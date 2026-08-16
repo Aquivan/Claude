@@ -1,3 +1,4 @@
-factura,estado
-E001-28,FALLO-descarga
-E001-3408,FALLO-descarga
+factura,estado_pdf,estado_xml
+E001-28,OK-oficial,OK
+E001-3408,OK-oficial,OK
+F004-2266,OK-oficial,OK
