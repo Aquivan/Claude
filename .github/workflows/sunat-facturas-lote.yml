@@ -23,20 +23,28 @@ jobs:
           cat > /tmp/decode_api.py << 'PYEOF'
           import sys, json, base64, zipfile, io, os, re
           d = json.load(open(sys.argv[1]))
+          destdir = sys.argv[2]
+          modo = sys.argv[3]  # "raw" (deja el .zip tal cual) o "extract" (saca el archivo de adentro)
           raw = base64.b64decode(d['valArchivo'])
-          zf = zipfile.ZipFile(io.BytesIO(raw))
-          names = zf.namelist()
-          if names:
-              interno = names[0]
-              ext = os.path.splitext(interno)[1]  # extension real del archivo (.pdf / .xml)
-              # nomArchivo es estable: RUC-tipoCpe-serie-numero-PDF.zip o -XML.zip.
-              # El nombre DENTRO del zip en cambio varia segun quien emitio el
-              # comprobante, asi que se usa nomArchivo como nombre final.
-              nom_zip = d.get('nomArchivo', interno)
-              base = re.sub(r'-(PDF|XML)\.zip$', '', nom_zip, flags=re.IGNORECASE)
-              nombre = base + ext
-              open(os.path.join(sys.argv[2], nombre), 'wb').write(zf.read(interno))
+          nom_zip = d.get('nomArchivo', 'archivo.zip')
+
+          if modo == 'raw':
+              nombre = nom_zip
+              open(os.path.join(destdir, nombre), 'wb').write(raw)
               print(nombre)
+          else:
+              zf = zipfile.ZipFile(io.BytesIO(raw))
+              names = zf.namelist()
+              if names:
+                  interno = names[0]
+                  ext = os.path.splitext(interno)[1]  # extension real del archivo (.pdf / .xml)
+                  # nomArchivo es estable: RUC-tipoCpe-serie-numero-PDF.zip o -XML.zip.
+                  # El nombre DENTRO del zip en cambio varia segun quien emitio el
+                  # comprobante, asi que se usa nomArchivo como nombre final.
+                  base = re.sub(r'-(PDF|XML)\.zip$', '', nom_zip, flags=re.IGNORECASE)
+                  nombre = base + ext
+                  open(os.path.join(destdir, nombre), 'wb').write(zf.read(interno))
+                  print(nombre)
           PYEOF
 
       - name: Login + procesar lista de facturas
@@ -105,10 +113,10 @@ jobs:
 
           # Intenta bajar PDF u XML de la API moderna, con reintentos (el servicio
           # es intermitente: falla con 500 con frecuencia, pero responde bien al
-          # reintentar). Guarda el archivo con el MISMO nombre oficial que trae
-          # el zip de SUNAT (no lo renombra) e imprime ese nombre por stdout.
+          # reintentar). modo="extract" saca el archivo de adentro del zip (PDF);
+          # modo="raw" deja el .zip tal cual lo entrega SUNAT (XML).
           descargar_api_moderna() {
-            id="$1"; accion="$2"; destdir="$3"
+            id="$1"; accion="$2"; destdir="$3"; modo="$4"
             for intento in 1 2 3 4 5; do
               curl -sS -H "Authorization: Bearer $API_TOKEN" \
                 -H "Accept: application/json, text/plain, */*" \
@@ -116,7 +124,7 @@ jobs:
                 -H "Referer: https://e-factura.sunat.gob.pe/" \
                 -A "$UA" "$API/$id/$accion?formato=x" -o /tmp/api_resp.json
               if grep -q '"valArchivo"' /tmp/api_resp.json; then
-                nombre=$(python3 /tmp/decode_api.py /tmp/api_resp.json "$destdir" 2>/dev/null)
+                nombre=$(python3 /tmp/decode_api.py /tmp/api_resp.json "$destdir" "$modo" 2>/dev/null)
                 if [ -n "$nombre" ] && [ -f "$destdir/$nombre" ]; then
                   echo "$nombre"
                   return 0
@@ -151,16 +159,16 @@ jobs:
               if [ -n "$codcpe" ]; then
                 id="${ruc_emisor}-${codcpe}-${serie}-${numero}-${direccion}"
 
-                nombre_xml=$(descargar_api_moderna "$id" "02" "facturas_descargadas")
+                nombre_xml=$(descargar_api_moderna "$id" "02" "facturas_descargadas" "raw")
                 if [ -n "$nombre_xml" ]; then
-                  echo "  XML oficial OK -> facturas_descargadas/$nombre_xml"
+                  echo "  XML oficial (zip) OK -> facturas_descargadas/$nombre_xml"
                   estado_xml="OK"
                   archivo_xml="$nombre_xml"
                 else
                   echo "  XML oficial: no se pudo obtener tras varios intentos"
                 fi
 
-                nombre_pdf=$(descargar_api_moderna "$id" "01" "facturas_descargadas")
+                nombre_pdf=$(descargar_api_moderna "$id" "01" "facturas_descargadas" "extract")
                 if [ -n "$nombre_pdf" ]; then
                   echo "  PDF oficial OK -> facturas_descargadas/$nombre_pdf"
                   estado_pdf="OK-oficial"
