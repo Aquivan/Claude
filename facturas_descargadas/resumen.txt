@@ -5,7 +5,7 @@ F001-4597,OK-oficial,OK
 F002-52904,OK-oficial,OK
 F002-52905,OK-oficial,OK
 F009-260,OK-oficial,OK
-F002-4555,OK-oficial,OK
-E001-28,OK-oficial,OK
+F002-4555,OK-representacion,OK
+E001-28,FALLO,OK
 E001-3408,OK-oficial,OK
 F001-650,OK-oficial,OK
