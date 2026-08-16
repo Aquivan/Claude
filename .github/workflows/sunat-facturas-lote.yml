@@ -1,1 +1,212 @@
-bmFtZTogRGVzY2FyZ2FyIGZhY3R1cmFzIFNVTkFUIChsb3RlIGRlc2RlIENTVikKCm9uOgogIHdvcmtmbG93X2Rpc3BhdGNoOiB7fQogIHB1c2g6CiAgICBicmFuY2hlczogW2NsYXVkZS9weXRob24tY29kZXMtaXp2ZTE4XQogICAgcGF0aHM6CiAgICAgIC0gImZhY3R1cmFzLmNzdiIKCnBlcm1pc3Npb25zOgogIGNvbnRlbnRzOiB3cml0ZQoKam9iczoKICBkZXNjYXJnYXI6CiAgICBydW5zLW9uOiB1YnVudHUtbGF0ZXN0CiAgICBzdGVwczoKICAgICAgLSBuYW1lOiBDaGVja291dAogICAgICAgIHVzZXM6IGFjdGlvbnMvY2hlY2tvdXRANAoKICAgICAgLSBuYW1lOiBJbnN0YWxhciBDaHJvbWl1bQogICAgICAgIHJ1bjogfAogICAgICAgICAgbnBtIGluaXQgLXkgPi9kZXYvbnVsbCAyPiYxIHx8IHRydWUKICAgICAgICAgIG5weCAtLXllcyBwbGF5d3JpZ2h0IGluc3RhbGwgLS13aXRoLWRlcHMgY2hyb21pdW0KCiAgICAgIC0gbmFtZTogQ3JlYXIgc2NyaXB0IGRlIGRlY29kaWZpY2FjaW9uIChQREYvWE1MIGRlIGxhIEFQSSBtb2Rlcm5hKQogICAgICAgIHJ1bjogfAogICAgICAgICAgY2F0ID4gL3RtcC9kZWNvZGVfYXBpLnB5IDw8ICdQWUVPRicKICAgICAgICAgIGltcG9ydCBzeXMsIGpzb24sIGJhc2U2NCwgemlwZmlsZSwgaW8KICAgICAgICAgIGQgPSBqc29uLmxvYWQob3BlbihzeXMuYXJndlsxXSkpCiAgICAgICAgICByYXcgPSBiYXNlNjQuYjY0ZGVjb2RlKGRbJ3ZhbEFyY2hpdm8nXSkKICAgICAgICAgIHpmID0gemlwZmlsZS5aaXBGaWxlKGlvLkJ5dGVzSU8ocmF3KSkKICAgICAgICAgIG5hbWVzID0gemYubmFtZWxpc3QoKQogICAgICAgICAgaWYgbmFtZXM6CiAgICAgICAgICAgICAgb3BlbihzeXMuYXJndlsyXSwgJ3diJykud3JpdGUoemYucmVhZChuYW1lc1swXSkpCiAgICAgICAgICAgICAgcHJpbnQoJ29rJykKICAgICAgICAgIFBZRU9GCgogICAgICAtIG5hbWU6IExvZ2luICsgcHJvY2VzYXIgbGlzdGEgZGUgZmFjdHVyYXMKICAgICAgICBlbnY6CiAgICAgICAgICBTVU5BVF9SVUM6ICR7eyBzZWNyZXRzLlNVTkFUX1JVQyB9fQogICAgICAgICAgU1VOQVRfVVNVQVJJTzogJHt7IHNlY3JldHMuU1VOQVRfVVNVQVJJTyB9fQogICAgICAgICAgU1VOQVRfQ0xBVkU6ICR7eyBzZWNyZXRzLlNVTkFUX0NMQVZFIH19CiAgICAgICAgcnVuOiB8CiAgICAgICAgICBVQT0iTW96aWxsYS81LjAgKFdpbmRvd3MgTlQgMTAuMDsgV2luNjQ7IHg2NCkgQXBwbGVXZWJLaXQvNTM3LjM2IChLSFRNTCwgbGlrZSBHZWNrbykgQ2hyb21lLzEyOC4wLjAuMCBTYWZhcmkvNTM3LjM2IgogICAgICAgICAgQ0lEPSI0ZjNiODhiMy1kOWQ2LTQwMmEtYjg1ZC02YTBiYzg1Nzc0NmEiCiAgICAgICAgICBTRUM9Imh0dHBzOi8vYXBpLXNlZ3VyaWRhZC5zdW5hdC5nb2IucGUvdjEvY2xpZW50ZXNzb2wvJENJRC9vYXV0aDIiCiAgICAgICAgICBPUklHPSJodHRwczovL2UtbWVudS5zdW5hdC5nb2IucGUvY2wtdGktaXRtZW51L0F1dGVudGljYU1lbnVJbnRlcm5ldC5odG0iCiAgICAgICAgICBNRU5VPSJodHRwczovL2UtbWVudS5zdW5hdC5nb2IucGUvY2wtdGktaXRtZW51L01lbnVJbnRlcm5ldC5odG0iCiAgICAgICAgICBDRD0iaHR0cHM6Ly93dzEuc3VuYXQuZ29iLnBlL29sLXRpLWl0Y29uc2NwZWdlbS9jb25zdWx0YXIuZG8iCiAgICAgICAgICBBUEk9Imh0dHBzOi8vYXBpLWNwZS5zdW5hdC5nb2IucGUvdjEvY29udHJpYnV5ZW50ZS9jb25zdWx0YWNwZS9jb21wcm9iYW50ZXMiCiAgICAgICAgICBTVEFURT0nck8wQUJYTnlBQkZxWVhaaExuVjBhV3d1U0dGemFFMWhjQVVIMnNIREZtRFJBd0FDUmdBS2JHOWhaR1ptWVdOMFJVa0FDWFJvY21WemFHVnNaSGh3UDBBQUFBQUFBQXgzQ0FBQUFCQUFBQUFEZEFBRFpYaGxjSFFBUnlvbUtpWXZZMngtZEdrdGFYUnRaVzUxTDAxbGJuVkpiblJsY25WMExtaDBiU1ptTmpSa01qWmhPR0kxWVdZd09URTVNak5pTWpOaU5qUXdOMkV4WXpGa1lqUXhaVGN6TTJFMmRBQUVaWGhsY0hCNCcKICAgICAgICAgIEpBUj1qYXIudHh0CiAgICAgICAgICBzZXQgLWUKCiAgICAgICAgICBlY2hvICI9PT0gTE9HSU4gPT09IgogICAgICAgICAgY3VybCAtc1MgLWMgIiRKQVIiIC1iICIkSkFSIiAtLW1heC10aW1lIDIwIC1BICIkVUEiIFwKICAgICAgICAgICAgIiRTRUMvbG9naW5NZW51U29sP2xhbmc9ZXMtUEUmc2hvd0RuaT10cnVlJnNob3dMYW5ndWFnZXM9ZmFsc2Umb3JpZ2luYWxVcmw9JE9SSUcmc3RhdGU9JFNUQVRFIiAtbyAvZGV2L251bGwKICAgICAgICAgIGN1cmwgLXNTIC1jICIkSkFSIiAtYiAiJEpBUiIgLS1tYXgtdGltZSAyNSAtQSAiJFVBIiAtTCBcCiAgICAgICAgICAgIC1IICJDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL3gtd3d3LWZvcm0tdXJsZW5jb2RlZCIgXAogICAgICAgICAgICAtLWRhdGEtdXJsZW5jb2RlICJ0aXBvPTIiIC0tZGF0YS11cmxlbmNvZGUgImRuaT0iIFwKICAgICAgICAgICAgLS1kYXRhLXVybGVuY29kZSAiY3VzdG9tX3J1Yz0kU1VOQVRfUlVDIiAtLWRhdGEtdXJsZW5jb2RlICJqX3VzZXJuYW1lPSRTVU5BVF9VU1VBUklPIiBcCiAgICAgICAgICAgIC0tZGF0YS11cmxlbmNvZGUgImpfcGFzc3dvcmQ9JFNVTkFUX0NMQVZFIiAtLWRhdGEtdXJsZW5jb2RlICJjYXB0Y2hhPSIgXAogICAgICAgICAgICAtLWRhdGEtdXJsZW5jb2RlICJvcmlnaW5hbFVybD0kT1JJRyIgLS1kYXRhLXVybGVuY29kZSAic3RhdGU9JFNUQVRFIiBcCiAgICAgICAgICAgICIkU0VDL2pfc2VjdXJpdHlfY2hlY2siIC1vIGxvZ2luLmh0bWwKICAgICAgICAgIGlmICEgZ3JlcCAtcSAiTWVuIiBsb2dpbi5odG1sOyB0aGVuCiAgICAgICAgICAgIGVjaG8gIiEhIExPR0lOIEZBTExJRE8iOyBleGl0IDEKICAgICAgICAgIGZpCiAgICAgICAgICBlY2hvICJMb2dpbiBPSy4iCgogICAgICAgICAgIyAtLS0tIE9idGllbmUgZWwgdG9rZW4gSldUIGRlIGxhIEFQSSBtb2Rlcm5hIChhcGktY3BlLnN1bmF0LmdvYi5wZSkgLS0tLQogICAgICAgICAgIyBTZSBwaWRlIHVuYSBzb2xhIHZlejogZHVyYSB+MSBob3JhLCBkZSBzb2JyYSBwYXJhIHRvZG8gZWwgbG90ZS4KICAgICAgICAgIGVjaG8gIj09PSBPYnRlbmllbmRvIHRva2VuIGRlIGxhIEFQSSBtb2Rlcm5hIChYTUwvUERGIG9maWNpYWxlcykgPT09IgogICAgICAgICAgY3VybCAtc1MgLUEgIiRVQSIgLWMgIiRKQVIiIC1iICIkSkFSIiAtLWRhdGEgImFjdGlvbj1wcmV2QXBwIiAiJE1FTlUiIC1vIC9kZXYvbnVsbAogICAgICAgICAgRVhFQ19MT0M9JChjdXJsIC1zUyAtQSAiJFVBIiAtYyAiJEpBUiIgLWIgIiRKQVIiIC1EIC0gLW8gL2Rldi9udWxsIFwKICAgICAgICAgICAgIiRNRU5VP2FjdGlvbj1leGVjdXRlJmNvZGU9MTEuMzguMS4xLjEiIHwgZ3JlcCAtaSAiXmxvY2F0aW9uOiIgfCBzZWQgJ3MvW0xsXW9jYXRpb246IC8vJyB8IHRyIC1kICdccicpCiAgICAgICAgICBBUElfVE9LRU49JChlY2hvICIkRVhFQ19MT0MiIHwgZ3JlcCAtb0UgJ3Rva2VuPVteJl0qJyB8IGN1dCAtZD0gLWYyKQogICAgICAgICAgaWYgWyAteiAiJEFQSV9UT0tFTiIgXTsgdGhlbgogICAgICAgICAgICBlY2hvICJBVklTTzogbm8gc2UgcHVkbyBvYnRlbmVyIGVsIHRva2VuIGRlIGxhIEFQSSBtb2Rlcm5hLiBTb2xvIHNlIHVzYXJhIGVsIG1ldG9kbyBjbGFzaWNvIChyZXByZXNlbnRhY2lvbiBQREYpLiIKICAgICAgICAgIGVsc2UKICAgICAgICAgICAgZWNobyAiVG9rZW4gbW9kZXJubyBvYnRlbmlkbyAoJHsjQVBJX1RPS0VOfSBjYXJhY3RlcmVzKS4iCiAgICAgICAgICBmaQoKICAgICAgICAgIHNldCAr ZSAgIyBkZSBhcXVpIGVuIGFkZWxhbnRlLCBxdWUgdW5hIGZhY3R1cmEgZmFsbGlkYSBubyBtYXRlIGVsIGpvYgogICAgICAgICAgbWtkaXIgLXAgZmFjdHVyYXNfZGVzY2FyZ2FkYXMKICAgICAgICAgIENIUk9NSVVNPSQoZmluZCB+Ly5jYWNoZS9tcy1wbGF5d3JpZ2h0IC1uYW1lICJjaHJvbWUiIC1wYXRoICIqY2hyb21lLWxpbnV4KiIgfCBoZWFkIC0xKQogICAgICAgICAgZWNobyAiZmFjdHVyYSxlc3RhZG9fcGRmLGVzdGFkb194bWwiID4gcmVzdW1lbi50eHQKCiAgICAgICAgICAjIE1hcGVhIGVsICJ0aXBvIiBkZWwgQ1NWIChjb252ZW5jaW9uIGRlIGxhIGFwcCBjbGFzaWNhKSBhbCBjb2RDcGUgb2ZpY2lhbAogICAgICAgICAgIyBkZSBTVU5BVCArIGRpcmVjY2lvbiAoMT1FbWl0aWRvLCAyPVJlY2liaWRvKSBxdWUgZXhpZ2UgbGEgQVBJIG1vZGVybmEuCiAgICAgICAgICBtYXBlYXJfY29kY3BlKCkgewogICAgICAgICAgICBjYXNlICIkMSIgaW4KICAgICAgICAgICAgICAxMCkgZWNobyAiMDEgMSIgOzsgICMgRkUgRW1pdGlkYXMKICAgICAgICAgICAgICAxMSkgZWNobyAiMDEgMiIgOzsgICMgRkUgUmVjaWJpZGFzCiAgICAgICAgICAgICAgMTMpIGVjaG8gIjA3IDEiIDs7ICAjIE5DIEVtaXRpZGFzCiAgICAgICAgICAgICAgMTQpIGVjaG8gIjA3IDIiIDs7ICAjIE5DIFJlY2liaWRhcwogICAgICAgICAgICAgIDE1KSBlY2hvICIwOCAxIiA7OyAgIyBORCBFbWl0aWRhcwogICAgICAgICAgICAgIDE2KSBlY2hvICIwOCAyIiA7OyAgIyBORCBSZWNpYmlkYXMKICAgICAgICAgICAgICAqKSBlY2hvICIiIDs7ICAgICAgICMgbm8gc29wb3J0YWRvIGF1biBwb3IgbGEgQVBJIG1vZGVybmEKICAgICAgICAgICAgZXNhYwogICAgICAgICAgfQoKICAgICAgICAgICMgSW50ZW50YSBiYWphciBQREYgdSBYTUwgZGUgbGEgQVBJIG1vZGVybmEsIGNvbiByZWludGVudG9zIChlbCBzZXJ2aWNpbwogICAgICAgICAgIyBlcyBpbnRlcm1pdGVudGU6IGZhbGxhIGNvbiA1MDAgY29uIGZyZWN1ZW5jaWEsIHBlcm8gcmVzcG9uZGUgYmllbiBhbAogICAgICAgICAgIyByZWludGVudGFyLiBEZXZ1ZWx2ZSAwIHNpIGxvZ3JvIGd1YXJkYXIgZWwgYXJjaGl2by4KICAgICAgICAgIGRlc2Nhcmdhcl9hcGlfbW9kZXJuYSgpIHsKICAgICAgICAgICAgaWQ9IiQxIjsgYWNjaW9uPSIkMiI7IGRlc3Rpbm89IiQzIgogICAgICAgICAgICBmb3IgaW50ZW50byBpbiAxIDIgMyA0IDU7IGRvCiAgICAgICAgICAgICAgY3VybCAtc1MgLUggIkF1dGhvcml6YXRpb246IEJlYXJlciAkQVBJX1RPS0VOIiBcCiAgICAgICAgICAgICAgICAtSCAiQWNjZXB0OiBhcHBsaWNhdGlvbi9qc29uLCB0ZXh0L3BsYWluLCAqLyoiIFwKICAgICAgICAgICAgICAgIC1IICJPcmlnaW46IGh0dHBzOi8vZS1mYWN0dXJhLnN1bmF0LmdvYi5wZSIgXAogICAgICAgICAgICAgICAgLUggIlJlZmVyZXI6IGh0dHBzOi8vZS1mYWN0dXJhLnN1bmF0LmdvYi5wZS8iIFwKICAgICAgICAgICAgICAgIC1BICIkVUEiICIkQVBJLyRpZC8kYWNjaW9uP2Zvcm1hdG89eCIgLW8gL3RtcC9hcGlfcmVzcC5qc29uCiAgICAgICAgICAgICAgaWYgZ3JlcCAtcSAnInZhbEFyY2hpdm8iJyAvdG1wL2FwaV9yZXNwLmpzb247IHRoZW4KICAgICAgICAgICAgICAgIGlmIHB5dGhvbjMgL3RtcC9kZWNvZGVfYXBpLnB5IC90bXAvYXBpX3Jlc3AuanNvbiAiJGRlc3Rpbm8iICYmIFsgLWYgIiRkZXN0aW5vIiBdOyB0aGVuCiAgICAgICAgICAgICAgICAgIHJldHVybiAwCiAgICAgICAgICAgICAgICBmaQogICAgICAgICAgICAgIGZpCiAgICAgICAgICAgICAgc2xlZXAgNAogICAgICAgICAgICBkb25lCiAgICAgICAgICAgIHJldHVybiAxCiAgICAgICAgICB9CgogICAgICAgICAgdGFpbCAtbiArMiBmYWN0dXJhcy5jc3YgfCB3aGlsZSBJRlM9JywnIHJlYWQgLXIgdGlwbyBydWNfZW1pc29yIHNlcmllIG51bWVybyBmZWNfZGVzZGUgZmVjX2hhc3RhOyBkbwogICAgICAgICAgICB0aXBvPSQoZWNobyAiJHRpcG8iIHwgdHIgLWQgJ1xyJyB8IHhhcmdzKQogICAgICAgICAgICBydWNfZW1pc29yPSQoZWNobyAiJHJ1Y19lbWlzb3IiIHwgdHIgLWQgJ1xyJyB8IHhhcmdzKQogICAgICAgICAgICBzZXJpZT0kKGVjaG8gIiRzZXJpZSIgfCB0ciAtZCAnXHInIHwgeGFyZ3MpCiAgICAgICAgICAgIG51bWVybz0kKGVjaG8gIiRudW1lcm8iIHwgdHIgLWQgJ1xyJyB8IHhhcmdzKQogICAgICAgICAgICBmZWNfZGVzZGU9JChlY2hvICIkZmVjX2Rlc2RlIiB8IHRyIC1kICdccicgfCB4YXJncykKICAgICAgICAgICAgZmVjX2hhc3RhPSQoZWNobyAiJGZlY19oYXN0YSIgfCB0ciAtZCAnXHInIHwgeGFyZ3MpCiAgICAgICAgICAgIFsgLXogIiR0aXBvIiBdICYmIGNvbnRpbnVlCgogICAgICAgICAgICBiYXNlPSIke3NlcmllfS0ke251bWVyb30iCiAgICAgICAgICAgIGVjaG8gIiIKICAgICAgICAgICAgZWNobyAiPT09IFByb2Nlc2FuZG8gJGJhc2UgKHRpcG89JHRpcG8sIGVtaXNvcj0kcnVjX2VtaXNvcikgPT09IgoKICAgICAgICAgICAgZXN0YWRvX3BkZj0icGVuZGllbnRlIgogICAgICAgICAgICBlc3RhZG9feG1sPSJuby1kaXNwb25pYmxlIgoKICAgICAgICAgICAgIyAtLS0tIDEpIEludGVudGFyIGxhIEFQSSBtb2Rlcm5hIChQREYgb2ZpY2lhbCArIFhNTCBvZmljaWFsKSAtLS0tCiAgICAgICAgICAgIGlmIFsgLW4gIiRBUElfVE9LRU4iIF07IHRoZW4KICAgICAgICAgICAgICByZWFkIC1yIGNvZGNwZSBkaXJlY2Npb24gPDw8ICIkKG1hcGVhcl9jb2RjcGUgIiR0aXBvIikiCiAgICAgICAgICAgICAgaWYgWyAtbiAiJGNvZGNwZSIgXTsgdGhlbgogICAgICAgICAgICAgICAgaWQ9IiR7cnVjX2VtaXNvcn0tJHtjb2RjcGV9LSR7c2VyaWV9LSR7bnVtZXJvfS0ke2RpcmVjY2lvbn0iCgogICAgICAgICAgICAgICAgaWYgZGVzY2FyZ2FyX2FwaV9tb2Rlcm5hICIkaWQiICIwMiIgImZhY3R1cmFzX2Rlc2NhcmdhZGFzLyR7YmFzZX0ueG1sIjsgdGhlbgogICAgICAgICAgICAgICAgICBlY2hvICIgIFhNTCBvZmljaWFsIE9LIC0+IGZhY3R1cmFzX2Rlc2NhcmdhZGFzLyR7YmFzZX0ueG1sIgogICAgICAgICAgICAgICAgICBlc3RhZG9feG1sPSJPSyIKICAgICAgICAgICAgICAgIGVsc2UKICAgICAgICAgICAgICAgICAgZWNobyAiICBYTUwgb2ZpY2lhbDogbm8gc2UgcHVkbyBvYnRlbmVyIHRyYXMgdmFyaW9zIGludGVudG9zIgogICAgICAgICAgICAgICAgZmkKCiAgICAgICAgICAgICAgICBpZiBkZXNjYXJnYXJfYXBpX21vZGVybmEgIiRpZCIgIjAxIiAiZmFjdHVyYXNfZGVzY2FyZ2FkYXMvJHtiYXNlfS5wZGYiOyB0aGVuCiAgICAgICAgICAgICAgICAgIGVjaG8gIiAgUERGIG9maWNpYWwgT0sgLT4gZmFjdHVyYXNfZGVzY2FyZ2FkYXMvJHtiYXNlfS5wZGYiCiAgICAgICAgICAgICAgICAgIGVzdGFkb19wZGY9Ik9LLW9maWNpYWwiCiAgICAgICAgICAgICAgICBmaQogICAgICAgICAgICAgIGVsc2UKICAgICAgICAgICAgICAgIGVjaG8gIiAgVGlwbyAkdGlwbyBhdW4gbm8gc29wb3J0YWRvIHBvciBsYSBBUEkgbW9kZXJuYSAoc2UgdXNhcmEgc29sbyBlbCBtZXRvZG8gY2xhc2ljbyBwYXJhIGVsIFBERikuIgogICAgICAgICAgICAgIGZpCiAgICAgICAgICAgIGZpCgogICAgICAgICAgICAjIC0tLS0gMikgU2kgbm8gc2UgbG9ncm8gZWwgUERGIG9maWNpYWwsIHVzYXIgZWwgbWV0b2RvIGNsYXNpY28gKHJlcHJlc2VudGFjaW9uIGltcHJlc2EpIC0tLS0KICAgICAgICAgICAgaWYgWyAiJGVzdGFkb19wZGYiICE9ICJPSy1vZmljaWFsIiBdOyB0aGVuCiAgICAgICAgICAgICAgY3VybCAtc1MgLUEgIiRVQSIgLWMgIiRKQVIiIC1iICIkSkFSIiAtLWRhdGEgImFjdGlvbj1wcmV2QXBwIiAiJE1FTlUiIC1vIC9kZXYvbnVsbAogICAgICAgICAgICAgIExPQz0kKGN1cmwgLXNTIC1BICIkVUEiIC1jICIkSkFSIiAtYiAiJEpBUiIgLUQgLSAtbyAvZGV2L251bGwgXAogICAgICAgICAgICAgICAgIiRNRU5VP2FjdGlvbj1leGVjdXRlJmNvZGU9MTEuOS41LjEuMSIgfCBncmVwIC1pICJebG9jYXRpb246IiB8IHNlZCAncy9bTGxdb2NhdGlvbjogLy8nIHwgdHIgLWQgJ1xyJykKICAgICAgICAgICAgICBpZiBbIC1uICIkTE9DIiBdOyB0aGVuCiAgICAgICAgICAgICAgICBjdXJsIC1zUyAtQSAiJFVBIiAtYyAiJEpBUiIgLWIgIiRKQVIiICIkTE9DIiAtbyAvZGV2L251bGwKICAgICAgICAgICAgICAgIGN1cmwgLXNTIC1BICIkVUEiIC1jICIkSkFSIiAtYiAiJEpBUiIgLUggIlJlZmVyZXI6ICRDRCIgXAogICAgICAgICAgICAgICAgICAtLWRhdGEgImFjdGlvbj1yZWFsaXphckNvbnN1bHRhIiAtLWRhdGEgImJ1c2NhclBvcj1wb3JEb2MiIC0tZGF0YSAidGlwb0NvbnN1bHRhPSR0aXBvIiBcCiAgICAgICAgICAgICAgICAgIC0tZGF0YSAicnVjRW1pc29yPSRydWNfZW1pc29yIiAtLWRhdGEgInNlcmllPSRzZXJpZSIgLS1kYXRhICJudW1lcm89JG51bWVybyIgLS1kYXRhICJudW1Eb2NpZGVSZWNlcD0iIFwKICAgICAgICAgICAgICAgICAgLS1kYXRhLXVybGVuY29kZSAiZmVjRGVzZGU9JGZlY19kZXNkZSIgLS1kYXRhLXVybGVuY29kZSAiZmVjSGFzdGE9JGZlY19oYXN0YSIgXAogICAgICAgICAgICAgICAgICAiJENEIiAtbyBxdWVyeS50eHQKICAgICAgICAgICAgICAgIGN1cmwgLXNTIC1BICIkVUEiIC1jICIkSkFSIiAtYiAiJEpBUiIgLUggIlJlZmVyZXI6ICRDRCIgXAogICAgICAgICAgICAgICAgICAiJENEP2FjdGlvbj1tb3N0cmFyTGlzdGFkbyZ0aXBvQ29uc3VsdGE9JHRpcG8iIC1vIC9kZXYvbnVsbAogICAgICAgICAgICAgICAgY3VybCAtc1MgLUEgIiRVQSIgLWMgIiRKQVIiIC1iICIkSkFSIiAtSCAiUmVmZXJlcjogJENEIiBcCiAgICAgICAgICAgICAgICAgICIkQ0Q/YWN0aW9uPXZlckltcHJpbWlyRmFjdHVyYSZyb3dJbmRleD0wIiAtbyAiZmFjdHVyYV8ke2Jhc2V9Lmh0bWwiCgogICAgICAgICAgICAgICAgaWYgZ3JlcCAtcWkgIkNPTVBST0JBTlRFIiAiZmFjdHVyYV8ke2Jhc2V9Lmh0bWwiOyB0aGVuCiAgICAgICAgICAgICAgICAgIHNlZCAtaSAnL25vIHRpZW5lIGxhIHZhbGlkZXogZGUgdW5hLycgImZhY3R1cmFfJHtiYXNlfS5odG1sIgogICAgICAgICAgICAgICAgICAiJENIUk9NSVVNIiAtLWhlYWRsZXNzIC0tbm8tc2FuZGJveCAtLWRpc2FibGUtZ3B1IC0tbm8tcGRmLWhlYWRlci1mb290ZXIgXAogICAgICAgICAgICAgICAgICAgIC0tcHJpbnQtdG8tcGRmPSJmYWN0dXJhc19kZXNjYXJnYWRhcy8ke2Jhc2V9LnBkZiIgImZpbGU6Ly8kKHJlYWxwYXRoICJmYWN0dXJhXyR7YmFzZX0uaHRtbCIpIiAyPi9kZXYvbnVsbAogICAgICAgICAgICAgICAgICBpZiBbIC1mICJmYWN0dXJhc19kZXNjYXJnYWRhcy8ke2Jhc2V9LnBkZiIgXTsgdGhlbgogICAgICAgICAgICAgICAgICAgIGVjaG8gIiAgUERGIChyZXByZXNlbnRhY2lvbiBjbGFzaWNhKSBPSyAtPiBmYWN0dXJhc19kZXNjYXJnYWRhcy8ke2Jhc2V9LnBkZiIKICAgICAgICAgICAgICAgICAgICBlc3RhZG9fcGRmPSJPSy1yZXByZXNlbnRhY2lvbiIKICAgICAgICAgICAgICAgICAgZmkKICAgICAgICAgICAgICAgIGZpCiAgICAgICAgICAgICAgZmkKICAgICAgICAgICAgZmkKCiAgICAgICAgICAgIFsgIiRlc3RhZG9fcGRmIiA9PSAicGVuZGllbnRlIiBdICYmIGVzdGFkb19wZGY9IkZBTExPIgogICAgICAgICAgICBlY2hvICIkYmFzZSwkZXN0YWRvX3BkZiwkZXN0YWRvX3htbCIgPj4gcmVzdW1lbi50eHQKICAgICAgICAgIGRvbmUKCiAgICAgICAgICBlY2hvICIiCiAgICAgICAgICBlY2hvICI9PT0gUkVTVU1FTiA9PT0iCiAgICAgICAgICBjYXQgcmVzdW1lbi50eHQKICAgICAgICAgIGNwIHJlc3VtZW4udHh0IGZhY3R1cmFzX2Rlc2NhcmdhZGFzL3Jlc3VtZW4udHh0CgogICAgICAtIG5hbWU6IEd1YXJkYXIgbG9zIFBERi9YTUwgZW4gZWwgcmVwb3NpdG9yaW8KICAgICAgICBydW46IHwKICAgICAgICAgIGdpdCBjb25maWcgdXNlci5uYW1lICJnaXRodWItYWN0aW9uc1tib3RdIgogICAgICAgICAgZ2l0IGNvbmZpZyB1c2VyLmVtYWlsICJnaXRodWItYWN0aW9uc1tib3RdQHVzZXJzLm5vcmVwbHkuZ2l0aHViLmNvbSIKICAgICAgICAgIGdpdCBhZGQgZmFjdHVyYXNfZGVzY2FyZ2FkYXMvCiAgICAgICAgICBnaXQgZGlmZiAtLWNhY2hlZCAtLXF1aWV0IHx8IGdpdCBjb21taXQgLW0gIkZhY3R1cmFzIGRlc2NhcmdhZGFzICQoZGF0ZSAtdSArJyVZLSVtLSVkICVIOiVNIFVUQycpIgogICAgICAgICAgZ2l0IHB1c2gKCiAgICAgIC0gbmFtZTogU3ViaXIgdGFtYmllbiBjb21vIGFydGVmYWN0byBkZXNjYXJnYWJsZQogICAgICAgIHVzZXM6IGFjdGlvbnMvdXBsb2FkLWFydGlmYWN0QHY0CiAgICAgICAgd2l0aDoKICAgICAgICAgIG5hbWU6IGZhY3R1cmFzLXN1bmF0LWxvdGUKICAgICAgICAgIHBhdGg6IGZhY3R1cmFzX2Rlc2NhcmdhZGFzLwogICAgICAgICAgcmV0ZW50aW9uLWRheXM6IDcK
+name: Descargar facturas SUNAT (lote desde CSV)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [claude/python-codes-izve18]
+    paths:
+      - "facturas.csv"
+
+permissions:
+  contents: write
+
+jobs:
+  descargar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar Chromium
+        run: |
+          npm init -y >/dev/null 2>&1 || true
+          npx --yes playwright install --with-deps chromium
+
+      - name: Crear script de decodificacion (PDF/XML de la API moderna)
+        run: |
+          cat > /tmp/decode_api.py << 'PYEOF'
+          import sys, json, base64, zipfile, io
+          d = json.load(open(sys.argv[1]))
+          raw = base64.b64decode(d['valArchivo'])
+          zf = zipfile.ZipFile(io.BytesIO(raw))
+          names = zf.namelist()
+          if names:
+              open(sys.argv[2], 'wb').write(zf.read(names[0]))
+              print('ok')
+          PYEOF
+
+      - name: Login + procesar lista de facturas
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+          CID="4f3b88b3-d9d6-402a-b85d-6a0bc857746a"
+          SEC="https://api-seguridad.sunat.gob.pe/v1/clientessol/$CID/oauth2"
+          ORIG="https://e-menu.sunat.gob.pe/cl-ti-itmenu/AutenticaMenuInternet.htm"
+          MENU="https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm"
+          CD="https://ww1.sunat.gob.pe/ol-ti-itconscpegem/consultar.do"
+          API="https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe/comprobantes"
+          STATE='rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAADdAADZXhlcHQABnBhcmFtc3QASyomKiYvY2wtdGktaXRtZW51L01lbnVJbnRlcm5ldC5odG0mYjY0ZDI2YThiNWFmMDkxOTIzYjIzYjY0MDdhMWMxZGI0MWU3MzNhNnQABGV4ZWNweA=='
+          JAR=jar.txt
+          set -e
+
+          echo "=== LOGIN ==="
+          curl -sS -c "$JAR" -b "$JAR" --max-time 20 -A "$UA" \
+            "$SEC/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl=$ORIG&state=$STATE" -o /dev/null
+          curl -sS -c "$JAR" -b "$JAR" --max-time 25 -A "$UA" -L \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "tipo=2" --data-urlencode "dni=" \
+            --data-urlencode "custom_ruc=$SUNAT_RUC" --data-urlencode "j_username=$SUNAT_USUARIO" \
+            --data-urlencode "j_password=$SUNAT_CLAVE" --data-urlencode "captcha=" \
+            --data-urlencode "originalUrl=$ORIG" --data-urlencode "state=$STATE" \
+            "$SEC/j_security_check" -o login.html
+          if ! grep -q "Men" login.html; then
+            echo "!! LOGIN FALLIDO"; exit 1
+          fi
+          echo "Login OK."
+
+          # ---- Obtiene el token JWT de la API moderna (api-cpe.sunat.gob.pe) ----
+          # Se pide una sola vez: dura ~1 hora, de sobra para todo el lote.
+          echo "=== Obteniendo token de la API moderna (XML/PDF oficiales) ==="
+          curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
+          EXEC_LOC=$(curl -sS -A "$UA" -c "$JAR" -b "$JAR" -D - -o /dev/null \
+            "$MENU?action=execute&code=11.38.1.1.1" | grep -i "^location:" | sed 's/[Ll]ocation: //' | tr -d '\r')
+          API_TOKEN=$(echo "$EXEC_LOC" | grep -oE 'token=[^&]*' | cut -d= -f2)
+          if [ -z "$API_TOKEN" ]; then
+            echo "AVISO: no se pudo obtener el token de la API moderna. Solo se usara el metodo clasico (representacion PDF)."
+          else
+            echo "Token moderno obtenido (${#API_TOKEN} caracteres)."
+          fi
+
+          set +e  # de aqui en adelante, que una factura fallida no mate el job
+          mkdir -p facturas_descargadas
+          CHROMIUM=$(find ~/.cache/ms-playwright -name "chrome" -path "*chrome-linux*" | head -1)
+          echo "factura,estado_pdf,estado_xml" > resumen.txt
+
+          # Mapea el "tipo" del CSV (convencion de la app clasica) al codCpe oficial
+          # de SUNAT + direccion (1=Emitido, 2=Recibido) que exige la API moderna.
+          mapear_codcpe() {
+            case "$1" in
+              10) echo "01 1" ;;  # FE Emitidas
+              11) echo "01 2" ;;  # FE Recibidas
+              13) echo "07 1" ;;  # NC Emitidas
+              14) echo "07 2" ;;  # NC Recibidas
+              15) echo "08 1" ;;  # ND Emitidas
+              16) echo "08 2" ;;  # ND Recibidas
+              *) echo "" ;;       # no soportado aun por la API moderna
+            esac
+          }
+
+          # Intenta bajar PDF u XML de la API moderna, con reintentos (el servicio
+          # es intermitente: falla con 500 con frecuencia, pero responde bien al
+          # reintentar). Devuelve 0 si logro guardar el archivo.
+          descargar_api_moderna() {
+            id="$1"; accion="$2"; destino="$3"
+            for intento in 1 2 3 4 5; do
+              curl -sS -H "Authorization: Bearer $API_TOKEN" \
+                -H "Accept: application/json, text/plain, */*" \
+                -H "Origin: https://e-factura.sunat.gob.pe" \
+                -H "Referer: https://e-factura.sunat.gob.pe/" \
+                -A "$UA" "$API/$id/$accion?formato=x" -o /tmp/api_resp.json
+              if grep -q '"valArchivo"' /tmp/api_resp.json; then
+                if python3 /tmp/decode_api.py /tmp/api_resp.json "$destino" && [ -f "$destino" ]; then
+                  return 0
+                fi
+              fi
+              sleep 4
+            done
+            return 1
+          }
+
+          tail -n +2 facturas.csv | while IFS=',' read -r tipo ruc_emisor serie numero fec_desde fec_hasta; do
+            tipo=$(echo "$tipo" | tr -d '\r' | xargs)
+            ruc_emisor=$(echo "$ruc_emisor" | tr -d '\r' | xargs)
+            serie=$(echo "$serie" | tr -d '\r' | xargs)
+            numero=$(echo "$numero" | tr -d '\r' | xargs)
+            fec_desde=$(echo "$fec_desde" | tr -d '\r' | xargs)
+            fec_hasta=$(echo "$fec_hasta" | tr -d '\r' | xargs)
+            [ -z "$tipo" ] && continue
+
+            base="${serie}-${numero}"
+            echo ""
+            echo "=== Procesando $base (tipo=$tipo, emisor=$ruc_emisor) ==="
+
+            estado_pdf="pendiente"
+            estado_xml="no-disponible"
+
+            # ---- 1) Intentar la API moderna (PDF oficial + XML oficial) ----
+            if [ -n "$API_TOKEN" ]; then
+              read -r codcpe direccion <<< "$(mapear_codcpe "$tipo")"
+              if [ -n "$codcpe" ]; then
+                id="${ruc_emisor}-${codcpe}-${serie}-${numero}-${direccion}"
+
+                if descargar_api_moderna "$id" "02" "facturas_descargadas/${base}.xml"; then
+                  echo "  XML oficial OK -> facturas_descargadas/${base}.xml"
+                  estado_xml="OK"
+                else
+                  echo "  XML oficial: no se pudo obtener tras varios intentos"
+                fi
+
+                if descargar_api_moderna "$id" "01" "facturas_descargadas/${base}.pdf"; then
+                  echo "  PDF oficial OK -> facturas_descargadas/${base}.pdf"
+                  estado_pdf="OK-oficial"
+                fi
+              else
+                echo "  Tipo $tipo aun no soportado por la API moderna (se usara solo el metodo clasico para el PDF)."
+              fi
+            fi
+
+            # ---- 2) Si no se logro el PDF oficial, usar el metodo clasico (representacion impresa) ----
+            if [ "$estado_pdf" != "OK-oficial" ]; then
+              curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
+              LOC=$(curl -sS -A "$UA" -c "$JAR" -b "$JAR" -D - -o /dev/null \
+                "$MENU?action=execute&code=11.9.5.1.1" | grep -i "^location:" | sed 's/[Ll]ocation: //' | tr -d '\r')
+              if [ -n "$LOC" ]; then
+                curl -sS -A "$UA" -c "$JAR" -b "$JAR" "$LOC" -o /dev/null
+                curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+                  --data "action=realizarConsulta" --data "buscarPor=porDoc" --data "tipoConsulta=$tipo" \
+                  --data "rucEmisor=$ruc_emisor" --data "serie=$serie" --data "numero=$numero" --data "numDocideRecep=" \
+                  --data-urlencode "fecDesde=$fec_desde" --data-urlencode "fecHasta=$fec_hasta" \
+                  "$CD" -o query.txt
+                curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+                  "$CD?action=mostrarListado&tipoConsulta=$tipo" -o /dev/null
+                curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+                  "$CD?action=verImprimirFactura&rowIndex=0" -o "factura_${base}.html"
+
+                if grep -qi "COMPROBANTE" "factura_${base}.html"; then
+                  sed -i '/no tiene la validez de una/d' "factura_${base}.html"
+                  "$CHROMIUM" --headless --no-sandbox --disable-gpu --no-pdf-header-footer \
+                    --print-to-pdf="facturas_descargadas/${base}.pdf" "file://$(realpath "factura_${base}.html")" 2>/dev/null
+                  if [ -f "facturas_descargadas/${base}.pdf" ]; then
+                    echo "  PDF (representacion clasica) OK -> facturas_descargadas/${base}.pdf"
+                    estado_pdf="OK-representacion"
+                  fi
+                fi
+              fi
+            fi
+
+            [ "$estado_pdf" == "pendiente" ] && estado_pdf="FALLO"
+            echo "$base,$estado_pdf,$estado_xml" >> resumen.txt
+          done
+
+          echo ""
+          echo "=== RESUMEN ==="
+          cat resumen.txt
+          cp resumen.txt facturas_descargadas/resumen.txt
+
+      - name: Guardar los PDF/XML en el repositorio
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add facturas_descargadas/
+          git diff --cached --quiet || git commit -m "Facturas descargadas $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
+
+      - name: Subir tambien como artefacto descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: facturas-sunat-lote
+          path: facturas_descargadas/
+          retention-days: 7
