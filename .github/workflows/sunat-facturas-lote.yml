@@ -93,9 +93,9 @@ jobs:
           fi
 
           set +e  # de aqui en adelante, que una factura fallida no mate el job
-          mkdir -p facturas_descargadas
+          mkdir -p facturas_descargadas/oficial facturas_descargadas/representacion
+          rm -rf /tmp/estado; mkdir -p /tmp/estado
           CHROMIUM=$(find ~/.cache/ms-playwright -name "chrome" -path "*chrome-linux*" | head -1)
-          echo "factura,estado_pdf,estado_xml,archivo_pdf,archivo_xml" > resumen.txt
 
           # Mapea el "tipo" del CSV (convencion de la app clasica) al codCpe oficial
           # de SUNAT + direccion (1=Emitido, 2=Recibido) que exige la API moderna.
@@ -110,21 +110,23 @@ jobs:
               *) echo "" ;;       # no soportado aun por la API moderna
             esac
           }
+          export -f mapear_codcpe
 
           # Intenta bajar PDF u XML de la API moderna, con reintentos (el servicio
           # es intermitente: falla con 500 con frecuencia, pero responde bien al
           # reintentar). modo="extract" saca el archivo de adentro del zip (PDF);
-          # modo="raw" deja el .zip tal cual lo entrega SUNAT (XML).
+          # modo="raw" deja el .zip tal cual lo entrega SUNAT (XML). No depende de
+          # cookies/sesion (solo del token), por eso es seguro correrlo en paralelo.
           descargar_api_moderna() {
-            id="$1"; accion="$2"; destdir="$3"; modo="$4"
+            id="$1"; accion="$2"; destdir="$3"; modo="$4"; resp_file="$5"
             for intento in 1 2 3 4 5; do
               curl -sS -H "Authorization: Bearer $API_TOKEN" \
                 -H "Accept: application/json, text/plain, */*" \
                 -H "Origin: https://e-factura.sunat.gob.pe" \
                 -H "Referer: https://e-factura.sunat.gob.pe/" \
-                -A "$UA" "$API/$id/$accion?formato=x" -o /tmp/api_resp.json
-              if grep -q '"valArchivo"' /tmp/api_resp.json; then
-                nombre=$(python3 /tmp/decode_api.py /tmp/api_resp.json "$destdir" "$modo" 2>/dev/null)
+                -A "$UA" "$API/$id/$accion?formato=x" -o "$resp_file"
+              if grep -q '"valArchivo"' "$resp_file"; then
+                nombre=$(python3 /tmp/decode_api.py "$resp_file" "$destdir" "$modo" 2>/dev/null)
                 if [ -n "$nombre" ] && [ -f "$destdir/$nombre" ]; then
                   echo "$nombre"
                   return 0
@@ -134,7 +136,88 @@ jobs:
             done
             return 1
           }
+          export -f descargar_api_moderna
+          export API_TOKEN UA API
 
+          # ---- FASE 1 (en paralelo, hasta 5 a la vez): API moderna ----
+          # Cada factura escribe su propio archivo de estado en /tmp/estado, asi
+          # que no hay dos procesos escribiendo al mismo archivo a la vez.
+          procesar_linea() {
+            linea="$1"
+            IFS=',' read -r tipo ruc_emisor serie numero fec_desde fec_hasta <<< "$linea"
+            tipo=$(echo "$tipo" | tr -d '\r' | xargs)
+            ruc_emisor=$(echo "$ruc_emisor" | tr -d '\r' | xargs)
+            serie=$(echo "$serie" | tr -d '\r' | xargs)
+            numero=$(echo "$numero" | tr -d '\r' | xargs)
+            fec_desde=$(echo "$fec_desde" | tr -d '\r' | xargs)
+            fec_hasta=$(echo "$fec_hasta" | tr -d '\r' | xargs)
+            [ -z "$tipo" ] && return
+
+            base="${serie}-${numero}"
+            base_safe=$(echo "$base" | tr '/' '_')
+            estado_file="/tmp/estado/${base_safe}.csv"
+            echo "=== Procesando $base (tipo=$tipo, emisor=$ruc_emisor) ==="
+
+            estado_pdf="pendiente"
+            estado_xml="no-disponible"
+            archivo_pdf=""
+            archivo_xml=""
+
+            read -r codcpe direccion <<< "$(mapear_codcpe "$tipo")"
+
+            if [ -n "$codcpe" ]; then
+              id="${ruc_emisor}-${codcpe}-${serie}-${numero}"
+
+              # No volver a descargar si ya existe (de esta corrida o de una anterior).
+              if [ -f "facturas_descargadas/oficial/${id}.pdf" ]; then
+                estado_pdf="YA-DESCARGADO"; archivo_pdf="oficial/${id}.pdf"
+              elif [ -f "facturas_descargadas/representacion/${base}.pdf" ]; then
+                estado_pdf="YA-DESCARGADO"; archivo_pdf="representacion/${base}.pdf"
+              fi
+              if [ -f "facturas_descargadas/oficial/${id}-XML.zip" ]; then
+                estado_xml="YA-DESCARGADO"; archivo_xml="oficial/${id}-XML.zip"
+              fi
+
+              id_api="${id}-${direccion}"
+
+              if [ -z "$archivo_xml" ] && [ -n "$API_TOKEN" ]; then
+                nombre_xml=$(descargar_api_moderna "$id_api" "02" "facturas_descargadas/oficial" "raw" "/tmp/api_resp_${base_safe}_xml.json")
+                if [ -n "$nombre_xml" ]; then
+                  echo "  XML oficial (zip) OK -> facturas_descargadas/oficial/$nombre_xml"
+                  estado_xml="OK"; archivo_xml="oficial/$nombre_xml"
+                else
+                  echo "  XML oficial: no se pudo obtener tras varios intentos"
+                fi
+              fi
+
+              if [ -z "$archivo_pdf" ] && [ -n "$API_TOKEN" ]; then
+                nombre_pdf=$(descargar_api_moderna "$id_api" "01" "facturas_descargadas/oficial" "extract" "/tmp/api_resp_${base_safe}_pdf.json")
+                if [ -n "$nombre_pdf" ]; then
+                  echo "  PDF oficial OK -> facturas_descargadas/oficial/$nombre_pdf"
+                  estado_pdf="OK-oficial"; archivo_pdf="oficial/$nombre_pdf"
+                fi
+              fi
+            else
+              if [ -f "facturas_descargadas/representacion/${base}.pdf" ]; then
+                estado_pdf="YA-DESCARGADO"; archivo_pdf="representacion/${base}.pdf"
+              else
+                echo "  Tipo $tipo aun no soportado por la API moderna (se usara solo el metodo clasico para el PDF)."
+              fi
+            fi
+
+            if [ -n "$archivo_pdf" ]; then necesita_fallback=0; else necesita_fallback=1; fi
+            echo "$estado_pdf,$estado_xml,$archivo_pdf,$archivo_xml,$necesita_fallback" > "$estado_file"
+          }
+          export -f procesar_linea
+
+          tail -n +2 facturas.csv | xargs -P 5 -I {} bash -c 'procesar_linea "$1"' _ {}
+
+          # ---- FASE 2 (secuencial): metodo clasico para lo que aun falte ----
+          # Usa un jar de cookies compartido (sesion con estado), por eso NO se
+          # paraleliza: si dos procesos escriben la misma cookie a la vez se
+          # puede corromper la sesion.
+          echo ""
+          echo "=== Fallback clasico (representacion impresa) para lo que quedo pendiente ==="
           tail -n +2 facturas.csv | while IFS=',' read -r tipo ruc_emisor serie numero fec_desde fec_hasta; do
             tipo=$(echo "$tipo" | tr -d '\r' | xargs)
             ruc_emisor=$(echo "$ruc_emisor" | tr -d '\r' | xargs)
@@ -143,72 +226,55 @@ jobs:
             fec_desde=$(echo "$fec_desde" | tr -d '\r' | xargs)
             fec_hasta=$(echo "$fec_hasta" | tr -d '\r' | xargs)
             [ -z "$tipo" ] && continue
-
             base="${serie}-${numero}"
-            echo ""
-            echo "=== Procesando $base (tipo=$tipo, emisor=$ruc_emisor) ==="
+            base_safe=$(echo "$base" | tr '/' '_')
+            estado_file="/tmp/estado/${base_safe}.csv"
+            [ -f "$estado_file" ] || continue
+            IFS=',' read -r estado_pdf estado_xml archivo_pdf archivo_xml necesita_fallback < "$estado_file"
+            [ "$necesita_fallback" != "1" ] && continue
 
-            estado_pdf="pendiente"
-            estado_xml="no-disponible"
-            archivo_pdf=""
-            archivo_xml=""
+            echo "  Fallback clasico para $base..."
+            curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
+            LOC=$(curl -sS -A "$UA" -c "$JAR" -b "$JAR" -D - -o /dev/null \
+              "$MENU?action=execute&code=11.9.5.1.1" | grep -i "^location:" | sed 's/[Ll]ocation: //' | tr -d '\r')
+            if [ -n "$LOC" ]; then
+              curl -sS -A "$UA" -c "$JAR" -b "$JAR" "$LOC" -o /dev/null
+              curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+                --data "action=realizarConsulta" --data "buscarPor=porDoc" --data "tipoConsulta=$tipo" \
+                --data "rucEmisor=$ruc_emisor" --data "serie=$serie" --data "numero=$numero" --data "numDocideRecep=" \
+                --data-urlencode "fecDesde=$fec_desde" --data-urlencode "fecHasta=$fec_hasta" \
+                "$CD" -o query.txt
+              curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+                "$CD?action=mostrarListado&tipoConsulta=$tipo" -o /dev/null
+              curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+                "$CD?action=verImprimirFactura&rowIndex=0" -o "factura_${base_safe}.html"
 
-            # ---- 1) Intentar la API moderna (PDF oficial + XML oficial) ----
-            if [ -n "$API_TOKEN" ]; then
-              read -r codcpe direccion <<< "$(mapear_codcpe "$tipo")"
-              if [ -n "$codcpe" ]; then
-                id="${ruc_emisor}-${codcpe}-${serie}-${numero}-${direccion}"
-
-                nombre_xml=$(descargar_api_moderna "$id" "02" "facturas_descargadas" "raw")
-                if [ -n "$nombre_xml" ]; then
-                  echo "  XML oficial (zip) OK -> facturas_descargadas/$nombre_xml"
-                  estado_xml="OK"
-                  archivo_xml="$nombre_xml"
-                else
-                  echo "  XML oficial: no se pudo obtener tras varios intentos"
-                fi
-
-                nombre_pdf=$(descargar_api_moderna "$id" "01" "facturas_descargadas" "extract")
-                if [ -n "$nombre_pdf" ]; then
-                  echo "  PDF oficial OK -> facturas_descargadas/$nombre_pdf"
-                  estado_pdf="OK-oficial"
-                  archivo_pdf="$nombre_pdf"
-                fi
-              else
-                echo "  Tipo $tipo aun no soportado por la API moderna (se usara solo el metodo clasico para el PDF)."
-              fi
-            fi
-
-            # ---- 2) Si no se logro el PDF oficial, usar el metodo clasico (representacion impresa) ----
-            if [ "$estado_pdf" != "OK-oficial" ]; then
-              curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
-              LOC=$(curl -sS -A "$UA" -c "$JAR" -b "$JAR" -D - -o /dev/null \
-                "$MENU?action=execute&code=11.9.5.1.1" | grep -i "^location:" | sed 's/[Ll]ocation: //' | tr -d '\r')
-              if [ -n "$LOC" ]; then
-                curl -sS -A "$UA" -c "$JAR" -b "$JAR" "$LOC" -o /dev/null
-                curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
-                  --data "action=realizarConsulta" --data "buscarPor=porDoc" --data "tipoConsulta=$tipo" \
-                  --data "rucEmisor=$ruc_emisor" --data "serie=$serie" --data "numero=$numero" --data "numDocideRecep=" \
-                  --data-urlencode "fecDesde=$fec_desde" --data-urlencode "fecHasta=$fec_hasta" \
-                  "$CD" -o query.txt
-                curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
-                  "$CD?action=mostrarListado&tipoConsulta=$tipo" -o /dev/null
-                curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
-                  "$CD?action=verImprimirFactura&rowIndex=0" -o "factura_${base}.html"
-
-                if grep -qi "COMPROBANTE" "factura_${base}.html"; then
-                  sed -i '/no tiene la validez de una/d' "factura_${base}.html"
-                  "$CHROMIUM" --headless --no-sandbox --disable-gpu --no-pdf-header-footer \
-                    --print-to-pdf="facturas_descargadas/${base}.pdf" "file://$(realpath "factura_${base}.html")" 2>/dev/null
-                  if [ -f "facturas_descargadas/${base}.pdf" ]; then
-                    echo "  PDF (representacion clasica) OK -> facturas_descargadas/${base}.pdf"
-                    estado_pdf="OK-representacion"
-                    archivo_pdf="${base}.pdf"
-                  fi
+              if grep -qi "COMPROBANTE" "factura_${base_safe}.html"; then
+                sed -i '/no tiene la validez de una/d' "factura_${base_safe}.html"
+                "$CHROMIUM" --headless --no-sandbox --disable-gpu --no-pdf-header-footer \
+                  --print-to-pdf="facturas_descargadas/representacion/${base}.pdf" "file://$(realpath "factura_${base_safe}.html")" 2>/dev/null
+                if [ -f "facturas_descargadas/representacion/${base}.pdf" ]; then
+                  echo "  PDF (representacion clasica) OK -> facturas_descargadas/representacion/${base}.pdf"
+                  estado_pdf="OK-representacion"; archivo_pdf="representacion/${base}.pdf"
                 fi
               fi
             fi
+            [ "$estado_pdf" == "pendiente" ] && estado_pdf="FALLO"
+            echo "$estado_pdf,$estado_xml,$archivo_pdf,$archivo_xml,0" > "$estado_file"
+          done
 
+          # ---- Armar resumen.txt final, en el mismo orden del CSV ----
+          echo "factura,estado_pdf,estado_xml,archivo_pdf,archivo_xml" > resumen.txt
+          tail -n +2 facturas.csv | while IFS=',' read -r tipo ruc_emisor serie numero fec_desde fec_hasta; do
+            tipo=$(echo "$tipo" | tr -d '\r' | xargs)
+            serie=$(echo "$serie" | tr -d '\r' | xargs)
+            numero=$(echo "$numero" | tr -d '\r' | xargs)
+            [ -z "$tipo" ] && continue
+            base="${serie}-${numero}"
+            base_safe=$(echo "$base" | tr '/' '_')
+            estado_file="/tmp/estado/${base_safe}.csv"
+            [ -f "$estado_file" ] || continue
+            IFS=',' read -r estado_pdf estado_xml archivo_pdf archivo_xml necesita_fallback < "$estado_file"
             [ "$estado_pdf" == "pendiente" ] && estado_pdf="FALLO"
             echo "$base,$estado_pdf,$estado_xml,$archivo_pdf,$archivo_xml" >> resumen.txt
           done
