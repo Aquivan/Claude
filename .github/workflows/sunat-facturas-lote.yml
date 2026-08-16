@@ -312,14 +312,17 @@ jobs:
           WEBHOOK_SECRET: ${{ secrets.SHEETS_WEBHOOK_SECRET }}
         run: |
           if [ -n "$WEBHOOK_URL" ]; then
-            # --post302/--post303 evita que curl convierta el POST en GET al
-            # seguir la redireccion que hace Apps Script (comportamiento por
-            # defecto de curl en redirects 302/303, que rompe los Web Apps de GAS).
-            curl -sS -L --post302 --post303 -X POST "$WEBHOOK_URL" \
+            # --post301/--post302/--post303 evita que curl convierta el POST en
+            # GET al seguir las redirecciones que hace Apps Script (puede haber
+            # mas de un salto, con distintos codigos de redireccion).
+            curl -sS -L --post301 --post302 --post303 -X POST "$WEBHOOK_URL" \
               -H "Content-Type: application/json" \
               -d "{\"secreto\":\"$WEBHOOK_SECRET\"}" \
+              -D /tmp/webhook_headers.txt \
               -o /tmp/webhook_resp.html -w "Webhook respondio con HTTP %{http_code}\n"
-            echo "--- primeros 800 caracteres de la respuesta (para diagnostico, no contiene la URL) ---"
+            echo "--- cabeceras de todas las respuestas (para ver la cadena de redirecciones) ---"
+            grep -iE "^(HTTP|Location):" /tmp/webhook_headers.txt
+            echo "--- primeros 800 caracteres de la respuesta final (para diagnostico) ---"
             head -c 800 /tmp/webhook_resp.html
             echo ""
             echo "--- fin de la respuesta ---"
