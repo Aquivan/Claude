@@ -321,7 +321,7 @@ jobs:
               -D /tmp/webhook_headers.txt \
               -o /tmp/webhook_resp.html -w "Webhook respondio con HTTP %{http_code}\n"
             echo "--- cabeceras de todas las respuestas (para ver la cadena de redirecciones) ---"
-            grep -iE "^(HTTP|Location):" /tmp/webhook_headers.txt
+            cat /tmp/webhook_headers.txt
             echo "--- primeros 800 caracteres de la respuesta final (para diagnostico) ---"
             head -c 800 /tmp/webhook_resp.html
             echo ""
