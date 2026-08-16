@@ -1,0 +1,121 @@
+name: Descargar factura SUNAT
+
+on:
+  workflow_dispatch:
+    inputs:
+      tipo:
+        description: "Tipo consulta (10=FE Emit 11=FE Recib 13=NC 15=ND)"
+        required: true
+        default: "11"
+      ruc_emisor:
+        description: "RUC del emisor de la factura"
+        required: true
+      serie:
+        description: "Serie (ej. F004)"
+        required: true
+      numero:
+        description: "Numero (ej. 2266)"
+        required: true
+      fec_desde:
+        description: "Fecha desde (dd/mm/aaaa)"
+        required: true
+        default: "01/01/2026"
+      fec_hasta:
+        description: "Fecha hasta (dd/mm/aaaa)"
+        required: true
+        default: "31/12/2026"
+
+jobs:
+  descargar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mostrar IP de salida del runner (para verificar estabilidad)
+        run: curl -s https://api.ipify.org && echo
+
+      - name: Instalar Chromium (para convertir HTML a PDF)
+        run: |
+          npm init -y >/dev/null 2>&1 || true
+          npx --yes playwright install --with-deps chromium
+
+      - name: Login + Consulta + Descarga de factura SUNAT
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          TIPO: ${{ inputs.tipo }}
+          RUC_EMISOR: ${{ inputs.ruc_emisor }}
+          SERIE: ${{ inputs.serie }}
+          NUMERO: ${{ inputs.numero }}
+          FEC_DESDE: ${{ inputs.fec_desde }}
+          FEC_HASTA: ${{ inputs.fec_hasta }}
+        run: |
+          set -e
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+          CID="4f3b88b3-d9d6-402a-b85d-6a0bc857746a"
+          SEC="https://api-seguridad.sunat.gob.pe/v1/clientessol/$CID/oauth2"
+          ORIG="https://e-menu.sunat.gob.pe/cl-ti-itmenu/AutenticaMenuInternet.htm"
+          MENU="https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm"
+          CD="https://ww1.sunat.gob.pe/ol-ti-itconscpegem/consultar.do"
+          STATE='rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAADdAADZXhlcHQABnBhcmFtc3QASyomKiYvY2wtdGktaXRtZW51L01lbnVJbnRlcm5ldC5odG0mYjY0ZDI2YThiNWFmMDkxOTIzYjIzYjY0MDdhMWMxZGI0MWU3MzNhNnQABGV4ZWNweA=='
+          JAR=jar.txt
+
+          echo "=== LOGIN ==="
+          curl -sS -c "$JAR" -b "$JAR" --max-time 20 -A "$UA" \
+            "$SEC/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl=$ORIG&state=$STATE" -o /dev/null
+
+          curl -sS -c "$JAR" -b "$JAR" --max-time 25 -A "$UA" -L \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "tipo=2" --data-urlencode "dni=" \
+            --data-urlencode "custom_ruc=$SUNAT_RUC" --data-urlencode "j_username=$SUNAT_USUARIO" \
+            --data-urlencode "j_password=$SUNAT_CLAVE" --data-urlencode "captcha=" \
+            --data-urlencode "originalUrl=$ORIG" --data-urlencode "state=$STATE" \
+            "$SEC/j_security_check" -o login.html
+
+          if ! grep -q "Men" login.html; then
+            echo "!! LOGIN FALLIDO"
+            exit 1
+          fi
+          echo "Login OK."
+
+          echo "=== CONSULTA Y DESCARGA (todo en un solo proceso, misma IP) ==="
+          curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null \
+            --next \
+            -A "$UA" -c "$JAR" -b "$JAR" -L "$MENU?action=execute&code=11.9.5.1.1" -o /dev/null \
+            --next \
+            -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+            --data "action=realizarConsulta" --data "buscarPor=porDoc" --data "tipoConsulta=$TIPO" \
+            --data "rucEmisor=$RUC_EMISOR" --data "serie=$SERIE" --data "numero=$NUMERO" --data "numDocideRecep=" \
+            --data-urlencode "fecDesde=$FEC_DESDE" --data-urlencode "fecHasta=$FEC_HASTA" \
+            "$CD" -o query.txt \
+            --next \
+            -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+            "$CD?action=mostrarListado&tipoConsulta=$TIPO" -o /dev/null \
+            --next \
+            -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+            "$CD?action=verImprimirFactura&rowIndex=0" -o factura.html
+
+          echo "--- consulta ---"
+          grep -o '"codeError":[0-9]*' query.txt || echo "(no encontrado)"
+
+          if ! grep -qi "COMPROBANTE" factura.html; then
+            echo "!! NO SE OBTUVO LA FACTURA. Contenido de respuesta:"
+            cat factura.html
+            exit 1
+          fi
+          echo "Factura obtenida OK."
+
+          # Quitar leyenda legal (evita 2da hoja con solo texto)
+          sed -i '/no tiene la validez de una/d' factura.html
+
+          CHROMIUM=$(find ~/.cache/ms-playwright -name "chrome" -path "*chrome-linux*" | head -1)
+          "$CHROMIUM" --headless --no-sandbox --disable-gpu --no-pdf-header-footer \
+            --print-to-pdf="factura_${SERIE}-${NUMERO}.pdf" "file://$(realpath factura.html)"
+          echo "PDF generado: factura_${SERIE}-${NUMERO}.pdf"
+          ls -la factura_*.pdf
+
+      - name: Subir PDF como artefacto descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: factura-sunat
+          path: factura_*.pdf
+          retention-days: 7
