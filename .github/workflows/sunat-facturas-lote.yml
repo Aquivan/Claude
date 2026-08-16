@@ -1,0 +1,136 @@
+name: Descargar facturas SUNAT (lote desde CSV)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [claude/python-codes-izve18]
+    paths:
+      - "facturas.csv"
+
+permissions:
+  contents: write
+
+jobs:
+  descargar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar Chromium
+        run: |
+          npm init -y >/dev/null 2>&1 || true
+          npx --yes playwright install --with-deps chromium
+
+      - name: Login + procesar lista de facturas
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+          CID="4f3b88b3-d9d6-402a-b85d-6a0bc857746a"
+          SEC="https://api-seguridad.sunat.gob.pe/v1/clientessol/$CID/oauth2"
+          ORIG="https://e-menu.sunat.gob.pe/cl-ti-itmenu/AutenticaMenuInternet.htm"
+          MENU="https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm"
+          CD="https://ww1.sunat.gob.pe/ol-ti-itconscpegem/consultar.do"
+          STATE='rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAADdAADZXhlcHQABnBhcmFtc3QASyomKiYvY2wtdGktaXRtZW51L01lbnVJbnRlcm5ldC5odG0mYjY0ZDI2YThiNWFmMDkxOTIzYjIzYjY0MDdhMWMxZGI0MWU3MzNhNnQABGV4ZWNweA=='
+          JAR=jar.txt
+          set -e
+
+          echo "=== LOGIN ==="
+          curl -sS -c "$JAR" -b "$JAR" --max-time 20 -A "$UA" \
+            "$SEC/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl=$ORIG&state=$STATE" -o /dev/null
+          curl -sS -c "$JAR" -b "$JAR" --max-time 25 -A "$UA" -L \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "tipo=2" --data-urlencode "dni=" \
+            --data-urlencode "custom_ruc=$SUNAT_RUC" --data-urlencode "j_username=$SUNAT_USUARIO" \
+            --data-urlencode "j_password=$SUNAT_CLAVE" --data-urlencode "captcha=" \
+            --data-urlencode "originalUrl=$ORIG" --data-urlencode "state=$STATE" \
+            "$SEC/j_security_check" -o login.html
+          if ! grep -q "Men" login.html; then
+            echo "!! LOGIN FALLIDO"; exit 1
+          fi
+          echo "Login OK."
+
+          set +e  # de aqui en adelante, que una factura fallida no mate el job
+          mkdir -p facturas_descargadas
+          CHROMIUM=$(find ~/.cache/ms-playwright -name "chrome" -path "*chrome-linux*" | head -1)
+          echo "factura,estado" > resumen.txt
+
+          tail -n +2 facturas.csv | while IFS=',' read -r tipo ruc_emisor serie numero fec_desde fec_hasta; do
+            tipo=$(echo "$tipo" | tr -d '\r' | xargs)
+            ruc_emisor=$(echo "$ruc_emisor" | tr -d '\r' | xargs)
+            serie=$(echo "$serie" | tr -d '\r' | xargs)
+            numero=$(echo "$numero" | tr -d '\r' | xargs)
+            fec_desde=$(echo "$fec_desde" | tr -d '\r' | xargs)
+            fec_hasta=$(echo "$fec_hasta" | tr -d '\r' | xargs)
+            [ -z "$tipo" ] && continue
+
+            base="${serie}-${numero}"
+            echo ""
+            echo "=== Procesando $base (tipo=$tipo, emisor=$ruc_emisor) ==="
+
+            curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
+            LOC=$(curl -sS -A "$UA" -c "$JAR" -b "$JAR" -D - -o /dev/null \
+              "$MENU?action=execute&code=11.9.5.1.1" | grep -i "^location:" | sed 's/[Ll]ocation: //' | tr -d '\r')
+            if [ -z "$LOC" ]; then
+              echo "  FALLO: no se genero ticket de acceso"
+              echo "$base,FALLO-ticket" >> resumen.txt
+              continue
+            fi
+            curl -sS -A "$UA" -c "$JAR" -b "$JAR" "$LOC" -o /dev/null
+
+            curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+              --data "action=realizarConsulta" --data "buscarPor=porDoc" --data "tipoConsulta=$tipo" \
+              --data "rucEmisor=$ruc_emisor" --data "serie=$serie" --data "numero=$numero" --data "numDocideRecep=" \
+              --data-urlencode "fecDesde=$fec_desde" --data-urlencode "fecHasta=$fec_hasta" \
+              "$CD" -o query.txt
+
+            CE=$(grep -o '"codeError":[0-9]*' query.txt)
+            echo "  consulta: $CE"
+
+            curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+              "$CD?action=mostrarListado&tipoConsulta=$tipo" -o /dev/null
+
+            curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+              "$CD?action=verImprimirFactura&rowIndex=0" -o "factura_${base}.html"
+
+            if ! grep -qi "COMPROBANTE" "factura_${base}.html"; then
+              echo "  FALLO: no se obtuvo la factura $base"
+              echo "$base,FALLO-descarga" >> resumen.txt
+              continue
+            fi
+
+            sed -i '/no tiene la validez de una/d' "factura_${base}.html"
+            "$CHROMIUM" --headless --no-sandbox --disable-gpu --no-pdf-header-footer \
+              --print-to-pdf="facturas_descargadas/${base}.pdf" "file://$(realpath "factura_${base}.html")" 2>/dev/null
+
+            if [ -f "facturas_descargadas/${base}.pdf" ]; then
+              echo "  OK -> facturas_descargadas/${base}.pdf"
+              echo "$base,OK" >> resumen.txt
+            else
+              echo "  FALLO: no se genero el PDF"
+              echo "$base,FALLO-pdf" >> resumen.txt
+            fi
+          done
+
+          echo ""
+          echo "=== RESUMEN ==="
+          cat resumen.txt
+          cp resumen.txt facturas_descargadas/resumen.txt
+
+      - name: Guardar los PDF en el repositorio
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add facturas_descargadas/
+          git diff --cached --quiet || git commit -m "Facturas descargadas $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
+
+      - name: Subir tambien como artefacto descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: facturas-sunat-lote
+          path: facturas_descargadas/
+          retention-days: 7
