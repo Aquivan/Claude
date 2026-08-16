@@ -2,10 +2,6 @@ name: Descargar facturas SUNAT (lote desde CSV)
 
 on:
   workflow_dispatch: {}
-  push:
-    branches: [claude/python-codes-izve18]
-    paths:
-      - "facturas.csv"
 
 permissions:
   contents: write
@@ -202,7 +198,13 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add facturas_descargadas/
           git diff --cached --quiet || git commit -m "Facturas descargadas $(date -u +'%Y-%m-%d %H:%M UTC')"
-          git push
+          for intento in 1 2 3; do
+            git push && break
+            echo "Push rechazado, reintentando con rebase (intento $intento)..."
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep 3
+          done
 
       - name: Subir tambien como artefacto descargable
         uses: actions/upload-artifact@v4
