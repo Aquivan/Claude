@@ -312,10 +312,12 @@ jobs:
           WEBHOOK_SECRET: ${{ secrets.SHEETS_WEBHOOK_SECRET }}
         run: |
           if [ -n "$WEBHOOK_URL" ]; then
-            # --post301/--post302/--post303 evita que curl convierta el POST en
-            # GET al seguir las redirecciones que hace Apps Script (puede haber
-            # mas de un salto, con distintos codigos de redireccion).
-            curl -sS -L --post301 --post302 --post303 -X POST "$WEBHOOK_URL" \
+            # Apps Script ejecuta el POST y luego redirige (302) a una URL de
+            # "eco" que entrega el resultado SOLO por GET (nunca acepta POST
+            # ahi). Por eso NO se usa -X POST aqui: -d ya implica POST en la
+            # primera llamada, y curl baja a GET solo en el salto siguiente
+            # (comportamiento por defecto sin forzar -X).
+            curl -sS -L "$WEBHOOK_URL" \
               -H "Content-Type: application/json" \
               -d "{\"secreto\":\"$WEBHOOK_SECRET\"}" \
               -D /tmp/webhook_headers.txt \
