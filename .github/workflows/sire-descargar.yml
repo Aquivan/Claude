@@ -37,16 +37,19 @@ jobs:
 
       - name: Descargar de la API SIRE
         env:
-          SIRE_RUC: ${{ secrets.SIRE_RUC }}
-          SIRE_USUARIO_SOL: ${{ secrets.SIRE_USUARIO_SOL }}
-          SIRE_CLAVE_SOL: ${{ secrets.SIRE_CLAVE_SOL }}
+          # Reutiliza los mismos secretos SUNAT_* que ya tienes configurados
+          # (mismo RUC/usuario/clave SOL de siempre) - solo hacen falta los
+          # 2 nuevos de la API SIRE (SIRE_CLIENT_ID/SIRE_CLIENT_SECRET).
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
           SIRE_CLIENT_ID: ${{ secrets.SIRE_CLIENT_ID }}
           SIRE_CLIENT_SECRET: ${{ secrets.SIRE_CLIENT_SECRET }}
         run: |
           python3 scripts/sire_client.py \
-            --ruc "$SIRE_RUC" \
-            --usuario-sol "$SIRE_USUARIO_SOL" \
-            --clave-sol "$SIRE_CLAVE_SOL" \
+            --ruc "$SUNAT_RUC" \
+            --usuario-sol "$SUNAT_USUARIO" \
+            --clave-sol "$SUNAT_CLAVE" \
             --client-id "$SIRE_CLIENT_ID" \
             --client-secret "$SIRE_CLIENT_SECRET" \
             --periodo "${{ steps.periodo.outputs.valor }}" \
