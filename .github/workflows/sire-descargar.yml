@@ -1,0 +1,137 @@
+name: Descargar SIRE (API oficial SUNAT)
+
+on:
+  workflow_dispatch:
+    inputs:
+      periodo:
+        description: "Periodo AAAAMM (ej. 202608). Vacio = mes actual"
+        required: false
+        default: ""
+      tipo:
+        description: "venta o compra"
+        required: true
+        default: "compra"
+        type: choice
+        options:
+          - compra
+          - venta
+
+permissions:
+  contents: write
+
+jobs:
+  descargar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Calcular periodo (mes actual si no se especifico)
+        id: periodo
+        run: |
+          if [ -n "${{ inputs.periodo }}" ]; then
+            echo "valor=${{ inputs.periodo }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "valor=$(date -u +%Y%m)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Descargar de la API SIRE
+        env:
+          # Reutiliza los mismos secretos SUNAT_* que ya tienes configurados
+          # (mismo RUC/usuario/clave SOL de siempre) - solo hacen falta los
+          # 2 nuevos de la API SIRE (SIRE_CLIENT_ID/SIRE_CLIENT_SECRET).
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          SIRE_CLIENT_ID: ${{ secrets.SIRE_CLIENT_ID }}
+          SIRE_CLIENT_SECRET: ${{ secrets.SIRE_CLIENT_SECRET }}
+        run: |
+          python3 scripts/sire_client.py \
+            --ruc "$SUNAT_RUC" \
+            --usuario-sol "$SUNAT_USUARIO" \
+            --clave-sol "$SUNAT_CLAVE" \
+            --client-id "$SIRE_CLIENT_ID" \
+            --client-secret "$SIRE_CLIENT_SECRET" \
+            --periodo "${{ steps.periodo.outputs.valor }}" \
+            --tipo "${{ inputs.tipo }}" \
+            --formato txt \
+            --out-dir sire
+
+      - name: Descomprimir y convertir el .txt (separado por |) a CSV real
+        run: |
+          echo "Contenido descargado:"
+          find sire -maxdepth 1 -type f
+
+          ZIP=$(find sire -maxdepth 1 -type f -iname "*.zip" | head -1)
+          if [ -n "$ZIP" ]; then
+            rm -rf sire/extraido
+            mkdir -p sire/extraido
+            unzip -o "$ZIP" -d sire/extraido/
+            echo "Extraido de $ZIP:"
+            find sire/extraido -type f
+          else
+            mkdir -p sire/extraido
+            cp sire/*.txt sire/extraido/ 2>/dev/null || true
+          fi
+
+          cat > /tmp/convertir_sire.py << 'PYEOF'
+          import csv, glob, sys, os
+
+          candidatos = glob.glob('sire/extraido/**/*.txt', recursive=True)
+          if not candidatos:
+              print("ERROR: no se encontro ningun .txt.")
+              sys.exit(1)
+          candidatos.sort(key=os.path.getmtime, reverse=True)
+          origen = candidatos[0]
+          print("Usando archivo:", origen)
+
+          with open(origen, encoding="utf-8", errors="replace") as f:
+              filas = [l.rstrip("\n").rstrip("\r").split("|") for l in f if l.strip() != ""]
+
+          if len(filas) < 2:
+              print("ERROR: el archivo no tiene filas de datos.")
+              sys.exit(1)
+
+          os.makedirs("sire", exist_ok=True)
+          with open("sire/reporte_parseado.csv", "w", newline="", encoding="utf-8") as out:
+              w = csv.writer(out)
+              w.writerows(filas)
+          print(f"OK: {len(filas)-1} fila(s) de datos convertidas a sire/reporte_parseado.csv")
+          PYEOF
+          python3 /tmp/convertir_sire.py
+
+      - name: Guardar el CSV convertido en el repositorio
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sire/reporte_parseado.csv
+          git diff --cached --quiet || git commit -m "Reporte SIRE (${{ inputs.tipo }}, ${{ steps.periodo.outputs.valor }}) $(date -u +'%Y-%m-%d %H:%M UTC')"
+          logrado=0
+          for intento in 1 2 3; do
+            if git push; then logrado=1; break; fi
+            echo "Push rechazado, reintentando con rebase (intento $intento)..."
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep 3
+          done
+          if [ "$logrado" -ne 1 ]; then
+            echo "ERROR: no se pudo subir sire/reporte_parseado.csv despues de 3 intentos."
+            exit 1
+          fi
+
+      - name: Avisar a Google Sheets que el reporte SIRE ya esta listo
+        if: always()
+        env:
+          WEBHOOK_URL: ${{ secrets.SHEETS_WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.SHEETS_WEBHOOK_SECRET }}
+        run: |
+          if [ -n "$WEBHOOK_URL" ]; then
+            curl -sS -L "$WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d "{\"secreto\":\"$WEBHOOK_SECRET\",\"tipo\":\"sire\"}" \
+              -o /tmp/webhook_resp.html -w "Webhook respondio con HTTP %{http_code}\n"
+            head -c 400 /tmp/webhook_resp.html
+            echo ""
+          else
+            echo "SHEETS_WEBHOOK_URL no esta configurado; se omite el aviso automatico."
+          fi
