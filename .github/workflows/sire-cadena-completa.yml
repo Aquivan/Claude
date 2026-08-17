@@ -1,0 +1,445 @@
+name: SIRE completo (API oficial -> facturas -> links, sin tocar el Sheet)
+
+on:
+  workflow_dispatch:
+    inputs:
+      periodo:
+        description: "Periodo AAAAMM (ej. 202608). Vacio = mes actual"
+        required: false
+        default: ""
+      tipo:
+        description: "venta o compra"
+        required: true
+        default: "compra"
+        type: choice
+        options:
+          - compra
+          - venta
+  schedule:
+    # Todos los dias a las 08:00 hora Peru (13:00 UTC, Peru es UTC-5 todo el
+    # ano, sin horario de verano). Ajustable despues si se quiere otra hora.
+    - cron: '0 13 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  sire_y_facturas:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Calcular periodo (mes actual si no se especifico)
+        id: periodo
+        run: |
+          if [ -n "${{ inputs.periodo }}" ]; then
+            echo "valor=${{ inputs.periodo }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "valor=$(date -u +%Y%m)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Instalar Chromium (para el respaldo clasico de PDF)
+        run: |
+          npm init -y >/dev/null 2>&1 || true
+          npx --yes playwright install --with-deps chromium
+
+      - name: Descargar de la API SIRE
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          SIRE_CLIENT_ID: ${{ secrets.SIRE_CLIENT_ID }}
+          SIRE_CLIENT_SECRET: ${{ secrets.SIRE_CLIENT_SECRET }}
+        run: |
+          python3 scripts/sire_client.py \
+            --ruc "$SUNAT_RUC" \
+            --usuario-sol "$SUNAT_USUARIO" \
+            --clave-sol "$SUNAT_CLAVE" \
+            --client-id "$SIRE_CLIENT_ID" \
+            --client-secret "$SIRE_CLIENT_SECRET" \
+            --periodo "${{ steps.periodo.outputs.valor }}" \
+            --tipo "${{ inputs.tipo || 'compra' }}" \
+            --formato txt \
+            --out-dir sire
+
+      - name: Descomprimir el reporte SIRE y armar facturas.csv
+        run: |
+          echo "Contenido descargado:"
+          find sire -maxdepth 1 -type f
+
+          ZIP=$(find sire -maxdepth 1 -type f -iname "*.zip" | head -1)
+          rm -rf sire/extraido
+          mkdir -p sire/extraido
+          if [ -n "$ZIP" ]; then
+            unzip -o "$ZIP" -d sire/extraido/
+          else
+            cp sire/*.txt sire/extraido/ 2>/dev/null || true
+          fi
+          echo "Extraido:"
+          find sire/extraido -type f
+
+          cat > /tmp/convertir_sire.py << 'PYEOF'
+          import csv, glob, sys, os, calendar
+
+          candidatos = glob.glob('sire/extraido/**/*.txt', recursive=True)
+          if not candidatos:
+              print("ERROR: no se encontro ningun .txt dentro del reporte SIRE.")
+              sys.exit(1)
+          candidatos.sort(key=os.path.getmtime, reverse=True)
+          origen = candidatos[0]
+          print("Usando archivo:", origen)
+
+          with open(origen, encoding="utf-8", errors="replace") as f:
+              filas = [l.rstrip("\n").rstrip("\r").split("|") for l in f if l.strip() != ""]
+
+          if len(filas) < 2:
+              print("ERROR: el archivo del SIRE no tiene filas de datos.")
+              sys.exit(1)
+
+          os.makedirs("sire", exist_ok=True)
+          with open("sire/reporte_parseado.csv", "w", newline="", encoding="utf-8") as out:
+              csv.writer(out).writerows(filas)
+          print(f"OK: {len(filas)-1} fila(s) del SIRE en sire/reporte_parseado.csv")
+
+          # ---- Ahora arma facturas.csv (lo que necesita la descarga de PDF/XML) ----
+          headers = [h.strip() for h in filas[0]]
+          idx_periodo = headers.index("Periodo")
+          idx_tipo_cp = headers.index("Tipo CP/Doc.")
+          idx_serie = headers.index("Serie del CDP")
+          idx_numero = headers.index("Nro CP o Doc. Nro Inicial (Rango)")
+          idx_ruc_emisor = headers.index("Nro Doc Identidad")
+
+          # Mismo mapeo usado en el Sheet viejo: SIRE (catalogo 01) -> codigo
+          # legacy que entiende el workflow de descarga.
+          TIPO_LEGACY = {"01": "11", "07": "14", "08": "16"}
+
+          filas_csv = [["tipo", "ruc_emisor", "serie", "numero", "fecha_desde", "fecha_hasta"]]
+          no_soportadas = 0
+          for fila in filas[1:]:
+              if len(fila) <= max(idx_periodo, idx_tipo_cp, idx_serie, idx_numero, idx_ruc_emisor):
+                  continue
+              tipo_cp = fila[idx_tipo_cp].strip()
+              serie = fila[idx_serie].strip()
+              numero = fila[idx_numero].strip()
+              ruc_emisor = fila[idx_ruc_emisor].strip()
+              periodo = fila[idx_periodo].strip()
+              if not (serie and numero and ruc_emisor):
+                  continue
+
+              tipo_legacy = TIPO_LEGACY.get(tipo_cp)
+              if not tipo_legacy:
+                  no_soportadas += 1
+                  continue
+
+              fecha_desde = fecha_hasta = ""
+              if len(periodo) == 6 and periodo.isdigit():
+                  anio, mes = int(periodo[:4]), int(periodo[4:6])
+                  ultimo_dia = calendar.monthrange(anio, mes)[1]
+                  fecha_desde = f"01/{mes:02d}/{anio}"
+                  fecha_hasta = f"{ultimo_dia:02d}/{mes:02d}/{anio}"
+
+              filas_csv.append([tipo_legacy, ruc_emisor, serie, numero, fecha_desde, fecha_hasta])
+
+          with open("facturas.csv", "w", newline="", encoding="utf-8") as out:
+              csv.writer(out).writerows(filas_csv)
+          print(f"OK: {len(filas_csv)-1} factura(s) en facturas.csv ({no_soportadas} no soportada(s) todavia)")
+          PYEOF
+          python3 /tmp/convertir_sire.py
+
+      - name: Crear script de decodificacion (PDF/XML de la API moderna)
+        run: |
+          cat > /tmp/decode_api.py << 'PYEOF'
+          import sys, json, base64, zipfile, io, os, re
+          d = json.load(open(sys.argv[1]))
+          destdir = sys.argv[2]
+          modo = sys.argv[3]  # "raw" (deja el .zip tal cual) o "extract" (saca el archivo de adentro)
+          raw = base64.b64decode(d['valArchivo'])
+          nom_zip = d.get('nomArchivo', 'archivo.zip')
+
+          if modo == 'raw':
+              nombre = nom_zip
+              open(os.path.join(destdir, nombre), 'wb').write(raw)
+              print(nombre)
+          else:
+              zf = zipfile.ZipFile(io.BytesIO(raw))
+              names = zf.namelist()
+              if names:
+                  interno = names[0]
+                  ext = os.path.splitext(interno)[1]
+                  base = re.sub(r'-(PDF|XML)\.zip$', '', nom_zip, flags=re.IGNORECASE)
+                  nombre = base + ext
+                  open(os.path.join(destdir, nombre), 'wb').write(zf.read(interno))
+                  print(nombre)
+          PYEOF
+
+      - name: Login + procesar lista de facturas (generadas del SIRE)
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+          CID="4f3b88b3-d9d6-402a-b85d-6a0bc857746a"
+          SEC="https://api-seguridad.sunat.gob.pe/v1/clientessol/$CID/oauth2"
+          ORIG="https://e-menu.sunat.gob.pe/cl-ti-itmenu/AutenticaMenuInternet.htm"
+          MENU="https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm"
+          CD="https://ww1.sunat.gob.pe/ol-ti-itconscpegem/consultar.do"
+          API="https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe/comprobantes"
+          STATE='rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAADdAADZXhlcHQABnBhcmFtc3QASyomKiYvY2wtdGktaXRtZW51L01lbnVJbnRlcm5ldC5odG0mYjY0ZDI2YThiNWFmMDkxOTIzYjIzYjY0MDdhMWMxZGI0MWU3MzNhNnQABGV4ZWNweA=='
+          JAR=jar.txt
+          set -e
+
+          echo "=== LOGIN ==="
+          curl -sS -c "$JAR" -b "$JAR" --max-time 20 -A "$UA" \
+            "$SEC/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl=$ORIG&state=$STATE" -o /dev/null
+          curl -sS -c "$JAR" -b "$JAR" --max-time 25 -A "$UA" -L \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "tipo=2" --data-urlencode "dni=" \
+            --data-urlencode "custom_ruc=$SUNAT_RUC" --data-urlencode "j_username=$SUNAT_USUARIO" \
+            --data-urlencode "j_password=$SUNAT_CLAVE" --data-urlencode "captcha=" \
+            --data-urlencode "originalUrl=$ORIG" --data-urlencode "state=$STATE" \
+            "$SEC/j_security_check" -o login.html
+          if ! grep -q "Men" login.html; then
+            echo "!! LOGIN FALLIDO"; exit 1
+          fi
+          echo "Login OK."
+
+          echo "=== Obteniendo token de la API moderna (XML/PDF oficiales) ==="
+          curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
+          EXEC_LOC=$(curl -sS -A "$UA" -c "$JAR" -b "$JAR" -D - -o /dev/null \
+            "$MENU?action=execute&code=11.38.1.1.1" | grep -i "^location:" | sed 's/[Ll]ocation: //' | tr -d '\r')
+          API_TOKEN=$(echo "$EXEC_LOC" | grep -oE 'token=[^&]*' | cut -d= -f2)
+          if [ -z "$API_TOKEN" ]; then
+            echo "AVISO: no se pudo obtener el token de la API moderna. Solo se usara el metodo clasico."
+          else
+            echo "Token moderno obtenido (${#API_TOKEN} caracteres)."
+          fi
+
+          if [ ! -s facturas.csv ] || [ $(wc -l < facturas.csv) -le 1 ]; then
+            echo "facturas.csv esta vacio (nada soportado en este periodo). Nada que descargar."
+            exit 0
+          fi
+
+          set +e
+          mkdir -p facturas_descargadas/oficial facturas_descargadas/representacion
+          rm -rf /tmp/estado; mkdir -p /tmp/estado
+          CHROMIUM=$(find ~/.cache/ms-playwright -name "chrome" -path "*chrome-linux*" | head -1)
+
+          mapear_codcpe() {
+            case "$1" in
+              10) echo "01 1" ;;
+              11) echo "01 2" ;;
+              13) echo "F7 1" ;;
+              14) echo "F7 2" ;;
+              15) echo "F8 1" ;;
+              16) echo "F8 2" ;;
+              *) echo "" ;;
+            esac
+          }
+          export -f mapear_codcpe
+
+          descargar_api_moderna() {
+            id="$1"; accion="$2"; destdir="$3"; modo="$4"; resp_file="$5"
+            for intento in 1 2 3 4 5; do
+              curl -sS -H "Authorization: Bearer $API_TOKEN" \
+                -H "Accept: application/json, text/plain, */*" \
+                -H "Origin: https://e-factura.sunat.gob.pe" \
+                -H "Referer: https://e-factura.sunat.gob.pe/" \
+                -A "$UA" "$API/$id/$accion?formato=x" -o "$resp_file"
+              if grep -q '"valArchivo"' "$resp_file"; then
+                nombre=$(python3 /tmp/decode_api.py "$resp_file" "$destdir" "$modo" 2>/dev/null)
+                if [ -n "$nombre" ] && [ -f "$destdir/$nombre" ]; then
+                  echo "$nombre"
+                  return 0
+                fi
+              fi
+              sleep 4
+            done
+            return 1
+          }
+          export -f descargar_api_moderna
+          export API_TOKEN UA API
+
+          procesar_linea() {
+            linea="$1"
+            IFS=',' read -r tipo ruc_emisor serie numero fec_desde fec_hasta <<< "$linea"
+            tipo=$(echo "$tipo" | tr -d '\r' | xargs)
+            ruc_emisor=$(echo "$ruc_emisor" | tr -d '\r' | xargs)
+            serie=$(echo "$serie" | tr -d '\r' | xargs)
+            numero=$(echo "$numero" | tr -d '\r' | xargs)
+            fec_desde=$(echo "$fec_desde" | tr -d '\r' | xargs)
+            fec_hasta=$(echo "$fec_hasta" | tr -d '\r' | xargs)
+            [ -z "$tipo" ] && return
+
+            base="${serie}-${numero}"
+            base_safe=$(echo "$base" | tr '/' '_')
+            estado_file="/tmp/estado/${base_safe}.csv"
+            echo "=== Procesando $base (tipo=$tipo, emisor=$ruc_emisor) ==="
+
+            estado_pdf="pendiente"
+            estado_xml="no-disponible"
+            archivo_pdf=""
+            archivo_xml=""
+
+            read -r codcpe direccion <<< "$(mapear_codcpe "$tipo")"
+
+            if [ -n "$codcpe" ]; then
+              id="${ruc_emisor}-${codcpe}-${serie}-${numero}"
+
+              if [ -f "facturas_descargadas/oficial/${id}.pdf" ]; then
+                estado_pdf="YA-DESCARGADO"; archivo_pdf="oficial/${id}.pdf"
+              elif [ -f "facturas_descargadas/representacion/${base}.pdf" ]; then
+                estado_pdf="YA-DESCARGADO"; archivo_pdf="representacion/${base}.pdf"
+              fi
+              if [ -f "facturas_descargadas/oficial/${id}-XML.zip" ]; then
+                estado_xml="YA-DESCARGADO"; archivo_xml="oficial/${id}-XML.zip"
+              fi
+
+              id_api="${id}-${direccion}"
+
+              if [ -z "$archivo_xml" ] && [ -n "$API_TOKEN" ]; then
+                nombre_xml=$(descargar_api_moderna "$id_api" "02" "facturas_descargadas/oficial" "raw" "/tmp/api_resp_${base_safe}_xml.json")
+                if [ -n "$nombre_xml" ]; then
+                  estado_xml="OK"; archivo_xml="oficial/$nombre_xml"
+                fi
+              fi
+
+              if [ -z "$archivo_pdf" ] && [ -n "$API_TOKEN" ]; then
+                nombre_pdf=$(descargar_api_moderna "$id_api" "01" "facturas_descargadas/oficial" "extract" "/tmp/api_resp_${base_safe}_pdf.json")
+                if [ -n "$nombre_pdf" ]; then
+                  estado_pdf="OK-oficial"; archivo_pdf="oficial/$nombre_pdf"
+                fi
+              fi
+            else
+              if [ -f "facturas_descargadas/representacion/${base}.pdf" ]; then
+                estado_pdf="YA-DESCARGADO"; archivo_pdf="representacion/${base}.pdf"
+              fi
+            fi
+
+            if [ -n "$archivo_pdf" ]; then necesita_fallback=0; else necesita_fallback=1; fi
+            echo "$estado_pdf,$estado_xml,$archivo_pdf,$archivo_xml,$necesita_fallback" > "$estado_file"
+          }
+          export -f procesar_linea
+
+          tail -n +2 facturas.csv | xargs -P 5 -I {} bash -c 'procesar_linea "$1"' _ {}
+
+          echo ""
+          echo "=== Fallback clasico (representacion impresa) para lo que quedo pendiente ==="
+          tail -n +2 facturas.csv | while IFS=',' read -r tipo ruc_emisor serie numero fec_desde fec_hasta; do
+            tipo=$(echo "$tipo" | tr -d '\r' | xargs)
+            ruc_emisor=$(echo "$ruc_emisor" | tr -d '\r' | xargs)
+            serie=$(echo "$serie" | tr -d '\r' | xargs)
+            numero=$(echo "$numero" | tr -d '\r' | xargs)
+            fec_desde=$(echo "$fec_desde" | tr -d '\r' | xargs)
+            fec_hasta=$(echo "$fec_hasta" | tr -d '\r' | xargs)
+            [ -z "$tipo" ] && continue
+            base="${serie}-${numero}"
+            base_safe=$(echo "$base" | tr '/' '_')
+            estado_file="/tmp/estado/${base_safe}.csv"
+            [ -f "$estado_file" ] || continue
+            IFS=',' read -r estado_pdf estado_xml archivo_pdf archivo_xml necesita_fallback < "$estado_file"
+            [ "$necesita_fallback" != "1" ] && continue
+
+            echo "  Fallback clasico para $base..."
+            curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
+            LOC=$(curl -sS -A "$UA" -c "$JAR" -b "$JAR" -D - -o /dev/null \
+              "$MENU?action=execute&code=11.9.5.1.1" | grep -i "^location:" | sed 's/[Ll]ocation: //' | tr -d '\r')
+            if [ -n "$LOC" ]; then
+              curl -sS -A "$UA" -c "$JAR" -b "$JAR" "$LOC" -o /dev/null
+              curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+                --data "action=realizarConsulta" --data "buscarPor=porDoc" --data "tipoConsulta=$tipo" \
+                --data "rucEmisor=$ruc_emisor" --data "serie=$serie" --data "numero=$numero" --data "numDocideRecep=" \
+                --data-urlencode "fecDesde=$fec_desde" --data-urlencode "fecHasta=$fec_hasta" \
+                "$CD" -o query.txt
+              curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+                "$CD?action=mostrarListado&tipoConsulta=$tipo" -o /dev/null
+              curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "Referer: $CD" \
+                "$CD?action=verImprimirFactura&rowIndex=0" -o "factura_${base_safe}.html"
+
+              if grep -qi "COMPROBANTE" "factura_${base_safe}.html"; then
+                sed -i '/no tiene la validez de una/d' "factura_${base_safe}.html"
+                "$CHROMIUM" --headless --no-sandbox --disable-gpu --no-pdf-header-footer \
+                  --print-to-pdf="facturas_descargadas/representacion/${base}.pdf" "file://$(realpath "factura_${base_safe}.html")" 2>/dev/null
+                if [ -f "facturas_descargadas/representacion/${base}.pdf" ]; then
+                  estado_pdf="OK-representacion"; archivo_pdf="representacion/${base}.pdf"
+                fi
+              fi
+            fi
+            [ "$estado_pdf" == "pendiente" ] && estado_pdf="FALLO"
+            echo "$estado_pdf,$estado_xml,$archivo_pdf,$archivo_xml,0" > "$estado_file"
+          done
+
+          echo "factura,estado_pdf,estado_xml,archivo_pdf,archivo_xml" > resumen.txt
+          tail -n +2 facturas.csv | while IFS=',' read -r tipo ruc_emisor serie numero fec_desde fec_hasta; do
+            tipo=$(echo "$tipo" | tr -d '\r' | xargs)
+            serie=$(echo "$serie" | tr -d '\r' | xargs)
+            numero=$(echo "$numero" | tr -d '\r' | xargs)
+            [ -z "$tipo" ] && continue
+            base="${serie}-${numero}"
+            base_safe=$(echo "$base" | tr '/' '_')
+            estado_file="/tmp/estado/${base_safe}.csv"
+            [ -f "$estado_file" ] || continue
+            IFS=',' read -r estado_pdf estado_xml archivo_pdf archivo_xml necesita_fallback < "$estado_file"
+            [ "$estado_pdf" == "pendiente" ] && estado_pdf="FALLO"
+            echo "$base,$estado_pdf,$estado_xml,$archivo_pdf,$archivo_xml" >> resumen.txt
+          done
+
+          echo ""
+          echo "=== RESUMEN ==="
+          cat resumen.txt
+          cp resumen.txt facturas_descargadas/resumen.txt
+
+      - name: Guardar todo en el repositorio
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sire/reporte_parseado.csv facturas.csv facturas_descargadas/ 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "SIRE + facturas (${{ inputs.tipo || 'compra' }}, ${{ steps.periodo.outputs.valor }}) $(date -u +'%Y-%m-%d %H:%M UTC')"
+          logrado=0
+          for intento in 1 2 3; do
+            if git push; then logrado=1; break; fi
+            echo "Push rechazado, reintentando con rebase (intento $intento)..."
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep 3
+          done
+          if [ "$logrado" -ne 1 ]; then
+            echo "ERROR: no se pudo subir los resultados despues de 3 intentos."
+            exit 1
+          fi
+
+      - name: Subir tambien como artefacto descargable
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sire-y-facturas
+          path: |
+            sire/reporte_parseado.csv
+            facturas.csv
+            facturas_descargadas/
+          retention-days: 7
+
+      - name: Avisar a Google Sheets (importa el SIRE y despues los links)
+        if: always()
+        env:
+          WEBHOOK_URL: ${{ secrets.SHEETS_WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.SHEETS_WEBHOOK_SECRET }}
+        run: |
+          if [ -n "$WEBHOOK_URL" ]; then
+            echo "--- Paso 1: importar reporte SIRE a la hoja 'Reporte SIRE' ---"
+            curl -sS -L "$WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d "{\"secreto\":\"$WEBHOOK_SECRET\",\"tipo\":\"sire\"}" \
+              -o /tmp/webhook_sire.html -w "HTTP %{http_code}\n"
+            head -c 400 /tmp/webhook_sire.html; echo ""
+
+            echo "--- Paso 2: subir PDF/XML a Drive y escribir los links ---"
+            curl -sS -L "$WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d "{\"secreto\":\"$WEBHOOK_SECRET\"}" \
+              -o /tmp/webhook_links.html -w "HTTP %{http_code}\n"
+            head -c 400 /tmp/webhook_links.html; echo ""
+          else
+            echo "SHEETS_WEBHOOK_URL no esta configurado; se omite el aviso automatico."
+          fi
