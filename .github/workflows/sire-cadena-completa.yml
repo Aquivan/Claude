@@ -390,11 +390,151 @@ jobs:
           cat resumen.txt
           cp resumen.txt facturas_descargadas/resumen.txt
 
+      - name: Generar tabla completa (markdown) del registro de compras
+        if: always()
+        run: |
+          cat > /tmp/generar_md.py << 'PYEOF'
+          import csv, os, textwrap
+
+          RUTA_CSV = "sire/reporte_parseado.csv"
+          RUTA_RESUMEN = "resumen.txt"
+          RUTA_MD = "docs/SIRE-columnas-reporte-compras.md"
+          RAMA = os.environ.get("GITHUB_REF_NAME", "claude/python-codes-izve18")
+          BASE_GH = f"https://github.com/Aquivan/Claude/blob/{RAMA}/facturas_descargadas/"
+
+          # Mismo orden natural ya usado en el documento (nombres de cabecera
+          # reales de SUNAT). Se omiten las columnas que siempre llegan vacias
+          # (Año, Nro Final Rango, COD. DAM O DSI, Clasif de Bss y Sss,
+          # ID Proyecto Operadores, PorcPart, CAR Orig/Ind E o I, CLU1..CLU39).
+          COLUMNAS = [
+              "RUC", "Apellidos y Nombres o Razón social", "Periodo", "CAR SUNAT",
+              "Fecha de emisión", "Fecha Vcto/Pago", "Tipo CP/Doc.", "Serie del CDP",
+              "Nro CP o Doc. Nro Inicial (Rango)", "Tipo Doc Identidad", "Nro Doc Identidad",
+              "Apellidos Nombres/ Razón  Social", "BI Gravado DG", "IGV / IPM DG",
+              "BI Gravado DGNG", "IGV / IPM DGNG", "BI Gravado DNG", "IGV / IPM DNG",
+              "Valor Adq. NG", "ISC", "ICBPER", "Otros Trib/ Cargos", "Total CP", "Moneda",
+              "Tipo de Cambio", "Fecha Emisión Doc Modificado", "Tipo CP Modificado",
+              "Serie CP Modificado", "Nro CP Modificado", "IMB", "Detracción",
+              "Tipo de Nota", "Est. Comp.", "Incal",
+          ]
+
+          def esc(v):
+              return (v or "").replace("|", "\\|").replace("\n", " ").strip()
+
+          if not os.path.exists(RUTA_CSV):
+              print("No hay sire/reporte_parseado.csv, se omite la tabla markdown.")
+              raise SystemExit(0)
+
+          with open(RUTA_CSV, encoding="utf-8") as f:
+              filas = list(csv.reader(f))
+          headers = [h.strip() for h in filas[0]]
+          datos = filas[1:]
+          idx = {h: headers.index(h) for h in COLUMNAS if h in headers}
+
+          resumen = {}
+          if os.path.exists(RUTA_RESUMEN):
+              with open(RUTA_RESUMEN, encoding="utf-8") as f:
+                  for r in csv.DictReader(f):
+                      resumen[r["factura"]] = r
+
+          filas_md = []
+          for fila in datos:
+              def val(col):
+                  i = idx.get(col)
+                  return esc(fila[i]) if i is not None and i < len(fila) else ""
+
+              serie = val("Serie del CDP")
+              numero = val("Nro CP o Doc. Nro Inicial (Rango)")
+              r = resumen.get(f"{serie}-{numero}", {})
+              estado = (r.get("estado_pdf") or "SIN-PROCESAR").strip() or "SIN-PROCESAR"
+              archivo_pdf = (r.get("archivo_pdf") or "").strip()
+              archivo_xml = (r.get("archivo_xml") or "").strip()
+              link_pdf = f"[{archivo_pdf}]({BASE_GH}{archivo_pdf})" if archivo_pdf else "-"
+              link_xml = f"[{archivo_xml}]({BASE_GH}{archivo_xml})" if archivo_xml else "-"
+
+              celdas = [val(c) for c in COLUMNAS] + [estado, link_pdf, link_xml]
+              filas_md.append("| " + " | ".join(celdas) + " |")
+
+          encabezado = "| " + " | ".join(COLUMNAS + ["Estado", "Link PDF", "Link XML"]) + " |"
+          separador = "|" + "|".join(["---"] * (len(COLUMNAS) + 3)) + "|"
+          periodo = datos[0][idx["Periodo"]].strip() if datos and "Periodo" in idx else "?"
+
+          explicacion = textwrap.dedent("""\
+          ## Qué significa cada columna
+
+          | Columna | Significado |
+          |---|---|
+          | `RUC` | RUC de la empresa que descarga el reporte |
+          | `Apellidos y Nombres o Razón social` | Razón social de la empresa que descarga el reporte |
+          | `Periodo` | Periodo tributario AAAAMM |
+          | `CAR SUNAT` | Código Único de Registro del comprobante en el libro electrónico |
+          | `Fecha de emisión` | Fecha de emisión del comprobante |
+          | `Fecha Vcto/Pago` | Fecha de vencimiento o pago pactada (si aplica) |
+          | `Tipo CP/Doc.` | Código de tipo de comprobante (Catálogo 01 SUNAT: `01`=Factura, `07`=Nota de Crédito, `08`=Nota de Débito) |
+          | `Serie del CDP` | Serie del comprobante |
+          | `Nro CP o Doc. Nro Inicial (Rango)` | Número del comprobante |
+          | `Tipo Doc Identidad` | Tipo de documento del proveedor (`6`=RUC) |
+          | `Nro Doc Identidad` | RUC del proveedor |
+          | `Apellidos Nombres/ Razón Social` | Razón social o nombre del proveedor |
+          | `BI Gravado DG` | Base imponible gravada — Destino Gravado |
+          | `IGV / IPM DG` | IGV de la base gravada DG |
+          | `BI Gravado DGNG` | Base imponible — Destino Gravado y No Gravado (uso mixto) |
+          | `IGV / IPM DGNG` | IGV de la base DGNG |
+          | `BI Gravado DNG` | Base imponible — Destino No Gravado |
+          | `IGV / IPM DNG` | IGV de la base DNG |
+          | `Valor Adq. NG` | Valor de adquisición No Gravado (exonerado/inafecto) |
+          | `ISC` | Impuesto Selectivo al Consumo |
+          | `ICBPER` | Impuesto a las bolsas plásticas |
+          | `Otros Trib/ Cargos` | Otros tributos o cargos del comprobante |
+          | `Total CP` | Importe total del comprobante |
+          | `Moneda` | Código de moneda (`PEN`=soles) |
+          | `Tipo de Cambio` | Tipo de cambio aplicado |
+          | `Fecha Emisión Doc Modificado` | Fecha de emisión del comprobante que la nota modifica (solo notas) |
+          | `Tipo CP Modificado` | Tipo del comprobante modificado (solo notas) |
+          | `Serie CP Modificado` | Serie del comprobante modificado (solo notas) |
+          | `Nro CP Modificado` | Número del comprobante modificado (solo notas) |
+          | `IMB` | Campo de uso interno de SUNAT (siempre `0.00` en los reportes observados) |
+          | `Detracción` | `D` = comprobante con detracción, vacío = sin detracción |
+          | `Tipo de Nota` | Motivo de la nota de crédito/débito (Catálogo 09 SUNAT), solo en notas |
+          | `Est. Comp.` | Estado del comprobante en el libro (`1` = vigente) |
+          | `Incal` | Indicador de comprobante observado por SUNAT (`0` = sin observación) |
+          | `Estado` | Resultado de la descarga automática del PDF/XML (`OK-oficial`, `OK-representacion`, `YA-DESCARGADO`, `FALLO`, `SIN-PROCESAR`) |
+          | `Link PDF` | Link al PDF del comprobante, guardado en el repositorio de GitHub |
+          | `Link XML` | Link al XML (ZIP) del comprobante, guardado en el repositorio de GitHub |
+          """)
+
+          os.makedirs("docs", exist_ok=True)
+          with open(RUTA_MD, "w", encoding="utf-8") as out:
+              out.write("# Registro de Compras SIRE — todos los comprobantes\n\n")
+              out.write(
+                  "Tabla generada automaticamente en cada ejecucion del workflow "
+                  "`sire-cadena-completa.yml`, con TODOS los comprobantes del ultimo "
+                  f"reporte descargado (periodo **{periodo}**, {len(datos)} "
+                  "comprobante(s)). Se actualiza sola cada vez que se agregan mas "
+                  "comprobantes. Se omiten las columnas que SUNAT siempre trae vacias "
+                  "(`Año`, `Nro Final (Rango)`, `COD. DAM O DSI`, `Clasif de Bss y Sss`, "
+                  "`ID Proyecto Operadores`, `PorcPart`, `CAR Orig/ Ind E o I`, y "
+                  "`CLU1`...`CLU39`).\n\n"
+              )
+              out.write(encabezado + "\n")
+              out.write(separador + "\n")
+              out.write("\n".join(filas_md) + "\n\n")
+              out.write(explicacion)
+              out.write(
+                  "\n---\n\n*Generado automaticamente por el workflow "
+                  "`sire-cadena-completa.yml` a partir de `sire/reporte_parseado.csv` "
+                  "y `resumen.txt` en cada ejecucion.*\n"
+              )
+
+          print(f"OK: {RUTA_MD} generado con {len(datos)} comprobante(s).")
+          PYEOF
+          python3 /tmp/generar_md.py
+
       - name: Guardar todo en el repositorio
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sire/reporte_parseado.csv facturas.csv facturas_descargadas/ 2>/dev/null || true
+          git add sire/reporte_parseado.csv facturas.csv facturas_descargadas/ docs/SIRE-columnas-reporte-compras.md 2>/dev/null || true
           git diff --cached --quiet || git commit -m "SIRE + facturas (${{ inputs.tipo || 'compra' }}, ${{ steps.periodo.outputs.valor }}) $(date -u +'%Y-%m-%d %H:%M UTC')"
           logrado=0
           for intento in 1 2 3; do
