@@ -103,10 +103,10 @@ jobs:
             case "$1" in
               10) echo "01 1" ;;  # FE Emitidas
               11) echo "01 2" ;;  # FE Recibidas
-              13) echo "07 1" ;;  # NC Emitidas
-              14) echo "07 2" ;;  # NC Recibidas
-              15) echo "08 1" ;;  # ND Emitidas
-              16) echo "08 2" ;;  # ND Recibidas
+              13) echo "F7 1" ;;  # NC Emitidas (codigo real de SUNAT: F7, no 07 -
+              14) echo "F7 2" ;;  # NC Recibidas  confirmado via api-cpe.../parametros)
+              15) echo "F8 1" ;;  # ND Emitidas (codigo real: F8, no 08)
+              16) echo "F8 2" ;;  # ND Recibidas
               *) echo "" ;;       # no soportado aun por la API moderna
             esac
           }
