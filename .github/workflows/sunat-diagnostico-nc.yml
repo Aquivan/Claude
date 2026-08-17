@@ -63,6 +63,23 @@ jobs:
           consultar "Con XML (accion=02) misma variante actual" "20611844469-07-E001-90-2" "02"
           consultar "Como si fuera Factura (control) - E001-378 que SI funciono" "20611844469-01-E001-378-2" "01"
 
+          # El usuario capturo la llamada real del navegador y el codigo NO es "07",
+          # es "F7" (letra F + numero 7) - un codigo combinado especial de este
+          # endpoint, distinto al catalogo simple de SUNAT.
+          consultar "F7 en vez de 07 (PDF)" "20611844469-F7-E001-90-2" "01"
+          consultar "F7 en vez de 07 (XML)" "20611844469-F7-E001-90-2" "02"
+          consultar "F7 sin direccion" "20611844469-F7-E001-90" "01"
+
+          echo ""
+          echo "=== F7 EXACTO como lo capturo el usuario del navegador (sin accion ni formato) ==="
+          echo "GET $API/20611844469-F7-E001-90-2"
+          curl -sS -H "Authorization: Bearer $API_TOKEN" \
+            -H "Accept: application/json, text/plain, */*" \
+            -H "Origin: https://e-factura.sunat.gob.pe" \
+            -H "Referer: https://e-factura.sunat.gob.pe/" \
+            -A "$UA" -w "\nHTTP_CODE:%{http_code}\n" \
+            "$API/20611844469-F7-E001-90-2"
+
           BASE="https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe"
           MIRUC="$SUNAT_RUC"
 
