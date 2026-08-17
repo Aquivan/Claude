@@ -3,6 +3,9 @@ name: Importar reporte SIRE (compras)
 on:
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   importar:
     runs-on: ubuntu-latest
@@ -59,13 +62,18 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add sire/reporte_parseado.csv
           git diff --cached --quiet || git commit -m "Reporte SIRE convertido a CSV $(date -u +'%Y-%m-%d %H:%M UTC')"
+          logrado=0
           for intento in 1 2 3; do
-            git push && break
+            if git push; then logrado=1; break; fi
             echo "Push rechazado, reintentando con rebase (intento $intento)..."
             git fetch origin "$GITHUB_REF_NAME"
             git rebase "origin/$GITHUB_REF_NAME"
             sleep 3
           done
+          if [ "$logrado" -ne 1 ]; then
+            echo "ERROR: no se pudo subir sire/reporte_parseado.csv despues de 3 intentos."
+            exit 1
+          fi
 
       - name: Avisar a Google Sheets que el reporte SIRE ya esta listo
         if: always()
