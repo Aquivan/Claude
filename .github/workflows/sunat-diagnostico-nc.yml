@@ -62,3 +62,27 @@ jobs:
           consultar "Direccion=1 (por si acaso)" "20611844469-07-E001-90-1" "01"
           consultar "Con XML (accion=02) misma variante actual" "20611844469-07-E001-90-2" "02"
           consultar "Como si fuera Factura (control) - E001-378 que SI funciono" "20611844469-01-E001-378-2" "01"
+
+          BASE="https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe"
+          MIRUC="$SUNAT_RUC"
+
+          echo ""
+          echo "=== parametros (metadata del formulario) ==="
+          curl -sS -H "Authorization: Bearer $API_TOKEN" -H "Accept: application/json" -A "$UA" \
+            -w "\nHTTP_CODE:%{http_code}\n" "$BASE/parametros"
+
+          echo ""
+          echo "=== generaPedido (POST, body vacio - para ver que campos pide) ==="
+          curl -sS -X POST -H "Authorization: Bearer $API_TOKEN" \
+            -H "Content-Type: application/json" -H "Accept: application/json" -A "$UA" \
+            -w "\nHTTP_CODE:%{http_code}\n" \
+            -d '{}' \
+            "$BASE/comprobantes/$MIRUC/pedidos"
+
+          echo ""
+          echo "=== generaPedido (POST, body con los datos de la NC que fallo) ==="
+          curl -sS -X POST -H "Authorization: Bearer $API_TOKEN" \
+            -H "Content-Type: application/json" -H "Accept: application/json" -A "$UA" \
+            -w "\nHTTP_CODE:%{http_code}\n" \
+            -d '{"numRuc":"20611844469","codCpe":"07","serieCpe":"E001","numeroCpe":"90","direccion":"2"}' \
+            "$BASE/comprobantes/$MIRUC/pedidos"
