@@ -1,87 +1,67 @@
-# Columnas del reporte SIRE (Registro de Compras Electrónico)
+# Registro de Compras SIRE — estructura de columnas
 
-Documentación de las columnas reales que trae el reporte de **Compras (RCE)**
-descargado desde la API oficial de SUNAT (`scripts/sire_client.py`), tal como
-llega en `sire/reporte_parseado.csv`.
+Estructura real del **Registro de Compras (RCE)** tal como queda en la hoja
+"Reporte SIRE", con los nombres de cabecera oficiales de SUNAT en el mismo
+orden en que se descargan, más las 3 columnas que el sistema agrega al
+final (`Estado`, `Link PDF`, `Link XML`).
 
-El archivo original de SUNAT trae **80 columnas** con los nombres de cabecera
-oficiales. De esas, **46 nunca traen datos** en nuestros reportes reales
-(son campos que SUNAT reserva pero no usa en este tipo de operación, o que
-solo aplican a un tipo de compra que esta empresa no realiza) y se omiten
-aqui:
+Se omiten las columnas que SUNAT trae en el archivo pero que siempre llegan
+vacías (`Año`, `Nro Final (Rango)`, `COD. DAM O DSI`, `Clasif de Bss y Sss`,
+`ID Proyecto Operadores`, `PorcPart`, `CAR Orig/ Ind E o I`, y `CLU1`...`CLU39`).
 
-- `Año`, `Nro Final (Rango)`, `COD. DAM O DSI`, `Clasif de Bss y Sss`,
-  `ID Proyecto Operadores`, `PorcPart`, `CAR Orig/ Ind E o I`
-- Las 39 columnas `CLU1` a `CLU39` (campos reservados de SUNAT para
-  detalle de casilleros/clusters, no usados en este libro)
+Ejemplo con 3 comprobantes reales (periodo 202607):
 
-Quedan las **34 columnas con datos reales**, documentadas abajo en el mismo
-orden en que aparecen en el archivo.
+| RUC | Apellidos y Nombres o Razón social | Periodo | CAR SUNAT | Fecha de emisión | Fecha Vcto/Pago | Tipo CP/Doc. | Serie del CDP | Nro CP o Doc. Nro Inicial (Rango) | Tipo Doc Identidad | Nro Doc Identidad | Apellidos Nombres/ Razón Social | BI Gravado DG | IGV / IPM DG | BI Gravado DGNG | IGV / IPM DGNG | BI Gravado DNG | IGV / IPM DNG | Valor Adq. NG | ISC | ICBPER | Otros Trib/ Cargos | Total CP | Moneda | Tipo de Cambio | Fecha Emisión Doc Modificado | Tipo CP Modificado | Serie CP Modificado | Nro CP Modificado | IMB | Detracción | Tipo de Nota | Est. Comp. | Incal | Estado | Link PDF | Link XML |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 20615366791 | CORPORACION EMPRESARIAL JENILE E.I.R.L. | 202607 | 2053703631201F0010000004593 | 02/07/2026 | 02/07/2026 | 01 | F001 | 4593 | 6 | 20537036312 | INDUSTRIA IMPERIAL S.A.C. | 640.68 | 115.32 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 756.00 | PEN | 1.000 | | | | | 0.00 | | | 1 | 0 | OK | drive.google.com/.../F001-4593.pdf | drive.google.com/.../F001-4593-XML.zip |
+| 20615366791 | CORPORACION EMPRESARIAL JENILE E.I.R.L. | 202607 | 2051722256001F0020000052904 | 02/07/2026 | 02/08/2026 | 01 | F002 | 52904 | 6 | 20517222560 | CORPORACION LON S.A.C. | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 23820.60 | 0.00 | 0.00 | 0.00 | 23820.60 | PEN | 1.000 | | | | | 0.00 | D | | 1 | 0 | OK | drive.google.com/.../F002-52904.pdf | drive.google.com/.../F002-52904-XML.zip |
+| 20615366791 | CORPORACION EMPRESARIAL JENILE E.I.R.L. | 202607 | 2060430160307E0010000000792 | 31/07/2026 | | 07 | E001 | 792 | 6 | 20604301603 | DISTRIBUIDORA DE PRODUCTOS MARINOS Y ALIMENTOS CASALI S.A.C. | -138135.59 | -24864.41 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | -163000.00 | PEN | 1.000 | 17/07/2026 | 01 | E001 | 3425 | 0.00 | | 01 | 1 | 0 | OK | drive.google.com/.../E001-792.pdf | drive.google.com/.../E001-792-XML.zip |
 
-## Datos del comprobante
+## Qué significa cada columna
 
-| # | Columna | Qué contiene | Ejemplo real |
-|---|---------|--------------|---------------|
-| 1 | `RUC` | RUC de la empresa (siempre el mismo: la que descarga el reporte) | `20615366791` |
-| 2 | `Apellidos y Nombres o Razón social` | Razón social de la empresa que descarga el reporte | `CORPORACION EMPRESARIAL JENILE E.I.R.L.` |
-| 3 | `Periodo` | Periodo tributario, formato AAAAMM | `202607` (julio 2026) |
-| 4 | `CAR SUNAT` | Código Único de Registro: identificador único que SUNAT asigna a cada comprobante dentro del libro electrónico | `2053703631201F0010000004593` |
-| 5 | `Fecha de emisión` | Fecha en que se emitió el comprobante | `02/07/2026` |
-| 6 | `Fecha Vcto/Pago` | Fecha de vencimiento o pago pactada (solo viene en algunos comprobantes, ej. facturas con crédito) | `02/08/2026` |
-| 7 | `Tipo CP/Doc.` | Código de tipo de comprobante (Catálogo 01 SUNAT) | `01` = Factura, `07` = Nota de Crédito |
-| 8 | `Serie del CDP` | Serie del comprobante | `E001`, `F001`, `F002` |
-| 9 | `Nro CP o Doc. Nro Inicial (Rango)` | Número del comprobante | `4593` |
-
-## Proveedor (emisor del comprobante)
-
-| # | Columna | Qué contiene | Ejemplo real |
-|---|---------|--------------|---------------|
-| 10 | `Tipo Doc Identidad` | Tipo de documento del proveedor (Catálogo SUNAT) | `6` = RUC |
-| 11 | `Nro Doc Identidad` | Número de documento del proveedor (RUC) | `20537036312` |
-| 12 | `Apellidos Nombres/ Razón Social` | Razón social o nombre del proveedor | `INDUSTRIA IMPERIAL S.A.C.` |
-
-## Importes
-
-| # | Columna | Qué contiene | Ejemplo real |
-|---|---------|--------------|---------------|
-| 13 | `BI Gravado DG` | Base imponible gravada — Destino Gravado (operación afecta a IGV, uso 100% gravado) | `640.68` |
-| 14 | `IGV / IPM DG` | IGV correspondiente a la base gravada DG | `115.32` |
-| 15 | `BI Gravado DGNG` | Base imponible — Destino Gravado y No Gravado (compras de uso mixto) | `0.00` |
-| 16 | `IGV / IPM DGNG` | IGV correspondiente a DGNG | `0.00` |
-| 17 | `BI Gravado DNG` | Base imponible — Destino No Gravado | `0.00` |
-| 18 | `IGV / IPM DNG` | IGV correspondiente a DNG | `0.00` |
-| 19 | `Valor Adq. NG` | Valor de adquisición No Gravado (operaciones exoneradas, inafectas o sin derecho a crédito fiscal) | `23820.60` |
-| 20 | `ISC` | Impuesto Selectivo al Consumo | `0.00` |
-| 21 | `ICBPER` | Impuesto al Consumo de Bolsas Plásticas | `0.00` |
-| 22 | `Otros Trib/ Cargos` | Otros tributos o cargos incluidos en el comprobante | `0.00` |
-| 23 | `Total CP` | Importe total del comprobante | `756.00` |
-| 24 | `Moneda` | Código de moneda | `PEN` (soles) |
-| 25 | `Tipo de Cambio` | Tipo de cambio aplicado (si la moneda no es soles) | `1.000` |
-
-## Solo para Notas de Crédito/Débito (comprobante que modifican)
-
-Estas 4 columnas solo traen datos cuando `Tipo CP/Doc.` es una nota (`07`,
-`08`); en facturas y boletas quedan vacías.
-
-| # | Columna | Qué contiene | Ejemplo real |
-|---|---------|--------------|---------------|
-| 26 | `Fecha Emisión Doc Modificado` | Fecha de emisión del comprobante original que la nota modifica | `17/07/2026` |
-| 27 | `Tipo CP Modificado` | Tipo del comprobante original modificado | `01` (Factura) |
-| 28 | `Serie CP Modificado` | Serie del comprobante original modificado | `E001` |
-| 29 | `Nro CP Modificado` | Número del comprobante original modificado | `3425` |
-
-## Otros indicadores
-
-| # | Columna | Qué contiene | Ejemplo real |
-|---|---------|--------------|---------------|
-| 30 | `IMB` | Campo de SUNAT de uso interno (siempre `0.00` en los reportes observados; no tiene efecto en el procesamiento) | `0.00` |
-| 31 | `Detracción` | Indicador de si la operación está sujeta a detracción | `D` = con detracción (vacío = sin detracción) |
-| 32 | `Tipo de Nota` | Motivo de la nota de crédito/débito (Catálogo 09 SUNAT). Solo en notas | `01` = Anulación de la operación |
-| 33 | `Est. Comp.` | Estado del comprobante en el libro | `1` = comprobante válido/vigente |
-| 34 | `Incal` | Indicador de comprobante "no calificado" u observado por SUNAT | `0` = sin observación |
+| Columna | Significado |
+|---|---|
+| `RUC` | RUC de la empresa que descarga el reporte |
+| `Apellidos y Nombres o Razón social` | Razón social de la empresa que descarga el reporte |
+| `Periodo` | Periodo tributario AAAAMM |
+| `CAR SUNAT` | Código Único de Registro del comprobante en el libro electrónico |
+| `Fecha de emisión` | Fecha de emisión del comprobante |
+| `Fecha Vcto/Pago` | Fecha de vencimiento o pago pactada (si aplica) |
+| `Tipo CP/Doc.` | Código de tipo de comprobante (Catálogo 01 SUNAT: `01`=Factura, `07`=Nota de Crédito, `08`=Nota de Débito) |
+| `Serie del CDP` | Serie del comprobante |
+| `Nro CP o Doc. Nro Inicial (Rango)` | Número del comprobante |
+| `Tipo Doc Identidad` | Tipo de documento del proveedor (`6`=RUC) |
+| `Nro Doc Identidad` | RUC del proveedor |
+| `Apellidos Nombres/ Razón Social` | Razón social o nombre del proveedor |
+| `BI Gravado DG` | Base imponible gravada — Destino Gravado |
+| `IGV / IPM DG` | IGV de la base gravada DG |
+| `BI Gravado DGNG` | Base imponible — Destino Gravado y No Gravado (uso mixto) |
+| `IGV / IPM DGNG` | IGV de la base DGNG |
+| `BI Gravado DNG` | Base imponible — Destino No Gravado |
+| `IGV / IPM DNG` | IGV de la base DNG |
+| `Valor Adq. NG` | Valor de adquisición No Gravado (exonerado/inafecto) |
+| `ISC` | Impuesto Selectivo al Consumo |
+| `ICBPER` | Impuesto a las bolsas plásticas |
+| `Otros Trib/ Cargos` | Otros tributos o cargos del comprobante |
+| `Total CP` | Importe total del comprobante |
+| `Moneda` | Código de moneda (`PEN`=soles) |
+| `Tipo de Cambio` | Tipo de cambio aplicado |
+| `Fecha Emisión Doc Modificado` | Fecha de emisión del comprobante que la nota modifica (solo notas) |
+| `Tipo CP Modificado` | Tipo del comprobante modificado (solo notas) |
+| `Serie CP Modificado` | Serie del comprobante modificado (solo notas) |
+| `Nro CP Modificado` | Número del comprobante modificado (solo notas) |
+| `IMB` | Campo de uso interno de SUNAT (siempre `0.00` en los reportes observados) |
+| `Detracción` | `D` = comprobante con detracción, vacío = sin detracción |
+| `Tipo de Nota` | Motivo de la nota de crédito/débito (Catálogo 09 SUNAT), solo en notas |
+| `Est. Comp.` | Estado del comprobante en el libro (`1` = vigente) |
+| `Incal` | Indicador de comprobante observado por SUNAT (`0` = sin observación) |
+| `Estado` | Resultado de la descarga automática del PDF/XML (`OK`, `FALLO`, `PENDIENTE`) |
+| `Link PDF` | Link de Drive al PDF del comprobante descargado |
+| `Link XML` | Link de Drive al XML (o ZIP con XML) del comprobante descargado |
 
 ---
 
-*Generado a partir de un reporte real (43 comprobantes, periodo 202607,
-RUC 20615366791) descargado por `scripts/sire_client.py` vía la cadena
-automatizada `sire-cadena-completa.yml`.*
+*Ejemplo tomado de un reporte real (43 comprobantes, periodo 202607, RUC
+20615366791) descargado por `scripts/sire_client.py` vía la cadena
+automatizada `sire-cadena-completa.yml`. Los links de Drive de arriba son
+de ejemplo — los reales los escribe el webhook al procesar cada fila.*
