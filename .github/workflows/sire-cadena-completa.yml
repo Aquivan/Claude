@@ -126,6 +126,7 @@ jobs:
       FACTURAS_CSV: sire/${{ matrix.empresa.ruc }}/facturas.csv
       RUTA_COMPRAS_CSV: sire/${{ matrix.empresa.ruc }}/reporte_parseado.csv
       RUTA_VENTAS_CSV: sire/${{ matrix.empresa.ruc }}/reporte_parseado_ventas.csv
+      DIR_HISTORICO: sire/${{ matrix.empresa.ruc }}/historico
       DIR_DESCARGAS: facturas_descargadas/${{ matrix.empresa.ruc }}
       DOC_COMPRAS_MD: docs/SIRE-columnas-reporte-compras-${{ matrix.empresa.ruc }}.md
       DOC_VENTAS_MD: docs/SIRE-columnas-reporte-ventas-${{ matrix.empresa.ruc }}.md
@@ -952,12 +953,28 @@ jobs:
           PYEOF
           python3 /tmp/generar_md.py "$RUC" "$RUTA_COMPRAS_CSV" "$DOC_COMPRAS_MD" "$RUTA_VENTAS_CSV" "$DOC_VENTAS_MD"
 
+      - name: Guardar copia historica del periodo (no se pisa entre corridas)
+        # RUTA_COMPRAS_CSV/RUTA_VENTAS_CSV se SOBREESCRIBEN en cada corrida (son
+        # "el ultimo periodo procesado"), asi que un rango de varios periodos, o
+        # simplemente correr el workflow mes a mes, va perdiendo los meses
+        # anteriores en esas rutas -- solo quedan en el HISTORIAL de git (cada
+        # commit), no en un archivo facil de encontrar. Esta copia guarda cada
+        # periodo en su propia ruta fija sire/<RUC>/historico/<periodo>/..., para
+        # que Google Sheets (u otra cosa) pueda leer un periodo especifico sin
+        # tener que andar buscando en el historial de commits.
+        run: |
+          PERIODO="${{ steps.periodo.outputs.valor }}"
+          mkdir -p "$DIR_HISTORICO/$PERIODO"
+          [ -s "$RUTA_COMPRAS_CSV" ] && cp "$RUTA_COMPRAS_CSV" "$DIR_HISTORICO/$PERIODO/reporte_parseado.csv"
+          [ -s "$RUTA_VENTAS_CSV" ] && cp "$RUTA_VENTAS_CSV" "$DIR_HISTORICO/$PERIODO/reporte_parseado_ventas.csv"
+          true
+
       - name: Guardar todo en el repositorio
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "$RUTA_COMPRAS_CSV" "$RUTA_VENTAS_CSV" \
-                  "$FACTURAS_CSV" "$DIR_DESCARGAS/" \
+                  "$FACTURAS_CSV" "$DIR_DESCARGAS/" "$DIR_HISTORICO/" \
                   "$DOC_COMPRAS_MD" "$DOC_VENTAS_MD" \
                   2>/dev/null || true
           git diff --cached --quiet || git commit -m "SIRE + facturas ($RUC, ${{ inputs.tipo || matrix.empresa.tipo || 'ambos' }}, ${{ steps.periodo.outputs.valor }}) $(date -u +'%Y-%m-%d %H:%M UTC')"
