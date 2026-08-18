@@ -90,6 +90,35 @@ jobs:
           origen, filas = mejor_origen, mejor_filas
           print(f"Usando archivo ({tipo_reporte}, el que tiene mas datos):", origen)
 
+          if tipo_reporte == "venta":
+              # El .txt de RVIE (ventas) que devuelve SUNAT NO trae fila de
+              # cabecera (a diferencia de RCE/compras, que si la trae) -
+              # verificado empiricamente 2026-08-18: todas las filas son
+              # datos, con exactamente 39 campos por fila. Se antepone una
+              # cabecera sintetica basada en la posicion real de cada campo
+              # (confirmado algebraicamente: BI Gravada + IGV = Total CP).
+              VENTAS_HEADERS = [
+                  "RUC", "Apellidos y Nombres o Razón social", "Periodo", "CAR SUNAT",
+                  "Fecha de emisión", "Fecha Vcto/Pago", "Tipo CP/Doc.", "Serie del CDP",
+                  "Nro CP o Doc. Nro Inicial (Rango)", "Nro Final (Rango)",
+                  "Tipo Doc Identidad", "Nro Doc Identidad", "Apellidos Nombres/ Razón  Social",
+                  "Campo 14 (SUNAT)", "BI Gravada", "Campo 16 (SUNAT)", "IGV / IPM",
+                  "Campo 18 (SUNAT)", "Monto Exonerado", "Campo 20 (SUNAT)", "Campo 21 (SUNAT)",
+                  "Campo 22 (SUNAT)", "Campo 23 (SUNAT)", "Campo 24 (SUNAT)", "Campo 25 (SUNAT)",
+                  "Total CP", "Moneda", "Tipo de Cambio",
+                  "Fecha Emisión Doc Modificado", "Tipo CP Modificado", "Serie CP Modificado",
+                  "Nro CP Modificado", "Campo 33 (SUNAT)", "Campo 34 (SUNAT)", "Campo 35 (SUNAT)",
+                  "Campo 36 (SUNAT)", "Campo 37 (SUNAT)", "Campo 38 (SUNAT)", "Campo 39 (SUNAT)",
+              ]
+              if filas and len(filas[0]) == len(VENTAS_HEADERS):
+                  filas = [VENTAS_HEADERS] + filas
+              else:
+                  print(f"AVISO: el archivo de ventas tiene {len(filas[0]) if filas else 0} "
+                        f"campos por fila (se esperaban {len(VENTAS_HEADERS)}); "
+                        "no se puede etiquetar con seguridad, se omite.")
+                  open(ruta_csv_salida, "w").close()
+                  sys.exit(0)
+
           os.makedirs(os.path.dirname(ruta_csv_salida) or ".", exist_ok=True)
           if len(filas) < 2:
               print(f"AVISO: {tipo_reporte} no tiene comprobantes en este periodo.")
@@ -459,11 +488,11 @@ jobs:
           BASE_GH = f"https://github.com/Aquivan/Claude/blob/{RAMA}/facturas_descargadas/"
           RUTA_RESUMEN = "resumen.txt"
 
-          # Mismo orden natural ya usado en el documento (nombres de cabecera
-          # reales de SUNAT). Se omiten las columnas que siempre llegan vacias
-          # (Año, Nro Final Rango, COD. DAM O DSI, Clasif de Bss y Sss,
+          # Compras (RCE): el .txt de SUNAT SI trae cabecera con nombres
+          # reales. Se omiten las columnas que siempre llegan vacias (Año,
+          # Nro Final Rango, COD. DAM O DSI, Clasif de Bss y Sss,
           # ID Proyecto Operadores, PorcPart, CAR Orig/Ind E o I, CLU1..CLU39).
-          COLUMNAS = [
+          COLUMNAS_COMPRAS = [
               "RUC", "Apellidos y Nombres o Razón social", "Periodo", "CAR SUNAT",
               "Fecha de emisión", "Fecha Vcto/Pago", "Tipo CP/Doc.", "Serie del CDP",
               "Nro CP o Doc. Nro Inicial (Rango)", "Tipo Doc Identidad", "Nro Doc Identidad",
@@ -475,10 +504,80 @@ jobs:
               "Tipo de Nota", "Est. Comp.", "Incal",
           ]
 
+          # Ventas (RVIE): el .txt de SUNAT NO trae cabecera (verificado
+          # 2026-08-18) - se le puso una cabecera sintetica por posicion en
+          # convertir_sire.py. Los campos "Campo N (SUNAT)" son posiciones
+          # cuyo nombre oficial no se pudo confirmar (siempre 0 en los datos
+          # vistos); se muestran igual para no ocultar montos por si algun
+          # periodo si los usa. Se omite solo "Nro Final (Rango)", confirmado
+          # siempre vacio igual que en compras.
+          COLUMNAS_VENTAS = [
+              "RUC", "Apellidos y Nombres o Razón social", "Periodo", "CAR SUNAT",
+              "Fecha de emisión", "Fecha Vcto/Pago", "Tipo CP/Doc.", "Serie del CDP",
+              "Nro CP o Doc. Nro Inicial (Rango)", "Tipo Doc Identidad", "Nro Doc Identidad",
+              "Apellidos Nombres/ Razón  Social",
+              "Campo 14 (SUNAT)", "BI Gravada", "Campo 16 (SUNAT)", "IGV / IPM",
+              "Campo 18 (SUNAT)", "Monto Exonerado", "Campo 20 (SUNAT)", "Campo 21 (SUNAT)",
+              "Campo 22 (SUNAT)", "Campo 23 (SUNAT)", "Campo 24 (SUNAT)",
+              "Total CP", "Moneda", "Tipo de Cambio",
+              "Fecha Emisión Doc Modificado", "Tipo CP Modificado",
+              "Serie CP Modificado", "Nro CP Modificado",
+          ]
+
           def esc(v):
               return (v or "").replace("|", "\\|").replace("\n", " ").strip()
 
-          def generar_tabla(ruta_csv, ruta_md, titulo, contraparte):
+          def significados(contraparte):
+              base = "Campo de SUNAT del reporte de ventas cuyo nombre oficial no se pudo confirmar contra el manual (siempre 0 en los datos vistos hasta ahora; se muestra tal cual, sin interpretar, por si algun periodo lo usa)."
+              d = {
+                  "RUC": "RUC de la empresa que descarga el reporte",
+                  "Apellidos y Nombres o Razón social": "Razón social de la empresa que descarga el reporte",
+                  "Periodo": "Periodo tributario AAAAMM",
+                  "CAR SUNAT": "Código Único de Registro del comprobante en el libro electrónico",
+                  "Fecha de emisión": "Fecha de emisión del comprobante",
+                  "Fecha Vcto/Pago": "Fecha de vencimiento o pago pactada (si aplica)",
+                  "Tipo CP/Doc.": "Código de tipo de comprobante (Catálogo 01 SUNAT: `01`=Factura, `07`=Nota de Crédito, `08`=Nota de Débito)",
+                  "Serie del CDP": "Serie del comprobante",
+                  "Nro CP o Doc. Nro Inicial (Rango)": "Número del comprobante",
+                  "Tipo Doc Identidad": f"Tipo de documento del {contraparte} (`6`=RUC)",
+                  "Nro Doc Identidad": f"RUC del {contraparte}",
+                  "Apellidos Nombres/ Razón  Social": f"Razón social o nombre del {contraparte}",
+                  "Total CP": "Importe total del comprobante",
+                  "Moneda": "Código de moneda (`PEN`=soles)",
+                  "Tipo de Cambio": "Tipo de cambio aplicado",
+                  "Fecha Emisión Doc Modificado": "Fecha de emisión del comprobante que la nota modifica (solo notas)",
+                  "Tipo CP Modificado": "Tipo del comprobante modificado (solo notas)",
+                  "Serie CP Modificado": "Serie del comprobante modificado (solo notas)",
+                  "Nro CP Modificado": "Número del comprobante modificado (solo notas)",
+                  # Compras (RCE)
+                  "BI Gravado DG": "Base imponible gravada — Destino Gravado",
+                  "IGV / IPM DG": "IGV de la base gravada DG",
+                  "BI Gravado DGNG": "Base imponible — Destino Gravado y No Gravado (uso mixto)",
+                  "IGV / IPM DGNG": "IGV de la base DGNG",
+                  "BI Gravado DNG": "Base imponible — Destino No Gravado",
+                  "IGV / IPM DNG": "IGV de la base DNG",
+                  "Valor Adq. NG": "Valor de adquisición No Gravado (exonerado/inafecto)",
+                  "ISC": "Impuesto Selectivo al Consumo",
+                  "ICBPER": "Impuesto a las bolsas plásticas",
+                  "Otros Trib/ Cargos": "Otros tributos o cargos del comprobante",
+                  "IMB": "Campo de uso interno de SUNAT (siempre `0.00` en los reportes observados)",
+                  "Detracción": "`D` = comprobante con detracción, vacío = sin detracción",
+                  "Tipo de Nota": "Motivo de la nota de crédito/débito (Catálogo 09 SUNAT), solo en notas",
+                  "Est. Comp.": "Estado del comprobante en el libro (`1` = vigente)",
+                  "Incal": "Indicador de comprobante observado por SUNAT (`0` = sin observación)",
+                  # Ventas (RVIE) - posiciones confirmadas algebraicamente
+                  # (BI Gravada + IGV [+ Monto Exonerado] = Total CP)
+                  "BI Gravada": "Base imponible gravada con IGV",
+                  "IGV / IPM": "IGV/IPM de la base gravada",
+                  "Monto Exonerado": "Monto de venta exonerada de IGV (confirmado: cuando BI/IGV estan en 0, este campo es igual al Total CP)",
+                  # Resultado de la descarga
+                  "Estado": "Resultado de la descarga automática del PDF/XML (`OK-oficial`, `OK-representacion`, `YA-DESCARGADO`, `FALLO`, `SIN-PROCESAR`)",
+                  "Link PDF": "Link al PDF del comprobante, guardado en el repositorio de GitHub",
+                  "Link XML": "Link al XML (ZIP) del comprobante, guardado en el repositorio de GitHub",
+              }
+              return d, base
+
+          def generar_tabla(ruta_csv, ruta_md, titulo, contraparte, columnas, nota_omitidas):
               if not os.path.exists(ruta_csv) or os.path.getsize(ruta_csv) == 0:
                   print(f"No hay {ruta_csv} (o esta vacio), se omite {ruta_md}.")
                   return
@@ -489,7 +588,7 @@ jobs:
                   return
               headers = [h.strip() for h in filas[0]]
               datos = filas[1:]
-              idx = {h: headers.index(h) for h in COLUMNAS if h in headers}
+              idx = {h: headers.index(h) for h in columnas if h in headers}
 
               resumen = {}
               if os.path.exists(RUTA_RESUMEN):
@@ -512,56 +611,19 @@ jobs:
                   link_pdf = f"[{archivo_pdf}]({BASE_GH}{archivo_pdf})" if archivo_pdf else "-"
                   link_xml = f"[{archivo_xml}]({BASE_GH}{archivo_xml})" if archivo_xml else "-"
 
-                  celdas = [val(c) for c in COLUMNAS] + [estado, link_pdf, link_xml]
+                  celdas = [val(c) for c in columnas] + [estado, link_pdf, link_xml]
                   filas_md.append("| " + " | ".join(celdas) + " |")
 
-              encabezado = "| " + " | ".join(COLUMNAS + ["Estado", "Link PDF", "Link XML"]) + " |"
-              separador = "|" + "|".join(["---"] * (len(COLUMNAS) + 3)) + "|"
+              encabezado = "| " + " | ".join(columnas + ["Estado", "Link PDF", "Link XML"]) + " |"
+              separador = "|" + "|".join(["---"] * (len(columnas) + 3)) + "|"
               periodo = datos[0][idx["Periodo"]].strip() if datos and "Periodo" in idx else "?"
 
-              explicacion = textwrap.dedent(f"""\
-              ## Qué significa cada columna
-
-              | Columna | Significado |
-              |---|---|
-              | `RUC` | RUC de la empresa que descarga el reporte |
-              | `Apellidos y Nombres o Razón social` | Razón social de la empresa que descarga el reporte |
-              | `Periodo` | Periodo tributario AAAAMM |
-              | `CAR SUNAT` | Código Único de Registro del comprobante en el libro electrónico |
-              | `Fecha de emisión` | Fecha de emisión del comprobante |
-              | `Fecha Vcto/Pago` | Fecha de vencimiento o pago pactada (si aplica) |
-              | `Tipo CP/Doc.` | Código de tipo de comprobante (Catálogo 01 SUNAT: `01`=Factura, `07`=Nota de Crédito, `08`=Nota de Débito) |
-              | `Serie del CDP` | Serie del comprobante |
-              | `Nro CP o Doc. Nro Inicial (Rango)` | Número del comprobante |
-              | `Tipo Doc Identidad` | Tipo de documento del {contraparte} (`6`=RUC) |
-              | `Nro Doc Identidad` | RUC del {contraparte} |
-              | `Apellidos Nombres/ Razón Social` | Razón social o nombre del {contraparte} |
-              | `BI Gravado DG` | Base imponible gravada — Destino Gravado |
-              | `IGV / IPM DG` | IGV de la base gravada DG |
-              | `BI Gravado DGNG` | Base imponible — Destino Gravado y No Gravado (uso mixto) |
-              | `IGV / IPM DGNG` | IGV de la base DGNG |
-              | `BI Gravado DNG` | Base imponible — Destino No Gravado |
-              | `IGV / IPM DNG` | IGV de la base DNG |
-              | `Valor Adq. NG` | Valor de adquisición No Gravado (exonerado/inafecto) |
-              | `ISC` | Impuesto Selectivo al Consumo |
-              | `ICBPER` | Impuesto a las bolsas plásticas |
-              | `Otros Trib/ Cargos` | Otros tributos o cargos del comprobante |
-              | `Total CP` | Importe total del comprobante |
-              | `Moneda` | Código de moneda (`PEN`=soles) |
-              | `Tipo de Cambio` | Tipo de cambio aplicado |
-              | `Fecha Emisión Doc Modificado` | Fecha de emisión del comprobante que la nota modifica (solo notas) |
-              | `Tipo CP Modificado` | Tipo del comprobante modificado (solo notas) |
-              | `Serie CP Modificado` | Serie del comprobante modificado (solo notas) |
-              | `Nro CP Modificado` | Número del comprobante modificado (solo notas) |
-              | `IMB` | Campo de uso interno de SUNAT (siempre `0.00` en los reportes observados) |
-              | `Detracción` | `D` = comprobante con detracción, vacío = sin detracción |
-              | `Tipo de Nota` | Motivo de la nota de crédito/débito (Catálogo 09 SUNAT), solo en notas |
-              | `Est. Comp.` | Estado del comprobante en el libro (`1` = vigente) |
-              | `Incal` | Indicador de comprobante observado por SUNAT (`0` = sin observación) |
-              | `Estado` | Resultado de la descarga automática del PDF/XML (`OK-oficial`, `OK-representacion`, `YA-DESCARGADO`, `FALLO`, `SIN-PROCESAR`) |
-              | `Link PDF` | Link al PDF del comprobante, guardado en el repositorio de GitHub |
-              | `Link XML` | Link al XML (ZIP) del comprobante, guardado en el repositorio de GitHub |
-              """)
+              significado_map, significado_generico = significados(contraparte)
+              filas_explicacion = "\n".join(
+                  f"| `{c}` | {significado_map.get(c, significado_generico)} |"
+                  for c in columnas + ["Estado", "Link PDF", "Link XML"]
+              )
+              explicacion = "## Qué significa cada columna\n\n| Columna | Significado |\n|---|---|\n" + filas_explicacion + "\n"
 
               os.makedirs(os.path.dirname(ruta_md) or ".", exist_ok=True)
               with open(ruta_md, "w", encoding="utf-8") as out:
@@ -571,10 +633,7 @@ jobs:
                       "`sire-cadena-completa.yml`, con TODOS los comprobantes del ultimo "
                       f"reporte descargado (periodo **{periodo}**, {len(datos)} "
                       "comprobante(s)). Se actualiza sola cada vez que se agregan mas "
-                      "comprobantes. Se omiten las columnas que SUNAT siempre trae vacias "
-                      "(`Año`, `Nro Final (Rango)`, `COD. DAM O DSI`, `Clasif de Bss y Sss`, "
-                      "`ID Proyecto Operadores`, `PorcPart`, `CAR Orig/ Ind E o I`, y "
-                      "`CLU1`...`CLU39`).\n\n"
+                      f"comprobantes. {nota_omitidas}\n\n"
                   )
                   out.write(encabezado + "\n")
                   out.write(separador + "\n")
@@ -587,10 +646,23 @@ jobs:
                   )
               print(f"OK: {ruta_md} generado con {len(datos)} comprobante(s).")
 
-          generar_tabla("sire/reporte_parseado.csv", "docs/SIRE-columnas-reporte-compras.md",
-                        "Registro de Compras SIRE — todos los comprobantes", "proveedor")
-          generar_tabla("sire/reporte_parseado_ventas.csv", "docs/SIRE-columnas-reporte-ventas.md",
-                        "Registro de Ventas SIRE — todos los comprobantes", "cliente")
+          generar_tabla(
+              "sire/reporte_parseado.csv", "docs/SIRE-columnas-reporte-compras.md",
+              "Registro de Compras SIRE — todos los comprobantes", "proveedor",
+              COLUMNAS_COMPRAS,
+              "Se omiten las columnas que SUNAT siempre trae vacias (`Año`, "
+              "`Nro Final (Rango)`, `COD. DAM O DSI`, `Clasif de Bss y Sss`, "
+              "`ID Proyecto Operadores`, `PorcPart`, `CAR Orig/ Ind E o I`, y "
+              "`CLU1`...`CLU39`)."
+          )
+          generar_tabla(
+              "sire/reporte_parseado_ventas.csv", "docs/SIRE-columnas-reporte-ventas.md",
+              "Registro de Ventas SIRE — todos los comprobantes", "cliente",
+              COLUMNAS_VENTAS,
+              "El .txt de ventas de SUNAT no trae fila de cabecera (a diferencia "
+              "de compras); se le puso una cabecera por posicion. Se omite solo "
+              "`Nro Final (Rango)` (siempre vacio)."
+          )
           PYEOF
           python3 /tmp/generar_md.py
 
