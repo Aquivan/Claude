@@ -8,11 +8,12 @@ on:
         required: false
         default: ""
       tipo:
-        description: "venta o compra"
+        description: "compra, venta o ambos"
         required: true
-        default: "compra"
+        default: "ambos"
         type: choice
         options:
+          - ambos
           - compra
           - venta
   schedule:
@@ -39,12 +40,21 @@ jobs:
             echo "valor=$(date -u +%Y%m)" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Calcular tipos a descargar (compra, venta o ambos)
+        id: tipos
+        run: |
+          if [ -n "${{ inputs.tipo }}" ]; then
+            echo "valor=${{ inputs.tipo }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "valor=ambos" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Instalar Chromium (para el respaldo clasico de PDF)
         run: |
           npm init -y >/dev/null 2>&1 || true
           npx --yes playwright install --with-deps chromium
 
-      - name: Descargar de la API SIRE
+      - name: Descargar de la API SIRE (compra y/o venta) y armar facturas.csv
         env:
           SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
           SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
@@ -52,112 +62,149 @@ jobs:
           SIRE_CLIENT_ID: ${{ secrets.SIRE_CLIENT_ID }}
           SIRE_CLIENT_SECRET: ${{ secrets.SIRE_CLIENT_SECRET }}
         run: |
-          python3 scripts/sire_client.py \
-            --ruc "$SUNAT_RUC" \
-            --usuario-sol "$SUNAT_USUARIO" \
-            --clave-sol "$SUNAT_CLAVE" \
-            --client-id "$SIRE_CLIENT_ID" \
-            --client-secret "$SIRE_CLIENT_SECRET" \
-            --periodo "${{ steps.periodo.outputs.valor }}" \
-            --tipo "${{ inputs.tipo || 'compra' }}" \
-            --formato txt \
-            --out-dir sire
-
-      - name: Descomprimir el reporte SIRE y armar facturas.csv
-        run: |
-          echo "Contenido descargado:"
-          find sire -maxdepth 1 -type f
-
-          ZIP=$(find sire -maxdepth 1 -type f -iname "*.zip" | head -1)
-          rm -rf sire/extraido
-          mkdir -p sire/extraido
-          if [ -n "$ZIP" ]; then
-            unzip -o "$ZIP" -d sire/extraido/
-          else
-            cp sire/*.txt sire/extraido/ 2>/dev/null || true
-          fi
-          echo "Extraido:"
-          find sire/extraido -type f
-
           cat > /tmp/convertir_sire.py << 'PYEOF'
           import csv, glob, sys, os, calendar
 
-          candidatos = glob.glob('sire/extraido/**/*.txt', recursive=True)
+          # argv: tipo_reporte("compra"|"venta")  ruta_csv_salida  ruta_facturas_csv
+          tipo_reporte, ruta_csv_salida, ruta_facturas_csv = sys.argv[1:4]
+
+          candidatos = glob.glob(f'sire/extraido_{tipo_reporte}/**/*.txt', recursive=True)
           if not candidatos:
-              print("ERROR: no se encontro ningun .txt dentro del reporte SIRE.")
+              print(f"ERROR: no se encontro ningun .txt para {tipo_reporte}.")
               sys.exit(1)
 
           # SUNAT a veces devuelve VARIOS .txt dentro del mismo zip (distintos
-          # sub-libros, ej. Registro de Compras vs Compras No Domiciliado) y
-          # solo uno trae filas reales; el resto vienen vacios (solo cabecera
-          # o ni eso). Elegir por fecha de modificacion no es confiable (todos
-          # se extraen casi al mismo instante) - en su lugar se leen TODOS los
-          # candidatos y se usa el que tenga mas filas de datos.
-          mejor_origen = None
-          mejor_filas = None
+          # sub-libros, ej. Registro de Compras vs Compras No Domiciliado) y solo
+          # uno trae filas reales; el resto vienen vacios (solo cabecera o ni
+          # eso). Elegir por fecha de modificacion no es confiable (todos se
+          # extraen casi al mismo instante) - se leen TODOS los candidatos y se
+          # usa el que tenga mas filas de datos.
+          mejor_origen = mejor_filas = None
           for candidato in candidatos:
               with open(candidato, encoding="utf-8", errors="replace") as f:
-                  filas_candidato = [l.rstrip("\n").rstrip("\r").split("|") for l in f if l.strip() != ""]
-              print(f"  {candidato}: {max(len(filas_candidato) - 1, 0)} fila(s) de datos")
-              if mejor_filas is None or len(filas_candidato) > len(mejor_filas):
-                  mejor_origen, mejor_filas = candidato, filas_candidato
+                  filas_c = [l.rstrip("\n").rstrip("\r").split("|") for l in f if l.strip() != ""]
+              print(f"  {candidato}: {max(len(filas_c) - 1, 0)} fila(s) de datos")
+              if mejor_filas is None or len(filas_c) > len(mejor_filas):
+                  mejor_origen, mejor_filas = candidato, filas_c
 
           origen, filas = mejor_origen, mejor_filas
-          print("Usando archivo (el que tiene mas datos):", origen)
+          print(f"Usando archivo ({tipo_reporte}, el que tiene mas datos):", origen)
 
+          os.makedirs(os.path.dirname(ruta_csv_salida) or ".", exist_ok=True)
           if len(filas) < 2:
-              print("ERROR: ningun archivo del SIRE tiene filas de datos.")
-              sys.exit(1)
+              print(f"AVISO: {tipo_reporte} no tiene comprobantes en este periodo.")
+              open(ruta_csv_salida, "w").close()
+              sys.exit(0)
 
-          os.makedirs("sire", exist_ok=True)
-          with open("sire/reporte_parseado.csv", "w", newline="", encoding="utf-8") as out:
+          with open(ruta_csv_salida, "w", newline="", encoding="utf-8") as out:
               csv.writer(out).writerows(filas)
-          print(f"OK: {len(filas)-1} fila(s) del SIRE en sire/reporte_parseado.csv")
+          print(f"OK: {len(filas)-1} fila(s) de {tipo_reporte} en {ruta_csv_salida}")
 
-          # ---- Ahora arma facturas.csv (lo que necesita la descarga de PDF/XML) ----
+          # ---- Agrega filas a facturas.csv (lo que necesita la descarga de PDF/XML) ----
           headers = [h.strip() for h in filas[0]]
           idx_periodo = headers.index("Periodo")
           idx_tipo_cp = headers.index("Tipo CP/Doc.")
           idx_serie = headers.index("Serie del CDP")
           idx_numero = headers.index("Nro CP o Doc. Nro Inicial (Rango)")
-          idx_ruc_emisor = headers.index("Nro Doc Identidad")
+          idx_ruc_propio = headers.index("RUC")
+          idx_ruc_contraparte = headers.index("Nro Doc Identidad")
 
-          # Mismo mapeo usado en el Sheet viejo: SIRE (catalogo 01) -> codigo
-          # legacy que entiende el workflow de descarga.
-          TIPO_LEGACY = {"01": "11", "07": "14", "08": "16"}
+          # SIRE (Catalogo 01) -> codigo legacy que entiende la descarga de
+          # PDF/XML (Emitidas=ventas, Recibidas=compras - ver mapear_codcpe).
+          if tipo_reporte == "venta":
+              TIPO_LEGACY = {"01": "10", "07": "13", "08": "15"}
+          else:
+              TIPO_LEGACY = {"01": "11", "07": "14", "08": "16"}
 
-          filas_csv = [["tipo", "ruc_emisor", "serie", "numero", "fecha_desde", "fecha_hasta"]]
-          no_soportadas = 0
-          for fila in filas[1:]:
-              if len(fila) <= max(idx_periodo, idx_tipo_cp, idx_serie, idx_numero, idx_ruc_emisor):
-                  continue
-              tipo_cp = fila[idx_tipo_cp].strip()
-              serie = fila[idx_serie].strip()
-              numero = fila[idx_numero].strip()
-              ruc_emisor = fila[idx_ruc_emisor].strip()
-              periodo = fila[idx_periodo].strip()
-              if not (serie and numero and ruc_emisor):
-                  continue
-
-              tipo_legacy = TIPO_LEGACY.get(tipo_cp)
-              if not tipo_legacy:
-                  no_soportadas += 1
-                  continue
-
-              fecha_desde = fecha_hasta = ""
-              if len(periodo) == 6 and periodo.isdigit():
-                  anio, mes = int(periodo[:4]), int(periodo[4:6])
-                  ultimo_dia = calendar.monthrange(anio, mes)[1]
-                  fecha_desde = f"01/{mes:02d}/{anio}"
-                  fecha_hasta = f"{ultimo_dia:02d}/{mes:02d}/{anio}"
-
-              filas_csv.append([tipo_legacy, ruc_emisor, serie, numero, fecha_desde, fecha_hasta])
-
-          with open("facturas.csv", "w", newline="", encoding="utf-8") as out:
-              csv.writer(out).writerows(filas_csv)
-          print(f"OK: {len(filas_csv)-1} factura(s) en facturas.csv ({no_soportadas} no soportada(s) todavia)")
+          existe_header = os.path.exists(ruta_facturas_csv) and os.path.getsize(ruta_facturas_csv) > 0
+          with open(ruta_facturas_csv, "a", newline="", encoding="utf-8") as out:
+              w = csv.writer(out)
+              if not existe_header:
+                  w.writerow(["tipo", "ruc_emisor", "serie", "numero", "fecha_desde", "fecha_hasta"])
+              agregadas = no_soportadas = 0
+              for fila in filas[1:]:
+                  if len(fila) <= max(idx_periodo, idx_tipo_cp, idx_serie, idx_numero,
+                                       idx_ruc_propio, idx_ruc_contraparte):
+                      continue
+                  tipo_cp = fila[idx_tipo_cp].strip()
+                  serie = fila[idx_serie].strip()
+                  numero = fila[idx_numero].strip()
+                  periodo = fila[idx_periodo].strip()
+                  # El "emisor" real del comprobante para la API de SUNAT: en
+                  # compras es el proveedor (Nro Doc Identidad); en ventas
+                  # somos nosotros mismos (columna RUC, constante).
+                  if tipo_reporte == "venta":
+                      ruc_emisor_real = fila[idx_ruc_propio].strip()
+                  else:
+                      ruc_emisor_real = fila[idx_ruc_contraparte].strip()
+                  if not (serie and numero and ruc_emisor_real):
+                      continue
+                  tipo_legacy = TIPO_LEGACY.get(tipo_cp)
+                  if not tipo_legacy:
+                      no_soportadas += 1
+                      continue
+                  fecha_desde = fecha_hasta = ""
+                  if len(periodo) == 6 and periodo.isdigit():
+                      anio, mes = int(periodo[:4]), int(periodo[4:6])
+                      ultimo_dia = calendar.monthrange(anio, mes)[1]
+                      fecha_desde = f"01/{mes:02d}/{anio}"
+                      fecha_hasta = f"{ultimo_dia:02d}/{mes:02d}/{anio}"
+                  w.writerow([tipo_legacy, ruc_emisor_real, serie, numero, fecha_desde, fecha_hasta])
+                  agregadas += 1
+          print(f"OK: {agregadas} factura(s) de {tipo_reporte} agregadas a {ruta_facturas_csv} "
+                f"({no_soportadas} no soportada(s) todavia)")
           PYEOF
-          python3 /tmp/convertir_sire.py
+
+          SELECCION="${{ steps.tipos.outputs.valor }}"
+          if [ "$SELECCION" = "ambos" ]; then
+            TIPOS=(compra venta)
+          else
+            TIPOS=("$SELECCION")
+          fi
+          echo "Tipos a descargar: ${TIPOS[*]}"
+
+          rm -f facturas.csv
+
+          for T in "${TIPOS[@]}"; do
+            echo ""
+            echo "########## Descargando SIRE - $T (periodo ${{ steps.periodo.outputs.valor }}) ##########"
+            rm -rf "sire/$T" "sire/extraido_$T"
+            mkdir -p "sire/$T" "sire/extraido_$T"
+
+            python3 scripts/sire_client.py \
+              --ruc "$SUNAT_RUC" \
+              --usuario-sol "$SUNAT_USUARIO" \
+              --clave-sol "$SUNAT_CLAVE" \
+              --client-id "$SIRE_CLIENT_ID" \
+              --client-secret "$SIRE_CLIENT_SECRET" \
+              --periodo "${{ steps.periodo.outputs.valor }}" \
+              --tipo "$T" \
+              --formato txt \
+              --out-dir "sire/$T"
+
+            echo "Contenido descargado ($T):"
+            find "sire/$T" -maxdepth 1 -type f
+
+            ZIP=$(find "sire/$T" -maxdepth 1 -type f -iname "*.zip" | head -1)
+            if [ -n "$ZIP" ]; then
+              unzip -o "$ZIP" -d "sire/extraido_$T/"
+            else
+              cp "sire/$T"/*.txt "sire/extraido_$T/" 2>/dev/null || true
+            fi
+            echo "Extraido ($T):"
+            find "sire/extraido_$T" -type f
+
+            if [ "$T" = "compra" ]; then
+              RUTA_CSV="sire/reporte_parseado.csv"
+            else
+              RUTA_CSV="sire/reporte_parseado_ventas.csv"
+            fi
+            python3 /tmp/convertir_sire.py "$T" "$RUTA_CSV" facturas.csv
+          done
+
+          echo ""
+          echo "=== facturas.csv combinado (compra + venta) ==="
+          cat facturas.csv 2>/dev/null || echo "(vacio)"
 
       - name: Crear script de decodificacion (PDF/XML de la API moderna)
         run: |
@@ -402,17 +449,15 @@ jobs:
           cat resumen.txt
           cp resumen.txt facturas_descargadas/resumen.txt
 
-      - name: Generar tabla completa (markdown) del registro de compras
+      - name: Generar tablas completas (markdown) de compras y ventas
         if: always()
         run: |
           cat > /tmp/generar_md.py << 'PYEOF'
           import csv, os, textwrap
 
-          RUTA_CSV = "sire/reporte_parseado.csv"
-          RUTA_RESUMEN = "resumen.txt"
-          RUTA_MD = "docs/SIRE-columnas-reporte-compras.md"
           RAMA = os.environ.get("GITHUB_REF_NAME", "claude/python-codes-izve18")
           BASE_GH = f"https://github.com/Aquivan/Claude/blob/{RAMA}/facturas_descargadas/"
+          RUTA_RESUMEN = "resumen.txt"
 
           # Mismo orden natural ya usado en el documento (nombres de cabecera
           # reales de SUNAT). Se omiten las columnas que siempre llegan vacias
@@ -433,112 +478,119 @@ jobs:
           def esc(v):
               return (v or "").replace("|", "\\|").replace("\n", " ").strip()
 
-          if not os.path.exists(RUTA_CSV):
-              print("No hay sire/reporte_parseado.csv, se omite la tabla markdown.")
-              raise SystemExit(0)
+          def generar_tabla(ruta_csv, ruta_md, titulo, contraparte):
+              if not os.path.exists(ruta_csv) or os.path.getsize(ruta_csv) == 0:
+                  print(f"No hay {ruta_csv} (o esta vacio), se omite {ruta_md}.")
+                  return
+              with open(ruta_csv, encoding="utf-8") as f:
+                  filas = list(csv.reader(f))
+              if len(filas) < 2:
+                  print(f"{ruta_csv} no tiene filas de datos, se omite {ruta_md}.")
+                  return
+              headers = [h.strip() for h in filas[0]]
+              datos = filas[1:]
+              idx = {h: headers.index(h) for h in COLUMNAS if h in headers}
 
-          with open(RUTA_CSV, encoding="utf-8") as f:
-              filas = list(csv.reader(f))
-          headers = [h.strip() for h in filas[0]]
-          datos = filas[1:]
-          idx = {h: headers.index(h) for h in COLUMNAS if h in headers}
+              resumen = {}
+              if os.path.exists(RUTA_RESUMEN):
+                  with open(RUTA_RESUMEN, encoding="utf-8") as f:
+                      for r in csv.DictReader(f):
+                          resumen[r["factura"]] = r
 
-          resumen = {}
-          if os.path.exists(RUTA_RESUMEN):
-              with open(RUTA_RESUMEN, encoding="utf-8") as f:
-                  for r in csv.DictReader(f):
-                      resumen[r["factura"]] = r
+              filas_md = []
+              for fila in datos:
+                  def val(col):
+                      i = idx.get(col)
+                      return esc(fila[i]) if i is not None and i < len(fila) else ""
 
-          filas_md = []
-          for fila in datos:
-              def val(col):
-                  i = idx.get(col)
-                  return esc(fila[i]) if i is not None and i < len(fila) else ""
+                  serie = val("Serie del CDP")
+                  numero = val("Nro CP o Doc. Nro Inicial (Rango)")
+                  r = resumen.get(f"{serie}-{numero}", {})
+                  estado = (r.get("estado_pdf") or "SIN-PROCESAR").strip() or "SIN-PROCESAR"
+                  archivo_pdf = (r.get("archivo_pdf") or "").strip()
+                  archivo_xml = (r.get("archivo_xml") or "").strip()
+                  link_pdf = f"[{archivo_pdf}]({BASE_GH}{archivo_pdf})" if archivo_pdf else "-"
+                  link_xml = f"[{archivo_xml}]({BASE_GH}{archivo_xml})" if archivo_xml else "-"
 
-              serie = val("Serie del CDP")
-              numero = val("Nro CP o Doc. Nro Inicial (Rango)")
-              r = resumen.get(f"{serie}-{numero}", {})
-              estado = (r.get("estado_pdf") or "SIN-PROCESAR").strip() or "SIN-PROCESAR"
-              archivo_pdf = (r.get("archivo_pdf") or "").strip()
-              archivo_xml = (r.get("archivo_xml") or "").strip()
-              link_pdf = f"[{archivo_pdf}]({BASE_GH}{archivo_pdf})" if archivo_pdf else "-"
-              link_xml = f"[{archivo_xml}]({BASE_GH}{archivo_xml})" if archivo_xml else "-"
+                  celdas = [val(c) for c in COLUMNAS] + [estado, link_pdf, link_xml]
+                  filas_md.append("| " + " | ".join(celdas) + " |")
 
-              celdas = [val(c) for c in COLUMNAS] + [estado, link_pdf, link_xml]
-              filas_md.append("| " + " | ".join(celdas) + " |")
+              encabezado = "| " + " | ".join(COLUMNAS + ["Estado", "Link PDF", "Link XML"]) + " |"
+              separador = "|" + "|".join(["---"] * (len(COLUMNAS) + 3)) + "|"
+              periodo = datos[0][idx["Periodo"]].strip() if datos and "Periodo" in idx else "?"
 
-          encabezado = "| " + " | ".join(COLUMNAS + ["Estado", "Link PDF", "Link XML"]) + " |"
-          separador = "|" + "|".join(["---"] * (len(COLUMNAS) + 3)) + "|"
-          periodo = datos[0][idx["Periodo"]].strip() if datos and "Periodo" in idx else "?"
+              explicacion = textwrap.dedent(f"""\
+              ## Qué significa cada columna
 
-          explicacion = textwrap.dedent("""\
-          ## Qué significa cada columna
+              | Columna | Significado |
+              |---|---|
+              | `RUC` | RUC de la empresa que descarga el reporte |
+              | `Apellidos y Nombres o Razón social` | Razón social de la empresa que descarga el reporte |
+              | `Periodo` | Periodo tributario AAAAMM |
+              | `CAR SUNAT` | Código Único de Registro del comprobante en el libro electrónico |
+              | `Fecha de emisión` | Fecha de emisión del comprobante |
+              | `Fecha Vcto/Pago` | Fecha de vencimiento o pago pactada (si aplica) |
+              | `Tipo CP/Doc.` | Código de tipo de comprobante (Catálogo 01 SUNAT: `01`=Factura, `07`=Nota de Crédito, `08`=Nota de Débito) |
+              | `Serie del CDP` | Serie del comprobante |
+              | `Nro CP o Doc. Nro Inicial (Rango)` | Número del comprobante |
+              | `Tipo Doc Identidad` | Tipo de documento del {contraparte} (`6`=RUC) |
+              | `Nro Doc Identidad` | RUC del {contraparte} |
+              | `Apellidos Nombres/ Razón Social` | Razón social o nombre del {contraparte} |
+              | `BI Gravado DG` | Base imponible gravada — Destino Gravado |
+              | `IGV / IPM DG` | IGV de la base gravada DG |
+              | `BI Gravado DGNG` | Base imponible — Destino Gravado y No Gravado (uso mixto) |
+              | `IGV / IPM DGNG` | IGV de la base DGNG |
+              | `BI Gravado DNG` | Base imponible — Destino No Gravado |
+              | `IGV / IPM DNG` | IGV de la base DNG |
+              | `Valor Adq. NG` | Valor de adquisición No Gravado (exonerado/inafecto) |
+              | `ISC` | Impuesto Selectivo al Consumo |
+              | `ICBPER` | Impuesto a las bolsas plásticas |
+              | `Otros Trib/ Cargos` | Otros tributos o cargos del comprobante |
+              | `Total CP` | Importe total del comprobante |
+              | `Moneda` | Código de moneda (`PEN`=soles) |
+              | `Tipo de Cambio` | Tipo de cambio aplicado |
+              | `Fecha Emisión Doc Modificado` | Fecha de emisión del comprobante que la nota modifica (solo notas) |
+              | `Tipo CP Modificado` | Tipo del comprobante modificado (solo notas) |
+              | `Serie CP Modificado` | Serie del comprobante modificado (solo notas) |
+              | `Nro CP Modificado` | Número del comprobante modificado (solo notas) |
+              | `IMB` | Campo de uso interno de SUNAT (siempre `0.00` en los reportes observados) |
+              | `Detracción` | `D` = comprobante con detracción, vacío = sin detracción |
+              | `Tipo de Nota` | Motivo de la nota de crédito/débito (Catálogo 09 SUNAT), solo en notas |
+              | `Est. Comp.` | Estado del comprobante en el libro (`1` = vigente) |
+              | `Incal` | Indicador de comprobante observado por SUNAT (`0` = sin observación) |
+              | `Estado` | Resultado de la descarga automática del PDF/XML (`OK-oficial`, `OK-representacion`, `YA-DESCARGADO`, `FALLO`, `SIN-PROCESAR`) |
+              | `Link PDF` | Link al PDF del comprobante, guardado en el repositorio de GitHub |
+              | `Link XML` | Link al XML (ZIP) del comprobante, guardado en el repositorio de GitHub |
+              """)
 
-          | Columna | Significado |
-          |---|---|
-          | `RUC` | RUC de la empresa que descarga el reporte |
-          | `Apellidos y Nombres o Razón social` | Razón social de la empresa que descarga el reporte |
-          | `Periodo` | Periodo tributario AAAAMM |
-          | `CAR SUNAT` | Código Único de Registro del comprobante en el libro electrónico |
-          | `Fecha de emisión` | Fecha de emisión del comprobante |
-          | `Fecha Vcto/Pago` | Fecha de vencimiento o pago pactada (si aplica) |
-          | `Tipo CP/Doc.` | Código de tipo de comprobante (Catálogo 01 SUNAT: `01`=Factura, `07`=Nota de Crédito, `08`=Nota de Débito) |
-          | `Serie del CDP` | Serie del comprobante |
-          | `Nro CP o Doc. Nro Inicial (Rango)` | Número del comprobante |
-          | `Tipo Doc Identidad` | Tipo de documento del proveedor (`6`=RUC) |
-          | `Nro Doc Identidad` | RUC del proveedor |
-          | `Apellidos Nombres/ Razón Social` | Razón social o nombre del proveedor |
-          | `BI Gravado DG` | Base imponible gravada — Destino Gravado |
-          | `IGV / IPM DG` | IGV de la base gravada DG |
-          | `BI Gravado DGNG` | Base imponible — Destino Gravado y No Gravado (uso mixto) |
-          | `IGV / IPM DGNG` | IGV de la base DGNG |
-          | `BI Gravado DNG` | Base imponible — Destino No Gravado |
-          | `IGV / IPM DNG` | IGV de la base DNG |
-          | `Valor Adq. NG` | Valor de adquisición No Gravado (exonerado/inafecto) |
-          | `ISC` | Impuesto Selectivo al Consumo |
-          | `ICBPER` | Impuesto a las bolsas plásticas |
-          | `Otros Trib/ Cargos` | Otros tributos o cargos del comprobante |
-          | `Total CP` | Importe total del comprobante |
-          | `Moneda` | Código de moneda (`PEN`=soles) |
-          | `Tipo de Cambio` | Tipo de cambio aplicado |
-          | `Fecha Emisión Doc Modificado` | Fecha de emisión del comprobante que la nota modifica (solo notas) |
-          | `Tipo CP Modificado` | Tipo del comprobante modificado (solo notas) |
-          | `Serie CP Modificado` | Serie del comprobante modificado (solo notas) |
-          | `Nro CP Modificado` | Número del comprobante modificado (solo notas) |
-          | `IMB` | Campo de uso interno de SUNAT (siempre `0.00` en los reportes observados) |
-          | `Detracción` | `D` = comprobante con detracción, vacío = sin detracción |
-          | `Tipo de Nota` | Motivo de la nota de crédito/débito (Catálogo 09 SUNAT), solo en notas |
-          | `Est. Comp.` | Estado del comprobante en el libro (`1` = vigente) |
-          | `Incal` | Indicador de comprobante observado por SUNAT (`0` = sin observación) |
-          | `Estado` | Resultado de la descarga automática del PDF/XML (`OK-oficial`, `OK-representacion`, `YA-DESCARGADO`, `FALLO`, `SIN-PROCESAR`) |
-          | `Link PDF` | Link al PDF del comprobante, guardado en el repositorio de GitHub |
-          | `Link XML` | Link al XML (ZIP) del comprobante, guardado en el repositorio de GitHub |
-          """)
+              os.makedirs(os.path.dirname(ruta_md) or ".", exist_ok=True)
+              with open(ruta_md, "w", encoding="utf-8") as out:
+                  out.write(f"# {titulo}\n\n")
+                  out.write(
+                      "Tabla generada automaticamente en cada ejecucion del workflow "
+                      "`sire-cadena-completa.yml`, con TODOS los comprobantes del ultimo "
+                      f"reporte descargado (periodo **{periodo}**, {len(datos)} "
+                      "comprobante(s)). Se actualiza sola cada vez que se agregan mas "
+                      "comprobantes. Se omiten las columnas que SUNAT siempre trae vacias "
+                      "(`Año`, `Nro Final (Rango)`, `COD. DAM O DSI`, `Clasif de Bss y Sss`, "
+                      "`ID Proyecto Operadores`, `PorcPart`, `CAR Orig/ Ind E o I`, y "
+                      "`CLU1`...`CLU39`).\n\n"
+                  )
+                  out.write(encabezado + "\n")
+                  out.write(separador + "\n")
+                  out.write("\n".join(filas_md) + "\n\n")
+                  out.write(explicacion)
+                  out.write(
+                      "\n---\n\n*Generado automaticamente por el workflow "
+                      f"`sire-cadena-completa.yml` a partir de `{ruta_csv}` "
+                      "y `resumen.txt` en cada ejecucion.*\n"
+                  )
+              print(f"OK: {ruta_md} generado con {len(datos)} comprobante(s).")
 
-          os.makedirs("docs", exist_ok=True)
-          with open(RUTA_MD, "w", encoding="utf-8") as out:
-              out.write("# Registro de Compras SIRE — todos los comprobantes\n\n")
-              out.write(
-                  "Tabla generada automaticamente en cada ejecucion del workflow "
-                  "`sire-cadena-completa.yml`, con TODOS los comprobantes del ultimo "
-                  f"reporte descargado (periodo **{periodo}**, {len(datos)} "
-                  "comprobante(s)). Se actualiza sola cada vez que se agregan mas "
-                  "comprobantes. Se omiten las columnas que SUNAT siempre trae vacias "
-                  "(`Año`, `Nro Final (Rango)`, `COD. DAM O DSI`, `Clasif de Bss y Sss`, "
-                  "`ID Proyecto Operadores`, `PorcPart`, `CAR Orig/ Ind E o I`, y "
-                  "`CLU1`...`CLU39`).\n\n"
-              )
-              out.write(encabezado + "\n")
-              out.write(separador + "\n")
-              out.write("\n".join(filas_md) + "\n\n")
-              out.write(explicacion)
-              out.write(
-                  "\n---\n\n*Generado automaticamente por el workflow "
-                  "`sire-cadena-completa.yml` a partir de `sire/reporte_parseado.csv` "
-                  "y `resumen.txt` en cada ejecucion.*\n"
-              )
-
-          print(f"OK: {RUTA_MD} generado con {len(datos)} comprobante(s).")
+          generar_tabla("sire/reporte_parseado.csv", "docs/SIRE-columnas-reporte-compras.md",
+                        "Registro de Compras SIRE — todos los comprobantes", "proveedor")
+          generar_tabla("sire/reporte_parseado_ventas.csv", "docs/SIRE-columnas-reporte-ventas.md",
+                        "Registro de Ventas SIRE — todos los comprobantes", "cliente")
           PYEOF
           python3 /tmp/generar_md.py
 
@@ -546,8 +598,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sire/reporte_parseado.csv facturas.csv facturas_descargadas/ docs/SIRE-columnas-reporte-compras.md 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "SIRE + facturas (${{ inputs.tipo || 'compra' }}, ${{ steps.periodo.outputs.valor }}) $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git add sire/reporte_parseado.csv sire/reporte_parseado_ventas.csv \
+                  facturas.csv facturas_descargadas/ \
+                  docs/SIRE-columnas-reporte-compras.md docs/SIRE-columnas-reporte-ventas.md \
+                  2>/dev/null || true
+          git diff --cached --quiet || git commit -m "SIRE + facturas (${{ inputs.tipo || 'ambos' }}, ${{ steps.periodo.outputs.valor }}) $(date -u +'%Y-%m-%d %H:%M UTC')"
           logrado=0
           for intento in 1 2 3; do
             if git push; then logrado=1; break; fi
@@ -568,18 +623,19 @@ jobs:
           name: sire-y-facturas
           path: |
             sire/reporte_parseado.csv
+            sire/reporte_parseado_ventas.csv
             facturas.csv
             facturas_descargadas/
           retention-days: 7
 
-      - name: Avisar a Google Sheets (importa el SIRE y despues los links)
+      - name: Avisar a Google Sheets (importa el SIRE de compras y despues los links)
         if: always()
         env:
           WEBHOOK_URL: ${{ secrets.SHEETS_WEBHOOK_URL }}
           WEBHOOK_SECRET: ${{ secrets.SHEETS_WEBHOOK_SECRET }}
         run: |
           if [ -n "$WEBHOOK_URL" ]; then
-            echo "--- Paso 1: importar reporte SIRE a la hoja 'Reporte SIRE' ---"
+            echo "--- Paso 1: importar reporte SIRE (compras) a la hoja 'Reporte SIRE' ---"
             curl -sS -L "$WEBHOOK_URL" \
               -H "Content-Type: application/json" \
               -d "{\"secreto\":\"$WEBHOOK_SECRET\",\"tipo\":\"sire\"}" \
