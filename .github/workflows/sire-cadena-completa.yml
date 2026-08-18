@@ -38,17 +38,60 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Leer empresas.json (solo las activas)
+      - name: Leer empresas.json (solo las activas, expandir rango de periodos)
         id: leer
         run: |
-          MATRIZ=$(python3 -c "
+          cat > /tmp/preparar_matriz.py << 'PYEOF'
+          # Lee empresas.json (formato {"_ayuda": {...}, "empresas": [...]}) y
+          # arma una "tarea" por cada combinacion (empresa activa x periodo).
+          # Si una empresa tiene periodo_hasta, se expande a un periodo por
+          # cada mes entre periodo y periodo_hasta (inclusive); si no, es un
+          # solo periodo (o el mes actual si "periodo" viene vacio).
           import json
+          from datetime import datetime, timezone
+
           with open('empresas.json', encoding='utf-8') as f:
-              empresas = json.load(f)
-          activas = [e for e in empresas if e.get('activo')]
-          print(json.dumps(activas))
-          ")
-          echo "Empresas activas: $MATRIZ"
+              data = json.load(f)
+          empresas = data['empresas'] if isinstance(data, dict) else data
+
+          def sumar_mes(periodo, delta):
+              anio, mes = int(periodo[:4]), int(periodo[4:6])
+              total = anio * 12 + (mes - 1) + delta
+              anio2, mes2 = divmod(total, 12)
+              return f"{anio2:04d}{mes2 + 1:02d}"
+
+          def rango_periodos(desde, hasta):
+              periodos, actual = [], desde
+              while True:
+                  periodos.append(actual)
+                  if actual == hasta or len(periodos) >= 60:  # tope de seguridad: 5 anios
+                      break
+                  actual = sumar_mes(actual, 1)
+              return periodos
+
+          mes_actual = datetime.now(timezone.utc).strftime("%Y%m")
+
+          tareas = []
+          for e in empresas:
+              if not e.get('activo'):
+                  continue
+              periodo = (e.get('periodo') or '').strip() or mes_actual
+              periodo_hasta = (e.get('periodo_hasta') or '').strip()
+              periodos = rango_periodos(periodo, periodo_hasta) if periodo_hasta else [periodo]
+              for p in periodos:
+                  tareas.append({
+                      'ruc': e['ruc'],
+                      'nombre': e.get('nombre', ''),
+                      'tipo': e.get('tipo') or 'ambos',
+                      'periodo': p,
+                      'generar_markdown': e.get('generar_markdown', True),
+                      'descargar_pdf_xml': e.get('descargar_pdf_xml', True),
+                  })
+
+          print(json.dumps(tareas))
+          PYEOF
+          MATRIZ=$(python3 /tmp/preparar_matriz.py)
+          echo "Tareas (empresa x periodo) activas: $MATRIZ"
           echo "matriz=$MATRIZ" >> "$GITHUB_OUTPUT"
 
   sire_y_facturas:
@@ -104,6 +147,7 @@ jobs:
           fi
 
       - name: Instalar Chromium (para el respaldo clasico de PDF)
+        if: matrix.empresa.descargar_pdf_xml == true
         run: |
           npm init -y >/dev/null 2>&1 || true
           npx --yes playwright install --with-deps chromium
@@ -398,6 +442,7 @@ jobs:
           PYEOF
 
       - name: Login + procesar lista de facturas (generadas del SIRE)
+        if: matrix.empresa.descargar_pdf_xml == true
         env:
           SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
           SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
@@ -655,7 +700,7 @@ jobs:
           # (ya se escribe directo en $DIR_DESCARGAS/resumen.txt, no hace falta copiar)
 
       - name: Generar tablas completas (markdown) de compras y ventas
-        if: always()
+        if: always() && matrix.empresa.generar_markdown == true
         run: |
           cat > /tmp/generar_md.py << 'PYEOF'
           import csv, os, sys, textwrap

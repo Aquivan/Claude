@@ -1,17 +1,35 @@
-[
-  {
-    "ruc": "20615366791",
-    "nombre": "CORPORACION EMPRESARIAL JENILE E.I.R.L.",
-    "activo": true,
-    "tipo": "ambos",
-    "periodo": ""
+{
+  "_ayuda": {
+    "_nota": "Este bloque es solo documentacion, el workflow lo ignora (no es una empresa real).",
+    "ruc": "RUC de la empresa (11 digitos). Debe coincidir EXACTAMENTE con el nombre del GitHub Environment donde estan sus 5 secrets (SUNAT_RUC, SUNAT_USUARIO, SUNAT_CLAVE, SIRE_CLIENT_ID, SIRE_CLIENT_SECRET). Settings > Environments en el repo.",
+    "nombre": "Razon social. Solo para identificar la empresa en los reportes, no afecta la descarga.",
+    "activo": "true = esta empresa corre en cada ejecucion del workflow. false = se salta por completo (no gasta llamadas a la API de SUNAT).",
+    "tipo": "'compra', 'venta' o 'ambos'. Que registro del SIRE descargar.",
+    "periodo": "Periodo AAAAMM (ejemplo '202608'). Vacio '' = usa el mes actual automaticamente en cada corrida.",
+    "periodo_hasta": "Opcional. Si se pone junto con 'periodo', descarga TODOS los periodos desde 'periodo' hasta 'periodo_hasta' (inclusive), uno por uno. Dejar '' (o no poner el campo) si solo quieres un periodo. OJO: un rango largo tarda mucho y hace muchas llamadas a SUNAT.",
+    "generar_markdown": "true (por defecto si se omite) = genera/actualiza docs/SIRE-columnas-reporte-...-<RUC>.md de esta empresa. false = no los genera.",
+    "descargar_pdf_xml": "true (por defecto si se omite) = ademas del reporte SIRE, descarga el PDF y XML de cada comprobante. false = solo baja el reporte SIRE (mas rapido, sin los archivos individuales)."
   },
-   {
-    "ruc": "20447623669",
-    "nombre": "PROCESOSO ALIEMENTARIOS M&D E.I.R.L.",
-    "activo": false,
-    "tipo": "ambos",
-    "periodo": ""
-  }
-]
-
+  "empresas": [
+    {
+      "ruc": "20615366791",
+      "nombre": "CORPORACION EMPRESARIAL JENILE E.I.R.L.",
+      "activo": true,
+      "tipo": "ambos",
+      "periodo": "",
+      "periodo_hasta": "",
+      "generar_markdown": true,
+      "descargar_pdf_xml": true
+    },
+    {
+      "ruc": "20447623669",
+      "nombre": "PROCESOSO ALIEMENTARIOS M&D E.I.R.L.",
+      "activo": false,
+      "tipo": "ambos",
+      "periodo": "",
+      "periodo_hasta": "",
+      "generar_markdown": true,
+      "descargar_pdf_xml": true
+    }
+  ]
+}
