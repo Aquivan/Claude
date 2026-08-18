@@ -25,8 +25,58 @@ permissions:
   contents: write
 
 jobs:
-  sire_y_facturas:
+  # Lee empresas.json y arma la lista de empresas ACTIVAS para que el job de
+  # abajo corra una vez por empresa (matrix), cada una con sus propias
+  # credenciales SUNAT tomadas de su GitHub Environment (nombrado igual que
+  # su RUC). Asi se agregan/quitan empresas editando solo empresas.json, sin
+  # tocar este workflow.
+  preparar_empresas:
     runs-on: ubuntu-latest
+    outputs:
+      matriz: ${{ steps.leer.outputs.matriz }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Leer empresas.json (solo las activas)
+        id: leer
+        run: |
+          MATRIZ=$(python3 -c "
+          import json
+          with open('empresas.json', encoding='utf-8') as f:
+              empresas = json.load(f)
+          activas = [e for e in empresas if e.get('activo')]
+          print(json.dumps(activas))
+          ")
+          echo "Empresas activas: $MATRIZ"
+          echo "matriz=$MATRIZ" >> "$GITHUB_OUTPUT"
+
+  sire_y_facturas:
+    needs: preparar_empresas
+    if: needs.preparar_empresas.outputs.matriz != '[]'
+    runs-on: ubuntu-latest
+    # Una empresa a la vez: evita que dos jobs intenten hacer git push al
+    # mismo tiempo (el reintento con rebase que ya existe abajo alcanza para
+    # colisiones raras, pero no hace falta arriesgarse) y evita pegarle a la
+    # API de SUNAT con varias sesiones simultaneas del mismo tipo.
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        empresa: ${{ fromJson(needs.preparar_empresas.outputs.matriz) }}
+    # El nombre del Environment debe ser EXACTAMENTE el RUC de la empresa
+    # (Settings > Environments > New environment, con ese nombre) y ahi
+    # adentro van sus 5 secrets: SUNAT_RUC, SUNAT_USUARIO, SUNAT_CLAVE,
+    # SIRE_CLIENT_ID, SIRE_CLIENT_SECRET.
+    environment: ${{ matrix.empresa.ruc }}
+    env:
+      RUC: ${{ matrix.empresa.ruc }}
+      FACTURAS_CSV: sire/${{ matrix.empresa.ruc }}/facturas.csv
+      RUTA_COMPRAS_CSV: sire/${{ matrix.empresa.ruc }}/reporte_parseado.csv
+      RUTA_VENTAS_CSV: sire/${{ matrix.empresa.ruc }}/reporte_parseado_ventas.csv
+      DIR_DESCARGAS: facturas_descargadas/${{ matrix.empresa.ruc }}
+      DOC_COMPRAS_MD: docs/SIRE-columnas-reporte-compras-${{ matrix.empresa.ruc }}.md
+      DOC_VENTAS_MD: docs/SIRE-columnas-reporte-ventas-${{ matrix.empresa.ruc }}.md
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,6 +86,8 @@ jobs:
         run: |
           if [ -n "${{ inputs.periodo }}" ]; then
             echo "valor=${{ inputs.periodo }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ matrix.empresa.periodo }}" ]; then
+            echo "valor=${{ matrix.empresa.periodo }}" >> "$GITHUB_OUTPUT"
           else
             echo "valor=$(date -u +%Y%m)" >> "$GITHUB_OUTPUT"
           fi
@@ -45,6 +97,8 @@ jobs:
         run: |
           if [ -n "${{ inputs.tipo }}" ]; then
             echo "valor=${{ inputs.tipo }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ matrix.empresa.tipo }}" ]; then
+            echo "valor=${{ matrix.empresa.tipo }}" >> "$GITHUB_OUTPUT"
           else
             echo "valor=ambos" >> "$GITHUB_OUTPUT"
           fi
@@ -66,9 +120,9 @@ jobs:
           import csv, glob, sys, os, calendar
 
           # argv: tipo_reporte("compra"|"venta")  ruta_csv_salida  ruta_facturas_csv
-          tipo_reporte, ruta_csv_salida, ruta_facturas_csv = sys.argv[1:4]
+          tipo_reporte, ruta_csv_salida, ruta_facturas_csv, ruc = sys.argv[1:5]
 
-          candidatos = glob.glob(f'sire/extraido_{tipo_reporte}/**/*.txt', recursive=True)
+          candidatos = glob.glob(f'sire/{ruc}/extraido_{tipo_reporte}/**/*.txt', recursive=True)
           if not candidatos:
               print(f"ERROR: no se encontro ningun .txt para {tipo_reporte}.")
               sys.exit(1)
@@ -206,13 +260,14 @@ jobs:
           fi
           echo "Tipos a descargar: ${TIPOS[*]}"
 
-          rm -f facturas.csv
+          rm -f "$FACTURAS_CSV"
+          mkdir -p "$(dirname "$FACTURAS_CSV")"
 
           for T in "${TIPOS[@]}"; do
             echo ""
-            echo "########## Descargando SIRE - $T (periodo ${{ steps.periodo.outputs.valor }}) ##########"
-            rm -rf "sire/$T" "sire/extraido_$T"
-            mkdir -p "sire/$T" "sire/extraido_$T"
+            echo "########## [$RUC] Descargando SIRE - $T (periodo ${{ steps.periodo.outputs.valor }}) ##########"
+            rm -rf "sire/$RUC/$T" "sire/$RUC/extraido_$T"
+            mkdir -p "sire/$RUC/$T" "sire/$RUC/extraido_$T"
 
             python3 scripts/sire_client.py \
               --ruc "$SUNAT_RUC" \
@@ -223,31 +278,31 @@ jobs:
               --periodo "${{ steps.periodo.outputs.valor }}" \
               --tipo "$T" \
               --formato txt \
-              --out-dir "sire/$T"
+              --out-dir "sire/$RUC/$T"
 
             echo "Contenido descargado ($T):"
-            find "sire/$T" -maxdepth 1 -type f
+            find "sire/$RUC/$T" -maxdepth 1 -type f
 
-            ZIP=$(find "sire/$T" -maxdepth 1 -type f -iname "*.zip" | head -1)
+            ZIP=$(find "sire/$RUC/$T" -maxdepth 1 -type f -iname "*.zip" | head -1)
             if [ -n "$ZIP" ]; then
-              unzip -o "$ZIP" -d "sire/extraido_$T/"
+              unzip -o "$ZIP" -d "sire/$RUC/extraido_$T/"
             else
-              cp "sire/$T"/*.txt "sire/extraido_$T/" 2>/dev/null || true
+              cp "sire/$RUC/$T"/*.txt "sire/$RUC/extraido_$T/" 2>/dev/null || true
             fi
             echo "Extraido ($T):"
-            find "sire/extraido_$T" -type f
+            find "sire/$RUC/extraido_$T" -type f
 
             if [ "$T" = "compra" ]; then
-              RUTA_CSV="sire/reporte_parseado.csv"
+              RUTA_CSV="$RUTA_COMPRAS_CSV"
             else
-              RUTA_CSV="sire/reporte_parseado_ventas.csv"
+              RUTA_CSV="$RUTA_VENTAS_CSV"
             fi
-            python3 /tmp/convertir_sire.py "$T" "$RUTA_CSV" facturas.csv
+            python3 /tmp/convertir_sire.py "$T" "$RUTA_CSV" "$FACTURAS_CSV" "$RUC"
           done
 
           echo ""
-          echo "=== facturas.csv combinado (compra + venta) ==="
-          cat facturas.csv 2>/dev/null || echo "(vacio)"
+          echo "=== facturas.csv combinado ($RUC, compra + venta) ==="
+          cat "$FACTURAS_CSV" 2>/dev/null || echo "(vacio)"
 
       - name: Crear script de decodificacion (PDF/XML de la API moderna)
         run: |
@@ -318,13 +373,13 @@ jobs:
             echo "Token moderno obtenido (${#API_TOKEN} caracteres)."
           fi
 
-          if [ ! -s facturas.csv ] || [ $(wc -l < facturas.csv) -le 1 ]; then
-            echo "facturas.csv esta vacio (nada soportado en este periodo). Nada que descargar."
+          if [ ! -s "$FACTURAS_CSV" ] || [ $(wc -l < "$FACTURAS_CSV") -le 1 ]; then
+            echo "$FACTURAS_CSV esta vacio (nada soportado en este periodo). Nada que descargar."
             exit 0
           fi
 
           set +e
-          mkdir -p facturas_descargadas/oficial facturas_descargadas/representacion
+          mkdir -p "$DIR_DESCARGAS/oficial" "$DIR_DESCARGAS/representacion"
           rm -rf /tmp/estado; mkdir -p /tmp/estado
           CHROMIUM=$(find ~/.cache/ms-playwright -name "chrome" -path "*chrome-linux*" | head -1)
 
@@ -389,32 +444,32 @@ jobs:
             if [ -n "$codcpe" ]; then
               id="${ruc_emisor}-${codcpe}-${serie}-${numero}"
 
-              if [ -f "facturas_descargadas/oficial/${id}.pdf" ]; then
+              if [ -f "$DIR_DESCARGAS/oficial/${id}.pdf" ]; then
                 estado_pdf="YA-DESCARGADO"; archivo_pdf="oficial/${id}.pdf"
-              elif [ -f "facturas_descargadas/representacion/${base}.pdf" ]; then
+              elif [ -f "$DIR_DESCARGAS/representacion/${base}.pdf" ]; then
                 estado_pdf="YA-DESCARGADO"; archivo_pdf="representacion/${base}.pdf"
               fi
-              if [ -f "facturas_descargadas/oficial/${id}-XML.zip" ]; then
+              if [ -f "$DIR_DESCARGAS/oficial/${id}-XML.zip" ]; then
                 estado_xml="YA-DESCARGADO"; archivo_xml="oficial/${id}-XML.zip"
               fi
 
               id_api="${id}-${direccion}"
 
               if [ -z "$archivo_xml" ] && [ -n "$API_TOKEN" ]; then
-                nombre_xml=$(descargar_api_moderna "$id_api" "02" "facturas_descargadas/oficial" "raw" "/tmp/api_resp_${base_safe}_xml.json")
+                nombre_xml=$(descargar_api_moderna "$id_api" "02" "$DIR_DESCARGAS/oficial" "raw" "/tmp/api_resp_${base_safe}_xml.json")
                 if [ -n "$nombre_xml" ]; then
                   estado_xml="OK"; archivo_xml="oficial/$nombre_xml"
                 fi
               fi
 
               if [ -z "$archivo_pdf" ] && [ -n "$API_TOKEN" ]; then
-                nombre_pdf=$(descargar_api_moderna "$id_api" "01" "facturas_descargadas/oficial" "extract" "/tmp/api_resp_${base_safe}_pdf.json")
+                nombre_pdf=$(descargar_api_moderna "$id_api" "01" "$DIR_DESCARGAS/oficial" "extract" "/tmp/api_resp_${base_safe}_pdf.json")
                 if [ -n "$nombre_pdf" ]; then
                   estado_pdf="OK-oficial"; archivo_pdf="oficial/$nombre_pdf"
                 fi
               fi
             else
-              if [ -f "facturas_descargadas/representacion/${base}.pdf" ]; then
+              if [ -f "$DIR_DESCARGAS/representacion/${base}.pdf" ]; then
                 estado_pdf="YA-DESCARGADO"; archivo_pdf="representacion/${base}.pdf"
               fi
             fi
@@ -424,11 +479,11 @@ jobs:
           }
           export -f procesar_linea
 
-          tail -n +2 facturas.csv | xargs -P 5 -I {} bash -c 'procesar_linea "$1"' _ {}
+          tail -n +2 "$FACTURAS_CSV" | xargs -P 5 -I {} bash -c 'procesar_linea "$1"' _ {}
 
           echo ""
           echo "=== Fallback clasico (representacion impresa) para lo que quedo pendiente ==="
-          tail -n +2 facturas.csv | while IFS=',' read -r tipo ruc_emisor serie numero fec_desde fec_hasta; do
+          tail -n +2 "$FACTURAS_CSV" | while IFS=',' read -r tipo ruc_emisor serie numero fec_desde fec_hasta; do
             tipo=$(echo "$tipo" | tr -d '\r' | xargs)
             ruc_emisor=$(echo "$ruc_emisor" | tr -d '\r' | xargs)
             serie=$(echo "$serie" | tr -d '\r' | xargs)
@@ -462,8 +517,8 @@ jobs:
               if grep -qi "COMPROBANTE" "factura_${base_safe}.html"; then
                 sed -i '/no tiene la validez de una/d' "factura_${base_safe}.html"
                 "$CHROMIUM" --headless --no-sandbox --disable-gpu --no-pdf-header-footer \
-                  --print-to-pdf="facturas_descargadas/representacion/${base}.pdf" "file://$(realpath "factura_${base_safe}.html")" 2>/dev/null
-                if [ -f "facturas_descargadas/representacion/${base}.pdf" ]; then
+                  --print-to-pdf="$DIR_DESCARGAS/representacion/${base}.pdf" "file://$(realpath "factura_${base_safe}.html")" 2>/dev/null
+                if [ -f "$DIR_DESCARGAS/representacion/${base}.pdf" ]; then
                   estado_pdf="OK-representacion"; archivo_pdf="representacion/${base}.pdf"
                 fi
               fi
@@ -472,8 +527,8 @@ jobs:
             echo "$estado_pdf,$estado_xml,$archivo_pdf,$archivo_xml,0" > "$estado_file"
           done
 
-          echo "factura,estado_pdf,estado_xml,archivo_pdf,archivo_xml" > resumen.txt
-          tail -n +2 facturas.csv | while IFS=',' read -r tipo ruc_emisor serie numero fec_desde fec_hasta; do
+          echo "factura,estado_pdf,estado_xml,archivo_pdf,archivo_xml" > "$DIR_DESCARGAS/resumen.txt"
+          tail -n +2 "$FACTURAS_CSV" | while IFS=',' read -r tipo ruc_emisor serie numero fec_desde fec_hasta; do
             tipo=$(echo "$tipo" | tr -d '\r' | xargs)
             serie=$(echo "$serie" | tr -d '\r' | xargs)
             numero=$(echo "$numero" | tr -d '\r' | xargs)
@@ -484,23 +539,26 @@ jobs:
             [ -f "$estado_file" ] || continue
             IFS=',' read -r estado_pdf estado_xml archivo_pdf archivo_xml necesita_fallback < "$estado_file"
             [ "$estado_pdf" == "pendiente" ] && estado_pdf="FALLO"
-            echo "$base,$estado_pdf,$estado_xml,$archivo_pdf,$archivo_xml" >> resumen.txt
+            echo "$base,$estado_pdf,$estado_xml,$archivo_pdf,$archivo_xml" >> "$DIR_DESCARGAS/resumen.txt"
           done
 
           echo ""
           echo "=== RESUMEN ==="
-          cat resumen.txt
-          cp resumen.txt facturas_descargadas/resumen.txt
+          cat "$DIR_DESCARGAS/resumen.txt"
+          # (ya se escribe directo en $DIR_DESCARGAS/resumen.txt, no hace falta copiar)
 
       - name: Generar tablas completas (markdown) de compras y ventas
         if: always()
         run: |
           cat > /tmp/generar_md.py << 'PYEOF'
-          import csv, os, textwrap
+          import csv, os, sys, textwrap
+
+          # argv: ruc  ruta_compras_csv  doc_compras_md  ruta_ventas_csv  doc_ventas_md
+          RUC, RUTA_COMPRAS_CSV, DOC_COMPRAS_MD, RUTA_VENTAS_CSV, DOC_VENTAS_MD = sys.argv[1:6]
 
           RAMA = os.environ.get("GITHUB_REF_NAME", "claude/python-codes-izve18")
-          BASE_GH = f"https://github.com/Aquivan/Claude/blob/{RAMA}/facturas_descargadas/"
-          RUTA_RESUMEN = "resumen.txt"
+          BASE_GH = f"https://github.com/Aquivan/Claude/blob/{RAMA}/facturas_descargadas/{RUC}/"
+          RUTA_RESUMEN = f"facturas_descargadas/{RUC}/resumen.txt"
 
           # Compras (RCE): el .txt de SUNAT SI trae cabecera con nombres
           # reales. Se omiten las columnas que siempre llegan vacias (Año,
@@ -661,8 +719,8 @@ jobs:
               print(f"OK: {ruta_md} generado con {len(datos)} comprobante(s).")
 
           generar_tabla(
-              "sire/reporte_parseado.csv", "docs/SIRE-columnas-reporte-compras.md",
-              "Registro de Compras SIRE — todos los comprobantes", "proveedor",
+              RUTA_COMPRAS_CSV, DOC_COMPRAS_MD,
+              f"Registro de Compras SIRE ({RUC}) — todos los comprobantes", "proveedor",
               COLUMNAS_COMPRAS,
               "Se omiten las columnas que SUNAT siempre trae vacias (`Año`, "
               "`Nro Final (Rango)`, `COD. DAM O DSI`, `Clasif de Bss y Sss`, "
@@ -670,25 +728,25 @@ jobs:
               "`CLU1`...`CLU39`)."
           )
           generar_tabla(
-              "sire/reporte_parseado_ventas.csv", "docs/SIRE-columnas-reporte-ventas.md",
-              "Registro de Ventas SIRE — todos los comprobantes", "cliente",
+              RUTA_VENTAS_CSV, DOC_VENTAS_MD,
+              f"Registro de Ventas SIRE ({RUC}) — todos los comprobantes", "cliente",
               COLUMNAS_VENTAS,
               "El .txt de ventas de SUNAT no trae fila de cabecera (a diferencia "
               "de compras); se le puso una cabecera por posicion. Se omite solo "
               "`Nro Final (Rango)` (siempre vacio)."
           )
           PYEOF
-          python3 /tmp/generar_md.py
+          python3 /tmp/generar_md.py "$RUC" "$RUTA_COMPRAS_CSV" "$DOC_COMPRAS_MD" "$RUTA_VENTAS_CSV" "$DOC_VENTAS_MD"
 
       - name: Guardar todo en el repositorio
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sire/reporte_parseado.csv sire/reporte_parseado_ventas.csv \
-                  facturas.csv facturas_descargadas/ \
-                  docs/SIRE-columnas-reporte-compras.md docs/SIRE-columnas-reporte-ventas.md \
+          git add "$RUTA_COMPRAS_CSV" "$RUTA_VENTAS_CSV" \
+                  "$FACTURAS_CSV" "$DIR_DESCARGAS/" \
+                  "$DOC_COMPRAS_MD" "$DOC_VENTAS_MD" \
                   2>/dev/null || true
-          git diff --cached --quiet || git commit -m "SIRE + facturas (${{ inputs.tipo || 'ambos' }}, ${{ steps.periodo.outputs.valor }}) $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git diff --cached --quiet || git commit -m "SIRE + facturas ($RUC, ${{ inputs.tipo || matrix.empresa.tipo || 'ambos' }}, ${{ steps.periodo.outputs.valor }}) $(date -u +'%Y-%m-%d %H:%M UTC')"
           logrado=0
           for intento in 1 2 3; do
             if git push; then logrado=1; break; fi
@@ -706,15 +764,22 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sire-y-facturas
+          name: sire-y-facturas-${{ matrix.empresa.ruc }}
           path: |
-            sire/reporte_parseado.csv
-            sire/reporte_parseado_ventas.csv
-            facturas.csv
-            facturas_descargadas/
+            ${{ env.RUTA_COMPRAS_CSV }}
+            ${{ env.RUTA_VENTAS_CSV }}
+            ${{ env.FACTURAS_CSV }}
+            ${{ env.DIR_DESCARGAS }}/
           retention-days: 7
 
       - name: Avisar a Google Sheets (importa el SIRE de compras/ventas y despues los links)
+        # PAUSADO temporalmente para multi-empresa: las rutas de archivos ahora
+        # llevan el RUC (sire/<ruc>/..., facturas_descargadas/<ruc>/...) y el
+        # Apps Script actual todavia busca en las rutas viejas sin RUC, asi
+        # que estas llamadas no van a encontrar nada (no rompen nada, solo no
+        # actualizan el Sheet). Se reactiva cuando se actualice el Apps
+        # Script para leer las rutas nuevas (ya queda "ruc" en el payload,
+        # listo para ese momento).
         if: always()
         env:
           WEBHOOK_URL: ${{ secrets.SHEETS_WEBHOOK_URL }}
@@ -724,21 +789,21 @@ jobs:
             echo "--- Paso 1: importar reporte SIRE (compras) a la hoja 'Reporte SIRE' ---"
             curl -sS -L "$WEBHOOK_URL" \
               -H "Content-Type: application/json" \
-              -d "{\"secreto\":\"$WEBHOOK_SECRET\",\"tipo\":\"sire\"}" \
+              -d "{\"secreto\":\"$WEBHOOK_SECRET\",\"tipo\":\"sire\",\"ruc\":\"$RUC\"}" \
               -o /tmp/webhook_sire.html -w "HTTP %{http_code}\n"
             head -c 400 /tmp/webhook_sire.html; echo ""
 
             echo "--- Paso 1b: importar reporte SIRE (ventas) a la hoja 'Reporte SIRE Ventas' ---"
             curl -sS -L "$WEBHOOK_URL" \
               -H "Content-Type: application/json" \
-              -d "{\"secreto\":\"$WEBHOOK_SECRET\",\"tipo\":\"sire_venta\"}" \
+              -d "{\"secreto\":\"$WEBHOOK_SECRET\",\"tipo\":\"sire_venta\",\"ruc\":\"$RUC\"}" \
               -o /tmp/webhook_sire_venta.html -w "HTTP %{http_code}\n"
             head -c 400 /tmp/webhook_sire_venta.html; echo ""
 
             echo "--- Paso 2: subir PDF/XML a Drive y escribir los links (ambas hojas) ---"
             curl -sS -L "$WEBHOOK_URL" \
               -H "Content-Type: application/json" \
-              -d "{\"secreto\":\"$WEBHOOK_SECRET\"}" \
+              -d "{\"secreto\":\"$WEBHOOK_SECRET\",\"ruc\":\"$RUC\"}" \
               -o /tmp/webhook_links.html -w "HTTP %{http_code}\n"
             head -c 400 /tmp/webhook_links.html; echo ""
           else
