@@ -86,15 +86,27 @@ jobs:
           if not candidatos:
               print("ERROR: no se encontro ningun .txt dentro del reporte SIRE.")
               sys.exit(1)
-          candidatos.sort(key=os.path.getmtime, reverse=True)
-          origen = candidatos[0]
-          print("Usando archivo:", origen)
 
-          with open(origen, encoding="utf-8", errors="replace") as f:
-              filas = [l.rstrip("\n").rstrip("\r").split("|") for l in f if l.strip() != ""]
+          # SUNAT a veces devuelve VARIOS .txt dentro del mismo zip (distintos
+          # sub-libros, ej. Registro de Compras vs Compras No Domiciliado) y
+          # solo uno trae filas reales; el resto vienen vacios (solo cabecera
+          # o ni eso). Elegir por fecha de modificacion no es confiable (todos
+          # se extraen casi al mismo instante) - en su lugar se leen TODOS los
+          # candidatos y se usa el que tenga mas filas de datos.
+          mejor_origen = None
+          mejor_filas = None
+          for candidato in candidatos:
+              with open(candidato, encoding="utf-8", errors="replace") as f:
+                  filas_candidato = [l.rstrip("\n").rstrip("\r").split("|") for l in f if l.strip() != ""]
+              print(f"  {candidato}: {max(len(filas_candidato) - 1, 0)} fila(s) de datos")
+              if mejor_filas is None or len(filas_candidato) > len(mejor_filas):
+                  mejor_origen, mejor_filas = candidato, filas_candidato
+
+          origen, filas = mejor_origen, mejor_filas
+          print("Usando archivo (el que tiene mas datos):", origen)
 
           if len(filas) < 2:
-              print("ERROR: el archivo del SIRE no tiene filas de datos.")
+              print("ERROR: ningun archivo del SIRE tiene filas de datos.")
               sys.exit(1)
 
           os.makedirs("sire", exist_ok=True)
