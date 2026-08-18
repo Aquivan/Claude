@@ -89,35 +89,25 @@ jobs:
 
           origen, filas = mejor_origen, mejor_filas
           print(f"Usando archivo ({tipo_reporte}, el que tiene mas datos):", origen)
+          print(f"DEBUG primera fila cruda ({len(filas[0]) if filas else 0} campos): {filas[0] if filas else []}")
 
-          if tipo_reporte == "venta":
-              # El .txt de RVIE (ventas) que devuelve SUNAT NO trae fila de
-              # cabecera (a diferencia de RCE/compras, que si la trae) -
-              # verificado empiricamente 2026-08-18: todas las filas son
-              # datos, con exactamente 39 campos por fila. Se antepone una
-              # cabecera sintetica basada en la posicion real de cada campo
-              # (confirmado algebraicamente: BI Gravada + IGV = Total CP).
-              VENTAS_HEADERS = [
-                  "RUC", "Apellidos y Nombres o Razón social", "Periodo", "CAR SUNAT",
-                  "Fecha de emisión", "Fecha Vcto/Pago", "Tipo CP/Doc.", "Serie del CDP",
-                  "Nro CP o Doc. Nro Inicial (Rango)", "Nro Final (Rango)",
-                  "Tipo Doc Identidad", "Nro Doc Identidad", "Apellidos Nombres/ Razón  Social",
-                  "Campo 14 (SUNAT)", "BI Gravada", "Campo 16 (SUNAT)", "IGV / IPM",
-                  "Campo 18 (SUNAT)", "Monto Exonerado", "Campo 20 (SUNAT)", "Campo 21 (SUNAT)",
-                  "Campo 22 (SUNAT)", "Campo 23 (SUNAT)", "Campo 24 (SUNAT)", "Campo 25 (SUNAT)",
-                  "Total CP", "Moneda", "Tipo de Cambio",
-                  "Fecha Emisión Doc Modificado", "Tipo CP Modificado", "Serie CP Modificado",
-                  "Nro CP Modificado", "Campo 33 (SUNAT)", "Campo 34 (SUNAT)", "Campo 35 (SUNAT)",
-                  "Campo 36 (SUNAT)", "Campo 37 (SUNAT)", "Campo 38 (SUNAT)", "Campo 39 (SUNAT)",
-              ]
-              if filas and len(filas[0]) == len(VENTAS_HEADERS):
-                  filas = [VENTAS_HEADERS] + filas
-              else:
-                  print(f"AVISO: el archivo de ventas tiene {len(filas[0]) if filas else 0} "
-                        f"campos por fila (se esperaban {len(VENTAS_HEADERS)}); "
-                        "no se puede etiquetar con seguridad, se omite.")
-                  open(ruta_csv_salida, "w").close()
-                  sys.exit(0)
+          # No asumir si el .txt trae cabecera o no: SUNAT a veces la trae y
+          # a veces no segun el endpoint (propuesta vs descarga oficial), y
+          # eso puede variar entre compras y ventas o incluso entre
+          # ejecuciones. Se detecta dinamicamente: la primera columna
+          # siempre es el RUC propio (11 digitos) en una fila de DATOS; si la
+          # primera fila NO es un RUC de 11 digitos, ya es una fila de
+          # cabecera real de SUNAT y se usa tal cual (sin inventar nombres).
+          primer_campo = (filas[0][0].strip() if filas and filas[0] else "")
+          ya_tiene_header = not (primer_campo.isdigit() and len(primer_campo) == 11)
+          print(f"DEBUG primer campo: {primer_campo!r} -> ya_tiene_header={ya_tiene_header}")
+
+          if not ya_tiene_header:
+              print(f"AVISO: el .txt de {tipo_reporte} no trae fila de cabecera; "
+                    "SUNAT cambio de comportamiento o esto es un caso nuevo. "
+                    "Se omite para no adivinar nombres de columna sin confirmar.")
+              open(ruta_csv_salida, "w").close()
+              sys.exit(0)
 
           os.makedirs(os.path.dirname(ruta_csv_salida) or ".", exist_ok=True)
           if len(filas) < 2:
