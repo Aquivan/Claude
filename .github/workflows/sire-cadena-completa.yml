@@ -102,12 +102,36 @@ jobs:
           ya_tiene_header = not (primer_campo.isdigit() and len(primer_campo) == 11)
           print(f"DEBUG primer campo: {primer_campo!r} -> ya_tiene_header={ya_tiene_header}")
 
+          # Ventas (RVIE): confirmado el 2026-08-18 con datos reales (RUC
+          # propio como primer campo) que el .txt de ventas NUNCA trae
+          # cabecera, a diferencia de compras. Se usa la cabecera sintetica
+          # por posicion, confirmada algebraicamente contra los datos reales
+          # (BI Gravada + IGV [+ Monto Exonerado] = Total CP), solo cuando
+          # el numero de campos coincide exactamente (39); si SUNAT cambia
+          # el formato, se omite en vez de adivinar mal.
+          VENTAS_HEADERS = [
+              "RUC", "Apellidos y Nombres o Razón social", "Periodo", "CAR SUNAT",
+              "Fecha de emisión", "Fecha Vcto/Pago", "Tipo CP/Doc.", "Serie del CDP",
+              "Nro CP o Doc. Nro Inicial (Rango)", "Nro Final (Rango)",
+              "Tipo Doc Identidad", "Nro Doc Identidad", "Apellidos Nombres/ Razón  Social",
+              "Campo 14 (SUNAT)", "BI Gravada", "Campo 16 (SUNAT)", "IGV / IPM",
+              "Campo 18 (SUNAT)", "Monto Exonerado", "Campo 20 (SUNAT)", "Campo 21 (SUNAT)",
+              "Campo 22 (SUNAT)", "Campo 23 (SUNAT)", "Campo 24 (SUNAT)", "Campo 25 (SUNAT)",
+              "Total CP", "Moneda", "Tipo de Cambio",
+              "Fecha Emisión Doc Modificado", "Tipo CP Modificado", "Serie CP Modificado",
+              "Nro CP Modificado", "Campo 33 (SUNAT)", "Campo 34 (SUNAT)", "Campo 35 (SUNAT)",
+              "Campo 36 (SUNAT)", "Campo 37 (SUNAT)", "Campo 38 (SUNAT)", "Campo 39 (SUNAT)",
+          ]
+
           if not ya_tiene_header:
-              print(f"AVISO: el .txt de {tipo_reporte} no trae fila de cabecera; "
-                    "SUNAT cambio de comportamiento o esto es un caso nuevo. "
-                    "Se omite para no adivinar nombres de columna sin confirmar.")
-              open(ruta_csv_salida, "w").close()
-              sys.exit(0)
+              if tipo_reporte == "venta" and filas and len(filas[0]) == len(VENTAS_HEADERS):
+                  filas = [VENTAS_HEADERS] + filas
+              else:
+                  print(f"AVISO: el .txt de {tipo_reporte} no trae fila de cabecera y no se pudo "
+                        "etiquetar con seguridad (numero de campos inesperado). Se omite para no "
+                        "adivinar nombres de columna sin confirmar.")
+                  open(ruta_csv_salida, "w").close()
+                  sys.exit(0)
 
           os.makedirs(os.path.dirname(ruta_csv_salida) or ".", exist_ok=True)
           if len(filas) < 2:
