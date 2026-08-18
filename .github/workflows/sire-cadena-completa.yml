@@ -85,7 +85,7 @@ jobs:
                       'tipo': e.get('tipo') or 'ambos',
                       'periodo': p,
                       'generar_markdown': e.get('generar_markdown', True),
-                      'descargar_pdf_xml': e.get('descargar_pdf_xml', True),
+                      'modalidad_descarga': (e.get('modalidad_descarga') or '').strip(),
                   })
 
           print(json.dumps(tareas))
@@ -147,7 +147,7 @@ jobs:
           fi
 
       - name: Instalar Chromium (para el respaldo clasico de PDF)
-        if: matrix.empresa.descargar_pdf_xml == true
+        if: matrix.empresa.modalidad_descarga != 'sire'
         run: |
           npm init -y >/dev/null 2>&1 || true
           npx --yes playwright install --with-deps chromium
@@ -442,7 +442,7 @@ jobs:
           PYEOF
 
       - name: Login + procesar lista de facturas (generadas del SIRE)
-        if: matrix.empresa.descargar_pdf_xml == true
+        if: matrix.empresa.modalidad_descarga != 'sire'
         env:
           SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
           SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}

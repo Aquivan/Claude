@@ -8,7 +8,7 @@
     "periodo": "Periodo AAAAMM (ejemplo '202608'). Vacio '' = usa el mes actual automaticamente en cada corrida.",
     "periodo_hasta": "Opcional. Si se pone junto con 'periodo', descarga TODOS los periodos desde 'periodo' hasta 'periodo_hasta' (inclusive), uno por uno. Dejar '' (o no poner el campo) si solo quieres un periodo. OJO: un rango largo tarda mucho y hace muchas llamadas a SUNAT.",
     "generar_markdown": "true (por defecto si se omite) = genera/actualiza docs/SIRE-columnas-reporte-...-<RUC>.md de esta empresa. false = no los genera.",
-    "descargar_pdf_xml": "true (por defecto si se omite) = ademas del reporte SIRE, descarga el PDF y XML de cada comprobante. false = solo baja el reporte SIRE (mas rapido, sin los archivos individuales)."
+    "modalidad_descarga": "'' (vacio, por defecto) = descarga completo: el reporte SIRE Y el PDF/XML de cada comprobante. 'sire' = solo descarga el reporte SIRE (CSV), sin bajar el PDF/XML de cada comprobante (mucho mas rapido). No existe una modalidad 'solo PDF/XML sin SIRE' porque para saber que comprobantes bajar primero hace falta el reporte SIRE."
   },
   "empresas": [
     {
@@ -19,7 +19,7 @@
       "periodo": "",
       "periodo_hasta": "",
       "generar_markdown": true,
-      "descargar_pdf_xml": true
+      "modalidad_descarga": ""
     },
     {
       "ruc": "20447623669",
@@ -29,7 +29,7 @@
       "periodo": "",
       "periodo_hasta": "",
       "generar_markdown": true,
-      "descargar_pdf_xml": true
+      "modalidad_descarga": ""
     }
   ]
 }
