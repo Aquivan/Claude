@@ -714,7 +714,7 @@ jobs:
             facturas_descargadas/
           retention-days: 7
 
-      - name: Avisar a Google Sheets (importa el SIRE de compras y despues los links)
+      - name: Avisar a Google Sheets (importa el SIRE de compras/ventas y despues los links)
         if: always()
         env:
           WEBHOOK_URL: ${{ secrets.SHEETS_WEBHOOK_URL }}
@@ -728,7 +728,14 @@ jobs:
               -o /tmp/webhook_sire.html -w "HTTP %{http_code}\n"
             head -c 400 /tmp/webhook_sire.html; echo ""
 
-            echo "--- Paso 2: subir PDF/XML a Drive y escribir los links ---"
+            echo "--- Paso 1b: importar reporte SIRE (ventas) a la hoja 'Reporte SIRE Ventas' ---"
+            curl -sS -L "$WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d "{\"secreto\":\"$WEBHOOK_SECRET\",\"tipo\":\"sire_venta\"}" \
+              -o /tmp/webhook_sire_venta.html -w "HTTP %{http_code}\n"
+            head -c 400 /tmp/webhook_sire_venta.html; echo ""
+
+            echo "--- Paso 2: subir PDF/XML a Drive y escribir los links (ambas hojas) ---"
             curl -sS -L "$WEBHOOK_URL" \
               -H "Content-Type: application/json" \
               -d "{\"secreto\":\"$WEBHOOK_SECRET\"}" \
