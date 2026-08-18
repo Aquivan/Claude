@@ -16,6 +16,14 @@ on:
           - ambos
           - compra
           - venta
+      modo:
+        description: "completo = todo el flujo normal. solo-reintentar-fallidas = NO vuelve a pedir el reporte SIRE a SUNAT, solo reintenta el PDF/XML de los comprobantes que quedaron en FALLO/pendiente en el ultimo run guardado (necesita haber corrido en modo completo antes)."
+        required: true
+        default: "completo"
+        type: choice
+        options:
+          - completo
+          - solo-reintentar-fallidas
   schedule:
     # Todos los dias a las 08:00 hora Peru (13:00 UTC, Peru es UTC-5 todo el
     # ano, sin horario de verano). Ajustable despues si se quiere otra hora.
@@ -122,6 +130,7 @@ jobs:
       DOC_COMPRAS_MD: docs/SIRE-columnas-reporte-compras-${{ matrix.empresa.ruc }}.md
       DOC_VENTAS_MD: docs/SIRE-columnas-reporte-ventas-${{ matrix.empresa.ruc }}.md
       METODO_PDF: ${{ matrix.empresa.metodo_descarga_pdf }}
+      MODO: ${{ inputs.modo }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -298,56 +307,106 @@ jobs:
                 f"({no_soportadas} no soportada(s) todavia)")
           PYEOF
 
-          SELECCION="${{ steps.tipos.outputs.valor }}"
-          if [ "$SELECCION" = "ambos" ]; then
-            TIPOS=(compra venta)
+          cat > /tmp/filtrar_pendientes.py << 'PYEOF'
+          # Modo "solo reintentar fallidas": no vuelve a pedirle nada a SUNAT.
+          # Cruza el facturas.csv completo del ultimo run guardado (ya viene
+          # en el checkout, se sobreescribe con la version filtrada) contra
+          # el resumen.txt de ese mismo run, y deja solo las filas cuyo
+          # comprobante NO quedo en OK/YA-DESCARGADO la vez anterior.
+          import csv, sys, os
+
+          ruta_resumen, ruta_facturas = sys.argv[1:3]
+
+          if not os.path.exists(ruta_facturas) or os.path.getsize(ruta_facturas) == 0:
+              print(f"ERROR: no hay {ruta_facturas} de un run anterior. Corre primero en modo 'completo'.")
+              sys.exit(1)
+
+          resumen_ok = set()
+          if os.path.exists(ruta_resumen):
+              with open(ruta_resumen, encoding="utf-8") as f:
+                  for r in csv.DictReader(f):
+                      if (r.get("estado_pdf") or "").strip() in ("OK-oficial", "OK-representacion", "YA-DESCARGADO"):
+                          resumen_ok.add(r["factura"])
+
+          with open(ruta_facturas, encoding="utf-8") as f:
+              filas = list(csv.reader(f))
+          if len(filas) < 2:
+              print("No hay facturas guardadas de un run anterior, nada que reintentar.")
+              open(ruta_facturas, "w").close()
+              sys.exit(0)
+
+          headers = filas[0]
+          idx_serie, idx_numero = headers.index("serie"), headers.index("numero")
+          pendientes = [headers] + [
+              fila for fila in filas[1:]
+              if len(fila) > max(idx_serie, idx_numero)
+              and f"{fila[idx_serie]}-{fila[idx_numero]}" not in resumen_ok
+          ]
+
+          with open(ruta_facturas, "w", newline="", encoding="utf-8") as out:
+              csv.writer(out).writerows(pendientes)
+          print(f"OK: {len(pendientes) - 1} factura(s) pendiente(s) de {len(filas) - 1} totales del ultimo run.")
+          PYEOF
+
+          if [ "$MODO" = "solo-reintentar-fallidas" ]; then
+            echo "########## [$RUC] Modo solo-reintentar-fallidas: NO se vuelve a pedir el reporte SIRE a SUNAT ##########"
+            if [ ! -s "$RUTA_COMPRAS_CSV" ] && [ ! -s "$RUTA_VENTAS_CSV" ]; then
+              echo "ERROR: no hay un reporte SIRE guardado para $RUC todavia. Corre primero una vez en modo 'completo'."
+              exit 1
+            fi
+            python3 /tmp/filtrar_pendientes.py "$DIR_DESCARGAS/resumen.txt" "$FACTURAS_CSV"
           else
-            TIPOS=("$SELECCION")
+            SELECCION="${{ steps.tipos.outputs.valor }}"
+            if [ "$SELECCION" = "ambos" ]; then
+              TIPOS=(compra venta)
+            else
+              TIPOS=("$SELECCION")
+            fi
+            echo "Tipos a descargar: ${TIPOS[*]}"
+
+            rm -f "$FACTURAS_CSV"
+            mkdir -p "$(dirname "$FACTURAS_CSV")"
+
+            for T in "${TIPOS[@]}"; do
+              echo ""
+              echo "########## [$RUC] Descargando SIRE - $T (periodo ${{ steps.periodo.outputs.valor }}) ##########"
+              rm -rf "sire/$RUC/$T" "sire/$RUC/extraido_$T"
+              mkdir -p "sire/$RUC/$T" "sire/$RUC/extraido_$T"
+
+              python3 scripts/sire_client.py \
+                --ruc "$SUNAT_RUC" \
+                --usuario-sol "$SUNAT_USUARIO" \
+                --clave-sol "$SUNAT_CLAVE" \
+                --client-id "$SIRE_CLIENT_ID" \
+                --client-secret "$SIRE_CLIENT_SECRET" \
+                --periodo "${{ steps.periodo.outputs.valor }}" \
+                --tipo "$T" \
+                --formato txt \
+                --out-dir "sire/$RUC/$T"
+
+              echo "Contenido descargado ($T):"
+              find "sire/$RUC/$T" -maxdepth 1 -type f
+
+              ZIP=$(find "sire/$RUC/$T" -maxdepth 1 -type f -iname "*.zip" | head -1)
+              if [ -n "$ZIP" ]; then
+                unzip -o "$ZIP" -d "sire/$RUC/extraido_$T/"
+              else
+                cp "sire/$RUC/$T"/*.txt "sire/$RUC/extraido_$T/" 2>/dev/null || true
+              fi
+              echo "Extraido ($T):"
+              find "sire/$RUC/extraido_$T" -type f
+
+              if [ "$T" = "compra" ]; then
+                RUTA_CSV="$RUTA_COMPRAS_CSV"
+              else
+                RUTA_CSV="$RUTA_VENTAS_CSV"
+              fi
+              python3 /tmp/convertir_sire.py "$T" "$RUTA_CSV" "$FACTURAS_CSV" "$RUC"
+            done
           fi
-          echo "Tipos a descargar: ${TIPOS[*]}"
-
-          rm -f "$FACTURAS_CSV"
-          mkdir -p "$(dirname "$FACTURAS_CSV")"
-
-          for T in "${TIPOS[@]}"; do
-            echo ""
-            echo "########## [$RUC] Descargando SIRE - $T (periodo ${{ steps.periodo.outputs.valor }}) ##########"
-            rm -rf "sire/$RUC/$T" "sire/$RUC/extraido_$T"
-            mkdir -p "sire/$RUC/$T" "sire/$RUC/extraido_$T"
-
-            python3 scripts/sire_client.py \
-              --ruc "$SUNAT_RUC" \
-              --usuario-sol "$SUNAT_USUARIO" \
-              --clave-sol "$SUNAT_CLAVE" \
-              --client-id "$SIRE_CLIENT_ID" \
-              --client-secret "$SIRE_CLIENT_SECRET" \
-              --periodo "${{ steps.periodo.outputs.valor }}" \
-              --tipo "$T" \
-              --formato txt \
-              --out-dir "sire/$RUC/$T"
-
-            echo "Contenido descargado ($T):"
-            find "sire/$RUC/$T" -maxdepth 1 -type f
-
-            ZIP=$(find "sire/$RUC/$T" -maxdepth 1 -type f -iname "*.zip" | head -1)
-            if [ -n "$ZIP" ]; then
-              unzip -o "$ZIP" -d "sire/$RUC/extraido_$T/"
-            else
-              cp "sire/$RUC/$T"/*.txt "sire/$RUC/extraido_$T/" 2>/dev/null || true
-            fi
-            echo "Extraido ($T):"
-            find "sire/$RUC/extraido_$T" -type f
-
-            if [ "$T" = "compra" ]; then
-              RUTA_CSV="$RUTA_COMPRAS_CSV"
-            else
-              RUTA_CSV="$RUTA_VENTAS_CSV"
-            fi
-            python3 /tmp/convertir_sire.py "$T" "$RUTA_CSV" "$FACTURAS_CSV" "$RUC"
-          done
 
           echo ""
-          echo "=== facturas.csv combinado ($RUC, compra + venta) ==="
+          echo "=== facturas.csv ($RUC, modo $MODO) ==="
           cat "$FACTURAS_CSV" 2>/dev/null || echo "(vacio)"
 
       - name: Crear script de decodificacion (PDF/XML de la API moderna)
