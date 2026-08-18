@@ -189,15 +189,32 @@ def descargar_periodo(token, periodo, tipo, formato="txt"):
     cod_tipo_archivo = "1" if formato == "csv" else "0"
     cod_libro = COD_LIBRO_RVIE if tipo == "venta" else COD_LIBRO_RCE
 
-    if not periodo_presentado(token, periodo, cod_libro):
-        num_ticket = (solicitar_propuesta_rvie(token, periodo, cod_tipo_archivo) if tipo == "venta"
-                      else solicitar_propuesta_rce(token, periodo, cod_tipo_archivo))
-    elif tipo == "venta":
-        num_ticket = solicitar_descarga_rvie(token, periodo, cod_tipo_archivo)
-    else:
-        num_ticket = solicitar_descarga_rce(token, periodo, cod_tipo_archivo)
+    def pedir_propuesta():
+        return (solicitar_propuesta_rvie(token, periodo, cod_tipo_archivo) if tipo == "venta"
+                else solicitar_propuesta_rce(token, periodo, cod_tipo_archivo))
 
-    archivos = esperar_ticket(token, num_ticket, periodo)
+    def pedir_oficial():
+        return (solicitar_descarga_rvie(token, periodo, cod_tipo_archivo) if tipo == "venta"
+                else solicitar_descarga_rce(token, periodo, cod_tipo_archivo))
+
+    usar_oficial = periodo_presentado(token, periodo, cod_libro)
+    try:
+        num_ticket = pedir_oficial() if usar_oficial else pedir_propuesta()
+        archivos = esperar_ticket(token, num_ticket, periodo)
+    except RuntimeError as e:
+        # SUNAT a veces marca el periodo como "presentado" en el padron pero
+        # el libro oficial todavia no tiene comprobantes generados (error
+        # 1070 "No se ha encontrado informacion..."). En ese caso se cae a
+        # la propuesta como respaldo, igual que si no estuviera presentado,
+        # sin reemplazar el intento oficial cuando este SI tiene datos.
+        if usar_oficial and ("1070" in str(e) or "No se ha encontrado" in str(e)):
+            print(f"AVISO: periodo {periodo} figura como presentado pero la descarga "
+                  f"oficial de {tipo} no tiene comprobantes; se usa la propuesta como respaldo.")
+            num_ticket = pedir_propuesta()
+            archivos = esperar_ticket(token, num_ticket, periodo)
+        else:
+            raise
+
     resultado = []
     for archivo in archivos:
         contenido = descargar_archivo(token, archivo, cod_libro)
