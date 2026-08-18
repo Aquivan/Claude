@@ -8,7 +8,8 @@
     "periodo": "Periodo AAAAMM (ejemplo '202608'). Vacio '' = usa el mes actual automaticamente en cada corrida.",
     "periodo_hasta": "Opcional. Si se pone junto con 'periodo', descarga TODOS los periodos desde 'periodo' hasta 'periodo_hasta' (inclusive), uno por uno. Dejar '' (o no poner el campo) si solo quieres un periodo. OJO: un rango largo tarda mucho y hace muchas llamadas a SUNAT.",
     "generar_markdown": "true (por defecto si se omite) = genera/actualiza docs/SIRE-columnas-reporte-...-<RUC>.md de esta empresa. false = no los genera.",
-    "modalidad_descarga": "'' (vacio, por defecto) = descarga completo: el reporte SIRE Y el PDF/XML de cada comprobante. 'sire' = solo descarga el reporte SIRE (CSV), sin bajar el PDF/XML de cada comprobante (mucho mas rapido). No existe una modalidad 'solo PDF/XML sin SIRE' porque para saber que comprobantes bajar primero hace falta el reporte SIRE."
+    "modalidad_descarga": "'' (vacio, por defecto) = descarga completo: el reporte SIRE Y el PDF/XML de cada comprobante. 'sire' = solo descarga el reporte SIRE (CSV), sin bajar el PDF/XML de cada comprobante (mucho mas rapido). No existe una modalidad 'solo PDF/XML sin SIRE' porque para saber que comprobantes bajar primero hace falta el reporte SIRE.",
+    "metodo_descarga_pdf": "Solo aplica si modalidad_descarga NO es 'sire' (o sea, cuando SI se bajan PDF/XML). '' (vacio, por defecto) = automatico: intenta primero la API moderna de SUNAT y, si falla para un comprobante, cae al metodo clasico (representacion impresa via el portal viejo). 'moderna' = solo usa la API moderna, NUNCA cae al metodo clasico (algunos comprobantes pueden quedar sin descargar). 'clasico' = solo usa el metodo clasico (representacion impresa), sin intentar la API moderna (mas lento, y nunca trae el XML, solo PDF)."
   },
   "empresas": [
     {
@@ -19,7 +20,8 @@
       "periodo": "",
       "periodo_hasta": "",
       "generar_markdown": true,
-      "modalidad_descarga": ""
+      "modalidad_descarga": "",
+      "metodo_descarga_pdf": ""
     },
     {
       "ruc": "20447623669",
@@ -29,7 +31,8 @@
       "periodo": "",
       "periodo_hasta": "",
       "generar_markdown": true,
-      "modalidad_descarga": ""
+      "modalidad_descarga": "",
+      "metodo_descarga_pdf": ""
     }
   ]
 }
