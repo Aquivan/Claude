@@ -27,11 +27,13 @@ on:
       ruc:
         # OJO: esta lista es fija (GitHub Actions no permite armar el
         # desplegable dinamicamente desde empresas.json) -- si se agrega o
-        # saca una empresa de empresas.json, hay que agregar/sacar su linea
-        # aca tambien para que siga apareciendo bien en el menu. El nombre
-        # del input ("ruc") NO se debe cambiar: GitHubSync.gs (el menu
-        # "Ejecutar UNA empresa" de la Sheet) dispara este workflow por API
-        # mandando el RUC pelado en un campo llamado exactamente "ruc".
+        # saca una empresa de empresas.json, hay que agregar/sacar SUS 2
+        # lineas aca tambien (la "RUC - Nombre" para el desplegable manual,
+        # y el RUC pelado solo, que es lo que GitHubSync.gs -- el menu
+        # "Ejecutar UNA empresa" de la Sheet -- manda por API). Probado:
+        # GitHub SI valida por API que el valor este en esta lista (rechaza
+        # con 422 "not in the list of allowed values" si no esta), por eso
+        # hacen falta las 2 formas y no alcanza con una sola.
         description: "Elegi UNA empresa para correr solo esa (o dejalo en 'Todas' para correr todas las activas de empresas.json). La empresa elegida igual debe estar 'activo: true' en empresas.json."
         required: true
         default: "Todas las empresas activas"
@@ -41,6 +43,10 @@ on:
           - "20615366791 - CORPORACION EMPRESARIAL JENILE E.I.R.L."
           - "20447623669 - PROCESOSO ALIEMENTARIOS M&D E.I.R.L."
           - "20447968216 - DSM CORPORACION E.I.R.L."
+          - "20615366791"
+          - "20447623669"
+          - "20447968216"
+          - ""
   schedule:
     # Todos los dias a las 08:00 hora Peru (13:00 UTC, Peru es UTC-5 todo el
     # ano, sin horario de verano). Ajustable despues si se quiere otra hora.
