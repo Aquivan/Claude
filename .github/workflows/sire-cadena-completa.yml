@@ -124,6 +124,11 @@ jobs:
     needs: preparar_empresas
     if: needs.preparar_empresas.outputs.matriz != '[]'
     runs-on: ubuntu-latest
+    # Limite de seguridad: sin esto, si un paso se cuelga (ej. apt-get
+    # esperando un mirror que no responde), GitHub lo deja correr hasta 6
+    # horas por defecto -- y como las empresas corren de a una, eso bloquea
+    # a todas las demas. Con este limite, se corta solo y sigue la siguiente.
+    timeout-minutes: 60
     # Una empresa a la vez: evita que dos jobs intenten hacer git push al
     # mismo tiempo (el reintento con rebase que ya existe abajo alcanza para
     # colisiones raras, pero no hace falta arriesgarse) y evita pegarle a la
@@ -185,6 +190,7 @@ jobs:
 
       - name: Instalar Chromium (para el respaldo clasico de PDF)
         if: matrix.empresa.modalidad_descarga != 'sire'
+        timeout-minutes: 20
         run: |
           npm init -y >/dev/null 2>&1 || true
           if [ "${{ steps.cache_chromium.outputs.cache-hit }}" = "true" ]; then
