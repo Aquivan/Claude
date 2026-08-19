@@ -197,10 +197,26 @@ jobs:
         run: |
           npm init -y >/dev/null 2>&1 || true
           if [ "${{ steps.cache_chromium.outputs.cache-hit }}" = "true" ]; then
-            npx --yes playwright install-deps chromium
+            CMD="npx --yes playwright install-deps chromium"
           else
-            npx --yes playwright install --with-deps chromium
+            CMD="npx --yes playwright install --with-deps chromium"
           fi
+          # Si un intento se cuelga (ej. apt-get esperando un mirror que no
+          # responde, como paso una vez), "timeout" lo corta a los 6 min y
+          # se reintenta de cero en vez de esperar hasta el limite del paso
+          # (20 min) para recien ahi fallar toda la corrida de esa empresa.
+          intentos=3
+          for intento in $(seq 1 $intentos); do
+            echo "=== Intento $intento de $intentos ==="
+            if timeout 360 bash -c "$CMD"; then
+              echo "Chromium instalado OK."
+              exit 0
+            fi
+            echo "Fallo o se colgo el intento $intento, reintentando..."
+            sleep 5
+          done
+          echo "No se pudo instalar Chromium tras $intentos intentos."
+          exit 1
 
       - name: Descargar de la API SIRE (compra y/o venta) y armar facturas.csv
         env:
