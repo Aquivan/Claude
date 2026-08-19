@@ -111,6 +111,7 @@ jobs:
                       'generar_markdown': e.get('generar_markdown', True),
                       'modalidad_descarga': (e.get('modalidad_descarga') or '').strip(),
                       'metodo_descarga_pdf': (e.get('metodo_descarga_pdf') or '').strip(),
+                      'subir_pdf_r2': bool(e.get('subir_pdf_r2', False)),
                   })
 
           print(json.dumps(tareas))
@@ -811,6 +812,86 @@ jobs:
           cat "$DIR_DESCARGAS/resumen.txt"
           # (ya se escribe directo en $DIR_DESCARGAS/resumen.txt, no hace falta copiar)
 
+      - name: Subir PDF/XML a Cloudflare R2 (opcional, solo si la empresa lo activa)
+        # 100% opcional -- si "subir_pdf_r2" no esta en true para esta empresa
+        # en empresas.json, este paso ni se ejecuta. Y si esta en true pero
+        # todavia no se configuraron los secrets de R2, se omite solo con un
+        # aviso (no rompe el resto del run) -- el proyecto sigue funcionando
+        # normal sin esto, es un extra para poder compartir el link de cada
+        # PDF/XML sin abrir el repo privado de GitHub.
+        #
+        # Sube cada archivo a la MISMA ruta relativa que ya tiene en el repo
+        # (bajo un prefijo con el RUC), asi Google Sheets puede armar el link
+        # publico sin tener que preguntarle nada a este workflow -- solo
+        # necesita saber la URL base del bucket (se configura una sola vez en
+        # la hoja, ver GitHubSync.gs / Config.gs).
+        if: always() && matrix.empresa.subir_pdf_r2 == true
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ] || [ -z "$R2_BUCKET" ]; then
+            echo "AVISO: subir_pdf_r2 esta en true para $RUC, pero faltan uno o mas secrets de R2"
+            echo "(R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET en Settings > Secrets)."
+            echo "Se omite la subida -- el resto del pipeline sigue normal."
+            exit 0
+          fi
+          if [ ! -s "$DIR_DESCARGAS/resumen.txt" ]; then
+            echo "No hay resumen.txt (nada se descargo en esta corrida) -- nada que subir a R2."
+            exit 0
+          fi
+
+          pip install --quiet boto3
+
+          cat > /tmp/subir_r2.py << 'PYEOF'
+          import boto3, csv, os, sys
+
+          ruc, dir_descargas = sys.argv[1:3]
+          resumen_path = os.path.join(dir_descargas, "resumen.txt")
+
+          s3 = boto3.client(
+              "s3",
+              endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+              aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+          )
+          bucket = os.environ["R2_BUCKET"]
+
+          def content_type(nombre):
+              n = nombre.lower()
+              if n.endswith(".pdf"):
+                  return "application/pdf"
+              if n.endswith(".zip"):
+                  return "application/zip"
+              if n.endswith(".xml"):
+                  return "application/xml"
+              return "application/octet-stream"
+
+          subidos = errores = 0
+          with open(resumen_path, newline="", encoding="utf-8") as f:
+              for fila in csv.DictReader(f):
+                  for campo in ("archivo_pdf", "archivo_xml"):
+                      rel = (fila.get(campo) or "").strip()
+                      if not rel:
+                          continue
+                      local = os.path.join(dir_descargas, rel)
+                      if not os.path.isfile(local):
+                          continue
+                      key = f"{ruc}/{rel}"
+                      try:
+                          s3.upload_file(local, bucket, key, ExtraArgs={"ContentType": content_type(rel)})
+                          subidos += 1
+                      except Exception as e:
+                          print(f"  ERROR subiendo {rel}: {e}")
+                          errores += 1
+
+          print(f"OK: {subidos} archivo(s) subido(s) a R2 (bucket {bucket}, prefijo {ruc}/)."
+                + (f" {errores} error(es)." if errores else ""))
+          PYEOF
+          python3 /tmp/subir_r2.py "$RUC" "$DIR_DESCARGAS"
+
       - name: Generar tablas completas (markdown) de compras y ventas
         if: always() && matrix.empresa.generar_markdown == true
         run: |
@@ -1016,6 +1097,12 @@ jobs:
           mkdir -p "$DIR_HISTORICO/$PERIODO"
           [ -s "$RUTA_COMPRAS_CSV" ] && cp "$RUTA_COMPRAS_CSV" "$DIR_HISTORICO/$PERIODO/reporte_parseado.csv"
           [ -s "$RUTA_VENTAS_CSV" ] && cp "$RUTA_VENTAS_CSV" "$DIR_HISTORICO/$PERIODO/reporte_parseado_ventas.csv"
+          # resumen.txt (que factura -> que PDF/XML) tambien se sobreescribe en
+          # cada corrida -- se guarda igual una copia fija por periodo, para que
+          # Google Sheets pueda armar los links de un periodo especifico (ver
+          # "Subir PDF/XML a Cloudflare R2" y GitHubSync.gs) sin depender de cual
+          # fue la ULTIMA corrida.
+          [ -s "$DIR_DESCARGAS/resumen.txt" ] && cp "$DIR_DESCARGAS/resumen.txt" "$DIR_HISTORICO/$PERIODO/resumen.txt"
           true
 
       - name: Guardar todo en el repositorio
