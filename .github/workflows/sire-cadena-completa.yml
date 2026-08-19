@@ -185,49 +185,87 @@ jobs:
             echo "valor=ambos" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Cache de Chromium (Playwright, evita re-descargar el binario cada corrida)
-        if: matrix.empresa.modalidad_descarga != 'sire'
-        id: cache_chromium
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-v1
-
-      - name: Instalar Chromium (para el respaldo clasico de PDF)
+      - name: Ubicar Chromium para el respaldo clasico de PDF
         if: matrix.empresa.modalidad_descarga != 'sire'
         timeout-minutes: 20
         run: |
-          npm init -y >/dev/null 2>&1 || true
-          if [ "${{ steps.cache_chromium.outputs.cache-hit }}" = "true" ]; then
-            CMD="npx --yes playwright install-deps chromium"
-          else
-            CMD="npx --yes playwright install --with-deps chromium"
+          # El runner ubuntu-latest de GitHub YA trae Google Chrome y
+          # Chromium instalados de fabrica, con todas sus librerias de
+          # sistema ya resueltas.
+          #
+          # Antes este paso hacia "playwright install --with-deps chromium",
+          # que ademas de bajar OTRO Chromium corre apt-get por dentro. Y apt
+          # en estos runners pega contra azure.archive.ubuntu.com, que es
+          # lento/inestable de forma recurrente (problema conocido y todavia
+          # abierto de GitHub: actions/runner-images#12949). Por eso este paso
+          # tardaba al azar entre 24 segundos y 19 minutos, y a veces fallaba
+          # del todo aun reintentando -- reintentar no ayuda si el mirror
+          # sigue caido.
+          #
+          # Usando el navegador que ya esta en la maquina: 0 red, 0 apt, ~1s.
+          set -u
+
+          # No alcanza con que el binario exista: tiene que poder generar un
+          # PDF headless, que es exactamente para lo que se usa mas abajo.
+          probar_navegador() {
+            bin="$1"
+            [ -n "$bin" ] && [ -x "$bin" ] || return 1
+            echo '<html><body>ok</body></html>' > /tmp/prueba_chromium.html
+            rm -f /tmp/prueba_chromium.pdf
+            "$bin" --headless --no-sandbox --disable-gpu --no-pdf-header-footer \
+              --print-to-pdf=/tmp/prueba_chromium.pdf \
+              "file:///tmp/prueba_chromium.html" >/dev/null 2>&1 || return 1
+            [ -s /tmp/prueba_chromium.pdf ]
+          }
+
+          buscar_navegador() {
+            for bin in \
+              "$(command -v google-chrome-stable 2>/dev/null || true)" \
+              "$(command -v google-chrome 2>/dev/null || true)" \
+              "$(command -v chromium-browser 2>/dev/null || true)" \
+              "$(command -v chromium 2>/dev/null || true)" \
+              "$(find "$HOME/.cache/ms-playwright" -name chrome -path '*chrome-linux*' 2>/dev/null | head -1)"; do
+              if probar_navegador "$bin"; then
+                echo "$bin"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          CHROMIUM_BIN="$(buscar_navegador || true)"
+
+          # Plan B: si el runner alguna vez dejara de traer navegador (no
+          # deberia pasar), recien ahi se descarga -- con la limpieza del
+          # candado de apt, porque el apt-get de adentro corre como root via
+          # sudo y "timeout" no llega a matarlo, dejando el candado tomado y
+          # haciendo que los reintentos fallen con "Could not get lock".
+          if [ -z "$CHROMIUM_BIN" ]; then
+            echo "AVISO: el runner no trajo ningun navegador utilizable."
+            echo "Se cae al metodo viejo (descargar Chromium con Playwright)."
+            npm init -y >/dev/null 2>&1 || true
+            for intento in 1 2 3; do
+              sudo pkill -9 -f apt-get 2>/dev/null || true
+              sudo pkill -9 -f dpkg 2>/dev/null || true
+              sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock \
+                         /var/lib/dpkg/lock-frontend /var/cache/apt/archives/lock 2>/dev/null || true
+              sudo dpkg --configure -a 2>/dev/null || true
+              echo "=== Intento $intento de 3 (descarga) ==="
+              timeout 360 npx --yes playwright install --with-deps chromium && break
+              echo "Fallo o se colgo el intento $intento, reintentando..."
+              sleep 5
+            done
+            CHROMIUM_BIN="$(buscar_navegador || true)"
           fi
-          # Si un intento se cuelga (ej. apt-get esperando un mirror que no
-          # responde), "timeout" lo corta a los 6 min y se reintenta en vez
-          # de esperar hasta el limite del paso (20 min). OJO: el apt-get de
-          # adentro corre como root (via sudo), y "timeout" NO llega a matar
-          # ese hijo -- queda vivo y se lleva el candado de apt, haciendo que
-          # el 2do/3er intento fallen siempre con "Could not get lock" (esto
-          # paso de verdad, ver corrida del 2026-08-19 20:15). Por eso antes
-          # de cada intento se limpia cualquier apt-get/dpkg que haya quedado
-          # colgado del intento anterior.
-          intentos=3
-          for intento in $(seq 1 $intentos); do
-            sudo pkill -9 -f apt-get 2>/dev/null || true
-            sudo pkill -9 -f dpkg 2>/dev/null || true
-            sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend /var/cache/apt/archives/lock 2>/dev/null || true
-            sudo dpkg --configure -a 2>/dev/null || true
-            echo "=== Intento $intento de $intentos ==="
-            if timeout 360 bash -c "$CMD"; then
-              echo "Chromium instalado OK."
-              exit 0
-            fi
-            echo "Fallo o se colgo el intento $intento, reintentando..."
-            sleep 5
-          done
-          echo "No se pudo instalar Chromium tras $intentos intentos."
-          exit 1
+
+          if [ -z "$CHROMIUM_BIN" ]; then
+            echo "ERROR: no se consiguio ningun Chromium capaz de generar PDF."
+            exit 1
+          fi
+
+          echo "Chromium a usar: $CHROMIUM_BIN"
+          "$CHROMIUM_BIN" --version || true
+          echo "CHROMIUM_BIN=$CHROMIUM_BIN" >> "$GITHUB_ENV"
 
       - name: Descargar de la API SIRE (compra y/o venta) y armar facturas.csv
         env:
@@ -687,7 +725,9 @@ jobs:
             python3 /tmp/migrar_estructura.py "$DIR_DESCARGAS" "$FACTURAS_CSV"
           fi
           rm -rf /tmp/estado; mkdir -p /tmp/estado
-          CHROMIUM=$(find ~/.cache/ms-playwright -name "chrome" -path "*chrome-linux*" | head -1)
+          # CHROMIUM_BIN lo deja el paso "Ubicar Chromium" (normalmente el
+          # Chrome que ya viene en el runner). El find es solo por si acaso.
+          CHROMIUM="${CHROMIUM_BIN:-$(find ~/.cache/ms-playwright -name "chrome" -path "*chrome-linux*" 2>/dev/null | head -1)}"
 
           mapear_codcpe() {
             case "$1" in
