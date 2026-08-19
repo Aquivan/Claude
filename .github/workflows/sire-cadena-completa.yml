@@ -43,9 +43,11 @@ on:
           - "20615366791 - CORPORACION EMPRESARIAL JENILE E.I.R.L."
           - "20447623669 - PROCESOSO ALIEMENTARIOS M&D E.I.R.L."
           - "20447968216 - DSM CORPORACION E.I.R.L."
+          - "20609309793 - BKF CORPORACION E.I.R.L."
           - "20615366791"
           - "20447623669"
           - "20447968216"
+          - "20609309793"
           - ""
   schedule:
     # Todos los dias a las 08:00 hora Peru (13:00 UTC, Peru es UTC-5 todo el
