@@ -202,11 +202,20 @@ jobs:
             CMD="npx --yes playwright install --with-deps chromium"
           fi
           # Si un intento se cuelga (ej. apt-get esperando un mirror que no
-          # responde, como paso una vez), "timeout" lo corta a los 6 min y
-          # se reintenta de cero en vez de esperar hasta el limite del paso
-          # (20 min) para recien ahi fallar toda la corrida de esa empresa.
+          # responde), "timeout" lo corta a los 6 min y se reintenta en vez
+          # de esperar hasta el limite del paso (20 min). OJO: el apt-get de
+          # adentro corre como root (via sudo), y "timeout" NO llega a matar
+          # ese hijo -- queda vivo y se lleva el candado de apt, haciendo que
+          # el 2do/3er intento fallen siempre con "Could not get lock" (esto
+          # paso de verdad, ver corrida del 2026-08-19 20:15). Por eso antes
+          # de cada intento se limpia cualquier apt-get/dpkg que haya quedado
+          # colgado del intento anterior.
           intentos=3
           for intento in $(seq 1 $intentos); do
+            sudo pkill -9 -f apt-get 2>/dev/null || true
+            sudo pkill -9 -f dpkg 2>/dev/null || true
+            sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend /var/cache/apt/archives/lock 2>/dev/null || true
+            sudo dpkg --configure -a 2>/dev/null || true
             echo "=== Intento $intento de $intentos ==="
             if timeout 360 bash -c "$CMD"; then
               echo "Chromium instalado OK."
