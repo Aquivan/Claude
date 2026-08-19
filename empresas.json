@@ -36,6 +36,18 @@
       "modalidad_descarga": "",
       "metodo_descarga_pdf": "",
       "subir_pdf_r2": false
+    },
+    {
+      "ruc": "20447968216",
+      "nombre": "DSM CORPORACION E.I.R.L.",
+      "activo": true,
+      "tipo": "ambos",
+      "periodo": "",
+      "periodo_hasta": "",
+      "generar_markdown": true,
+      "modalidad_descarga": "",
+      "metodo_descarga_pdf": "",
+      "subir_pdf_r2": true
     }
   ]
 }
