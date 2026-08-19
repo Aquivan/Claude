@@ -48,6 +48,18 @@
       "modalidad_descarga": "",
       "metodo_descarga_pdf": "",
       "subir_pdf_r2": true
+    },
+    {
+      "ruc": "20609309793",
+      "nombre": "BKF CORPORACION E.I.R.L.",
+      "activo": true,
+      "tipo": "ambos",
+      "periodo": "",
+      "periodo_hasta": "",
+      "generar_markdown": true,
+      "modalidad_descarga": "",
+      "metodo_descarga_pdf": "",
+      "subir_pdf_r2": true
     }
   ]
 }
