@@ -1026,7 +1026,10 @@ jobs:
             ${{ env.RUTA_VENTAS_CSV }}
             ${{ env.FACTURAS_CSV }}
             ${{ env.DIR_DESCARGAS }}/
+            sire/${{ matrix.empresa.ruc }}/extraido_venta/
+            sire/${{ matrix.empresa.ruc }}/extraido_compra/
           retention-days: 7
+          if-no-files-found: ignore
 
       - name: Avisar a Google Sheets (importa el SIRE de compras/ventas y despues los links)
         # PAUSADO temporalmente para multi-empresa: las rutas de archivos ahora
