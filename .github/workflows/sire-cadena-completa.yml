@@ -254,13 +254,30 @@ jobs:
           print(f"OK: {len(filas)-1} fila(s) de {tipo_reporte} en {ruta_csv_salida}")
 
           # ---- Agrega filas a facturas.csv (lo que necesita la descarga de PDF/XML) ----
-          headers = [h.strip() for h in filas[0]]
-          idx_periodo = headers.index("Periodo")
-          idx_tipo_cp = headers.index("Tipo CP/Doc.")
-          idx_serie = headers.index("Serie del CDP")
-          idx_numero = headers.index("Nro CP o Doc. Nro Inicial (Rango)")
-          idx_ruc_propio = headers.index("RUC")
-          idx_ruc_contraparte = headers.index("Nro Doc Identidad")
+          # Bug real encontrado el 2026-08-19: para el periodo del mes en curso
+          # (todavia no "presentado"), SUNAT devuelve la PROPUESTA, que SI trae
+          # cabecera real -- pero con un BOM pegado a la primera celda
+          # ('﻿Ruc') y con otra capitalizacion ('Ruc' en vez de 'RUC') que
+          # la del registro ya presentado. headers.index("RUC") tiraba
+          # ValueError y tumbaba todo el job. Se busca por nombre normalizado
+          # (sin BOM, sin espacios, sin importar mayus/minus) en vez de exigir
+          # coincidencia exacta.
+          def idx_de_(nombre):
+              def normalizar(s):
+                  return s.strip().lstrip("﻿").strip().lower()
+              objetivo = normalizar(nombre)
+              normados = [normalizar(h) for h in headers]
+              if objetivo not in normados:
+                  raise ValueError(f"Columna {nombre!r} no encontrada en la cabecera: {headers}")
+              return normados.index(objetivo)
+
+          headers = [h.strip().lstrip("﻿").strip() for h in filas[0]]
+          idx_periodo = idx_de_("Periodo")
+          idx_tipo_cp = idx_de_("Tipo CP/Doc.")
+          idx_serie = idx_de_("Serie del CDP")
+          idx_numero = idx_de_("Nro CP o Doc. Nro Inicial (Rango)")
+          idx_ruc_propio = idx_de_("RUC")
+          idx_ruc_contraparte = idx_de_("Nro Doc Identidad")
 
           # SIRE (Catalogo 01) -> codigo legacy que entiende la descarga de
           # PDF/XML (Emitidas=ventas, Recibidas=compras - ver mapear_codcpe).
