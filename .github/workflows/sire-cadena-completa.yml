@@ -196,8 +196,16 @@ jobs:
 
           candidatos = glob.glob(f'sire/{ruc}/extraido_{tipo_reporte}/**/*.txt', recursive=True)
           if not candidatos:
-              print(f"ERROR: no se encontro ningun .txt para {tipo_reporte}.")
-              sys.exit(1)
+              # sire_client.py ya no escribe ningun archivo cuando SUNAT
+              # confirma que no hay comprobantes en el periodo (ver el AVISO
+              # "no tiene comprobantes... periodo vacio" en su salida) --
+              # eso es un resultado valido, no un error, asi que se sigue
+              # igual que el caso de "0 filas" mas abajo en vez de cortar el job.
+              print(f"AVISO: no se encontro ningun .txt para {tipo_reporte} -- "
+                    "SUNAT no tiene comprobantes de este tipo en este periodo.")
+              os.makedirs(os.path.dirname(ruta_csv_salida) or ".", exist_ok=True)
+              open(ruta_csv_salida, "w").close()
+              sys.exit(0)
 
           # SUNAT a veces devuelve VARIOS .txt dentro del mismo zip (distintos
           # sub-libros, ej. Registro de Compras vs Compras No Domiciliado) y solo

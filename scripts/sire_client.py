@@ -197,23 +197,46 @@ def descargar_periodo(token, periodo, tipo, formato="txt"):
         return (solicitar_descarga_rvie(token, periodo, cod_tipo_archivo) if tipo == "venta"
                 else solicitar_descarga_rce(token, periodo, cod_tipo_archivo))
 
+    def es_error_sin_comprobantes(e):
+        # SUNAT devuelve el error 1070 "No se ha encontrado informacion de
+        # comprobantes de pago en Periodo Seleccionado" tanto al pedir la
+        # descarga como al consultar el estado del ticket ya creado -- en
+        # los dos casos significa lo mismo: el RUC simplemente no tiene
+        # comprobantes de ese tipo en ese periodo (nada raro, pasa seguido a
+        # mitad de mes o con RUCs de poco movimiento). NO es un error real.
+        return "1070" in str(e) or "No se ha encontrado" in str(e)
+
     usar_oficial = periodo_presentado(token, periodo, cod_libro)
     try:
         num_ticket = pedir_oficial() if usar_oficial else pedir_propuesta()
         archivos = esperar_ticket(token, num_ticket, periodo)
     except RuntimeError as e:
-        # SUNAT a veces marca el periodo como "presentado" en el padron pero
-        # el libro oficial todavia no tiene comprobantes generados (error
-        # 1070 "No se ha encontrado informacion..."). En ese caso se cae a
-        # la propuesta como respaldo, igual que si no estuviera presentado,
-        # sin reemplazar el intento oficial cuando este SI tiene datos.
-        if usar_oficial and ("1070" in str(e) or "No se ha encontrado" in str(e)):
+        if not es_error_sin_comprobantes(e):
+            raise
+        if usar_oficial:
+            # SUNAT a veces marca el periodo como "presentado" en el padron
+            # pero el libro oficial todavia no tiene comprobantes generados.
+            # En ese caso se cae a la propuesta como respaldo, igual que si
+            # no estuviera presentado, sin reemplazar el intento oficial
+            # cuando este SI tiene datos.
             print(f"AVISO: periodo {periodo} figura como presentado pero la descarga "
                   f"oficial de {tipo} no tiene comprobantes; se usa la propuesta como respaldo.")
-            num_ticket = pedir_propuesta()
-            archivos = esperar_ticket(token, num_ticket, periodo)
+            try:
+                num_ticket = pedir_propuesta()
+                archivos = esperar_ticket(token, num_ticket, periodo)
+            except RuntimeError as e2:
+                if not es_error_sin_comprobantes(e2):
+                    raise
+                print(f"AVISO: {periodo}/{tipo} no tiene comprobantes ni en oficial ni en "
+                      "propuesta -- se trata como periodo vacio (0 comprobantes), no como error.")
+                archivos = []
         else:
-            raise
+            # Ya se estaba pidiendo la propuesta directamente (periodo no
+            # presentado) y SUNAT confirma que no hay comprobantes: periodo
+            # vacio, no hay a que otro endpoint caer.
+            print(f"AVISO: {periodo}/{tipo} no tiene comprobantes en la propuesta -- "
+                  "se trata como periodo vacio (0 comprobantes), no como error.")
+            archivos = []
 
     resultado = []
     for archivo in archivos:
@@ -248,8 +271,13 @@ def main():
 
     archivos = descargar_periodo(token, args.periodo, args.tipo, args.formato)
     if not archivos:
-        print("SUNAT no devolvio ningun archivo para ese periodo.")
-        sys.exit(1)
+        # SUNAT confirmo que no hay comprobantes de este tipo en este periodo
+        # (0 comprobantes es un resultado valido, no un error) -- se sale sin
+        # escribir ningun archivo y con exit 0, para que el resto del
+        # pipeline lo trate como "periodo vacio" en vez de cortar todo el job.
+        print(f"SUNAT confirma que no hay comprobantes de {args.tipo} en el periodo "
+              f"{args.periodo}. No se escribe ningun archivo (periodo vacio, no es un error).")
+        return
 
     for nombre, contenido in archivos:
         ruta = os.path.join(args.out_dir, nombre)
