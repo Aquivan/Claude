@@ -207,6 +207,10 @@ def descargar_periodo(token, periodo, tipo, formato="txt"):
         return "1070" in str(e) or "No se ha encontrado" in str(e)
 
     usar_oficial = periodo_presentado(token, periodo, cod_libro)
+    # modo_efectivo: de donde salieron realmente los archivos devueltos (no
+    # necesariamente igual a usar_oficial, por el fallback de abajo). None si
+    # termino sin archivos (periodo vacio, no hay nada que rotular).
+    modo_efectivo = "oficial" if usar_oficial else "propuesta"
     try:
         num_ticket = pedir_oficial() if usar_oficial else pedir_propuesta()
         archivos = esperar_ticket(token, num_ticket, periodo)
@@ -221,6 +225,7 @@ def descargar_periodo(token, periodo, tipo, formato="txt"):
             # cuando este SI tiene datos.
             print(f"AVISO: periodo {periodo} figura como presentado pero la descarga "
                   f"oficial de {tipo} no tiene comprobantes; se usa la propuesta como respaldo.")
+            modo_efectivo = "propuesta"
             try:
                 num_ticket = pedir_propuesta()
                 archivos = esperar_ticket(token, num_ticket, periodo)
@@ -230,6 +235,7 @@ def descargar_periodo(token, periodo, tipo, formato="txt"):
                 print(f"AVISO: {periodo}/{tipo} no tiene comprobantes ni en oficial ni en "
                       "propuesta -- se trata como periodo vacio (0 comprobantes), no como error.")
                 archivos = []
+                modo_efectivo = None
         else:
             # Ya se estaba pidiendo la propuesta directamente (periodo no
             # presentado) y SUNAT confirma que no hay comprobantes: periodo
@@ -237,13 +243,14 @@ def descargar_periodo(token, periodo, tipo, formato="txt"):
             print(f"AVISO: {periodo}/{tipo} no tiene comprobantes en la propuesta -- "
                   "se trata como periodo vacio (0 comprobantes), no como error.")
             archivos = []
+            modo_efectivo = None
 
     resultado = []
     for archivo in archivos:
         contenido = descargar_archivo(token, archivo, cod_libro)
         nombre = archivo["nombre"].split("__")[-1] if "__" in archivo["nombre"] else archivo["nombre"]
         resultado.append((nombre, contenido))
-    return resultado
+    return resultado, modo_efectivo
 
 
 def main():
@@ -269,7 +276,7 @@ def main():
     })
     print("Token OK. Solicitando descarga...")
 
-    archivos = descargar_periodo(token, args.periodo, args.tipo, args.formato)
+    archivos, modo = descargar_periodo(token, args.periodo, args.tipo, args.formato)
     if not archivos:
         # SUNAT confirmo que no hay comprobantes de este tipo en este periodo
         # (0 comprobantes es un resultado valido, no un error) -- se sale sin
@@ -284,6 +291,11 @@ def main():
         with open(ruta, "wb") as f:
             f.write(contenido)
         print(f"OK: {ruta} ({len(contenido)} bytes)")
+
+    # Linea de salida FIJA y facil de "grep-ear" desde el workflow (ver paso
+    # "Guardar copia historica del periodo"), para saber sin ambiguedad si lo
+    # que se acaba de descargar es la propuesta o el registro ya presentado.
+    print(f"MODO_DESCARGA={modo}")
 
 
 if __name__ == "__main__":

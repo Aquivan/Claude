@@ -424,6 +424,14 @@ jobs:
               rm -rf "sire/$RUC/$T" "sire/$RUC/extraido_$T"
               mkdir -p "sire/$RUC/$T" "sire/$RUC/extraido_$T"
 
+              # Se redirige a un archivo (en vez de solo mostrarlo en pantalla)
+              # para poder leer despues la linea "MODO_DESCARGA=..." que
+              # imprime sire_client.py -- indica si lo que bajo fue la
+              # PROPUESTA o el registro ya ACEPTADO/presentado, para poder
+              # guardar el .zip crudo rotulado correctamente mas abajo. Se usa
+              # un archivo en vez de un pipe a tee para no perder el exit code
+              # real de sire_client.py (con un pipe, "set -e" solo mira el
+              # exit code del ULTIMO comando del pipe, no de python3).
               python3 scripts/sire_client.py \
                 --ruc "$SUNAT_RUC" \
                 --usuario-sol "$SUNAT_USUARIO" \
@@ -433,14 +441,32 @@ jobs:
                 --periodo "${{ steps.periodo.outputs.valor }}" \
                 --tipo "$T" \
                 --formato txt \
-                --out-dir "sire/$RUC/$T"
+                --out-dir "sire/$RUC/$T" > "/tmp/salida_sire_$T.log" 2>&1
+              cat "/tmp/salida_sire_$T.log"
+              MODO_DESCARGA=$(grep -oE 'MODO_DESCARGA=[a-zA-Z]+' "/tmp/salida_sire_$T.log" | tail -1 | cut -d= -f2)
 
-              echo "Contenido descargado ($T):"
+              echo "Contenido descargado ($T, modo=$MODO_DESCARGA):"
               find "sire/$RUC/$T" -maxdepth 1 -type f
 
               ZIP=$(find "sire/$RUC/$T" -maxdepth 1 -type f -iname "*.zip" | head -1)
               if [ -n "$ZIP" ]; then
                 unzip -o "$ZIP" -d "sire/$RUC/extraido_$T/"
+
+                # Copia del .zip crudo (tal cual lo entrega SUNAT) en la
+                # carpeta historica del periodo, rotulada segun el modo --
+                # "Propuesta_<tipo>.zip" o "Aceptada_<tipo>.zip". Se
+                # sobreescribe a si misma en cada corrida (no se acumulan
+                # copias viejas de la MISMA version); las dos conviven porque
+                # tienen nombre distinto.
+                case "$MODO_DESCARGA" in
+                  oficial) NOMBRE_ZIP_HIST="Aceptada_$T.zip" ;;
+                  propuesta) NOMBRE_ZIP_HIST="Propuesta_$T.zip" ;;
+                  *) NOMBRE_ZIP_HIST="" ;;
+                esac
+                if [ -n "$NOMBRE_ZIP_HIST" ]; then
+                  mkdir -p "$DIR_HISTORICO/${{ steps.periodo.outputs.valor }}"
+                  cp "$ZIP" "$DIR_HISTORICO/${{ steps.periodo.outputs.valor }}/$NOMBRE_ZIP_HIST"
+                fi
               else
                 cp "sire/$RUC/$T"/*.txt "sire/$RUC/extraido_$T/" 2>/dev/null || true
               fi
