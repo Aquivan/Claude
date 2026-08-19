@@ -16,7 +16,7 @@
     {
       "ruc": "20615366791",
       "nombre": "CORPORACION EMPRESARIAL JENILE E.I.R.L.",
-      "activo": true,
+      "activo": false,
       "tipo": "ambos",
       "periodo": "",
       "periodo_hasta": "",
