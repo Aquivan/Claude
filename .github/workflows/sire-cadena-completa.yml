@@ -175,11 +175,23 @@ jobs:
             echo "valor=ambos" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Cache de Chromium (Playwright, evita re-descargar el binario cada corrida)
+        if: matrix.empresa.modalidad_descarga != 'sire'
+        id: cache_chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+
       - name: Instalar Chromium (para el respaldo clasico de PDF)
         if: matrix.empresa.modalidad_descarga != 'sire'
         run: |
           npm init -y >/dev/null 2>&1 || true
-          npx --yes playwright install --with-deps chromium
+          if [ "${{ steps.cache_chromium.outputs.cache-hit }}" = "true" ]; then
+            npx --yes playwright install-deps chromium
+          else
+            npx --yes playwright install --with-deps chromium
+          fi
 
       - name: Descargar de la API SIRE (compra y/o venta) y armar facturas.csv
         env:
