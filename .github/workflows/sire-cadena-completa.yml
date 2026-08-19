@@ -544,6 +544,14 @@ jobs:
               # un archivo en vez de un pipe a tee para no perder el exit code
               # real de sire_client.py (con un pipe, "set -e" solo mira el
               # exit code del ULTIMO comando del pipe, no de python3).
+              #
+              # OJO: "set +e"/"set -e" alrededor es necesario -- sin esto,
+              # si sire_client.py fallaba, "set -e" cortaba el step EN ESA
+              # MISMA linea, antes de llegar al "cat" de aca abajo, y el
+              # log quedaba con "exit code 1" sin ningun detalle del error
+              # real (paso de verdad, corrida del 2026-08-19 23:11 con la
+              # empresa BKF, RUC 20609309793).
+              set +e
               python3 scripts/sire_client.py \
                 --ruc "$SUNAT_RUC" \
                 --usuario-sol "$SUNAT_USUARIO" \
@@ -554,7 +562,13 @@ jobs:
                 --tipo "$T" \
                 --formato txt \
                 --out-dir "sire/$RUC/$T" > "/tmp/salida_sire_$T.log" 2>&1
+              EXIT_SIRE=$?
+              set -e
               cat "/tmp/salida_sire_$T.log"
+              if [ "$EXIT_SIRE" -ne 0 ]; then
+                echo "ERROR: sire_client.py fallo (exit $EXIT_SIRE) para $RUC / $T. Ver el detalle arriba."
+                exit "$EXIT_SIRE"
+              fi
               MODO_DESCARGA=$(grep -oE 'MODO_DESCARGA=[a-zA-Z]+' "/tmp/salida_sire_$T.log" | tail -1 | cut -d= -f2)
 
               echo "Contenido descargado ($T, modo=$MODO_DESCARGA):"
