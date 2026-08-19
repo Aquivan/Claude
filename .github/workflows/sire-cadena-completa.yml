@@ -24,6 +24,10 @@ on:
         options:
           - completo
           - solo-reintentar-fallidas
+      ruc:
+        description: "RUC (11 digitos) para correr SOLO esa empresa. Vacio = todas las empresas activas de empresas.json. La empresa igual debe estar 'activo: true' en empresas.json."
+        required: false
+        default: ""
   schedule:
     # Todos los dias a las 08:00 hora Peru (13:00 UTC, Peru es UTC-5 todo el
     # ano, sin horario de verano). Ajustable despues si se quiere otra hora.
@@ -48,6 +52,8 @@ jobs:
 
       - name: Leer empresas.json (solo las activas, expandir rango de periodos)
         id: leer
+        env:
+          RUC_FILTRO: ${{ inputs.ruc }}
         run: |
           cat > /tmp/preparar_matriz.py << 'PYEOF'
           # Lee empresas.json (formato {"_ayuda": {...}, "empresas": [...]}) y
@@ -55,12 +61,22 @@ jobs:
           # Si una empresa tiene periodo_hasta, se expande a un periodo por
           # cada mes entre periodo y periodo_hasta (inclusive); si no, es un
           # solo periodo (o el mes actual si "periodo" viene vacio).
-          import json
+          #
+          # Si se disparo con un RUC especifico (inputs.ruc, ej. desde el
+          # menu "Ejecutar UNA empresa" de la hoja de Google), se corre SOLO
+          # esa empresa en vez de todas las activas -- pero sigue exigiendo
+          # que este "activo: true" en empresas.json, para no correr por
+          # error una empresa que se desactivo a proposito.
+          import json, os
           from datetime import datetime, timezone
 
           with open('empresas.json', encoding='utf-8') as f:
               data = json.load(f)
           empresas = data['empresas'] if isinstance(data, dict) else data
+
+          ruc_filtro = os.environ.get('RUC_FILTRO', '').strip()
+          if ruc_filtro:
+              empresas = [e for e in empresas if e.get('ruc') == ruc_filtro]
 
           def sumar_mes(periodo, delta):
               anio, mes = int(periodo[:4]), int(periodo[4:6])
