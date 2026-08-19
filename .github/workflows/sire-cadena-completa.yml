@@ -25,30 +25,18 @@ on:
           - completo
           - solo-reintentar-fallidas
       ruc:
-        # OJO: esta lista es fija (GitHub Actions no permite armar el
-        # desplegable dinamicamente desde empresas.json) -- si se agrega o
-        # saca una empresa de empresas.json, hay que agregar/sacar SUS 2
-        # lineas aca tambien (la "RUC - Nombre" para el desplegable manual,
-        # y el RUC pelado solo, que es lo que GitHubSync.gs -- el menu
-        # "Ejecutar UNA empresa" de la Sheet -- manda por API). Probado:
-        # GitHub SI valida por API que el valor este en esta lista (rechaza
-        # con 422 "not in the list of allowed values" si no esta), por eso
-        # hacen falta las 2 formas y no alcanza con una sola.
-        description: "Elegi UNA empresa para correr solo esa (o dejalo en 'Todas' para correr todas las activas de empresas.json). La empresa elegida igual debe estar 'activo: true' en empresas.json."
-        required: true
-        default: "Todas las empresas activas"
-        type: choice
-        options:
-          - "Todas las empresas activas"
-          - "20615366791 - CORPORACION EMPRESARIAL JENILE E.I.R.L."
-          - "20447623669 - PROCESOSO ALIEMENTARIOS M&D E.I.R.L."
-          - "20447968216 - DSM CORPORACION E.I.R.L."
-          - "20609309793 - BKF CORPORACION E.I.R.L."
-          - "20615366791"
-          - "20447623669"
-          - "20447968216"
-          - "20609309793"
-          - ""
+        # Texto libre a proposito (no "choice"): un desplegable fijo
+        # obligaba a editar este archivo cada vez que se agrega o saca una
+        # empresa de empresas.json, y GitHub Actions no permite armar un
+        # choice dinamicamente desde un archivo del repo. Con texto libre,
+        # cualquier empresa nueva funciona apenas se agrega a empresas.json,
+        # sin tocar el workflow. Para elegir por NOMBRE en vez de por RUC de
+        # memoria, usar el menu "Ejecutar UNA empresa" de la Google Sheet
+        # (GitHubSync.gs) -- ese si arma la lista al momento, leyendo
+        # empresas.json fresco desde GitHub, asi que nunca queda desactualizado.
+        description: "RUC (11 digitos) para correr SOLO esa empresa. Vacio = todas las activas de empresas.json. La empresa igual debe estar 'activo: true'."
+        required: false
+        default: ""
   schedule:
     # Todos los dias a las 08:00 hora Peru (13:00 UTC, Peru es UTC-5 todo el
     # ano, sin horario de verano). Ajustable despues si se quiere otra hora.
@@ -95,10 +83,11 @@ jobs:
               data = json.load(f)
           empresas = data['empresas'] if isinstance(data, dict) else data
 
-          # El desplegable manual manda "RUC - Nombre" (o "Todas las
-          # empresas activas"). El menu "Ejecutar UNA empresa" de la Sheet,
-          # en cambio, sigue mandando el RUC pelado por API (GitHubSync.gs).
-          # Soportamos los dos formatos con el mismo campo.
+          # "ruc" es texto libre: normalmente el RUC pelado (a mano, o por
+          # API desde GitHubSync.gs -- menu "Ejecutar UNA empresa" de la
+          # Sheet). El split(' - ') y el chequeo de "todas" quedan solo por
+          # las dudas (compatibilidad con el desplegable viejo), no hacen
+          # falta para el uso normal.
           ruc_input = os.environ.get('RUC_INPUT', '').strip()
           ruc_filtro = ''
           if ruc_input and not ruc_input.lower().startswith('todas'):
