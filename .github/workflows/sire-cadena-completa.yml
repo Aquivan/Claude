@@ -212,25 +212,33 @@ jobs:
           ya_tiene_header = not (primer_campo.isdigit() and len(primer_campo) == 11)
           print(f"DEBUG primer campo: {primer_campo!r} -> ya_tiene_header={ya_tiene_header}")
 
-          # Ventas (RVIE): confirmado el 2026-08-18 con datos reales (RUC
-          # propio como primer campo) que el .txt de ventas NUNCA trae
-          # cabecera, a diferencia de compras. Se usa la cabecera sintetica
-          # por posicion, confirmada algebraicamente contra los datos reales
-          # (BI Gravada + IGV [+ Monto Exonerado] = Total CP), solo cuando
-          # el numero de campos coincide exactamente (39); si SUNAT cambia
-          # el formato, se omite en vez de adivinar mal.
+          # Ventas (RVIE): SUNAT SI trae cabecera real cuando el periodo
+          # todavia no esta "presentado" (te devuelve la PROPUESTA, que
+          # incluye una fila de encabezado -- ver el bug de BOM/case
+          # corregido el 2026-08-19 en idx_de_ mas abajo). Pero cuando el
+          # periodo YA esta presentado, te devuelve el registro oficial SIN
+          # fila de encabezado (confirmado el 2026-08-18 con datos reales:
+          # el primer campo es directamente el RUC numerico de 11 digitos).
+          # Para ese caso sin encabezado se le pega esta cabecera sintetica
+          # por posicion -- son los mismos 39 primeros nombres reales de la
+          # propuesta (que trae 40 campos con "CLU" al final; el registro
+          # oficial trae uno menos, sin ese ultimo campo), verificados el
+          # 2026-08-19 contra la propuesta real de un periodo no presentado.
+          # Solo se aplica cuando el numero de campos coincide exactamente
+          # (39); si SUNAT cambia el formato, se omite en vez de adivinar mal.
           VENTAS_HEADERS = [
-              "RUC", "Apellidos y Nombres o Razón social", "Periodo", "CAR SUNAT",
+              "RUC", "Razon Social", "Periodo", "CAR SUNAT",
               "Fecha de emisión", "Fecha Vcto/Pago", "Tipo CP/Doc.", "Serie del CDP",
               "Nro CP o Doc. Nro Inicial (Rango)", "Nro Final (Rango)",
-              "Tipo Doc Identidad", "Nro Doc Identidad", "Apellidos Nombres/ Razón  Social",
-              "Campo 14 (SUNAT)", "BI Gravada", "Campo 16 (SUNAT)", "IGV / IPM",
-              "Campo 18 (SUNAT)", "Monto Exonerado", "Campo 20 (SUNAT)", "Campo 21 (SUNAT)",
-              "Campo 22 (SUNAT)", "Campo 23 (SUNAT)", "Campo 24 (SUNAT)", "Campo 25 (SUNAT)",
-              "Total CP", "Moneda", "Tipo de Cambio",
+              "Tipo Doc Identidad", "Nro Doc Identidad", "Apellidos Nombres/ Razón Social",
+              "Valor Facturado Exportación", "BI Gravada", "Dscto BI", "IGV / IPM",
+              "Dscto IGV / IPM", "Mto Exonerado", "Mto Inafecto", "ISC",
+              "BI Grav IVAP", "IVAP", "ICBPER", "Otros Tributos",
+              "Total CP", "Moneda", "Tipo Cambio",
               "Fecha Emisión Doc Modificado", "Tipo CP Modificado", "Serie CP Modificado",
-              "Nro CP Modificado", "Campo 33 (SUNAT)", "Campo 34 (SUNAT)", "Campo 35 (SUNAT)",
-              "Campo 36 (SUNAT)", "Campo 37 (SUNAT)", "Campo 38 (SUNAT)", "Campo 39 (SUNAT)",
+              "Nro CP Modificado", "ID Proyecto Operadores Atribución", "Tipo de Nota",
+              "Est. Comp", "Valor FOB Embarcado", "Valor OP Gratuitas", "Tipo Operación",
+              "DAM / CP",
           ]
 
           if not ya_tiene_header:
