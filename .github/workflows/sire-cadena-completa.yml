@@ -25,9 +25,22 @@ on:
           - completo
           - solo-reintentar-fallidas
       ruc:
-        description: "RUC (11 digitos) para correr SOLO esa empresa. Vacio = todas las empresas activas de empresas.json. La empresa igual debe estar 'activo: true' en empresas.json."
-        required: false
-        default: ""
+        # OJO: esta lista es fija (GitHub Actions no permite armar el
+        # desplegable dinamicamente desde empresas.json) -- si se agrega o
+        # saca una empresa de empresas.json, hay que agregar/sacar su linea
+        # aca tambien para que siga apareciendo bien en el menu. El nombre
+        # del input ("ruc") NO se debe cambiar: GitHubSync.gs (el menu
+        # "Ejecutar UNA empresa" de la Sheet) dispara este workflow por API
+        # mandando el RUC pelado en un campo llamado exactamente "ruc".
+        description: "Elegi UNA empresa para correr solo esa (o dejalo en 'Todas' para correr todas las activas de empresas.json). La empresa elegida igual debe estar 'activo: true' en empresas.json."
+        required: true
+        default: "Todas las empresas activas"
+        type: choice
+        options:
+          - "Todas las empresas activas"
+          - "20615366791 - CORPORACION EMPRESARIAL JENILE E.I.R.L."
+          - "20447623669 - PROCESOSO ALIEMENTARIOS M&D E.I.R.L."
+          - "20447968216 - DSM CORPORACION E.I.R.L."
   schedule:
     # Todos los dias a las 08:00 hora Peru (13:00 UTC, Peru es UTC-5 todo el
     # ano, sin horario de verano). Ajustable despues si se quiere otra hora.
@@ -53,7 +66,7 @@ jobs:
       - name: Leer empresas.json (solo las activas, expandir rango de periodos)
         id: leer
         env:
-          RUC_FILTRO: ${{ inputs.ruc }}
+          RUC_INPUT: ${{ inputs.ruc }}
         run: |
           cat > /tmp/preparar_matriz.py << 'PYEOF'
           # Lee empresas.json (formato {"_ayuda": {...}, "empresas": [...]}) y
@@ -74,7 +87,14 @@ jobs:
               data = json.load(f)
           empresas = data['empresas'] if isinstance(data, dict) else data
 
-          ruc_filtro = os.environ.get('RUC_FILTRO', '').strip()
+          # El desplegable manual manda "RUC - Nombre" (o "Todas las
+          # empresas activas"). El menu "Ejecutar UNA empresa" de la Sheet,
+          # en cambio, sigue mandando el RUC pelado por API (GitHubSync.gs).
+          # Soportamos los dos formatos con el mismo campo.
+          ruc_input = os.environ.get('RUC_INPUT', '').strip()
+          ruc_filtro = ''
+          if ruc_input and not ruc_input.lower().startswith('todas'):
+              ruc_filtro = ruc_input.split(' - ')[0].strip()
           if ruc_filtro:
               empresas = [e for e in empresas if e.get('ruc') == ruc_filtro]
 
