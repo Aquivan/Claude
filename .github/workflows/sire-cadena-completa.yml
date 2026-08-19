@@ -1153,6 +1153,34 @@ jobs:
             exit 1
           fi
 
+      - name: Avisar a la Sheet (webhook instantaneo, opcional)
+        # 100% opcional -- si no configuraste SHEET_WEBHOOK_URL/SHEET_WEBHOOK_SECRET
+        # como Repository secrets, este paso se omite solo con un aviso, sin
+        # romper nada. Reemplaza la ESPERA de la importacion periodica/el
+        # seguimiento de la Sheet (que igual siguen funcionando igual si no
+        # configuras esto) por un aviso al toque apenas termina esta empresa
+        # -- ver Webhook.gs del lado de Apps Script para los pasos de
+        # configuracion completos (hay que desplegar una Web App).
+        #
+        # Solo tiene sentido en modo "completo": "solo-reintentar-fallidas"
+        # no cambia el reporte SIRE (solo reintenta PDF/XML), asi que no hay
+        # nada nuevo que la Sheet necesite reimportar.
+        if: env.MODO == 'completo'
+        env:
+          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
+          SHEET_WEBHOOK_SECRET: ${{ secrets.SHEET_WEBHOOK_SECRET }}
+        run: |
+          if [ -z "$SHEET_WEBHOOK_URL" ]; then
+            echo "SHEET_WEBHOOK_URL no esta configurado; se omite el aviso instantaneo"
+            echo "(la importacion periodica / el seguimiento de la Sheet siguen funcionando igual)."
+            exit 0
+          fi
+          curl -sS -L "$SHEET_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"secreto\":\"$SHEET_WEBHOOK_SECRET\",\"ruc\":\"$RUC\",\"periodo\":\"${{ steps.periodo.outputs.valor }}\"}" \
+            -o /tmp/webhook_resp.txt -w "HTTP %{http_code}\n"
+          cat /tmp/webhook_resp.txt
+
       - name: Subir tambien como artefacto descargable
         if: always()
         uses: actions/upload-artifact@v4
