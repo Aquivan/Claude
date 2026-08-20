@@ -16,7 +16,7 @@
     {
       "ruc": "20615366791",
       "nombre": "CORPORACION EMPRESARIAL JENILE E.I.R.L.",
-      "activo": false,
+      "activo": true,
       "tipo": "ambos",
       "periodo": "",
       "periodo_hasta": "",
@@ -28,19 +28,19 @@
     {
       "ruc": "20447623669",
       "nombre": "PROCESOSO ALIEMENTARIOS M&D E.I.R.L.",
-      "activo": false,
+      "activo": true,
       "tipo": "ambos",
       "periodo": "",
       "periodo_hasta": "",
       "generar_markdown": true,
       "modalidad_descarga": "",
       "metodo_descarga_pdf": "",
-      "subir_pdf_r2": false
+      "subir_pdf_r2": true
     },
     {
       "ruc": "20447968216",
       "nombre": "DSM CORPORACION E.I.R.L.",
-      "activo": false,
+      "activo": true,
       "tipo": "ambos",
       "periodo": "",
       "periodo_hasta": "",
