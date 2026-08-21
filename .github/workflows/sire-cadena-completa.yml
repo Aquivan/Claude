@@ -1298,7 +1298,20 @@ jobs:
             # se niega a correr con cambios sin confirmar sueltos: "cannot
             # rebase: You have unstaged changes." (paso de verdad en la
             # corrida del 2026-08-21 16:24, con este mismo fix a medias).
-            git restore --staged --worktree "$DIR_DESCARGAS/resumen.txt" 2>/dev/null || true
+            #
+            # OJO 2: no basta con restaurar resumen.txt. Los pasos de mas
+            # arriba (conversion SIRE, generar_md.py) SIEMPRE sobreescriben
+            # tambien RUTA_COMPRAS_CSV, RUTA_VENTAS_CSV, FACTURAS_CSV y los
+            # dos .md, sin importar ES_RANGO -- quedan igual de sucios en el
+            # disco aunque nunca se les haga "git add" aqui, y bloquean el
+            # rebase de la misma forma (confirmado: corrida del 2026-08-21
+            # 16:42, job 202602, fallo con "cannot rebase: You have unstaged
+            # changes" pese al fix de resumen.txt).
+            git restore --staged --worktree \
+              "$DIR_DESCARGAS/resumen.txt" \
+              "$RUTA_COMPRAS_CSV" "$RUTA_VENTAS_CSV" "$FACTURAS_CSV" \
+              "$DOC_COMPRAS_MD" "$DOC_VENTAS_MD" \
+              2>/dev/null || true
           else
             git add "$RUTA_COMPRAS_CSV" "$RUTA_VENTAS_CSV" "$FACTURAS_CSV" \
                     "$DOC_COMPRAS_MD" "$DOC_VENTAS_MD" \
