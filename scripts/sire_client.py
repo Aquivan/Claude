@@ -198,13 +198,21 @@ def descargar_periodo(token, periodo, tipo, formato="txt"):
                 else solicitar_descarga_rce(token, periodo, cod_tipo_archivo))
 
     def es_error_sin_comprobantes(e):
-        # SUNAT devuelve el error 1070 "No se ha encontrado informacion de
-        # comprobantes de pago en Periodo Seleccionado" tanto al pedir la
-        # descarga como al consultar el estado del ticket ya creado -- en
-        # los dos casos significa lo mismo: el RUC simplemente no tiene
-        # comprobantes de ese tipo en ese periodo (nada raro, pasa seguido a
-        # mitad de mes o con RUCs de poco movimiento). NO es un error real.
-        return "1070" in str(e) or "No se ha encontrado" in str(e)
+        # SUNAT devuelve varios codigos distintos para decir lo mismo: "este
+        # RUC no tiene comprobantes de este tipo en este periodo" (nada raro,
+        # pasa seguido a mitad de mes, con RUCs de poco movimiento, o con el
+        # primer periodo de un rango largo que todavia no tenia operaciones).
+        # NO es un error real, en ninguno de los 2 puntos donde puede salir
+        # (al pedir la descarga/ticket, o al consultar su estado):
+        #   - 1070 "No se ha encontrado informacion de comprobantes..."
+        #   - 1815 "No existen documentos para exportar." (confirmado real:
+        #     BKF 20609309793 y GRANIX 20447969531, periodo 202601, venta,
+        #     corrida del 2026-08-21 -- tumbaba el job entero por esto).
+        texto = str(e)
+        return any(marca in texto for marca in (
+            "1070", "No se ha encontrado",
+            "1815", "No existen documentos para exportar",
+        ))
 
     usar_oficial = periodo_presentado(token, periodo, cod_libro)
     # modo_efectivo: de donde salieron realmente los archivos devueltos (no
