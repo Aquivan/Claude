@@ -149,14 +149,22 @@ jobs:
     # (una corrida normal, aun con hartos comprobantes, tarda minutos, no
     # horas), sin dejar que un cuelgue real se coma las 2000 min/mes gratis.
     timeout-minutes: 180
-    # Hasta 3 empresas a la vez (no todas de un tiro, para no arriesgar de
-    # mas con SUNAT si hay algun limite por IP/carga que no se puede ver de
-    # antemano). El choque de "git push" entre jobs que terminan casi juntos
-    # se resuelve con el reintento+rebase de mas abajo (ahora con mas
-    # intentos y una espera con jitter, pensado para correr en paralelo de
-    # verdad en vez de solo para colisiones raras).
+    # De a una: se probo max-parallel:3 pero se detecto un bug real con el
+    # uso de "periodo_hasta" (rangos de varios meses por empresa) -- cada
+    # matrix job, sin importar el periodo, tambien pisa los archivos "mas
+    # recientes" de esa empresa (sire/<RUC>/reporte_parseado.csv, etc; los
+    # del HISTORICO por periodo no chocan, esos son unicos por mes). Si
+    # 2 o 3 meses de la MISMA empresa corrian en simultaneo (matrix no
+    # agrupa por empresa, max-parallel:3 los mezclaba sin ningun orden),
+    # los 2 pisaban ese mismo archivo con contenido distinto -- un
+    # conflicto real de "git rebase" que ningun reintento arregla (a
+    # diferencia de una demora pasajera). Se vio en la corrida programada
+    # del 2026-08-21: con las 4 empresas usando periodo_hasta (rango
+    # ene-ago), SOLO el primer mes de cada empresa salio bien; todo el
+    # resto choco. De a una elimina el riesgo de raiz: nunca 2 periodos de
+    # la misma empresa corren a la vez.
     strategy:
-      max-parallel: 3
+      max-parallel: 1
       fail-fast: false
       matrix:
         empresa: ${{ fromJson(needs.preparar_empresas.outputs.matriz) }}
