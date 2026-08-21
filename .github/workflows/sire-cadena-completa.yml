@@ -24,6 +24,17 @@ on:
         options:
           - completo
           - solo-reintentar-fallidas
+      descarga_pdf_xml:
+        description: "De los registros SIRE que se descargan arriba (segun 'tipo'), de cuales bajar tambien el PDF/XML de cada comprobante. Vacio = igual que 'tipo' (comportamiento de siempre). 'ninguno' = descarga el registro SIRE completo (compra y/o venta) pero NO baja ningun PDF/XML."
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - ambos
+          - compra
+          - venta
+          - ninguno
       ruc:
         # Texto libre a proposito (no "choice"): un desplegable fijo
         # obligaba a editar este archivo cada vez que se agrega o saca una
@@ -128,6 +139,7 @@ jobs:
                       'generar_markdown': e.get('generar_markdown', True),
                       'modalidad_descarga': (e.get('modalidad_descarga') or '').strip(),
                       'metodo_descarga_pdf': (e.get('metodo_descarga_pdf') or '').strip(),
+                      'descarga_pdf_xml': (e.get('descarga_pdf_xml') or '').strip(),
                       'subir_pdf_r2': bool(e.get('subir_pdf_r2', False)),
                       # true si esta empresa esta corriendo un RANGO de
                       # periodos (periodo_hasta). Cada mes del rango pisa los
@@ -224,6 +236,23 @@ jobs:
             echo "valor=ambos" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Calcular de cuales tipos bajar tambien PDF/XML
+        id: tipos_pdf
+        run: |
+          # Independiente de "tipo" de arriba: "tipo" decide que registro
+          # SIRE se pide a SUNAT (compra/venta/ambos); esto decide, de ESOS
+          # registros ya descargados, de cuales se baja ademas el PDF/XML de
+          # cada comprobante (mas lento: un login/consulta por comprobante).
+          # Vacio = mismo valor que "tipo" (comportamiento de siempre, sin
+          # cambios para quien no configuro nada nuevo).
+          if [ -n "${{ inputs.descarga_pdf_xml }}" ]; then
+            echo "valor=${{ inputs.descarga_pdf_xml }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ matrix.empresa.descarga_pdf_xml }}" ]; then
+            echo "valor=${{ matrix.empresa.descarga_pdf_xml }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "valor=${{ steps.tipos.outputs.valor }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Ubicar Chromium para el respaldo clasico de PDF
         if: matrix.empresa.modalidad_descarga != 'sire'
         timeout-minutes: 20
@@ -317,8 +346,12 @@ jobs:
           cat > /tmp/convertir_sire.py << 'PYEOF'
           import csv, glob, sys, os, calendar
 
-          # argv: tipo_reporte("compra"|"venta")  ruta_csv_salida  ruta_facturas_csv
+          # argv: tipo_reporte("compra"|"venta")  ruta_csv_salida  ruta_facturas_csv  ruc  incluir_pdf("si"|"no")
           tipo_reporte, ruta_csv_salida, ruta_facturas_csv, ruc = sys.argv[1:5]
+          # Compatibilidad: si no viene el 5to argumento, se asume "si" (todo
+          # lo que se descarga del SIRE tambien va a facturas.csv -- el
+          # comportamiento de siempre).
+          incluir_pdf = (sys.argv[5] if len(sys.argv) > 5 else "si") == "si"
 
           candidatos = glob.glob(f'sire/{ruc}/extraido_{tipo_reporte}/**/*.txt', recursive=True)
           if not candidatos:
@@ -410,6 +443,18 @@ jobs:
           with open(ruta_csv_salida, "w", newline="", encoding="utf-8") as out:
               csv.writer(out).writerows(filas)
           print(f"OK: {len(filas)-1} fila(s) de {tipo_reporte} en {ruta_csv_salida}")
+
+          if not incluir_pdf:
+              # El registro SIRE completo de {tipo_reporte} ya quedo guardado
+              # arriba (ruta_csv_salida); lo unico que se salta es agregar
+              # estas filas a facturas.csv, que es lo que despues dispara la
+              # descarga de PDF/XML comprobante por comprobante. Permite
+              # bajar TODO el registro (compra y venta) sin gastar tiempo/
+              # llamadas bajando PDF/XML de un tipo que no se quiere (ver
+              # empresas.json: campo "descarga_pdf_xml").
+              print(f"OK: {tipo_reporte} configurado para NO bajar PDF/XML (descarga_pdf_xml). "
+                    "Se omite agregar a facturas.csv.")
+              sys.exit(0)
 
           # ---- Agrega filas a facturas.csv (lo que necesita la descarga de PDF/XML) ----
           # Bug real encontrado el 2026-08-19: para el periodo del mes en curso
@@ -538,7 +583,21 @@ jobs:
             else
               TIPOS=("$SELECCION")
             fi
-            echo "Tipos a descargar: ${TIPOS[*]}"
+            echo "Tipos a descargar (registro SIRE): ${TIPOS[*]}"
+
+            # De cuales de esos tipos bajar ademas PDF/XML -- independiente
+            # de TIPOS de arriba. "ninguno" = ninguno; blanco/"ambos" ya
+            # viene resuelto por el paso "tipos_pdf" (por defecto, igual a
+            # TIPOS -- comportamiento de siempre).
+            SELECCION_PDF="${{ steps.tipos_pdf.outputs.valor }}"
+            if [ "$SELECCION_PDF" = "ninguno" ]; then
+              TIPOS_PDF=()
+            elif [ "$SELECCION_PDF" = "ambos" ]; then
+              TIPOS_PDF=(compra venta)
+            else
+              TIPOS_PDF=("$SELECCION_PDF")
+            fi
+            echo "Tipos a los que se les baja PDF/XML: ${TIPOS_PDF[*]:-ninguno}"
 
             rm -f "$FACTURAS_CSV"
             mkdir -p "$(dirname "$FACTURAS_CSV")"
@@ -617,7 +676,12 @@ jobs:
               else
                 RUTA_CSV="$RUTA_VENTAS_CSV"
               fi
-              python3 /tmp/convertir_sire.py "$T" "$RUTA_CSV" "$FACTURAS_CSV" "$RUC"
+
+              INCLUIR_PDF="no"
+              for TP in "${TIPOS_PDF[@]:-}"; do
+                [ "$TP" = "$T" ] && INCLUIR_PDF="si"
+              done
+              python3 /tmp/convertir_sire.py "$T" "$RUTA_CSV" "$FACTURAS_CSV" "$RUC" "$INCLUIR_PDF"
             done
           fi
 
