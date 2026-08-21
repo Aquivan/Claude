@@ -1291,7 +1291,14 @@ jobs:
             # la corrida del 2026-08-21: fallaba igual corriendo de a una).
             # Se excluyen del commit; el detalle de este mes ya quedo
             # completo e intacto en historico/<periodo>/ (arriba).
-            git restore --staged "$DIR_DESCARGAS/resumen.txt" 2>/dev/null || true
+            #
+            # OJO: hace falta "--worktree" ademas de "--staged". Sin eso,
+            # el archivo queda fuera del commit pero SIGUE modificado en el
+            # disco (sucio) -- y "git rebase" (mas abajo, si el push falla)
+            # se niega a correr con cambios sin confirmar sueltos: "cannot
+            # rebase: You have unstaged changes." (paso de verdad en la
+            # corrida del 2026-08-21 16:24, con este mismo fix a medias).
+            git restore --staged --worktree "$DIR_DESCARGAS/resumen.txt" 2>/dev/null || true
           else
             git add "$RUTA_COMPRAS_CSV" "$RUTA_VENTAS_CSV" "$FACTURAS_CSV" \
                     "$DOC_COMPRAS_MD" "$DOC_VENTAS_MD" \
