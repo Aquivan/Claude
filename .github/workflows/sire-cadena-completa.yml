@@ -129,6 +129,20 @@ jobs:
                       'modalidad_descarga': (e.get('modalidad_descarga') or '').strip(),
                       'metodo_descarga_pdf': (e.get('metodo_descarga_pdf') or '').strip(),
                       'subir_pdf_r2': bool(e.get('subir_pdf_r2', False)),
+                      # true si esta empresa esta corriendo un RANGO de
+                      # periodos (periodo_hasta). Cada mes del rango pisa los
+                      # mismos archivos "mas recientes" (sire/<RUC>/reporte_
+                      # parseado*.csv, facturas.csv, docs/*.md, resumen.txt)
+                      # con datos de ESE mes -- eso siempre termina en un
+                      # conflicto real de git al hacer rebase (no una carrera
+                      # de tiempo: el commit de un mes anterior y el de este
+                      # mes reescriben las mismas lineas con datos distintos,
+                      # y git no puede fusionar eso solo, corran de a una o
+                      # en paralelo). Con es_rango=true, el paso de guardado
+                      # excluye esos archivos del commit -- el detalle de
+                      # cada mes queda completo e intacto igual, bajo
+                      # historico/<periodo>/, que nunca choca.
+                      'es_rango': bool(periodo_hasta),
                   })
 
           print(json.dumps(tareas))
@@ -1259,13 +1273,30 @@ jobs:
           true
 
       - name: Guardar todo en el repositorio
+        env:
+          ES_RANGO: ${{ matrix.empresa.es_rango }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$RUTA_COMPRAS_CSV" "$RUTA_VENTAS_CSV" \
-                  "$FACTURAS_CSV" "$DIR_DESCARGAS/" "$DIR_HISTORICO/" \
-                  "$DOC_COMPRAS_MD" "$DOC_VENTAS_MD" \
-                  2>/dev/null || true
+          # DIR_DESCARGAS/ y DIR_HISTORICO/ son seguros siempre: todo lo de
+          # adentro esta bajo una carpeta con el periodo en la ruta, asi que
+          # nunca choca entre meses distintos de la misma empresa.
+          git add "$DIR_DESCARGAS/" "$DIR_HISTORICO/" 2>/dev/null || true
+          if [ "$ES_RANGO" = "true" ]; then
+            # Corriendo un RANGO de periodos: estos archivos "mas recientes"
+            # (sin el periodo en la ruta) quedarian pisados por cada mes con
+            # datos DISTINTOS, lo que siempre termina en un conflicto real de
+            # git al hacer rebase -- no una carrera de tiempo, un choque de
+            # contenido genuino que ningun reintento arregla (confirmado en
+            # la corrida del 2026-08-21: fallaba igual corriendo de a una).
+            # Se excluyen del commit; el detalle de este mes ya quedo
+            # completo e intacto en historico/<periodo>/ (arriba).
+            git restore --staged "$DIR_DESCARGAS/resumen.txt" 2>/dev/null || true
+          else
+            git add "$RUTA_COMPRAS_CSV" "$RUTA_VENTAS_CSV" "$FACTURAS_CSV" \
+                    "$DOC_COMPRAS_MD" "$DOC_VENTAS_MD" \
+                    2>/dev/null || true
+          fi
           git diff --cached --quiet || git commit -m "SIRE + facturas ($RUC, ${{ inputs.tipo || matrix.empresa.tipo || 'ambos' }}, ${{ steps.periodo.outputs.valor }}) $(date -u +'%Y-%m-%d %H:%M UTC')"
           logrado=0
           for intento in 1 2 3 4 5 6 7 8; do
