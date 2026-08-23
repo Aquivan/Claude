@@ -74,6 +74,7 @@ jobs:
         id: leer
         env:
           RUC_INPUT: ${{ inputs.ruc }}
+          PERIODO_INPUT: ${{ inputs.periodo }}
         run: |
           cat > /tmp/preparar_matriz.py << 'PYEOF'
           # Lee empresas.json (formato {"_ayuda": {...}, "empresas": [...]}) y
@@ -87,6 +88,10 @@ jobs:
           # esa empresa en vez de todas las activas -- pero sigue exigiendo
           # que este "activo: true" en empresas.json, para no correr por
           # error una empresa que se desactivo a proposito.
+          #
+          # Si se especifico un periodo especifico en los inputs (inputs.periodo),
+          # se corre SOLO ese periodo para esa(s) empresa(s), ignorando
+          # el rango periodo_hasta de empresas.json.
           import json, os
           from datetime import datetime, timezone
 
@@ -100,6 +105,7 @@ jobs:
           # las dudas (compatibilidad con el desplegable viejo), no hacen
           # falta para el uso normal.
           ruc_input = os.environ.get('RUC_INPUT', '').strip()
+          periodo_input = os.environ.get('PERIODO_INPUT', '').strip()
           ruc_filtro = ''
           if ruc_input and not ruc_input.lower().startswith('todas'):
               ruc_filtro = ruc_input.split(' - ')[0].strip()
@@ -127,9 +133,15 @@ jobs:
           for e in empresas:
               if not e.get('activo'):
                   continue
-              periodo = (e.get('periodo') or '').strip() or mes_actual
-              periodo_hasta = (e.get('periodo_hasta') or '').strip()
-              periodos = rango_periodos(periodo, periodo_hasta) if periodo_hasta else [periodo]
+              if periodo_input:
+                  periodos = [periodo_input]
+                  es_rango = False
+              else:
+                  periodo = (e.get('periodo') or '').strip() or mes_actual
+                  periodo_hasta = (e.get('periodo_hasta') or '').strip()
+                  periodos = rango_periodos(periodo, periodo_hasta) if periodo_hasta else [periodo]
+                  es_rango = bool(periodo_hasta)
+
               for p in periodos:
                   tareas.append({
                       'ruc': e['ruc'],
@@ -141,20 +153,7 @@ jobs:
                       'metodo_descarga_pdf': (e.get('metodo_descarga_pdf') or '').strip(),
                       'descarga_pdf_xml': (e.get('descarga_pdf_xml') or '').strip(),
                       'subir_pdf_r2': bool(e.get('subir_pdf_r2', False)),
-                      # true si esta empresa esta corriendo un RANGO de
-                      # periodos (periodo_hasta). Cada mes del rango pisa los
-                      # mismos archivos "mas recientes" (sire/<RUC>/reporte_
-                      # parseado*.csv, facturas.csv, docs/*.md, resumen.txt)
-                      # con datos de ESE mes -- eso siempre termina en un
-                      # conflicto real de git al hacer rebase (no una carrera
-                      # de tiempo: el commit de un mes anterior y el de este
-                      # mes reescriben las mismas lineas con datos distintos,
-                      # y git no puede fusionar eso solo, corran de a una o
-                      # en paralelo). Con es_rango=true, el paso de guardado
-                      # excluye esos archivos del commit -- el detalle de
-                      # cada mes queda completo e intacto igual, bajo
-                      # historico/<periodo>/, que nunca choca.
-                      'es_rango': bool(periodo_hasta),
+                      'es_rango': es_rango,
                   })
 
           print(json.dumps(tareas))
@@ -217,10 +216,10 @@ jobs:
       - name: Calcular periodo (mes actual si no se especifico)
         id: periodo
         run: |
-          if [ -n "${{ inputs.periodo }}" ]; then
-            echo "valor=${{ inputs.periodo }}" >> "$GITHUB_OUTPUT"
-          elif [ -n "${{ matrix.empresa.periodo }}" ]; then
+          if [ -n "${{ matrix.empresa.periodo }}" ]; then
             echo "valor=${{ matrix.empresa.periodo }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ inputs.periodo }}" ]; then
+            echo "valor=${{ inputs.periodo }}" >> "$GITHUB_OUTPUT"
           else
             echo "valor=$(date -u +%Y%m)" >> "$GITHUB_OUTPUT"
           fi
