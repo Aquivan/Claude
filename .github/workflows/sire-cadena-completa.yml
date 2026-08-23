@@ -424,12 +424,26 @@ jobs:
           ]
 
           if not ya_tiene_header:
-              if tipo_reporte == "venta" and filas and len(filas[0]) == len(VENTAS_HEADERS):
-                  filas = [VENTAS_HEADERS] + filas
+              if tipo_reporte == "venta" and filas:
+                  num_cols = len(filas[0])
+                  if num_cols == len(VENTAS_HEADERS):
+                      filas = [VENTAS_HEADERS] + filas
+                  elif num_cols == len(VENTAS_HEADERS) + 1:
+                      filas = [VENTAS_HEADERS + ["CLU"]] + filas
+                  elif num_cols >= len(VENTAS_HEADERS):
+                      headers_gen = VENTAS_HEADERS + [f"Campo_{i}" for i in range(len(VENTAS_HEADERS) + 1, num_cols + 1)]
+                      filas = [headers_gen] + filas
+                  elif num_cols >= 15:
+                      headers_gen = VENTAS_HEADERS[:num_cols]
+                      filas = [headers_gen] + filas
+                  else:
+                      print(f"AVISO: el .txt de {tipo_reporte} no trae fila de cabecera y no se pudo "
+                            f"etiquetar con seguridad ({num_cols} campos).")
+                      open(ruta_csv_salida, "w").close()
+                      sys.exit(0)
               else:
                   print(f"AVISO: el .txt de {tipo_reporte} no trae fila de cabecera y no se pudo "
-                        "etiquetar con seguridad (numero de campos inesperado). Se omite para no "
-                        "adivinar nombres de columna sin confirmar.")
+                        "etiquetar con seguridad. Se omite.")
                   open(ruta_csv_salida, "w").close()
                   sys.exit(0)
 
