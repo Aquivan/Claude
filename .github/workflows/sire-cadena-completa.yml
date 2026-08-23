@@ -48,6 +48,15 @@ on:
         description: "RUC (11 digitos) para correr SOLO esa empresa. Vacio = todas las activas de empresas.json. La empresa igual debe estar 'activo: true'."
         required: false
         default: ""
+      extraer_items_xml:
+        description: "true = extrae descripcion y cantidad de items del detalle de cada XML descargado (separados con ||). false = no extrae items. Vacio = usa configuracion de empresas.json."
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - "true"
+          - "false"
   schedule:
     # Todos los dias a las 08:00 hora Peru (13:00 UTC, Peru es UTC-5 todo el
     # ano, sin horario de verano). Ajustable despues si se quiere otra hora.
@@ -75,6 +84,7 @@ jobs:
         env:
           RUC_INPUT: ${{ inputs.ruc }}
           PERIODO_INPUT: ${{ inputs.periodo }}
+          EXTRAER_ITEMS_INPUT: ${{ inputs.extraer_items_xml }}
         run: |
           cat > /tmp/preparar_matriz.py << 'PYEOF'
           # Lee empresas.json (formato {"_ayuda": {...}, "empresas": [...]}) y
@@ -106,6 +116,7 @@ jobs:
           # falta para el uso normal.
           ruc_input = os.environ.get('RUC_INPUT', '').strip()
           periodo_input = os.environ.get('PERIODO_INPUT', '').strip()
+          extraer_items_input = os.environ.get('EXTRAER_ITEMS_INPUT', '').strip()
           ruc_filtro = ''
           if ruc_input and not ruc_input.lower().startswith('todas'):
               ruc_filtro = ruc_input.split(' - ')[0].strip()
@@ -142,6 +153,11 @@ jobs:
                   periodos = rango_periodos(periodo, periodo_hasta) if periodo_hasta else [periodo]
                   es_rango = bool(periodo_hasta)
 
+              if extraer_items_input in ('true', 'false'):
+                  extraer_items = (extraer_items_input == 'true')
+              else:
+                  extraer_items = bool(e.get('extraer_items_xml', False))
+
               for p in periodos:
                   tareas.append({
                       'ruc': e['ruc'],
@@ -153,6 +169,7 @@ jobs:
                       'metodo_descarga_pdf': (e.get('metodo_descarga_pdf') or '').strip(),
                       'descarga_pdf_xml': (e.get('descarga_pdf_xml') or '').strip(),
                       'subir_pdf_r2': bool(e.get('subir_pdf_r2', False)),
+                      'extraer_items_xml': extraer_items,
                       'es_rango': es_rango,
                   })
 
@@ -1082,6 +1099,129 @@ jobs:
           echo "=== RESUMEN ==="
           cat "$DIR_DESCARGAS/resumen.txt"
           # (ya se escribe directo en $DIR_DESCARGAS/resumen.txt, no hace falta copiar)
+
+      - name: Extraer descripcion y cantidad de items desde los XML (opcional)
+        if: matrix.empresa.extraer_items_xml == true
+        run: |
+          cat > /tmp/extraer_items.py << 'PYEOF'
+          import csv, glob, os, sys, zipfile
+          import xml.etree.ElementTree as ET
+
+          ruc, dir_descargas, ruta_compras, ruta_ventas, facturas_csv = sys.argv[1:6]
+          ruta_resumen = os.path.join(dir_descargas, "resumen.txt")
+
+          print(f"=== Extrayendo items de XMLs para RUC {ruc} ===")
+
+          def parse_xml_items(zip_path):
+              if not os.path.isfile(zip_path):
+                  return "", ""
+              try:
+                  with zipfile.ZipFile(zip_path) as z:
+                      for name in z.namelist():
+                          if name.lower().endswith(".xml"):
+                              root = ET.fromstring(z.read(name))
+                              lines = (root.findall('.//{*}InvoiceLine') or
+                                       root.findall('.//{*}CreditNoteLine') or
+                                       root.findall('.//{*}DebitNoteLine'))
+                              descs, qtys = [], []
+                              for line in lines:
+                                  qty_elem = (line.find('.//{*}InvoicedQuantity') or
+                                              line.find('.//{*}CreditedQuantity') or
+                                              line.find('.//{*}DebitedQuantity') or
+                                              line.find('.//{*}Quantity'))
+                                  desc_elem = line.find('.//{*}Item/{*}Description') or line.find('.//{*}Description')
+
+                                  qty = qty_elem.text.strip() if (qty_elem is not None and qty_elem.text) else "1"
+                                  try:
+                                      f_qty = float(qty)
+                                      if f_qty.is_integer():
+                                          qty = str(int(f_qty))
+                                  except Exception:
+                                      pass
+
+                                  desc = desc_elem.text.strip() if (desc_elem is not None and desc_elem.text) else ""
+                                  desc = " ".join(desc.replace("|", "-").split())
+                                  descs.append(desc)
+                                  qtys.append(qty)
+                              return " || ".join(descs), " || ".join(qtys)
+              except Exception as e:
+                  return "", ""
+              return "", ""
+
+          items_por_factura = {}
+          if os.path.exists(ruta_resumen):
+              with open(ruta_resumen, encoding="utf-8", errors="replace") as f:
+                  for r in csv.DictReader(f):
+                      fac = r.get("factura", "").strip()
+                      xml_rel = r.get("archivo_xml", "").strip()
+                      if fac and xml_rel and xml_rel != "-":
+                          zip_path = os.path.join(dir_descargas, xml_rel) if not xml_rel.startswith(dir_descargas) else xml_rel
+                          descs, qtys = parse_xml_items(zip_path)
+                          if descs or qtys:
+                              items_por_factura[fac] = (descs, qtys)
+
+          print(f"Items extraidos de {len(items_por_factura)} XML(s).")
+
+          if os.path.exists(ruta_resumen):
+              with open(ruta_resumen, encoding="utf-8", errors="replace") as f:
+                  filas_resumen = list(csv.DictReader(f))
+
+              if filas_resumen:
+                  campos = list(filas_resumen[0].keys())
+                  if "items_descripcion" not in campos:
+                      campos.extend(["items_descripcion", "items_cantidad"])
+
+                  for row in filas_resumen:
+                      fac = row.get("factura", "").strip()
+                      d, q = items_por_factura.get(fac, ("", ""))
+                      row["items_descripcion"] = d
+                      row["items_cantidad"] = q
+
+                  with open(ruta_resumen, "w", newline="", encoding="utf-8") as f:
+                      w = csv.DictWriter(f, fieldnames=campos)
+                      w.writeheader()
+                      w.writerows(filas_resumen)
+
+          def anexar_a_csv(ruta_csv):
+              if not os.path.exists(ruta_csv) or os.path.getsize(ruta_csv) == 0:
+                  return
+              with open(ruta_csv, encoding="utf-8", errors="replace") as f:
+                  filas = list(csv.reader(f))
+              if len(filas) < 2:
+                  return
+
+              headers = [h.strip() for h in filas[0]]
+              if "items_descripcion" in headers:
+                  return
+
+              def normalizar(s):
+                  return s.strip().lstrip("﻿").strip().lower()
+
+              norm_headers = [normalizar(h) for h in headers]
+              try:
+                  idx_serie = norm_headers.index("serie del cdp")
+                  idx_numero = norm_headers.index("nro cp o doc. nro inicial (rango)")
+              except ValueError:
+                  return
+
+              headers_nuevos = headers + ["items_descripcion", "items_cantidad"]
+              filas_nuevas = [headers_nuevos]
+
+              for row in filas[1:]:
+                  serie = row[idx_serie].strip() if len(row) > idx_serie else ""
+                  numero = row[idx_numero].strip() if len(row) > idx_numero else ""
+                  fac_key = f"{serie}-{numero}"
+                  d, q = items_por_factura.get(fac_key, ("", ""))
+                  filas_nuevas.append(row + [d, q])
+
+              with open(ruta_csv, "w", newline="", encoding="utf-8") as f:
+                  csv.writer(f).writerows(filas_nuevas)
+              print(f"OK: columnas de items anexadas a {ruta_csv}")
+
+          anexar_a_csv(ruta_compras)
+          anexar_a_csv(ruta_ventas)
+          PYEOF
+          python3 /tmp/extraer_items.py "$RUC" "$DIR_DESCARGAS" "$RUTA_COMPRAS_CSV" "$RUTA_VENTAS_CSV" "$FACTURAS_CSV"
 
       - name: Subir PDF/XML a Cloudflare R2 (opcional, solo si la empresa lo activa)
         # 100% opcional -- si "subir_pdf_r2" no esta en true para esta empresa
