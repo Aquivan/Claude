@@ -1,0 +1,892 @@
+/**
+ * Liquidacion.gs
+ * Genera/actualiza una planilla de liquidacion de IGV a partir de los periodos
+ * ya descargados en Drive (SIRE Descargas/<RUC>/Venta|Compra/<Anio>/<Mes>/).
+ *
+ * DISENO: el script SOLO refresca las hojas de detalle ("Detalle Ventas" /
+ * "Detalle Compras"). El tablero "Liquidacion" es 100% formulas SUMIFS que
+ * viven en la hoja -- para que puedas agregar columnas, cambiar criterios o
+ * ajustar parametros sin tocar el codigo.
+ *
+ * SEPARACION "DEL MES" vs "ANTERIOR": al consolidar se agregan 2 columnas
+ * calculadas al final del detalle: "Periodo Emision" (YYYYMM de la fecha de
+ * emision) y "Origen" ("Del mes" o "Anterior"). Verificado contra datos reales
+ * el 2026-08-11: en COMPRAS es habitual que SUNAT incluya comprobantes de
+ * periodos anteriores (en un periodo real llego a ser el 61% de los registros
+ * y casi la mitad del monto), por eso el tablero los muestra por separado.
+ *
+ * IMPORTANTE - LIMITE DE RESPONSABILIDAD: la agregacion de datos (sumas,
+ * clasificacion, arrastre mes a mes) es mecanica y verificable. Las REGLAS
+ * TRIBUTARIAS (prorrata del credito fiscal, que credito es computable, como
+ * se aplican retenciones/percepciones) son criterio del contador: se dejan
+ * como parametros y formulas VISIBLES en la hoja "Parametros", no quemadas en
+ * el codigo. Cuadra un mes que ya tengas calculado antes de usar esto para una
+ * declaracion real.
+ */
+
+var MESES_NOMBRE_ = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
+                      'JUL', 'AGO', 'SET', 'OCT', 'NOV', 'DIC'];
+
+// Columnas (1-indexed) de los archivos de detalle, segun la estructura real
+// verificada. Ventas: 40 columnas de SUNAT. Compras: 80 columnas de SUNAT
+// (con encabezado SUNAT). totalCols incluye 2 columnas mas al final ("Link
+// PDF"/"Link XML") que agrega Main.gs (agregarLinksR2SiCorresponde_) cuando
+// Cloudflare R2 esta configurado -- vienen vacias si no lo esta, pero el
+// espacio se reserva siempre para que consolidarDetalle_ no las descarte al
+// armar "Detalle Ventas"/"Detalle Compras".
+var COL_VENTA_ = {
+  periodo: 3, fechaEmision: 5,
+  biGravada: 15, descuentoBI: 16, igv: 17, descuentoIGV: 18,
+  exonerado: 19, inafecto: 20, exportacion: 14, total: 26,
+  // ISC/ICBPER/Otros Tributos: cargos aparte del IGV que igual forman parte
+  // del "Total CP" -- si no se suman en algun lado, Precio Venta no cuadra
+  // con el Total CP real cuando una factura los trae (ver ventaOtrosCargos).
+  isc: 21, icbper: 24, otrosTributos: 25,
+  totalCols: 42,
+};
+var COL_COMPRA_ = {
+  periodo: 3, fechaEmision: 5,
+  biDG: 15, igvDG: 16, biDGNG: 17, igvDGNG: 18, biDNG: 19, igvDNG: 20,
+  valorAdqNG: 21, total: 25,
+  // Idem del lado Compras (ver compraOtrosCargos).
+  isc: 22, icbper: 23, otrosTribCargos: 24,
+  totalCols: 82,
+};
+
+/**
+ * Boton para borrar TODOS los valores manuales del tablero de liquidacion:
+ * Percepciones, Retenciones, Coeficiente Renta, Y cualquier celda de formula
+ * que hayas sobreescrito a mano en otra columna (las que aparecen resaltadas
+ * en rojo). Deja todo listo para recalcularse 100% automatico en la proxima
+ * vez que corras "Actualizar". NO toca los datos descargados de SUNAT
+ * (Detalle Ventas/Compras), ni borra el archivo. Pide confirmacion escrita
+ * porque es irreversible.
+ */
+function menuLimpiarValoresManualesLiquidacion() {
+  var ui = SpreadsheetApp.getUi();
+  var resp = ui.prompt('Vaciar valores manuales',
+    'Esto borra Percepciones, Retenciones, Coeficiente Renta, y CUALQUIER\n' +
+    'celda que hayas sobreescrito a mano (las resaltadas en rojo) en TODOS\n' +
+    'los meses de la planilla de liquidacion. NO se puede deshacer.\n\n' +
+    'Escribe BORRAR para confirmar:',
+    ui.ButtonSet.OK_CANCEL);
+  if (resp.getSelectedButton() !== ui.Button.OK) return;
+  if (resp.getResponseText().trim().toUpperCase() !== 'BORRAR') {
+    ui.alert('Cancelado (no escribiste "BORRAR" exactamente).');
+    return;
+  }
+
+  var cfg;
+  var ruc;
+  try {
+    cfg = cargarConfigGitHub_();
+    ruc = elegirRucEmpresa_(cfg);
+  } catch (e) {
+    ui.alert('Error de configuracion', e.message, ui.ButtonSet.OK);
+    return;
+  }
+  if (!ruc) return; // cancelado
+
+  var respAnio = ui.prompt('Anio', 'Anio de la planilla a vaciar (ej: 2026):', ui.ButtonSet.OK_CANCEL);
+  if (respAnio.getSelectedButton() !== ui.Button.OK) return;
+  var anio = parseInt(respAnio.getResponseText().trim(), 10);
+  if (!anio) { ui.alert('Anio invalido.'); return; }
+
+  var raiz = obtenerCarpetaRaiz_();
+  var cRuc = obtenerCarpetaRUC_(raiz, ruc);
+  var itArchivo = cRuc.getFilesByName('Liquidacion IGV ' + ruc + ' - ' + anio);
+  if (!itArchivo.hasNext()) { ui.alert('No existe una planilla de liquidacion ' + anio + ' todavia.'); return; }
+
+  var ss = SpreadsheetApp.open(itArchivo.next());
+  var sheet = ss.getSheetByName('Liquidacion');
+  if (!sheet) { ui.alert('La hoja "Liquidacion" no existe en ese archivo.'); return; }
+
+  colsManualesLiquidacion_().forEach(function (col) {
+    sheet.getRange(2, col, 12, 1).clearContent();
+  });
+
+  var overrides = leerOverridesFormula_(ss);
+  overrides.forEach(function (o) {
+    var col = indiceColumnaPorTitulo_(o.titulo);
+    if (col === -1) return;
+    sheet.getRange(o.fila, col).clearContent()
+      .setBackground(null).setFontColor(null).setFontWeight('normal');
+  });
+
+  ui.alert('Listo. Se vaciaron los valores manuales y ' + overrides.length +
+    ' ajuste(s) sobreescrito(s) de ' + anio + '.\n\n' +
+    'Corre "Actualizar" para que esas celdas vuelvan a mostrar la formula automatica.');
+}
+
+function menuGenerarLiquidacion() {
+  var ui = SpreadsheetApp.getUi();
+
+  var cfg, ruc;
+  try {
+    cfg = cargarConfigGitHub_();
+    ruc = elegirRucEmpresa_(cfg);
+  } catch (e) {
+    ui.alert('Error de configuracion', e.message, ui.ButtonSet.OK);
+    return;
+  }
+  if (!ruc) return; // cancelado
+
+  var resp = ui.prompt('Planilla de liquidacion IGV',
+    'Anio a procesar para ' + ruc + ' (ej: 2026).\n\n' +
+    'Se leeran los periodos que YA hayas IMPORTADO a Drive de ese anio\n' +
+    '(menus "4/5/6. Importar resultados"). Si un mes no esta importado,\n' +
+    'sale en cero.',
+    ui.ButtonSet.OK_CANCEL);
+  if (resp.getSelectedButton() !== ui.Button.OK) return;
+
+  var anio = parseInt(resp.getResponseText().trim(), 10);
+  if (!anio || anio < 2000 || anio > 2100) { ui.alert('Anio invalido.'); return; }
+
+  try {
+    var url = construirLiquidacion_(ruc, anio);
+    ui.alert('Planilla generada',
+      'Listo. Se creo/actualizo la planilla de liquidacion ' + anio + '.\n\n' + url +
+      '\n\nRevisa la hoja "Parametros" para ajustar prorrata y saldo inicial.',
+      ui.ButtonSet.OK);
+  } catch (e) {
+    Logger.log('ERROR construyendo liquidacion: ' + e.message + '\n' + e.stack);
+    ui.alert('Error', e.message, ui.ButtonSet.OK);
+  }
+}
+
+/** Lee las filas de datos de un periodo ya descargado. Devuelve
+ * {encabezado, filas}: encabezado es la fila de titulos real de SUNAT si la
+ * hoja traia una (null si no traia), y filas es [] si el periodo no existe. */
+function leerDetallePeriodo_(ruc, tipo, anio, mes) {
+  var raiz = obtenerCarpetaRaiz_();
+  var cRuc = obtenerCarpetaRUC_(raiz, ruc);
+  var nombreTipo = tipo === 'venta' ? 'Venta' : 'Compra';
+
+  var itTipo = cRuc.getFoldersByName(nombreTipo);
+  if (!itTipo.hasNext()) return { encabezado: null, filas: [] };
+  var itAnio = itTipo.next().getFoldersByName(String(anio));
+  if (!itAnio.hasNext()) return { encabezado: null, filas: [] };
+  var itMes = itAnio.next().getFoldersByName(MESES_CARPETA_[mes - 1]);
+  if (!itMes.hasNext()) return { encabezado: null, filas: [] };
+
+  var periodoStr = anio + ('' + mes).padStart(2, '0');
+  var itArchivo = itMes.next().getFilesByName(nombreTipo + ' ' + periodoStr);
+  if (!itArchivo.hasNext()) return { encabezado: null, filas: [] };
+
+  var ss = SpreadsheetApp.open(itArchivo.next());
+  var hojas = ss.getSheets();
+  for (var i = 0; i < hojas.length; i++) {
+    if (hojas[i].getLastRow() > 1) {
+      var rango = hojas[i].getDataRange();
+      var valores = rango.getValues();
+      // Las columnas "Link PDF"/"Link XML" son formulas HYPERLINK() (asi se
+      // ven cortas en la hoja, "Abrir PDF" en vez de la URL completa) --
+      // getValues() por si solo devuelve el TEXTO visible ("Abrir PDF"), sin
+      // el link. Se pisan esas celdas con su formula real (via getFormulas())
+      // para que el link siga funcionando aca tambien; el resto de columnas
+      // (sin formula) queda con su valor normal, sin cambios.
+      var formulas = rango.getFormulas();
+      for (var f = 0; f < valores.length; f++) {
+        for (var c = 0; c < valores[f].length; c++) {
+          if (formulas[f][c]) valores[f][c] = formulas[f][c];
+        }
+      }
+      // La hoja puede o no tener fila de encabezado: Compras siempre trae la de
+      // SUNAT, y Ventas solo cuando es PROPUESTA (periodo no presentado). Se
+      // detecta por si la primera celda es numerica (un RUC) o texto ("Ruc").
+      // Se limpia el BOM por si quedo pegado de una descarga anterior.
+      var primeraCelda = String(valores[0][0]).replace(/^﻿/, '').replace(/^ï»¿/, '').trim();
+      var tieneEncabezado = isNaN(Number(primeraCelda)) || primeraCelda === '';
+      return {
+        encabezado: tieneEncabezado ? valores[0].map(String) : null,
+        filas: tieneEncabezado ? valores.slice(1) : valores,
+      };
+    }
+  }
+  return { encabezado: null, filas: [] };
+}
+
+/** YYYYMM a partir de la fecha de emision (Date o texto dd/mm/yyyy). */
+function periodoDeEmision_(valor) {
+  if (valor instanceof Date) {
+    return valor.getFullYear() + ('' + (valor.getMonth() + 1)).padStart(2, '0');
+  }
+  var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(valor).trim());
+  return m ? (m[3] + m[2]) : '';
+}
+
+/** Consolida todos los meses del anio en una matriz, agregando las 2 columnas
+ * calculadas (Periodo Emision, Origen) al final de cada fila. Devuelve
+ * {encabezado, filas}: encabezado es la primera fila de titulos real de
+ * SUNAT que se haya encontrado en cualquier mes (null si ningun mes traia
+ * una), para no perderla al armar "Detalle Compras"/"Detalle Ventas". */
+function consolidarDetalle_(ruc, tipo, anio, cols) {
+  var filas = [];
+  var encabezado = null;
+  for (var mes = 1; mes <= 12; mes++) {
+    var periodo = leerDetallePeriodo_(ruc, tipo, anio, mes);
+    if (!encabezado && periodo.encabezado) encabezado = periodo.encabezado;
+    var datos = periodo.filas;
+    if (datos.length === 0) continue;
+    Logger.log(tipo + ' ' + anio + '-' + mes + ': ' + datos.length + ' filas');
+
+    // SUNAT no siempre exporta la misma cantidad de columnas de un mes a
+    // otro (ej. Ventas a veces trae una columna extra "CLU" al final y a
+    // veces no) -- si se rellena "a ciegas" al final de la fila (como se
+    // hacia antes), un mes con MENOS columnas de las que espera "cols"
+    // termina con "Link PDF"/"Link XML" corridos una posicion a la
+    // izquierda respecto de los demas meses (el link/columna corrida que
+    // se vio en 202607 vs 202608, que si traia la CLU). Se ubica donde
+    // esta "Link PDF" en el encabezado real de ESTE mes puntual y se
+    // rellena JUSTO ANTES de esas 2 columnas, no al final de la fila, para
+    // que "Link PDF"/"Link XML" siempre caigan en la posicion fija
+    // (cols.totalCols - 2 / - 1) que despues usa escribirDetalle_.
+    var idxLinkPdf = periodo.encabezado
+      ? indiceColumnaPorNombre_(periodo.encabezado, 'Link PDF') : -1;
+    var tieneLinks = idxLinkPdf !== -1;
+    var basePropio = tieneLinks ? idxLinkPdf : (datos[0] || []).length;
+    var baseCanonico = cols.totalCols - 2;
+
+    datos.forEach(function (fila) {
+      var base = fila.slice(0, basePropio);
+      while (base.length < baseCanonico) base.push('');
+      base = base.slice(0, baseCanonico);
+      var linkPdf = tieneLinks ? (fila[idxLinkPdf] || '') : '';
+      var linkXml = tieneLinks ? (fila[idxLinkPdf + 1] || '') : '';
+      var filaAlineada = base.concat([linkPdf, linkXml]);
+
+      var periodoDeclarado = String(filaAlineada[cols.periodo - 1]).trim();
+      var perEmision = periodoDeEmision_(filaAlineada[cols.fechaEmision - 1]);
+      var origen = (perEmision && perEmision !== periodoDeclarado) ? 'Anterior' : 'Del mes';
+      filas.push(filaAlineada.concat([perEmision, origen]));
+    });
+  }
+  return { encabezado: encabezado, filas: filas };
+}
+
+/**
+ * Separador de argumentos que Google Sheets espera al ESCRIBIR formulas por
+ * codigo con Range.setValues()/setFormula(): depende de la configuracion
+ * regional del documento (Archivo > Configuracion), NO del idioma de la
+ * interfaz. La mayoria de locales en espanol (incluido es-PE / es-419) usan
+ * punto y coma (;) porque la coma es el separador decimal; los locales en
+ * ingles usan coma (,). Escribir el separador equivocado hace que Sheets
+ * muestre #ERROR! en la celda entera, sin detalle util del error.
+ */
+function separadorFormula_() {
+  var locale = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetLocale() || '';
+  return /^en/i.test(locale) ? ',' : ';';
+}
+
+function letraColumna_(n) {
+  var s = '';
+  while (n > 0) {
+    var r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function construirLiquidacion_(ruc, anio) {
+  var raiz = obtenerCarpetaRaiz_();
+  var cRuc = obtenerCarpetaRUC_(raiz, ruc);
+  var nombreArchivo = 'Liquidacion IGV ' + ruc + ' - ' + anio;
+  var ss = obtenerOCrearSpreadsheetEnCarpeta_(cRuc, nombreArchivo);
+
+  var ventas = consolidarDetalle_(ruc, 'venta', anio, COL_VENTA_);
+  var compras = consolidarDetalle_(ruc, 'compra', anio, COL_COMPRA_);
+  Logger.log('Consolidado: ventas=' + ventas.filas.length + ' compras=' + compras.filas.length);
+
+  if (ventas.filas.length === 0 && compras.filas.length === 0) {
+    throw new Error('No se encontraron periodos descargados de ' + anio +
+      '. Descarga primero con el menu "SIRE SUNAT".');
+  }
+
+  // Para Ventas se usa siempre COLUMNAS_VENTA_ (encabezado oficial fijo,
+  // verificado contra un archivo real). Para Compras se usa el encabezado
+  // real de SUNAT que traiga cualquiera de los meses descargados -- si
+  // ningun mes lo trae (caso raro), cae a "Campo N" como antes.
+  escribirDetalle_(ss, 'Detalle Ventas', ventas.filas, COLUMNAS_VENTA_, COL_VENTA_.totalCols);
+  escribirDetalle_(ss, 'Detalle Compras', compras.filas, compras.encabezado, COL_COMPRA_.totalCols);
+  escribirParametros_(ss);
+  escribirTablero_(ss, anio);
+  limpiarHojasVacias_(ss);
+  return ss.getUrl();
+}
+
+function escribirDetalle_(ss, nombreHoja, filas, encabezadosBase, totalCols) {
+  var sheet = obtenerOCrearHoja_(ss, nombreHoja);
+  if (filas.length === 0) {
+    sheet.getRange(1, 1).setValue('(sin datos descargados para este anio)');
+    return;
+  }
+
+  var encabezado = [];
+  for (var i = 0; i < totalCols; i++) {
+    encabezado.push(encabezadosBase && i < encabezadosBase.length
+      ? encabezadosBase[i] : ('Campo ' + (i + 1)));
+  }
+  // Para Compras se usa el encabezado real que trae el archivo de SUNAT: como
+  // aqui ya se quito, se rotula generico salvo las columnas que si usamos.
+  if (!encabezadosBase) {
+    encabezado[COL_COMPRA_.periodo - 1] = 'Periodo';
+    encabezado[COL_COMPRA_.fechaEmision - 1] = 'Fecha de emision';
+    encabezado[COL_COMPRA_.biDG - 1] = 'BI Gravado DG';
+    encabezado[COL_COMPRA_.igvDG - 1] = 'IGV / IPM DG';
+    encabezado[COL_COMPRA_.biDGNG - 1] = 'BI Gravado DGNG';
+    encabezado[COL_COMPRA_.igvDGNG - 1] = 'IGV / IPM DGNG';
+    encabezado[COL_COMPRA_.biDNG - 1] = 'BI Gravado DNG';
+    encabezado[COL_COMPRA_.igvDNG - 1] = 'IGV / IPM DNG';
+    encabezado[COL_COMPRA_.valorAdqNG - 1] = 'Valor Adq. NG';
+    encabezado[COL_COMPRA_.total - 1] = 'Total CP';
+    encabezado[6] = 'Tipo CP/Doc.';
+    encabezado[12] = 'Nro Doc Identidad';
+    encabezado[13] = 'Razon Social Proveedor';
+  }
+  // Las ultimas 2 columnas del detalle (antes de Periodo Emision/Origen) son
+  // los links a R2 que agrega Main.gs (agregarLinksR2SiCorresponde_) --
+  // aplica igual a Ventas y Compras, tengan o no encabezado real de SUNAT.
+  // Si Cloudflare R2 no esta configurado, estas columnas quedan vacias, pero
+  // el titulo se pone igual para que no aparezca como "Campo N".
+  if (totalCols >= 2) {
+    encabezado[totalCols - 2] = 'Link PDF';
+    encabezado[totalCols - 1] = 'Link XML';
+  }
+  encabezado.push('Periodo Emision', 'Origen');
+
+  var nCols = encabezado.length;
+
+  // Se ordena por Fecha de emision (ascendente, sin fecha al final) para que
+  // el consolidado quede cronologico por defecto -- el autofiltro (mas abajo)
+  // igual permite reordenar a mano por cualquier otra columna.
+  filas = ordenarPorFechaEmision_(filas, indiceColumnaFechaEmision_(encabezado));
+
+  sheet.getRange(1, 1, 1, nCols).setValues([encabezado])
+    .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#305496');
+  sheet.setFrozenRows(1);
+  sheet.getRange(2, 1, filas.length, nCols).setValues(filas);
+
+  // Si la hoja se reutiliza de una corrida anterior, puede que ya tenga un
+  // filtro -- hay que sacarlo antes o createFilter() lanza "ya existe un
+  // filtro en esta hoja" (el mismo problema que ya se corrigio en
+  // ExcelHelper.gs, aplicado aqui tambien).
+  var filtroExistente = sheet.getFilter();
+  if (filtroExistente) filtroExistente.remove();
+  sheet.getRange(1, 1, filas.length + 1, nCols).createFilter();
+
+  // Las fechas llegan aqui como objetos Date (ya tipados por ExcelHelper.gs
+  // al escribir la hoja mensual de origen), pero setValues() no copia el
+  // formato de celda -- sin esto, Sheets las mostraba con el formato de fecha
+  // por defecto del documento (a veces M/D/AAAA) en vez de dd/mm/aaaa.
+  formatearColumnasFecha_(sheet, filas, nCols);
+
+  // Ancho de columna: segun el DATO mas largo de cada columna (no el titulo
+  // del encabezado) -- columnas vacias o con datos cortos quedan angostas
+  // aunque el titulo sea largo; el titulo puede verse cortado, no la celda.
+  ajustarAnchoColumnas_(sheet, encabezado, filas, nCols);
+}
+
+/** Aplica formato dd/mm/yyyy a cualquier columna del detalle consolidado que
+ * contenga objetos Date -- ver comentario en escribirDetalle_. */
+function formatearColumnasFecha_(sheet, filas, nCols) {
+  if (filas.length === 0) return;
+  // Formato ACTUAL de cada columna (fila de datos), para poder detectar
+  // restos de "dd/mm/yyyy" de una corrida anterior en columnas que en
+  // este refresco ya NO tienen fechas (ej. si el orden de columnas
+  // cambio alguna vez). setValues() solo pisa el VALOR de la celda, no
+  // su formato -- un formato de fecha viejo se queda pegado para
+  // siempre si no se limpia a mano, y un numero grande sin relacion con
+  // fechas (como el CAR SUNAT, 11 digitos) formateado como fecha cae
+  // muy afuera del rango valido y Sheets lo muestra como #NUM!.
+  var formatosActuales = sheet.getRange(2, 1, filas.length, nCols).getNumberFormats();
+  for (var c = 0; c < nCols; c++) {
+    var esFecha = false;
+    for (var r = 0; r < filas.length; r++) {
+      if (filas[r][c] instanceof Date) { esFecha = true; break; }
+    }
+    if (esFecha) {
+      sheet.getRange(2, c + 1, filas.length, 1).setNumberFormat('dd/mm/yyyy');
+    } else if (/[ymdhs]/i.test(formatosActuales[0][c])) {
+      sheet.getRange(2, c + 1, filas.length, 1).setNumberFormat('General');
+    }
+  }
+}
+
+// Filas de Parametros que son valores editables por el usuario (no texto fijo
+// ni notas) -- se preservan al refrescar, igual que en el tablero Liquidacion.
+var FILAS_PARAMETROS_EDITABLES_ = [3, 4, 5];
+
+/** Lee B3:B5 de Parametros si la hoja ya existe, para no perderlos al
+ * refrescar. Devuelve null si la hoja no existe todavia (primera vez). */
+function leerParametrosPrevios_(ss) {
+  var sheet = ss.getSheetByName('Parametros');
+  if (!sheet || sheet.getLastRow() < 5) return null;
+  var valores = {};
+  FILAS_PARAMETROS_EDITABLES_.forEach(function (fila) {
+    valores[fila] = sheet.getRange(fila, 2).getValue();
+  });
+  return valores;
+}
+
+function restaurarParametros_(sheet, valores) {
+  if (!valores) return;
+  FILAS_PARAMETROS_EDITABLES_.forEach(function (fila) {
+    sheet.getRange(fila, 2).setValue(valores[fila]);
+  });
+}
+
+function escribirParametros_(ss) {
+  var valoresPrevios = leerParametrosPrevios_(ss);
+  var sheet = obtenerOCrearHoja_(ss, 'Parametros');
+  var datos = [
+    ['PARAMETROS DE LA LIQUIDACION', ''],
+    ['', ''],
+    ['Saldo a favor de IGV al inicio del anio', 0],
+    ['% de credito fiscal computable sobre compras DGNG (prorrata)', 1],
+    ['Saldo de Percepciones/Retenciones NO aplicadas al inicio del anio', 0],
+    ['', ''],
+    ['NOTAS:', ''],
+    ['- El "% prorrata" aplica solo a las compras DGNG (destinadas a operaciones', ''],
+    ['  gravadas Y no gravadas a la vez). 1 = 100% computable. Ajustalo segun tu', ''],
+    ['  calculo de prorrata. Las compras DNG (no gravadas) NO dan credito fiscal', ''],
+    ['  y por eso el tablero las muestra aparte, sin sumarlas al credito.', ''],
+    ['- El credito de compras DG se toma al 100%.', ''],
+    ['- Las columnas de Percepciones y Retenciones del tablero son de CARGA MANUAL:', ''],
+    ['  escribelas cada mes y el saldo a pagar se recalcula solo.', ''],
+    ['- Si en un mes no se puede aplicar toda la percepcion/retencion (porque no', ''],
+    ['  hay suficiente IGV resultante ese mes), el saldo sobrante SE ARRASTRA', ''],
+    ['  automaticamente al mes siguiente (igual que el saldo a favor de IGV).', ''],
+    ['- Estas formulas son visibles y editables. Si tu criterio tributario es otro,', ''],
+    ['  cambialas directamente en la hoja "Liquidacion".', ''],
+  ];
+  sheet.getRange(1, 1, datos.length, 2).setValues(datos);
+
+  // Se restauran los valores que ya habias puesto (saldo inicial de IGV,
+  // prorrata, saldo inicial de percep/retenc) -- de lo contrario, cada vez
+  // que se actualiza la liquidacion volverian a los defaults (0, 100%, 0).
+  restaurarParametros_(sheet, valoresPrevios);
+
+  sheet.getRange(1, 1).setFontWeight('bold').setFontSize(12);
+  sheet.getRange(3, 2, 3, 1).setBackground('#FFF2CC').setBorder(true, true, true, true, false, false);
+  sheet.getRange(4, 2).setNumberFormat('0.00%');
+  sheet.getRange(3, 2).setNumberFormat('#,##0.00');
+  sheet.getRange(5, 2).setNumberFormat('#,##0.00');
+  sheet.setColumnWidth(1, 430);
+  sheet.setColumnWidth(2, 110);
+}
+
+/**
+ * Definicion de columnas del tablero "Liquidacion", EN ORDEN, con nombre
+ * simbolico ("clave") y grupo visual. Las formulas de cada fila se arman
+ * referenciando estas claves (ver LETRA_ en escribirTablero_) en vez de
+ * escribir letras de columna a mano -- asi, si se agrega/quita una columna,
+ * no hay que volver a contar ni corregir formulas por todos lados.
+ *
+ * grupo: 'label' | 'venta' | 'compra' | 'igv' | 'percep' | 'renta'
+ * (se usa para pintar la cabecera de cada bloque con un color distinto).
+ */
+var COLUMNAS_TABLERO_ = [
+  { clave: 'mes', titulo: 'Mes', grupo: 'label' },
+  { clave: 'periodo', titulo: 'Periodo', grupo: 'label' },
+  { clave: 'ventaGravDelMes', titulo: 'Venta Gravada (del mes)', grupo: 'venta' },
+  { clave: 'ventaGravAnt', titulo: 'Venta Gravada (anteriores)', grupo: 'venta' },
+  { clave: 'ventaGravTotal', titulo: 'Venta Gravada TOTAL', grupo: 'venta' },
+  { clave: 'debitoDelMes', titulo: 'Debito Fiscal (del mes)', grupo: 'venta' },
+  { clave: 'debitoAnt', titulo: 'Debito Fiscal (anteriores)', grupo: 'venta' },
+  { clave: 'debitoTotal', titulo: 'Debito Fiscal TOTAL', grupo: 'venta' },
+  { clave: 'ventaNoGravDelMes', titulo: 'Venta No Gravada (del mes)', grupo: 'venta' },
+  { clave: 'ventaNoGravAnt', titulo: 'Venta No Gravada (anteriores)', grupo: 'venta' },
+  { clave: 'ventaNoGravTotal', titulo: 'Venta No Gravada TOTAL', grupo: 'venta' },
+  { clave: 'ventaOtrosCargos', titulo: 'Otros Cargos Venta (ISC+ICBPER+Otros)', grupo: 'venta' },
+  { clave: 'precioVenta', titulo: 'Precio Venta', grupo: 'venta' },
+  { clave: 'compraDgDelMes', titulo: 'Compra DG (del mes)', grupo: 'compra' },
+  { clave: 'compraDgAnt', titulo: 'Compra DG (anteriores)', grupo: 'compra' },
+  { clave: 'compraDgTotal', titulo: 'Compra DG TOTAL', grupo: 'compra' },
+  { clave: 'creditoDgDelMes', titulo: 'Credito Fiscal DG (del mes)', grupo: 'compra' },
+  { clave: 'creditoDgAnt', titulo: 'Credito Fiscal DG (anteriores)', grupo: 'compra' },
+  { clave: 'creditoDgTotal', titulo: 'Credito Fiscal DG TOTAL', grupo: 'compra' },
+  { clave: 'compraDgng', titulo: 'Compra DGNG', grupo: 'compra' },
+  { clave: 'igvDgng', titulo: 'IGV DGNG', grupo: 'compra' },
+  { clave: 'compraDng', titulo: 'Compra DNG (sin credito)', grupo: 'compra' },
+  { clave: 'igvDng', titulo: 'IGV DNG (sin credito)', grupo: 'compra' },
+  { clave: 'compraNoGravDelMes', titulo: 'Compra No Gravada (del mes)', grupo: 'compra' },
+  { clave: 'compraNoGravAnt', titulo: 'Compra No Gravada (anteriores)', grupo: 'compra' },
+  { clave: 'compraNoGravTotal', titulo: 'Compra No Gravada TOTAL', grupo: 'compra' },
+  { clave: 'compraOtrosCargos', titulo: 'Otros Cargos Compra (ISC+ICBPER+Otros)', grupo: 'compra' },
+  { clave: 'precioCompra', titulo: 'Precio Compra', grupo: 'compra' },
+  { clave: 'igvResultante', titulo: 'IGV Resultante', grupo: 'igv' },
+  { clave: 'saldoAnt', titulo: 'Saldo a favor mes anterior', grupo: 'igv' },
+  { clave: 'igvAcumulado', titulo: 'IGV acumulado', grupo: 'igv' },
+  { clave: 'percepciones', titulo: 'Percepciones del mes', grupo: 'percep' },
+  { clave: 'retenciones', titulo: 'Retenciones del mes', grupo: 'percep' },
+  { clave: 'igvAPagar', titulo: 'IGV A PAGAR', grupo: 'percep' },
+  { clave: 'saldoArrastrar', titulo: 'Saldo a favor a arrastrar', grupo: 'percep' },
+  { clave: 'percepRetencArrastre', titulo: 'Percep/Retenc arrastradas (mes anterior)', grupo: 'percep' },
+  { clave: 'saldoPercepRetencArrastrar', titulo: 'Saldo Percep/Retenc a arrastrar', grupo: 'percep' },
+  { clave: 'ingresoNeto', titulo: 'Ingreso Neto (Vta Grav. + No Grav.)', grupo: 'renta' },
+  { clave: 'coeficienteRenta', titulo: 'Coeficiente Renta', grupo: 'renta' },
+  { clave: 'pagoACuentaRenta', titulo: 'Pago a Cuenta Renta', grupo: 'renta' },
+];
+
+// Color de fondo de la cabecera por grupo (letra blanca en todos).
+var COLOR_GRUPO_ = {
+  label: '#434343', venta: '#1155CC', compra: '#38761D',
+  igv: '#674EA7', percep: '#B45F06', renta: '#A64D79',
+};
+
+// Version suave (pastel) de COLOR_GRUPO_, para pintar de fondo SOLO las
+// columnas "importantes" de cada grupo (ver COLUMNAS_IMPORTANTES_ abajo) --
+// no todo el bloque, para que el resaltado se note y no se vea cargado.
+var COLOR_GRUPO_SUAVE_ = {
+  label: null, venta: '#EAF1FE', compra: '#EAF7EE',
+  igv: '#F2EAFB', percep: '#FDF1E6', renta: '#FBEAF1',
+};
+
+// Columnas que se consideran "principales" de cada grupo -- las que resumen
+// o concluyen un bloque (TOTALES y resultados), no cada columna del detalle
+// (del mes/anteriores). Son las unicas que llevan el fondo suave de
+// COLOR_GRUPO_SUAVE_. IGV A PAGAR y Pago a Cuenta Renta no estan aca porque
+// ya tienen su propio color bien distintivo (ver mas abajo en escribirTablero_).
+var COLUMNAS_IMPORTANTES_ = [
+  'ventaGravTotal', 'debitoTotal', 'ventaNoGravTotal', 'precioVenta',
+  'compraDgTotal', 'creditoDgTotal', 'compraNoGravTotal', 'precioCompra',
+  'igvResultante',
+];
+
+/** Indice de columna (1-indexado) de una clave. Lanza error si no existe
+ * (para detectar typos de inmediato en vez de fallar silenciosamente). */
+function indiceColumna_(clave) {
+  for (var i = 0; i < COLUMNAS_TABLERO_.length; i++) {
+    if (COLUMNAS_TABLERO_[i].clave === clave) return i + 1;
+  }
+  throw new Error('Clave de columna desconocida: ' + clave);
+}
+
+// Columnas de entrada MANUAL PURA (nunca tienen formula, son simples casillas
+// para escribir). Son funciones (no un array fijo) para no depender del
+// orden en que Apps Script cargue los archivos del proyecto.
+function colsManualesLiquidacion_() {
+  return ['percepciones', 'retenciones', 'coeficienteRenta'].map(indiceColumna_);
+}
+
+// Titulos (NO numero de columna -- ver nota mas abajo) que NUNCA se tratan
+// como "override manual" aunque no tengan formula: etiquetas, las de entrada
+// manual pura (arriba), y el arrastre interno mes a mes (saldo IGV y saldo
+// percep/retenc) -- sobreescribirlas ahi rompe la cadena de arrastre; mejor
+// ajustar en la columna de origen si hace falta (ej. Debito Fiscal).
+function titulosSinOverride_() {
+  return ['mes', 'periodo', 'percepciones', 'retenciones', 'coeficienteRenta',
+    'saldoAnt', 'igvAcumulado', 'saldoArrastrar', 'percepRetencArrastre',
+    'saldoPercepRetencArrastrar'].map(function (clave) {
+      var col = COLUMNAS_TABLERO_.filter(function (c) { return c.clave === clave; })[0];
+      return col ? col.titulo : null;
+    });
+}
+
+/** Indice de columna (1-indexado) a partir del TITULO visible. -1 si esa
+ * columna ya no existe en COLUMNAS_TABLERO_ (se elimino del codigo). */
+function indiceColumnaPorTitulo_(titulo) {
+  for (var i = 0; i < COLUMNAS_TABLERO_.length; i++) {
+    if (COLUMNAS_TABLERO_[i].titulo === titulo) return i + 1;
+  }
+  return -1;
+}
+
+// Color con el que se resalta cualquier celda de formula que el usuario haya
+// sobreescrito a mano (ver leerOverridesFormula_ / aplicarOverridesFormula_).
+var COLOR_OVERRIDE_FONDO_ = '#CC0000';
+var COLOR_OVERRIDE_TEXTO_ = '#FFFFFF';
+
+/**
+ * Recorre el tablero actual (antes de que se borre y reescriba) y detecta
+ * cualquier celda de formula donde el usuario escribio un valor a mano
+ * encima (getFormula() vacio = ya no es formula). Se usa para 2 cosas: no
+ * perder ese valor al refrescar, y resaltarlo despues con un color llamativo
+ * para que sea facil ver a simple vista que celdas se tocaron a mano.
+ *
+ * IMPORTANTE: guarda el TITULO de la columna (no el numero de columna). Si
+ * se guardara por numero, agregar/quitar una columna en COLUMNAS_TABLERO_
+ * (como paso con "Credito Fiscal computable") corre todo lo de despues una
+ * posicion y los overrides quedan pegados en la celda equivocada -- eso fue
+ * justamente el bug reportado ("ya no se resalta lo modificado").
+ */
+function leerOverridesFormula_(ss) {
+  var sheet = ss.getSheetByName('Liquidacion');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  var ultimaCol = sheet.getLastColumn();
+  var encabezados = sheet.getRange(1, 1, 1, ultimaCol).getValues()[0];
+  var sinOverride = titulosSinOverride_();
+  var overrides = [];
+  for (var fila = 2; fila <= 13; fila++) {
+    for (var col = 3; col <= ultimaCol; col++) {
+      var titulo = encabezados[col - 1];
+      if (sinOverride.indexOf(titulo) !== -1) continue;
+      var celda = sheet.getRange(fila, col);
+      var formula = celda.getFormula();
+      var valor = celda.getValue();
+      if (formula === '' && String(valor) !== '') {
+        overrides.push({ fila: fila, titulo: titulo, valor: valor });
+      }
+    }
+  }
+  return overrides;
+}
+
+/** Vuelve a poner los valores manuales sobre las formulas recien escritas
+ * (buscando la columna por TITULO, no por numero -- ver nota arriba), y los
+ * resalta con COLOR_OVERRIDE_FONDO_/COLOR_OVERRIDE_TEXTO_. Si una columna ya
+ * no existe (se elimino del codigo), ese override en particular se descarta
+ * en silencio -- ya no hay donde ponerlo. */
+function aplicarOverridesFormula_(sheet, overrides) {
+  overrides.forEach(function (o) {
+    var col = indiceColumnaPorTitulo_(o.titulo);
+    if (col === -1) return;
+    sheet.getRange(o.fila, col)
+      .setValue(o.valor)
+      .setBackground(COLOR_OVERRIDE_FONDO_)
+      .setFontColor(COLOR_OVERRIDE_TEXTO_)
+      .setFontWeight('bold');
+  });
+}
+
+/** Lee los valores actuales de las columnas manuales del tablero (filas 2-13),
+ * para poder restaurarlos despues de que escribirTablero_ vuelva a escribir
+ * todas las formulas desde cero. Si la hoja no existe aun, devuelve null. */
+function leerValoresManuales_(ss) {
+  var sheet = ss.getSheetByName('Liquidacion');
+  if (!sheet || sheet.getLastRow() < 2) return null;
+  var valores = {};
+  colsManualesLiquidacion_().forEach(function (col) {
+    valores[col] = sheet.getRange(2, col, 12, 1).getValues();
+  });
+  return valores;
+}
+
+/** Vuelve a escribir los valores manuales guardados por leerValoresManuales_. */
+function restaurarValoresManuales_(sheet, valores) {
+  if (!valores) return;
+  colsManualesLiquidacion_().forEach(function (col) {
+    sheet.getRange(2, col, 12, 1).setValues(valores[col]);
+  });
+}
+
+function escribirTablero_(ss, anio) {
+  var valoresManualesPrevios = leerValoresManuales_(ss);
+  var overridesPrevios = leerOverridesFormula_(ss);
+  var sheet = obtenerOCrearHoja_(ss, 'Liquidacion');
+  var DV = "'Detalle Ventas'!";
+  var DC = "'Detalle Compras'!";
+  var colOrigenV = letraColumna_(COL_VENTA_.totalCols + 2);
+  var colOrigenC = letraColumna_(COL_COMPRA_.totalCols + 2);
+  var perV = letraColumna_(COL_VENTA_.periodo);
+  var perC = letraColumna_(COL_COMPRA_.periodo);
+
+  // LETRA.clave -> letra de columna de esa clave en el tablero (ej. LETRA.debitoTotal = 'H').
+  // Asi las formulas de mas abajo se arman por nombre, no contando columnas a mano.
+  var LETRA = {};
+  COLUMNAS_TABLERO_.forEach(function (c, i) { LETRA[c.clave] = letraColumna_(i + 1); });
+
+  // Separador de argumentos de formula: "," en locale ingles, ";" en la
+  // mayoria de los demas (incluido espanol/Peru). Escribir formulas con el
+  // separador equivocado hace que SUNAT... digo, que Sheets muestre #ERROR!
+  // en TODA la celda, sin ningun detalle util del error. Verificado que este
+  // es el motivo real: la barra de formulas mostraba sintaxis valida en
+  // ingles, pero la hoja estaba en configuracion regional en espanol.
+  var S = separadorFormula_();
+
+  function sumaV(col, origen) {
+    var base = 'SUMIFS(' + DV + '$' + letraColumna_(col) + ':$' + letraColumna_(col) +
+      S + DV + '$' + perV + ':$' + perV + S + '$B{R}';
+    if (origen) base += S + DV + '$' + colOrigenV + ':$' + colOrigenV + S + '"' + origen + '"';
+    return base + ')';
+  }
+  function sumaC(col, origen) {
+    var base = 'SUMIFS(' + DC + '$' + letraColumna_(col) + ':$' + letraColumna_(col) +
+      S + DC + '$' + perC + ':$' + perC + S + '$B{R}';
+    if (origen) base += S + DC + '$' + colOrigenC + ':$' + colOrigenC + S + '"' + origen + '"';
+    return base + ')';
+  }
+
+  var encabezado = COLUMNAS_TABLERO_.map(function (c) { return c.titulo; });
+
+  sheet.getRange(1, 1, 1, encabezado.length).setValues([encabezado])
+    .setFontWeight('bold').setFontColor('#FFFFFF')
+    .setWrap(true).setVerticalAlignment('middle');
+  sheet.setFrozenRows(1);
+  sheet.setFrozenColumns(2);
+
+  // Cabecera coloreada por grupo (ventas / compras / IGV resultante-saldo-
+  // acumulado / percepciones-retenciones-IGV a pagar / renta), en rangos
+  // contiguos ya que COLUMNAS_TABLERO_ agrupa las columnas de cada bloque
+  // una junto a la otra.
+  var grupoActual = null, inicioGrupo = 1;
+  for (var gi = 0; gi <= COLUMNAS_TABLERO_.length; gi++) {
+    var grupo = gi < COLUMNAS_TABLERO_.length ? COLUMNAS_TABLERO_[gi].grupo : null;
+    if (grupo !== grupoActual) {
+      if (grupoActual !== null) {
+        sheet.getRange(1, inicioGrupo, 1, gi - inicioGrupo + 1).setBackground(COLOR_GRUPO_[grupoActual]);
+      }
+      grupoActual = grupo;
+      inicioGrupo = gi + 1;
+    }
+  }
+
+  var filas = [];
+  for (var m = 1; m <= 12; m++) {
+    var r = m + 1;
+    var per = anio + ('' + m).padStart(2, '0');
+    function fv(col, origen) { return sumaV(col, origen).replace(/\{R\}/g, r); }
+    function fc(col, origen) { return sumaC(col, origen).replace(/\{R\}/g, r); }
+    function ref(clave, fila) { return LETRA[clave] + (fila === undefined ? r : fila); }
+
+    var saldoAnterior = m === 1 ? '=Parametros!$B$3' : '=' + ref('saldoArrastrar', r - 1);
+    // Arrastre de percepciones/retenciones NO aplicadas de meses anteriores,
+    // igual que saldoAnterior hace con el saldo de IGV.
+    var arrastrePercepRetenc = m === 1 ? '=Parametros!$B$5' : '=' + ref('saldoPercepRetencArrastrar', r - 1);
+
+    filas.push([
+      MESES_NOMBRE_[m - 1],
+      per,
+      '=' + fv(COL_VENTA_.biGravada, 'Del mes') + '+' + fv(COL_VENTA_.descuentoBI, 'Del mes'),
+      '=' + fv(COL_VENTA_.biGravada, 'Anterior') + '+' + fv(COL_VENTA_.descuentoBI, 'Anterior'),
+      '=' + ref('ventaGravDelMes') + '+' + ref('ventaGravAnt'),
+      // Debito Fiscal, separado por origen igual que la Base Imponible.
+      '=' + fv(COL_VENTA_.igv, 'Del mes') + '+' + fv(COL_VENTA_.descuentoIGV, 'Del mes'),
+      '=' + fv(COL_VENTA_.igv, 'Anterior') + '+' + fv(COL_VENTA_.descuentoIGV, 'Anterior'),
+      '=' + ref('debitoDelMes') + '+' + ref('debitoAnt'),
+      // Venta No Gravada, separada por origen igual que la Base Imponible
+      // (exonerado + inafecto + exportacion).
+      '=' + fv(COL_VENTA_.exonerado, 'Del mes') + '+' + fv(COL_VENTA_.inafecto, 'Del mes') +
+        '+' + fv(COL_VENTA_.exportacion, 'Del mes'),
+      '=' + fv(COL_VENTA_.exonerado, 'Anterior') + '+' + fv(COL_VENTA_.inafecto, 'Anterior') +
+        '+' + fv(COL_VENTA_.exportacion, 'Anterior'),
+      '=' + ref('ventaNoGravDelMes') + '+' + ref('ventaNoGravAnt'),
+      // Otros cargos que NO son IGV pero si forman parte del Total CP (ISC,
+      // ICBPER, Otros Tributos) -- separados en su propia columna en vez de
+      // mezclarlos con "No Gravada" (son conceptos tributarios distintos),
+      // pero se suman en Precio Venta para que cuadre con el Total CP real.
+      '=' + fv(COL_VENTA_.isc) + '+' + fv(COL_VENTA_.icbper) + '+' + fv(COL_VENTA_.otrosTributos),
+      // Precio Venta: se calcula DENTRO de la hoja (Base Imponible + Debito
+      // Fiscal + No Gravado + Otros Cargos), no se jala directo del "Total
+      // CP" de SUNAT -- asi, si ajustas a mano la Base Imponible o el
+      // Debito Fiscal de un mes, el Precio Venta se recalcula solo y queda
+      // consistente.
+      '=' + ref('ventaGravTotal') + '+' + ref('debitoTotal') + '+' + ref('ventaNoGravTotal') +
+        '+' + ref('ventaOtrosCargos'),
+      '=' + fc(COL_COMPRA_.biDG, 'Del mes'),
+      '=' + fc(COL_COMPRA_.biDG, 'Anterior'),
+      '=' + ref('compraDgDelMes') + '+' + ref('compraDgAnt'),
+      // Credito Fiscal DG, separado por origen igual que la Base Imponible.
+      '=' + fc(COL_COMPRA_.igvDG, 'Del mes'),
+      '=' + fc(COL_COMPRA_.igvDG, 'Anterior'),
+      '=' + ref('creditoDgDelMes') + '+' + ref('creditoDgAnt'),
+      '=' + fc(COL_COMPRA_.biDGNG),
+      '=' + fc(COL_COMPRA_.igvDGNG),
+      '=' + fc(COL_COMPRA_.biDNG),
+      '=' + fc(COL_COMPRA_.igvDNG),
+      // Compra No Gravada (Valor Adq. NG), separada por origen igual que la
+      // Base Imponible.
+      '=' + fc(COL_COMPRA_.valorAdqNG, 'Del mes'),
+      '=' + fc(COL_COMPRA_.valorAdqNG, 'Anterior'),
+      '=' + ref('compraNoGravDelMes') + '+' + ref('compraNoGravAnt'),
+      // Otros cargos que NO son IGV pero si forman parte del Total CP (ISC,
+      // ICBPER, Otros Trib/Cargos) -- ver mismo comentario del lado Venta.
+      '=' + fc(COL_COMPRA_.isc) + '+' + fc(COL_COMPRA_.icbper) + '+' + fc(COL_COMPRA_.otrosTribCargos),
+      // Precio Compra: igual que Precio Venta, se arma sumando los
+      // componentes YA calculados en esta misma hoja, no del "Total CP" de
+      // SUNAT -- consistente con cualquier ajuste manual que hagas arriba.
+      '=' + ref('compraDgTotal') + '+' + ref('creditoDgTotal') + '+' + ref('compraDgng') + '+' +
+        ref('igvDgng') + '+' + ref('compraDng') + '+' + ref('igvDng') + '+' + ref('compraNoGravTotal') +
+        '+' + ref('compraOtrosCargos'),
+      // IGV Resultante: Debito Fiscal TOTAL menos el credito fiscal
+      // computable, calculado directo aca adentro (Credito Fiscal DG TOTAL
+      // + IGV DGNG por el % de prorrata de Parametros) -- sin pasar por una
+      // columna intermedia aparte.
+      '=' + ref('debitoTotal') + '-(' + ref('creditoDgTotal') + '+' + ref('igvDgng') + '*Parametros!$B$4)',
+      saldoAnterior,
+      '=' + ref('igvResultante') + '+' + ref('saldoAnt'),
+      0,
+      0,
+      // IGV A PAGAR: resta percepciones/retenciones DEL MES *y* las que quedaron
+      // arrastradas de meses anteriores sin poder aplicarse.
+      '=MAX(0' + S + ref('igvAcumulado') + '-' + ref('percepciones') + '-' + ref('retenciones') +
+        '-' + ref('percepRetencArrastre') + ')',
+      '=MIN(0' + S + ref('igvAcumulado') + ')',
+      arrastrePercepRetenc,
+      // Lo que sobra de (percep/retenc del mes + arrastre) despues de cubrir el
+      // IGV resultante del mes, pasa a la siguiente fila como nuevo arrastre.
+      '=MAX(0' + S + '(' + ref('percepciones') + '+' + ref('retenciones') + '+' + ref('percepRetencArrastre') +
+        ')-MAX(0' + S + ref('igvAcumulado') + '))',
+      // Pago a cuenta de Impuesto a la Renta (Art. 85 LIR): Ingreso Neto =
+      // Venta Gravada TOTAL + Venta No Gravada (exonerada/inafecta/exportacion).
+      // El coeficiente lo escribes tu cada mes (puede cambiar Ene-Abr vs
+      // May-Dic segun tu DJ anual, o ser 1.5% si aplicas Sistema B).
+      '=' + ref('ventaGravTotal') + '+' + ref('ventaNoGravTotal'),
+      0,
+      '=' + ref('ingresoNeto') + '*' + ref('coeficienteRenta'),
+    ]);
+  }
+
+  sheet.getRange(2, 1, filas.length, encabezado.length).setValues(filas);
+
+  // Fondo suave SOLO en las columnas "principales" de cada grupo (ver
+  // COLUMNAS_IMPORTANTES_), no en todo el bloque -- para que el resaltado
+  // realmente llame la atencion hacia los totales/resultados en vez de
+  // pintar todas las columnas de detalle. Va ANTES de los resaltados mas
+  // especificos de abajo (carga manual en amarillo, IGV a pagar, override en
+  // rojo) para que esos sigan viendose por encima sin que este fondo los tape.
+  COLUMNAS_IMPORTANTES_.forEach(function (clave) {
+    var col = indiceColumna_(clave);
+    var grupo = COLUMNAS_TABLERO_[col - 1].grupo;
+    if (COLOR_GRUPO_SUAVE_[grupo]) {
+      sheet.getRange(2, col, filas.length, 1).setBackground(COLOR_GRUPO_SUAVE_[grupo]);
+    }
+  });
+
+  // Se restauran los valores manuales que ya tenias escritos (Percepciones,
+  // Retenciones, Coeficiente) -- de lo contrario, cada vez que se actualiza
+  // la liquidacion se perderian y volverian a 0/vacio.
+  restaurarValoresManuales_(sheet, valoresManualesPrevios);
+
+  // Totales
+  var filaTotal = filas.length + 2;
+  sheet.getRange(filaTotal, 1).setValue('TOTAL').setFontWeight('bold');
+  var colsSinTotal = ['saldoAnt', 'igvAcumulado', 'saldoArrastrar', 'percepRetencArrastre',
+    'saldoPercepRetencArrastrar', 'coeficienteRenta'].map(indiceColumna_);
+  for (var c = 3; c <= encabezado.length; c++) {
+    // No tiene sentido totalizar saldos de arrastre / balances puntuales, ni
+    // el coeficiente de renta (es una tasa, no un monto que se pueda sumar).
+    if (colsSinTotal.indexOf(c) !== -1) continue;
+    var L = letraColumna_(c);
+    sheet.getRange(filaTotal, c).setFormula('=SUM(' + L + '2:' + L + '13)');
+  }
+  sheet.getRange(filaTotal, 1, 1, encabezado.length)
+    .setFontWeight('bold').setBorder(true, null, null, null, null, null);
+
+  // Formato
+  sheet.getRange(2, 3, filas.length + 1, encabezado.length - 2).setNumberFormat('#,##0.00');
+  sheet.getRange(2, 2, filas.length, 1).setNumberFormat('0');
+  var colCoefRenta = indiceColumna_('coeficienteRenta');
+  sheet.getRange(2, colCoefRenta, filas.length, 1).setNumberFormat('0.00%');
+  // Columnas de carga manual (Percepciones / Retenciones / Coeficiente Renta) resaltadas
+  sheet.getRange(2, indiceColumna_('percepciones'), filas.length, 2).setBackground('#FFF2CC');
+  sheet.getRange(2, colCoefRenta, filas.length, 1).setBackground('#FFF2CC');
+  // IGV a pagar y Pago a Cuenta Renta destacados
+  sheet.getRange(2, indiceColumna_('igvAPagar'), filas.length, 1)
+    .setBackground('#FCE4D6').setFontWeight('bold');
+  sheet.getRange(2, indiceColumna_('pagoACuentaRenta'), filas.length, 1)
+    .setBackground('#D9EAD3').setFontWeight('bold');
+
+  // Se aplican AL FINAL (despues de todo el formato de arriba) las celdas que
+  // hayas sobreescrito a mano en cualquier columna de formula (venta, compra,
+  // debito/credito fiscal, IGV a pagar, etc.) -- en rojo con letra blanca,
+  // para que el resaltado no quede tapado por el formato general de columna.
+  // Para deshacer un ajuste puntual: borra el contenido de esa celda (Supr) y
+  // vuelve a correr "Actualizar" -- regresa sola a la formula automatica.
+  aplicarOverridesFormula_(sheet, overridesPrevios);
+
+  sheet.setColumnWidth(1, 55);
+  sheet.setColumnWidth(2, 75);
+  for (var i = 3; i <= encabezado.length; i++) sheet.setColumnWidth(i, 115);
+}
