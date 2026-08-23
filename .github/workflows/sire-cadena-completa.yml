@@ -1433,11 +1433,6 @@ jobs:
         # configuras esto) por un aviso al toque apenas termina esta empresa
         # -- ver Webhook.gs del lado de Apps Script para los pasos de
         # configuracion completos (hay que desplegar una Web App).
-        #
-        # Solo tiene sentido en modo "completo": "solo-reintentar-fallidas"
-        # no cambia el reporte SIRE (solo reintenta PDF/XML), asi que no hay
-        # nada nuevo que la Sheet necesite reimportar.
-        if: env.MODO != 'solo-reintentar-fallidas'
         env:
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL || secrets.SHEETS_WEBHOOK_URL }}
           SHEET_WEBHOOK_SECRET: ${{ secrets.SHEET_WEBHOOK_SECRET || secrets.SHEETS_WEBHOOK_SECRET }}
