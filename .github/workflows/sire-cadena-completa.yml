@@ -51,7 +51,7 @@ on:
   schedule:
     # Todos los dias a las 08:00 hora Peru (13:00 UTC, Peru es UTC-5 todo el
     # ano, sin horario de verano). Ajustable despues si se quiere otra hora.
-    - cron: '38 23 * * *'
+    - cron: '* 06 * * *'
 
 permissions:
   contents: write
@@ -623,22 +623,32 @@ jobs:
               # log quedaba con "exit code 1" sin ningun detalle del error
               # real (paso de verdad, corrida del 2026-08-19 23:11 con la
               # empresa BKF, RUC 20609309793).
-              set +e
-              python3 scripts/sire_client.py \
-                --ruc "$SUNAT_RUC" \
-                --usuario-sol "$SUNAT_USUARIO" \
-                --clave-sol "$SUNAT_CLAVE" \
-                --client-id "$SIRE_CLIENT_ID" \
-                --client-secret "$SIRE_CLIENT_SECRET" \
-                --periodo "${{ steps.periodo.outputs.valor }}" \
-                --tipo "$T" \
-                --formato txt \
-                --out-dir "sire/$RUC/$T" > "/tmp/salida_sire_$T.log" 2>&1
-              EXIT_SIRE=$?
-              set -e
-              cat "/tmp/salida_sire_$T.log"
+              EXIT_SIRE=1
+              for intento_sire in 1 2; do
+                set +e
+                python3 scripts/sire_client.py \
+                  --ruc "$SUNAT_RUC" \
+                  --usuario-sol "$SUNAT_USUARIO" \
+                  --clave-sol "$SUNAT_CLAVE" \
+                  --client-id "$SIRE_CLIENT_ID" \
+                  --client-secret "$SIRE_CLIENT_SECRET" \
+                  --periodo "${{ steps.periodo.outputs.valor }}" \
+                  --tipo "$T" \
+                  --formato txt \
+                  --out-dir "sire/$RUC/$T" > "/tmp/salida_sire_$T.log" 2>&1
+                EXIT_SIRE=$?
+                set -e
+                cat "/tmp/salida_sire_$T.log"
+                if [ "$EXIT_SIRE" -eq 0 ]; then
+                  break
+                fi
+                if [ "$intento_sire" -lt 2 ]; then
+                  echo "AVISO: Fallo temporal en descarga SIRE ($RUC / $T). Reintentando en 5s..."
+                  sleep 5
+                fi
+              done
               if [ "$EXIT_SIRE" -ne 0 ]; then
-                echo "ERROR: sire_client.py fallo (exit $EXIT_SIRE) para $RUC / $T. Ver el detalle arriba."
+                echo "ERROR: sire_client.py fallo (exit $EXIT_SIRE) para $RUC / $T tras los reintentos. Ver el detalle arriba."
                 exit "$EXIT_SIRE"
               fi
               MODO_DESCARGA=$(grep -oE 'MODO_DESCARGA=[a-zA-Z]+' "/tmp/salida_sire_$T.log" | tail -1 | cut -d= -f2)
@@ -798,32 +808,49 @@ jobs:
           API="https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe/comprobantes"
           STATE='rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAADdAADZXhlcHQABnBhcmFtc3QASyomKiYvY2wtdGktaXRtZW51L01lbnVJbnRlcm5ldC5odG0mYjY0ZDI2YThiNWFmMDkxOTIzYjIzYjY0MDdhMWMxZGI0MWU3MzNhNnQABGV4ZWNweA=='
           JAR=jar.txt
-          set -e
+          LOGIN_OK=0
+          API_TOKEN=""
+          for intento_login in 1 2 3 4; do
+            echo "=== LOGIN (intento $intento_login/4) ==="
+            rm -f "$JAR" login.html
+            curl -sS -c "$JAR" -b "$JAR" --connect-timeout 10 --max-time 20 -A "$UA" \
+              "$SEC/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl=$ORIG&state=$STATE" -o /dev/null || true
+            curl -sS -c "$JAR" -b "$JAR" --connect-timeout 15 --max-time 30 -A "$UA" -L \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              --data-urlencode "tipo=2" --data-urlencode "dni=" \
+              --data-urlencode "custom_ruc=$SUNAT_RUC" --data-urlencode "j_username=$SUNAT_USUARIO" \
+              --data-urlencode "j_password=$SUNAT_CLAVE" --data-urlencode "captcha=" \
+              --data-urlencode "originalUrl=$ORIG" --data-urlencode "state=$STATE" \
+              "$SEC/j_security_check" -o login.html || true
 
-          echo "=== LOGIN ==="
-          curl -sS -c "$JAR" -b "$JAR" --max-time 20 -A "$UA" \
-            "$SEC/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl=$ORIG&state=$STATE" -o /dev/null
-          curl -sS -c "$JAR" -b "$JAR" --max-time 25 -A "$UA" -L \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            --data-urlencode "tipo=2" --data-urlencode "dni=" \
-            --data-urlencode "custom_ruc=$SUNAT_RUC" --data-urlencode "j_username=$SUNAT_USUARIO" \
-            --data-urlencode "j_password=$SUNAT_CLAVE" --data-urlencode "captcha=" \
-            --data-urlencode "originalUrl=$ORIG" --data-urlencode "state=$STATE" \
-            "$SEC/j_security_check" -o login.html
-          if ! grep -q "Men" login.html; then
-            echo "!! LOGIN FALLIDO"; exit 1
-          fi
-          echo "Login OK."
+            if [ -f login.html ] && grep -q "Men" login.html; then
+              echo "Login OK."
+              LOGIN_OK=1
 
-          echo "=== Obteniendo token de la API moderna (XML/PDF oficiales) ==="
-          curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
-          EXEC_LOC=$(curl -sS -A "$UA" -c "$JAR" -b "$JAR" -D - -o /dev/null \
-            "$MENU?action=execute&code=11.38.1.1.1" | grep -i "^location:" | sed 's/[Ll]ocation: //' | tr -d '\r')
-          API_TOKEN=$(echo "$EXEC_LOC" | grep -oE 'token=[^&]*' | cut -d= -f2)
-          if [ -z "$API_TOKEN" ]; then
-            echo "AVISO: no se pudo obtener el token de la API moderna. Solo se usara el metodo clasico."
-          else
-            echo "Token moderno obtenido (${#API_TOKEN} caracteres)."
+              echo "=== Obteniendo token de la API moderna (XML/PDF oficiales) ==="
+              curl -sS -A "$UA" -c "$JAR" -b "$JAR" --connect-timeout 10 --max-time 20 --data "action=prevApp" "$MENU" -o /dev/null || true
+              EXEC_LOC=$(curl -sS -A "$UA" -c "$JAR" -b "$JAR" --connect-timeout 10 --max-time 20 -D - -o /dev/null \
+                "$MENU?action=execute&code=11.38.1.1.1" 2>/dev/null | grep -i "^location:" | sed 's/[Ll]ocation: //' | tr -d '\r')
+              API_TOKEN=$(echo "$EXEC_LOC" | grep -oE 'token=[^&]*' | cut -d= -f2)
+              if [ -z "$API_TOKEN" ]; then
+                echo "AVISO: no se pudo obtener el token de la API moderna. Solo se usara el metodo clasico."
+              else
+                echo "Token moderno obtenido (${#API_TOKEN} caracteres)."
+              fi
+              break
+            fi
+
+            echo "AVISO: Intento $intento_login de login con SUNAT no completo (posible demora o microcorte del portal SOL)."
+            if [ "$intento_login" -lt 4 ]; then
+              espera=$((intento_login * 3))
+              echo "Reintentando login en ${espera}s..."
+              sleep "$espera"
+            fi
+          done
+
+          if [ "$LOGIN_OK" -ne 1 ]; then
+            echo "!! LOGIN FALLIDO tras 4 intentos contra SUNAT"
+            exit 1
           fi
 
           if [ ! -s "$FACTURAS_CSV" ] || [ $(wc -l < "$FACTURAS_CSV") -le 1 ]; then

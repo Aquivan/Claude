@@ -22,20 +22,23 @@ produccion que ya estaban documentados en la version de Apps Script:
 Manual de referencia (usar siempre la version vigente): https://cpe.sunat.gob.pe/node/158
 """
 import argparse
+import http.client
 import json
+import socket
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
-import urllib.error
 
 TOKEN_URL = "https://api-seguridad.sunat.gob.pe/v1/clientessol/{client_id}/oauth2/token/"
 SIRE_BASE = "https://api-sire.sunat.gob.pe/v1/contribuyente/migeigv/libros"
 COD_LIBRO_RVIE = "140000"
 COD_LIBRO_RCE = "080000"
+DEFAULT_TIMEOUT = 25  # Segundos por peticion para evitar cuelgues prolongados de socket
 
 
-def autenticar(cfg):
+def autenticar(cfg, reintentos=4):
     url = TOKEN_URL.format(client_id=cfg["client_id"])
     payload = urllib.parse.urlencode({
         "grant_type": "password",
@@ -45,19 +48,39 @@ def autenticar(cfg):
         "username": cfg["ruc"] + cfg["usuario_sol"],
         "password": cfg["clave_sol"],
     }).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, method="POST",
-                                  headers={"Content-Type": "application/x-www-form-urlencoded"})
-    try:
-        with urllib.request.urlopen(req) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"No se pudo autenticar contra SUNAT ({e.code}): {e.read()[:500]}")
-    if "access_token" not in data:
-        raise RuntimeError(f"Respuesta de autenticacion sin access_token: {data}")
-    return data["access_token"]
+
+    ultimo_error = None
+    for intento in range(1, reintentos + 1):
+        req = urllib.request.Request(
+            url, data=payload, method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            if "access_token" not in data:
+                raise RuntimeError(f"Respuesta de autenticacion sin access_token: {data}")
+            return data["access_token"]
+        except urllib.error.HTTPError as e:
+            if e.code in (400, 401):
+                # Error de credenciales no recuperable con reintentos
+                raise RuntimeError(f"Credenciales SUNAT rechazadas ({e.code}): {e.read()[:500]}")
+            ultimo_error = f"HTTP {e.code}: {e.read()[:200]}"
+        except (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionResetError, http.client.RemoteDisconnected) as e:
+            ultimo_error = f"Error de red / Timeout ({e})"
+        except Exception as e:
+            ultimo_error = str(e)
+
+        if intento < reintentos:
+            espera = intento * 3  # 3s, 6s, 9s (reintento rapido e inteligente sin largas esperas)
+            print(f"AVISO: Fallo conexion con servidor de autenticacion SUNAT ({ultimo_error}). "
+                  f"Reintentando en {espera}s (intento {intento + 1}/{reintentos})...")
+            time.sleep(espera)
+
+    raise RuntimeError(f"No se pudo autenticar contra SUNAT tras {reintentos} intentos. Ultimo error: {ultimo_error}")
 
 
-def sire_get(url, params, token, accept="application/json", intentos429=4):
+def sire_get(url, params, token, accept="application/json", intentos=4):
     qs = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
     url_completa = f"{url}?{qs}" if qs else url
     req = urllib.request.Request(url_completa, headers={
@@ -65,16 +88,39 @@ def sire_get(url, params, token, accept="application/json", intentos429=4):
         "Accept": accept,
         "Authorization": f"Bearer {token}",
     })
-    try:
-        return urllib.request.urlopen(req)
-    except urllib.error.HTTPError as e:
-        if e.code == 429 and intentos429 > 0:
-            espera = 30 * (5 - intentos429)  # 30s, 60s, 90s, 120s
-            time.sleep(espera)
-            return sire_get(url, params, token, accept, intentos429 - 1)
-        detalle = "Limite de peticiones de SUNAT alcanzado; reintenta en unos minutos." \
-            if e.code == 429 else e.read()[:300]
-        raise RuntimeError(f"Error SUNAT {e.code} en {url_completa}: {detalle}")
+
+    ultimo_error = None
+    for intento in range(1, intentos + 1):
+        try:
+            return urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT)
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                espera = 10 * intento  # 10s, 20s, 30s
+                print(f"AVISO: Limite 429 alcanzado en SUNAT. Esperando {espera}s (intento {intento}/{intentos})...")
+                time.sleep(espera)
+                continue
+            elif e.code in (500, 502, 503, 504):
+                espera = intento * 3  # 3s, 6s, 9s
+                print(f"AVISO: Servidor SUNAT devolvio error temporal {e.code}. Reintentando en {espera}s (intento {intento}/{intentos})...")
+                time.sleep(espera)
+                continue
+            else:
+                detalle = e.read()[:300]
+                raise RuntimeError(f"Error SUNAT {e.code} en {url_completa}: {detalle}")
+        except (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionResetError, http.client.RemoteDisconnected) as e:
+            ultimo_error = f"Error de red / Timeout ({e})"
+            if intento < intentos:
+                espera = intento * 3  # 3s, 6s, 9s
+                print(f"AVISO: Timeout/fallo de red en llamada a SUNAT ({e}). Reintentando en {espera}s (intento {intento + 1}/{intentos})...")
+                time.sleep(espera)
+                continue
+        except Exception as e:
+            ultimo_error = str(e)
+            if intento < intentos:
+                time.sleep(intento * 3)
+                continue
+
+    raise RuntimeError(f"Error comunicando con SUNAT en {url_completa} tras {intentos} intentos. Ultimo error: {ultimo_error}")
 
 
 def solicitar_descarga_rvie(token, periodo, cod_tipo_archivo="0", cod_proceso="23"):
