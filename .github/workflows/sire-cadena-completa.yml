@@ -1112,6 +1112,9 @@ jobs:
 
           print(f"=== Extrayendo items de XMLs para RUC {ruc} ===")
 
+          def get_tag_name(elem):
+              return elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+
           def parse_xml_items(zip_path):
               if not os.path.isfile(zip_path):
                   return "", ""
@@ -1120,29 +1123,33 @@ jobs:
                       for name in z.namelist():
                           if name.lower().endswith(".xml"):
                               root = ET.fromstring(z.read(name))
-                              lines = (root.findall('.//{*}InvoiceLine') or
-                                       root.findall('.//{*}CreditNoteLine') or
-                                       root.findall('.//{*}DebitNoteLine'))
+                              lines = [elem for elem in root.iter() if get_tag_name(elem) in ("InvoiceLine", "CreditNoteLine", "DebitNoteLine")]
                               descs, qtys = [], []
                               for line in lines:
-                                  qty_elem = (line.find('.//{*}InvoicedQuantity') or
-                                              line.find('.//{*}CreditedQuantity') or
-                                              line.find('.//{*}DebitedQuantity') or
-                                              line.find('.//{*}Quantity'))
-                                  desc_elem = line.find('.//{*}Item/{*}Description') or line.find('.//{*}Description')
+                                  qty_val = "1"
+                                  desc_val = ""
+                                  for elem in line.iter():
+                                      t = get_tag_name(elem)
+                                      if t in ("InvoicedQuantity", "CreditedQuantity", "DebitedQuantity", "Quantity"):
+                                          if elem.text and elem.text.strip():
+                                              qty_val = elem.text.strip()
+                                      elif t == "Description":
+                                          if elem.text and elem.text.strip():
+                                              desc_val = elem.text.strip()
 
-                                  qty = qty_elem.text.strip() if (qty_elem is not None and qty_elem.text) else "1"
                                   try:
-                                      f_qty = float(qty)
+                                      f_qty = float(qty_val)
                                       if f_qty.is_integer():
-                                          qty = str(int(f_qty))
+                                          qty_val = str(int(f_qty))
+                                      else:
+                                          qty_val = str(round(f_qty, 4))
                                   except Exception:
                                       pass
 
-                                  desc = desc_elem.text.strip() if (desc_elem is not None and desc_elem.text) else ""
-                                  desc = " ".join(desc.replace("|", "-").split())
-                                  descs.append(desc)
-                                  qtys.append(qty)
+                                  desc_val = " ".join(desc_val.replace("|", "-").split())
+                                  descs.append(desc_val)
+                                  qtys.append(qty_val)
+
                               return " || ".join(descs), " || ".join(qtys)
               except Exception as e:
                   return "", ""
