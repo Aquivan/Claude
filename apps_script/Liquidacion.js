@@ -27,30 +27,34 @@
 var MESES_NOMBRE_ = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
                       'JUL', 'AGO', 'SET', 'OCT', 'NOV', 'DIC'];
 
-// Columnas (1-indexed) de los archivos de detalle, segun la estructura real
-// verificada. Ventas: 40 columnas de SUNAT. Compras: 80 columnas de SUNAT
-// (con encabezado SUNAT). totalCols incluye 2 columnas mas al final ("Link
-// PDF"/"Link XML") que agrega Main.gs (agregarLinksR2SiCorresponde_) cuando
-// Cloudflare R2 esta configurado -- vienen vacias si no lo esta, pero el
-// espacio se reserva siempre para que consolidarDetalle_ no las descarte al
-// armar "Detalle Ventas"/"Detalle Compras".
+var COLUMNAS_CANONICAS_VENTA_ = [
+  'Ruc', 'Razon Social', 'Periodo', 'CAR SUNAT', 'Fecha de emisión',
+  'Fecha Vcto/Pago', 'Tipo CP/Doc.', 'Serie del CDP',
+  'Nro CP o Doc. Nro Inicial (Rango)', 'Nro Final (Rango)',
+  'Tipo Doc Identidad', 'Nro Doc Identidad', 'Apellidos Nombres/ Razón Social',
+  'Valor Facturado Exportación', 'BI Gravada', 'Dscto BI', 'IGV / IPM',
+  'Dscto IGV / IPM', 'Mto Exonerado', 'Mto Inafecto', 'ISC', 'BI Grav IVAP',
+  'IVAP', 'ICBPER', 'Otros Tributos', 'Total CP', 'Moneda', 'Tipo Cambio',
+  'Fecha Emisión Doc Modificado', 'Tipo CP Modificado', 'Serie CP Modificado',
+  'Nro CP Modificado', 'ID Proyecto Operadores Atribución', 'Tipo de Nota',
+  'Est. Comp', 'Valor FOB Embarcado', 'Valor OP Gratuitas', 'Tipo Operación',
+  'DAM / CP', 'CLU', 'items_descripcion', 'items_cantidad', 'Link PDF', 'Link XML'
+];
+
 var COL_VENTA_ = {
   periodo: 3, fechaEmision: 5,
   biGravada: 15, descuentoBI: 16, igv: 17, descuentoIGV: 18,
   exonerado: 19, inafecto: 20, exportacion: 14, total: 26,
-  // ISC/ICBPER/Otros Tributos: cargos aparte del IGV que igual forman parte
-  // del "Total CP" -- si no se suman en algun lado, Precio Venta no cuadra
-  // con el Total CP real cuando una factura los trae (ver ventaOtrosCargos).
   isc: 21, icbper: 24, otrosTributos: 25,
-  totalCols: 42,
+  totalCols: 44,
 };
+
 var COL_COMPRA_ = {
   periodo: 3, fechaEmision: 5,
   biDG: 15, igvDG: 16, biDGNG: 17, igvDGNG: 18, biDNG: 19, igvDNG: 20,
   valorAdqNG: 21, total: 25,
-  // Idem del lado Compras (ver compraOtrosCargos).
   isc: 22, icbper: 23, otrosTribCargos: 24,
-  totalCols: 82,
+  totalCols: 84,
 };
 
 /**
@@ -215,53 +219,141 @@ function periodoDeEmision_(valor) {
   return m ? (m[3] + m[2]) : '';
 }
 
-/** Consolida todos los meses del anio en una matriz, agregando las 2 columnas
- * calculadas (Periodo Emision, Origen) al final de cada fila. Devuelve
- * {encabezado, filas}: encabezado es la primera fila de titulos real de
- * SUNAT que se haya encontrado en cualquier mes (null si ningun mes traia
- * una), para no perderla al armar "Detalle Compras"/"Detalle Ventas". */
+/**
+ * Normaliza nombres de encabezado para comparar sin importar mayúsculas, minúsculas,
+ * tildes, BOM o espacios.
+ */
+function normalizarEncabezado_(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/^﻿/, '').replace(/^ï»¿/, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim().toLowerCase();
+}
+
+/**
+ * Busca el índice de una columna por nombre normalizado (soporta variantes de nombres).
+ */
+function buscarIndiceColumna_(encabezados, nombreBuscado) {
+  if (!encabezados || encabezados.length === 0) return -1;
+  var normBuscado = normalizarEncabezado_(nombreBuscado);
+  
+  // Coincidencia exacta normalizada
+  for (var i = 0; i < encabezados.length; i++) {
+    var normActual = normalizarEncabezado_(encabezados[i]);
+    if (normActual === normBuscado) return i;
+  }
+
+  // Coincidencias por patrones habituales
+  for (var i = 0; i < encabezados.length; i++) {
+    var normActual = normalizarEncabezado_(encabezados[i]);
+    if (normBuscado === 'link pdf' && (normActual === 'link pdf' || normActual === 'link_pdf' || normActual === 'pdf link')) return i;
+    if (normBuscado === 'link xml' && (normActual === 'link xml' || normActual === 'link_xml' || normActual === 'xml link')) return i;
+    if (normBuscado === 'items_descripcion' && (normActual === 'items_descripcion' || normActual === 'items descripcion' || normActual.indexOf('descripcion') !== -1)) return i;
+    if (normBuscado === 'items_cantidad' && (normActual === 'items_cantidad' || normActual === 'items cantidad' || normActual.indexOf('cantidad') !== -1)) return i;
+    if (normBuscado === 'fecha de emision' && (normActual.indexOf('fecha') !== -1 && normActual.indexOf('emision') !== -1 && normActual.indexOf('modific') === -1)) return i;
+    if (normBuscado === 'periodo' && normActual === 'periodo') return i;
+    if (normBuscado === 'clu' && (normActual === 'clu' || normActual === 'clu39')) return i;
+  }
+
+  return -1;
+}
+
+/** Convierte una URL a una fórmula HYPERLINK limpia y clickeable. */
+function formatearLinkCorto_(val, textoVisible) {
+  if (!val) return '';
+  var s = String(val).trim();
+  if (s.indexOf('=HYPERLINK(') === 0) return s;
+  if (/^https?:\/\//i.test(s)) {
+    return '=HYPERLINK("' + s + '", "' + textoVisible + '")';
+  }
+  return s;
+}
+
+/** Consolida todos los meses del anio alineando 100% las columnas por su nombre de encabezado. */
 function consolidarDetalle_(ruc, tipo, anio, cols) {
   var filas = [];
-  var encabezado = null;
+  var esVenta = (tipo === 'venta');
+  var listaCanonicos = esVenta ? COLUMNAS_CANONICAS_VENTA_.slice() : [];
+
+  var periodosLeidos = [];
+  var encabezadoSUNATCompras = null;
+
   for (var mes = 1; mes <= 12; mes++) {
     var periodo = leerDetallePeriodo_(ruc, tipo, anio, mes);
-    if (!encabezado && periodo.encabezado) encabezado = periodo.encabezado;
+    if (periodo.filas.length > 0) {
+      periodosLeidos.push({ mes: mes, periodo: periodo });
+      if (!esVenta && !encabezadoSUNATCompras && periodo.encabezado) {
+        encabezadoSUNATCompras = periodo.encabezado;
+      }
+    }
+  }
+
+  if (!esVenta) {
+    if (encabezadoSUNATCompras) {
+      var baseEnc = [];
+      for (var i = 0; i < encabezadoSUNATCompras.length; i++) {
+        var h = normalizarEncabezado_(encabezadoSUNATCompras[i]);
+        if (h !== 'link pdf' && h !== 'link xml' && h !== 'items_descripcion' && h !== 'items_cantidad' && h !== 'periodo emision' && h !== 'origen') {
+          baseEnc.push(encabezadoSUNATCompras[i]);
+        }
+      }
+      listaCanonicos = baseEnc.concat(['items_descripcion', 'items_cantidad', 'Link PDF', 'Link XML']);
+    } else {
+      listaCanonicos = [];
+      for (var i = 1; i <= 80; i++) listaCanonicos.push('Campo ' + i);
+      listaCanonicos.push('items_descripcion', 'items_cantidad', 'Link PDF', 'Link XML');
+    }
+  }
+
+  periodosLeidos.forEach(function (item) {
+    var mes = item.mes;
+    var periodo = item.periodo;
     var datos = periodo.filas;
-    if (datos.length === 0) continue;
+    var encMes = periodo.encabezado;
     Logger.log(tipo + ' ' + anio + '-' + mes + ': ' + datos.length + ' filas');
 
-    // SUNAT no siempre exporta la misma cantidad de columnas de un mes a
-    // otro (ej. Ventas a veces trae una columna extra "CLU" al final y a
-    // veces no) -- si se rellena "a ciegas" al final de la fila (como se
-    // hacia antes), un mes con MENOS columnas de las que espera "cols"
-    // termina con "Link PDF"/"Link XML" corridos una posicion a la
-    // izquierda respecto de los demas meses (el link/columna corrida que
-    // se vio en 202607 vs 202608, que si traia la CLU). Se ubica donde
-    // esta "Link PDF" en el encabezado real de ESTE mes puntual y se
-    // rellena JUSTO ANTES de esas 2 columnas, no al final de la fila, para
-    // que "Link PDF"/"Link XML" siempre caigan en la posicion fija
-    // (cols.totalCols - 2 / - 1) que despues usa escribirDetalle_.
-    var idxLinkPdf = periodo.encabezado
-      ? indiceColumnaPorNombre_(periodo.encabezado, 'Link PDF') : -1;
-    var tieneLinks = idxLinkPdf !== -1;
-    var basePropio = tieneLinks ? idxLinkPdf : (datos[0] || []).length;
-    var baseCanonico = cols.totalCols - 2;
+    var indicesMapeo = listaCanonicos.map(function (colName) {
+      return encMes ? buscarIndiceColumna_(encMes, colName) : -1;
+    });
+
+    var idxPeriodo = encMes ? buscarIndiceColumna_(encMes, 'Periodo') : (cols.periodo - 1);
+    var idxFecha = encMes ? buscarIndiceColumna_(encMes, 'Fecha de emision') : (cols.fechaEmision - 1);
 
     datos.forEach(function (fila) {
-      var base = fila.slice(0, basePropio);
-      while (base.length < baseCanonico) base.push('');
-      base = base.slice(0, baseCanonico);
-      var linkPdf = tieneLinks ? (fila[idxLinkPdf] || '') : '';
-      var linkXml = tieneLinks ? (fila[idxLinkPdf + 1] || '') : '';
-      var filaAlineada = base.concat([linkPdf, linkXml]);
+      var filaAlineada = [];
+      for (var c = 0; c < listaCanonicos.length; c++) {
+        var idx = indicesMapeo[c];
+        var val = (idx !== -1 && idx < fila.length) ? fila[idx] : '';
+        
+        if (idx === -1 && !encMes && c < fila.length) {
+          val = fila[c];
+        }
 
-      var periodoDeclarado = String(filaAlineada[cols.periodo - 1]).trim();
-      var perEmision = periodoDeEmision_(filaAlineada[cols.fechaEmision - 1]);
+        var nombreCol = listaCanonicos[c];
+        if (nombreCol === 'Link PDF') {
+          val = formatearLinkCorto_(val, 'Abrir PDF');
+        } else if (nombreCol === 'Link XML') {
+          val = formatearLinkCorto_(val, 'Abrir XML');
+        }
+        filaAlineada.push(val);
+      }
+
+      var periodoDeclarado = (idxPeriodo !== -1 && idxPeriodo < fila.length)
+        ? String(fila[idxPeriodo]).trim() : String(filaAlineada[cols.periodo - 1] || '').trim();
+      var fechaEmisionVal = (idxFecha !== -1 && idxFecha < fila.length)
+        ? fila[idxFecha] : filaAlineada[cols.fechaEmision - 1];
+      var perEmision = periodoDeEmision_(fechaEmisionVal);
       var origen = (perEmision && perEmision !== periodoDeclarado) ? 'Anterior' : 'Del mes';
+
       filas.push(filaAlineada.concat([perEmision, origen]));
     });
-  }
-  return { encabezado: encabezado, filas: filas };
+  });
+
+  return {
+    encabezado: listaCanonicos.concat(['Periodo Emision', 'Origen']),
+    filas: filas
+  };
 }
 
 /**
@@ -303,88 +395,77 @@ function construirLiquidacion_(ruc, anio) {
       '. Descarga primero con el menu "SIRE SUNAT".');
   }
 
-  // Para Ventas se usa siempre COLUMNAS_VENTA_ (encabezado oficial fijo,
-  // verificado contra un archivo real). Para Compras se usa el encabezado
-  // real de SUNAT que traiga cualquiera de los meses descargados -- si
-  // ningun mes lo trae (caso raro), cae a "Campo N" como antes.
-  escribirDetalle_(ss, 'Detalle Ventas', ventas.filas, COLUMNAS_VENTA_, COL_VENTA_.totalCols);
-  escribirDetalle_(ss, 'Detalle Compras', compras.filas, compras.encabezado, COL_COMPRA_.totalCols);
+  escribirDetalle_(ss, 'Detalle Ventas', ventas.filas, ventas.encabezado);
+  escribirDetalle_(ss, 'Detalle Compras', compras.filas, compras.encabezado);
   escribirParametros_(ss);
   escribirTablero_(ss, anio);
   limpiarHojasVacias_(ss);
   return ss.getUrl();
 }
 
-function escribirDetalle_(ss, nombreHoja, filas, encabezadosBase, totalCols) {
+function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
   var sheet = obtenerOCrearHoja_(ss, nombreHoja);
   if (filas.length === 0) {
     sheet.getRange(1, 1).setValue('(sin datos descargados para este anio)');
     return;
   }
 
-  var encabezado = [];
-  for (var i = 0; i < totalCols; i++) {
-    encabezado.push(encabezadosBase && i < encabezadosBase.length
-      ? encabezadosBase[i] : ('Campo ' + (i + 1)));
-  }
-  // Para Compras se usa el encabezado real que trae el archivo de SUNAT: como
-  // aqui ya se quito, se rotula generico salvo las columnas que si usamos.
-  if (!encabezadosBase) {
-    encabezado[COL_COMPRA_.periodo - 1] = 'Periodo';
-    encabezado[COL_COMPRA_.fechaEmision - 1] = 'Fecha de emision';
-    encabezado[COL_COMPRA_.biDG - 1] = 'BI Gravado DG';
-    encabezado[COL_COMPRA_.igvDG - 1] = 'IGV / IPM DG';
-    encabezado[COL_COMPRA_.biDGNG - 1] = 'BI Gravado DGNG';
-    encabezado[COL_COMPRA_.igvDGNG - 1] = 'IGV / IPM DGNG';
-    encabezado[COL_COMPRA_.biDNG - 1] = 'BI Gravado DNG';
-    encabezado[COL_COMPRA_.igvDNG - 1] = 'IGV / IPM DNG';
-    encabezado[COL_COMPRA_.valorAdqNG - 1] = 'Valor Adq. NG';
-    encabezado[COL_COMPRA_.total - 1] = 'Total CP';
-    encabezado[6] = 'Tipo CP/Doc.';
-    encabezado[12] = 'Nro Doc Identidad';
-    encabezado[13] = 'Razon Social Proveedor';
-  }
-  // Las ultimas 2 columnas del detalle (antes de Periodo Emision/Origen) son
-  // los links a R2 que agrega Main.gs (agregarLinksR2SiCorresponde_) --
-  // aplica igual a Ventas y Compras, tengan o no encabezado real de SUNAT.
-  // Si Cloudflare R2 no esta configurado, estas columnas quedan vacias, pero
-  // el titulo se pone igual para que no aparezca como "Campo N".
-  if (totalCols >= 2) {
-    encabezado[totalCols - 2] = 'Link PDF';
-    encabezado[totalCols - 1] = 'Link XML';
-  }
-  encabezado.push('Periodo Emision', 'Origen');
+  sheet.clearContents();
+  sheet.clearFormats();
 
   var nCols = encabezado.length;
 
-  // Se ordena por Fecha de emision (ascendente, sin fecha al final) para que
-  // el consolidado quede cronologico por defecto -- el autofiltro (mas abajo)
-  // igual permite reordenar a mano por cualquier otra columna.
-  filas = ordenarPorFechaEmision_(filas, indiceColumnaFechaEmision_(encabezado));
+  var idxFecha = indiceColumnaFechaEmision_(encabezado);
+  if (idxFecha !== -1) {
+    filas = ordenarPorFechaEmision_(filas, idxFecha);
+  }
 
   sheet.getRange(1, 1, 1, nCols).setValues([encabezado])
     .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#305496');
   sheet.setFrozenRows(1);
   sheet.getRange(2, 1, filas.length, nCols).setValues(filas);
 
-  // Si la hoja se reutiliza de una corrida anterior, puede que ya tenga un
-  // filtro -- hay que sacarlo antes o createFilter() lanza "ya existe un
-  // filtro en esta hoja" (el mismo problema que ya se corrigio en
-  // ExcelHelper.gs, aplicado aqui tambien).
   var filtroExistente = sheet.getFilter();
   if (filtroExistente) filtroExistente.remove();
   sheet.getRange(1, 1, filas.length + 1, nCols).createFilter();
 
-  // Las fechas llegan aqui como objetos Date (ya tipados por ExcelHelper.gs
-  // al escribir la hoja mensual de origen), pero setValues() no copia el
-  // formato de celda -- sin esto, Sheets las mostraba con el formato de fecha
-  // por defecto del documento (a veces M/D/AAAA) en vez de dd/mm/aaaa.
   formatearColumnasFecha_(sheet, filas, nCols);
+  ajustarAnchoColumnasDetalle_(sheet, encabezado, filas);
+}
 
-  // Ancho de columna: segun el DATO mas largo de cada columna (no el titulo
-  // del encabezado) -- columnas vacias o con datos cortos quedan angostas
-  // aunque el titulo sea largo; el titulo puede verse cortado, no la celda.
-  ajustarAnchoColumnas_(sheet, encabezado, filas, nCols);
+function ajustarAnchoColumnasDetalle_(sheet, encabezado, filas) {
+  var PATRON_TEXTO_LARGO = ['razon social', 'raz. social', 'nombre', 'denominaci', 'descripcion'];
+  var muestra = filas.slice(0, 30);
+  for (var col = 0; col < encabezado.length; col++) {
+    var nombre = normalizarEncabezado_(encabezado[col]);
+    var colNum = col + 1;
+
+    if (nombre.indexOf('items_descripcion') !== -1) {
+      sheet.setColumnWidth(colNum, 280);
+      if (filas.length > 0) sheet.getRange(2, colNum, filas.length, 1).setWrap(true);
+    } else if (nombre === 'link pdf' || nombre === 'link xml') {
+      sheet.setColumnWidth(colNum, 90);
+    } else if (nombre.indexOf('items_cantidad') !== -1) {
+      sheet.setColumnWidth(colNum, 100);
+    } else if (nombre === 'periodo emision' || nombre === 'origen') {
+      sheet.setColumnWidth(colNum, 88);
+    } else {
+      var maxLen = 0;
+      for (var r = 0; r < muestra.length; r++) {
+        var v = muestra[r][col];
+        var len = v instanceof Date ? 10 : String(v === null || v === undefined ? '' : v).length;
+        if (len > maxLen) maxLen = len;
+      }
+      var esLargo = PATRON_TEXTO_LARGO.some(function(p) { return nombre.indexOf(p) !== -1; });
+      var px = (maxLen + 2) * 7.3;
+      if (esLargo) {
+        px = Math.min(Math.max(px, 200), 330);
+      } else {
+        px = Math.min(Math.max(px, 55), 220);
+      }
+      sheet.setColumnWidth(colNum, Math.round(px));
+    }
+  }
 }
 
 /** Aplica formato dd/mm/yyyy a cualquier columna del detalle consolidado que

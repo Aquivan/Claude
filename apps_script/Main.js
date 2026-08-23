@@ -294,7 +294,7 @@ function ejecutarImportacion_(periodos, mostrarResultado, rucFiltro) {
             return;
           }
           var nombreTipoCap = tipo === 'venta' ? 'Venta' : 'Compra';
-          var carpeta = obtenerCarpetaPeriodo_(empresa.ruc, tipo, anio, mes);
+          var carpeta = obtenerCarpetaPeriodo_(empresa.ruc, tipo, anio, mes, empresa.nombre);
           var nombreArchivo = nombreTipoCap + ' ' + periodoStr;
           var ss = obtenerOCrearSpreadsheetEnCarpeta_(carpeta, nombreArchivo);
           var yaExistia = !!ss.getSheetByName('Datos');
@@ -661,13 +661,15 @@ function agregarLinksR2SiCorresponde_(cfg, sheet, empresa, tipo, periodoStr) {
   var idxNumero = indiceColumnaPorNombre_(encabezado, 'Nro CP o Doc. Nro Inicial (Rango)');
   if (idxSerie === -1 || idxNumero === -1) return; // formato inesperado, se omite sin romper nada
 
+  var idxLinkPdf = indiceColumnaPorNombre_(encabezado, 'Link PDF');
+  var idxLinkXml = indiceColumnaPorNombre_(encabezado, 'Link XML');
+  var colPdf = idxLinkPdf !== -1 ? (idxLinkPdf + 1) : (ultimaCol + 1);
+  var colXml = idxLinkXml !== -1 ? (idxLinkXml + 1) : (idxLinkPdf !== -1 ? idxLinkPdf + 2 : ultimaCol + 2);
+  var totalColsFinal = Math.max(ultimaCol, colXml);
+
   var datos = sheet.getRange(2, 1, ultimaFila - 1, ultimaCol).getValues();
-  var colPdf = ultimaCol + 1, colXml = ultimaCol + 2;
   var valoresPdf = [], valoresXml = [];
-  // HYPERLINK muestra un texto corto clickeable ("Abrir PDF") en vez del
-  // link completo -- por dentro sigue apuntando a la URL larga de R2, pero
-  // en la hoja se ve prolijo. setValues() interpreta un string que empieza
-  // con "=" como formula, igual que si lo tipearas a mano en la celda.
+
   datos.forEach(function (fila) {
     var factura = String(fila[idxSerie] || '').trim() + '-' + String(fila[idxNumero] || '').trim();
     var r = mapa[factura];
@@ -686,11 +688,10 @@ function agregarLinksR2SiCorresponde_(cfg, sheet, empresa, tipo, periodoStr) {
   sheet.setColumnWidth(colPdf, 90);
   sheet.setColumnWidth(colXml, 90);
 
-  // El autofiltro que ya creo escribirDatosEnHoja_ quedo angosto (no
-  // contemplaba estas 2 columnas nuevas) -- se recrea para que las incluya.
+  // El autofiltro que ya creo escribirDatosEnHoja_ se recrea para que las incluya.
   var filtroExistente = sheet.getFilter();
   if (filtroExistente) filtroExistente.remove();
-  sheet.getRange(1, 1, ultimaFila, colXml).createFilter();
+  sheet.getRange(1, 1, ultimaFila, totalColsFinal).createFilter();
 }
 
 /**

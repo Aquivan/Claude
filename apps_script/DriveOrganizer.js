@@ -35,44 +35,63 @@ function obtenerCarpetaRaiz_() {
 }
 
 /**
- * Carpeta especifica del RUC, dentro de la raiz. Se guarda el ID en Script
- * Properties (no solo el nombre) para que sea seguro RENOMBRARLA en Drive a
- * algo mas legible (ej. "Jenile SAC" en vez del RUC a secas) -- la proxima
- * vez se sigue encontrando por ID aunque ya no se llame como el RUC, y no se
- * crea una carpeta duplicada.
+ * Carpeta especifica del RUC, dentro de la raiz.
+ * Formato: "<RUC> - <NOMBRE_EMPRESA>" si se conoce el nombre, o "<RUC>" si no.
+ * Si ya existia una carpeta con solo el RUC o con nombre anterior, se renombra
+ * automaticamente al formato claro y legible para no duplicar carpetas.
  */
-function obtenerCarpetaRUC_(raiz, ruc) {
+function obtenerCarpetaRUC_(raiz, ruc, nombreEmpresa) {
   var props = PropertiesService.getScriptProperties();
   var claveId = 'CARPETA_ID_RUC_' + ruc;
   var idGuardado = props.getProperty(claveId);
 
-  if (idGuardado) {
-    try {
-      var carpetaGuardada = DriveApp.getFolderById(idGuardado);
-      // OJO: getFolderById NO lanza error si la carpeta esta en la
-      // Papelera (solo si fue borrada PARA SIEMPRE) -- sin este chequeo,
-      // si el usuario elimino la carpeta desde Drive (que la manda a la
-      // Papelera, no la borra de una), el script seguia devolviendo esa
-      // carpeta vieja e invisible, escribiendo ahi sin darse cuenta, y
-      // nunca creaba una nueva (bug real confirmado el 2026-08-21: las
-      // carpetas de 3 de las 5 empresas habian dejado de aparecer en
-      // Drive tras borrarlas, y no volvieron a crearse).
-      if (!carpetaGuardada.isTrashed()) return carpetaGuardada;
-    } catch (e) {
-      // La carpeta fue borrada para siempre (o el ID ya no es valido): se
-      // crea de nuevo abajo.
+  var nombreDeseado = String(ruc).trim();
+  if (nombreEmpresa) {
+    var nombreLimpio = String(nombreEmpresa).trim();
+    if (nombreLimpio && nombreLimpio !== ruc) {
+      nombreDeseado = ruc + ' - ' + nombreLimpio;
     }
   }
 
-  var carpeta = obtenerOCrearCarpeta_(raiz, ruc);
+  if (idGuardado) {
+    try {
+      var carpetaGuardada = DriveApp.getFolderById(idGuardado);
+      if (!carpetaGuardada.isTrashed()) {
+        if (nombreDeseado !== ruc && carpetaGuardada.getName() !== nombreDeseado) {
+          carpetaGuardada.setName(nombreDeseado);
+        }
+        return carpetaGuardada;
+      }
+    } catch (e) {
+      // no existe por id
+    }
+  }
+
+  // Buscar si ya existe una carpeta que comience con ese RUC
+  var it = raiz.getFolders();
+  while (it.hasNext()) {
+    var f = it.next();
+    if (!f.isTrashed()) {
+      var nombreActual = f.getName();
+      if (nombreActual === ruc || nombreActual.indexOf(ruc + ' - ') === 0 || nombreActual.indexOf(ruc) === 0) {
+        if (nombreDeseado !== nombreActual) {
+          f.setName(nombreDeseado);
+        }
+        props.setProperty(claveId, f.getId());
+        return f;
+      }
+    }
+  }
+
+  var carpeta = raiz.createFolder(nombreDeseado);
   props.setProperty(claveId, carpeta.getId());
   return carpeta;
 }
 
-/** tipo: 'venta' | 'compra'. Devuelve la carpeta <Raiz>/<RUC>/<Tipo>/<Anio>/<NN_Mes>/ */
-function obtenerCarpetaPeriodo_(ruc, tipo, anio, mes) {
+/** tipo: 'venta' | 'compra'. Devuelve la carpeta <Raiz>/<RUC - Nombre>/<Tipo>/<Anio>/<NN_Mes>/ */
+function obtenerCarpetaPeriodo_(ruc, tipo, anio, mes, nombreEmpresa) {
   var raiz = obtenerCarpetaRaiz_();
-  var cRuc = obtenerCarpetaRUC_(raiz, ruc);
+  var cRuc = obtenerCarpetaRUC_(raiz, ruc, nombreEmpresa);
   var nombreTipo = tipo === 'venta' ? 'Venta' : 'Compra';
   var cTipo = obtenerOCrearCarpeta_(cRuc, nombreTipo);
   var cAnio = obtenerOCrearCarpeta_(cTipo, String(anio));
