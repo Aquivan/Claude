@@ -1424,13 +1424,29 @@ jobs:
           git diff --cached --quiet || git commit -m "SIRE + facturas ($RUC, ${{ inputs.tipo || matrix.empresa.tipo || 'ambos' }}, ${{ steps.periodo.outputs.valor }}) $(date -u +'%Y-%m-%d %H:%M UTC')"
           logrado=0
           for intento in 1 2 3 4 5 6 7 8; do
-            if git push; then logrado=1; break; fi
-            echo "Push rechazado, reintentando con rebase (intento $intento)..."
+            if git push origin "HEAD:$GITHUB_REF_NAME"; then
+              logrado=1
+              break
+            fi
+            echo "Push rechazado, reintentando con rebase inteligente (intento $intento)..."
             git fetch origin "$GITHUB_REF_NAME"
-            git rebase "origin/$GITHUB_REF_NAME"
-            # Jitter (no todas las empresas reintentan al mismo segundo si
-            # varias chocan a la vez, con max-parallel:3 esto puede pasar de
-            # verdad y no solo por rareza).
+
+            set +e
+            git rebase -X theirs "origin/$GITHUB_REF_NAME"
+            REBASE_STATUS=$?
+            if [ "$REBASE_STATUS" -ne 0 ]; then
+              echo "Resolviendo conflictos de archivos binarios/datos a favor de la descarga actual..."
+              git checkout --theirs . 2>/dev/null || true
+              git add -A
+              GIT_EDITOR=true git rebase --continue 2>/dev/null || git rebase --abort
+            fi
+            set -e
+
+            if git push origin "HEAD:$GITHUB_REF_NAME"; then
+              logrado=1
+              break
+            fi
+            # Jitter aleatorio para evitar colisiones simultáneas
             sleep $((3 + RANDOM % 5))
           done
           if [ "$logrado" -ne 1 ]; then
