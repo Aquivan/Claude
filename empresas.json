@@ -19,11 +19,12 @@
       "nombre": "CORPORACION EMPRESARIAL JENILE E.I.R.L.",
       "activo": true,
       "tipo": "ambos",
-      "periodo": "202601",
-      "periodo_hasta": "202608",
+      "periodo": "",
+      "periodo_hasta": "",
       "generar_markdown": true,
       "modalidad_descarga": "",
       "metodo_descarga_pdf": "",
+      "descarga_pdf_xml": "ambos",
       "subir_pdf_r2": true
     },
     {
@@ -31,11 +32,12 @@
       "nombre": "PROCESOSO ALIEMENTARIOS M&D E.I.R.L.",
       "activo": true,
       "tipo": "ambos",
-      "periodo": "202601",
-      "periodo_hasta": "202608",
+      "periodo": "202603",
+      "periodo_hasta": "202605",
       "generar_markdown": true,
       "modalidad_descarga": "",
       "metodo_descarga_pdf": "",
+      "descarga_pdf_xml": "ambos",
       "subir_pdf_r2": true
     },
     {
@@ -43,11 +45,12 @@
       "nombre": "DSM CORPORACION E.I.R.L.",
       "activo": true,
       "tipo": "ambos",
-      "periodo": "202601",
-      "periodo_hasta": "202608",
+      "periodo": "",
+      "periodo_hasta": "",
       "generar_markdown": true,
       "modalidad_descarga": "",
       "metodo_descarga_pdf": "",
+      "descarga_pdf_xml": "ambos",
       "subir_pdf_r2": true
     },
     {
@@ -55,11 +58,12 @@
       "nombre": "BKF CORPORACION E.I.R.L.",
       "activo": true,
       "tipo": "ambos",
-      "periodo": "202601",
-      "periodo_hasta": "202608",
+      "periodo": "",
+      "periodo_hasta": "",
       "generar_markdown": true,
       "modalidad_descarga": "",
       "metodo_descarga_pdf": "",
+      "descarga_pdf_xml": "ambos",
       "subir_pdf_r2": true
     },
     {
@@ -67,11 +71,12 @@
       "nombre": "CORPORACION GRANIX E.I.R.L.",
       "activo": true,
       "tipo": "ambos",
-      "periodo": "202601",
-      "periodo_hasta": "202608",
+      "periodo": "",
+      "periodo_hasta": "",
       "generar_markdown": true,
       "modalidad_descarga": "",
       "metodo_descarga_pdf": "",
+      "descarga_pdf_xml": "ambos",
       "subir_pdf_r2": true
     }
   ]
