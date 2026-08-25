@@ -51,16 +51,44 @@ function obtenerCarpetaRaiz_() {
  * En cualquier caso en que el ID guardado no sirva se limpia el Property para
  * que el siguiente intento no lo reutilice.
  */
+/**
+ * Busca la razon social de una empresa a partir de su RUC en empresas.json.
+ */
+function obtenerNombreEmpresaPorRuc_(ruc) {
+  try {
+    var cfg = cargarConfigGitHub_();
+    var empresas = listarEmpresasGitHub_(cfg, false);
+    for (var i = 0; i < empresas.length; i++) {
+      if (String(empresas[i].ruc).trim() === String(ruc).trim()) {
+        return (empresas[i].nombre || '').trim();
+      }
+    }
+  } catch (e) {}
+  return '';
+}
+
+/**
+ * Carpeta especifica del RUC, dentro de la raiz.
+ * Formato SIEMPRE: "<RUC> - <NOMBRE_EMPRESA>".
+ * Si no se pasa el nombre por parametro, se busca automaticamente en empresas.json.
+ * Si ya existia una carpeta con solo el RUC o con nombre desactualizado,
+ * se renombra automaticamente al formato legible.
+ */
 function obtenerCarpetaRUC_(raiz, ruc, nombreEmpresa) {
   var props = PropertiesService.getScriptProperties();
   var claveId = 'CARPETA_ID_RUC_' + ruc;
   var idGuardado = props.getProperty(claveId);
 
-  var nombreDeseado = String(ruc).trim();
+  var rucStr = String(ruc).trim();
+  if (!nombreEmpresa) {
+    nombreEmpresa = obtenerNombreEmpresaPorRuc_(rucStr);
+  }
+
+  var nombreDeseado = rucStr;
   if (nombreEmpresa) {
     var nombreLimpio = String(nombreEmpresa).trim();
-    if (nombreLimpio && nombreLimpio !== ruc) {
-      nombreDeseado = ruc + ' - ' + nombreLimpio;
+    if (nombreLimpio && nombreLimpio !== rucStr) {
+      nombreDeseado = rucStr + ' - ' + nombreLimpio;
     }
   }
 
@@ -70,9 +98,6 @@ function obtenerCarpetaRUC_(raiz, ruc, nombreEmpresa) {
       var carpetaGuardada = DriveApp.getFolderById(idGuardado);
       var esValida = !carpetaGuardada.isTrashed();
 
-      // Verificar ademas que la carpeta sea hija directa de raiz -- si el
-      // usuario borro la carpeta raiz y la recreo, el ID viejo apunta a una
-      // carpeta "suelta" que ya no esta dentro del nuevo raiz.
       if (esValida) {
         var padres = carpetaGuardada.getParents();
         var estaEnRaiz = false;
@@ -83,36 +108,49 @@ function obtenerCarpetaRUC_(raiz, ruc, nombreEmpresa) {
       }
 
       if (esValida) {
-        // Si el nombre cambio (empresa renombrada), actualiza en Drive.
-        if (carpetaGuardada.getName() !== nombreDeseado) {
+        // Renombrar si tiene solo el RUC o nombre anterior
+        if (nombreDeseado !== rucStr && carpetaGuardada.getName() !== nombreDeseado) {
           carpetaGuardada.setName(nombreDeseado);
         }
         return carpetaGuardada;
       }
-    } catch (e) {
-      // ID invalido (borrada para siempre u otro error)
-    }
-    // ID ya no sirve -- eliminarlo para no reutilizarlo.
+    } catch (e) {}
     props.deleteProperty(claveId);
   }
 
-  // --- 2. Buscar por nombre dentro de raiz (no devuelve trashadas) ---
-  // Intenta primero el nombre deseado, luego solo el RUC (formato antiguo).
+  // --- 2. Buscar por nombre deseado o solo RUC dentro de raiz ---
   var candidatos = [nombreDeseado];
-  if (nombreDeseado !== ruc) candidatos.push(ruc);
+  if (nombreDeseado !== rucStr) candidatos.push(rucStr);
+
   for (var i = 0; i < candidatos.length; i++) {
     var it = raiz.getFoldersByName(candidatos[i]);
     while (it.hasNext()) {
       var f = it.next();
       if (f.isTrashed()) continue;
-      // Renombrar si encontro el formato antiguo (solo RUC)
-      if (f.getName() !== nombreDeseado) f.setName(nombreDeseado);
+      if (nombreDeseado !== rucStr && f.getName() !== nombreDeseado) {
+        f.setName(nombreDeseado);
+      }
       props.setProperty(claveId, f.getId());
       return f;
     }
   }
 
-  // --- 3. Crear la carpeta ---
+  // Buscar si existe alguna carpeta que empiece con el RUC
+  var itTodos = raiz.getFolders();
+  while (itTodos.hasNext()) {
+    var f2 = itTodos.next();
+    if (f2.isTrashed()) continue;
+    var nActual = f2.getName();
+    if (nActual === rucStr || nActual.indexOf(rucStr + ' - ') === 0 || nActual.indexOf(rucStr) === 0) {
+      if (nombreDeseado !== rucStr && nActual !== nombreDeseado) {
+        f2.setName(nombreDeseado);
+      }
+      props.setProperty(claveId, f2.getId());
+      return f2;
+    }
+  }
+
+  // --- 3. Crear la carpeta con formato "RUC - Nombre" ---
   var carpeta = raiz.createFolder(nombreDeseado);
   props.setProperty(claveId, carpeta.getId());
   return carpeta;
