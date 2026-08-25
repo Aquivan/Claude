@@ -365,8 +365,9 @@ function consolidarDetalle_(ruc, tipo, anio, cols) {
  * ingles usan coma (,). Escribir el separador equivocado hace que Sheets
  * muestre #ERROR! en la celda entera, sin detalle util del error.
  */
-function separadorFormula_() {
-  var locale = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetLocale() || '';
+function separadorFormula_(ss) {
+  var target = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var locale = target ? (target.getSpreadsheetLocale() || '') : '';
   return /^en/i.test(locale) ? ',' : ';';
 }
 
@@ -378,6 +379,30 @@ function letraColumna_(n) {
     n = Math.floor((n - 1) / 26);
   }
   return s;
+}
+
+function obtenerMapeoColumnasHoja_(sheet) {
+  var mapeo = {};
+  if (!sheet || sheet.getLastColumn() < 1) return mapeo;
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  for (var i = 0; i < headers.length; i++) {
+    var h = normalizarEncabezado_(headers[i]);
+    if (h) mapeo[h] = i + 1;
+  }
+  return mapeo;
+}
+
+function buscarLetraColumnaPorPatron_(mapeo, patrones, colDefault) {
+  for (var p = 0; p < patrones.length; p++) {
+    var normP = normalizarEncabezado_(patrones[p]);
+    if (mapeo[normP]) return letraColumna_(mapeo[normP]);
+    for (var k in mapeo) {
+      if (k.indexOf(normP) !== -1) {
+        return letraColumna_(mapeo[k]);
+      }
+    }
+  }
+  return letraColumna_(colDefault);
 }
 
 function construirLiquidacion_(ruc, anio) {
@@ -425,11 +450,15 @@ function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
   sheet.setFrozenRows(1);
   sheet.getRange(2, 1, filas.length, nCols).setValues(filas);
 
-  // --- Eliminar columnas completamente vacias (solo encabezado, sin ningun dato) ---
-  // Se recorre de derecha a izquierda para que al borrar no se desplacen los
-  // indices de las columnas que aun no se han revisado.
+  // --- Eliminar columnas CLU / de relleno completamente vacias ---
+  // Solo se eliminan columnas secundarias de relleno (CLU1..CLU39 o Campo XX)
+  // que esten completamente vacias, para no tocar columnas tributarias estandares.
   for (var c = nCols; c >= 1; c--) {
     if (c > sheet.getLastColumn()) continue;
+    var nombreCol = normalizarEncabezado_(encabezado[c - 1]);
+    var esColumnaRelleno = (nombreCol.indexOf('clu') === 0 || nombreCol.indexOf('campo ') === 0);
+    if (!esColumnaRelleno) continue;
+
     var rangoCol = sheet.getRange(2, c, filas.length, 1).getValues();
     var tieneAlgo = rangoCol.some(function(celda) {
       var v = String(celda[0] || '').trim();
@@ -448,7 +477,7 @@ function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
   if (filtroExistente) filtroExistente.remove();
   sheet.getRange(1, 1, filas.length + 1, nColsFinal).createFilter();
 
-  formatearColumnasFecha_(sheet, filas, nCols);
+  formatearColumnasFecha_(sheet, filas, nColsFinal);
   ajustarAnchoColumnasDetalle_(sheet, encFinal, filas);
 
   // --- Colorear filas de Notas de Credito en rojo claro ---
@@ -826,36 +855,65 @@ function escribirTablero_(ss, anio) {
   var valoresManualesPrevios = leerValoresManuales_(ss);
   var overridesPrevios = leerOverridesFormula_(ss);
   var sheet = obtenerOCrearHoja_(ss, 'Liquidacion');
+  sheet.clearContents();
+  sheet.clearFormats();
+
   var DV = "'Detalle Ventas'!";
   var DC = "'Detalle Compras'!";
-  var colOrigenV = letraColumna_(COL_VENTA_.totalCols + 2);
-  var colOrigenC = letraColumna_(COL_COMPRA_.totalCols + 2);
-  var perV = letraColumna_(COL_VENTA_.periodo);
-  var perC = letraColumna_(COL_COMPRA_.periodo);
 
-  // LETRA.clave -> letra de columna de esa clave en el tablero (ej. LETRA.debitoTotal = 'H').
-  // Asi las formulas de mas abajo se arman por nombre, no contando columnas a mano.
+  var sheetDV = ss.getSheetByName('Detalle Ventas');
+  var sheetDC = ss.getSheetByName('Detalle Compras');
+
+  var mapeoDV = obtenerMapeoColumnasHoja_(sheetDV);
+  var mapeoDC = obtenerMapeoColumnasHoja_(sheetDC);
+
+  // Mapeo dinamico de letras de columna en Detalle Ventas
+  var letV = {
+    periodo: buscarLetraColumnaPorPatron_(mapeoDV, ['periodo'], 3),
+    origen: buscarLetraColumnaPorPatron_(mapeoDV, ['origen'], sheetDV ? sheetDV.getLastColumn() : 46),
+    biGravada: buscarLetraColumnaPorPatron_(mapeoDV, ['bi gravada', 'base imponible gravada'], 15),
+    descuentoBI: buscarLetraColumnaPorPatron_(mapeoDV, ['dscto bi', 'descuento bi'], 16),
+    igv: buscarLetraColumnaPorPatron_(mapeoDV, ['igv / ipm', 'igv'], 17),
+    descuentoIGV: buscarLetraColumnaPorPatron_(mapeoDV, ['dscto igv', 'descuento igv'], 18),
+    exonerado: buscarLetraColumnaPorPatron_(mapeoDV, ['mto exonerado', 'monto exonerado', 'exonerado'], 19),
+    inafecto: buscarLetraColumnaPorPatron_(mapeoDV, ['mto inafecto', 'monto inafecto', 'inafecto'], 20),
+    exportacion: buscarLetraColumnaPorPatron_(mapeoDV, ['valor facturado exportacion', 'exportacion'], 14),
+    isc: buscarLetraColumnaPorPatron_(mapeoDV, ['isc'], 21),
+    icbper: buscarLetraColumnaPorPatron_(mapeoDV, ['icbper'], 24),
+    otrosTributos: buscarLetraColumnaPorPatron_(mapeoDV, ['otros tributos', 'otros cargos', 'otros'], 25),
+  };
+
+  // Mapeo dinamico de letras de columna en Detalle Compras
+  var letC = {
+    periodo: buscarLetraColumnaPorPatron_(mapeoDC, ['periodo'], 3),
+    origen: buscarLetraColumnaPorPatron_(mapeoDC, ['origen'], sheetDC ? sheetDC.getLastColumn() : 46),
+    biDG: buscarLetraColumnaPorPatron_(mapeoDC, ['bi gravado dg', 'bi gravada dg', 'bi dg'], 15),
+    igvDG: buscarLetraColumnaPorPatron_(mapeoDC, ['igv / ipm dg', 'igv dg'], 16),
+    biDGNG: buscarLetraColumnaPorPatron_(mapeoDC, ['bi gravado dgng', 'bi dgng'], 17),
+    igvDGNG: buscarLetraColumnaPorPatron_(mapeoDC, ['igv / ipm dgng', 'igv dgng'], 18),
+    biDNG: buscarLetraColumnaPorPatron_(mapeoDC, ['bi gravado dng', 'bi dng'], 19),
+    igvDNG: buscarLetraColumnaPorPatron_(mapeoDC, ['igv / ipm dng', 'igv dng'], 20),
+    valorAdqNG: buscarLetraColumnaPorPatron_(mapeoDC, ['valor adq. ng', 'valor adq ng', 'no gravada'], 21),
+    isc: buscarLetraColumnaPorPatron_(mapeoDC, ['isc'], 22),
+    icbper: buscarLetraColumnaPorPatron_(mapeoDC, ['icbper'], 23),
+    otrosTribCargos: buscarLetraColumnaPorPatron_(mapeoDC, ['otros trib/ cargos', 'otros trib', 'otros cargos'], 24),
+  };
+
   var LETRA = {};
   COLUMNAS_TABLERO_.forEach(function (c, i) { LETRA[c.clave] = letraColumna_(i + 1); });
 
-  // Separador de argumentos de formula: "," en locale ingles, ";" en la
-  // mayoria de los demas (incluido espanol/Peru). Escribir formulas con el
-  // separador equivocado hace que SUNAT... digo, que Sheets muestre #ERROR!
-  // en TODA la celda, sin ningun detalle util del error. Verificado que este
-  // es el motivo real: la barra de formulas mostraba sintaxis valida en
-  // ingles, pero la hoja estaba en configuracion regional en espanol.
-  var S = separadorFormula_();
+  var S = separadorFormula_(ss);
 
-  function sumaV(col, origen) {
-    var base = 'SUMIFS(' + DV + '$' + letraColumna_(col) + ':$' + letraColumna_(col) +
-      S + DV + '$' + perV + ':$' + perV + S + '$B{R}';
-    if (origen) base += S + DV + '$' + colOrigenV + ':$' + colOrigenV + S + '"' + origen + '"';
+  function sumaV(colLetra, origen) {
+    var base = 'SUMIFS(' + DV + '$' + colLetra + ':$' + colLetra +
+      S + DV + '$' + letV.periodo + ':$' + letV.periodo + S + '$B{R}';
+    if (origen) base += S + DV + '$' + letV.origen + ':$' + letV.origen + S + '"' + origen + '"';
     return base + ')';
   }
-  function sumaC(col, origen) {
-    var base = 'SUMIFS(' + DC + '$' + letraColumna_(col) + ':$' + letraColumna_(col) +
-      S + DC + '$' + perC + ':$' + perC + S + '$B{R}';
-    if (origen) base += S + DC + '$' + colOrigenC + ':$' + colOrigenC + S + '"' + origen + '"';
+  function sumaC(colLetra, origen) {
+    var base = 'SUMIFS(' + DC + '$' + colLetra + ':$' + colLetra +
+      S + DC + '$' + letC.periodo + ':$' + letC.periodo + S + '$B{R}';
+    if (origen) base += S + DC + '$' + letC.origen + ':$' + letC.origen + S + '"' + origen + '"';
     return base + ')';
   }
 
@@ -867,10 +925,6 @@ function escribirTablero_(ss, anio) {
   sheet.setFrozenRows(1);
   sheet.setFrozenColumns(2);
 
-  // Cabecera coloreada por grupo (ventas / compras / IGV resultante-saldo-
-  // acumulado / percepciones-retenciones-IGV a pagar / renta), en rangos
-  // contiguos ya que COLUMNAS_TABLERO_ agrupa las columnas de cada bloque
-  // una junto a la otra.
   var grupoActual = null, inicioGrupo = 1;
   for (var gi = 0; gi <= COLUMNAS_TABLERO_.length; gi++) {
     var grupo = gi < COLUMNAS_TABLERO_.length ? COLUMNAS_TABLERO_[gi].grupo : null;
@@ -887,92 +941,55 @@ function escribirTablero_(ss, anio) {
   for (var m = 1; m <= 12; m++) {
     var r = m + 1;
     var per = anio + ('' + m).padStart(2, '0');
-    function fv(col, origen) { return sumaV(col, origen).replace(/\{R\}/g, r); }
-    function fc(col, origen) { return sumaC(col, origen).replace(/\{R\}/g, r); }
+    function fv(colLetra, origen) { return sumaV(colLetra, origen).replace(/\{R\}/g, r); }
+    function fc(colLetra, origen) { return sumaC(colLetra, origen).replace(/\{R\}/g, r); }
     function ref(clave, fila) { return LETRA[clave] + (fila === undefined ? r : fila); }
 
     var saldoAnterior = m === 1 ? '=Parametros!$B$3' : '=' + ref('saldoArrastrar', r - 1);
-    // Arrastre de percepciones/retenciones NO aplicadas de meses anteriores,
-    // igual que saldoAnterior hace con el saldo de IGV.
     var arrastrePercepRetenc = m === 1 ? '=Parametros!$B$5' : '=' + ref('saldoPercepRetencArrastrar', r - 1);
 
     filas.push([
       MESES_NOMBRE_[m - 1],
       per,
-      '=' + fv(COL_VENTA_.biGravada, 'Del mes') + '+' + fv(COL_VENTA_.descuentoBI, 'Del mes'),
-      '=' + fv(COL_VENTA_.biGravada, 'Anterior') + '+' + fv(COL_VENTA_.descuentoBI, 'Anterior'),
+      '=' + fv(letV.biGravada, 'Del mes') + '+' + fv(letV.descuentoBI, 'Del mes'),
+      '=' + fv(letV.biGravada, 'Anterior') + '+' + fv(letV.descuentoBI, 'Anterior'),
       '=' + ref('ventaGravDelMes') + '+' + ref('ventaGravAnt'),
-      // Debito Fiscal, separado por origen igual que la Base Imponible.
-      '=' + fv(COL_VENTA_.igv, 'Del mes') + '+' + fv(COL_VENTA_.descuentoIGV, 'Del mes'),
-      '=' + fv(COL_VENTA_.igv, 'Anterior') + '+' + fv(COL_VENTA_.descuentoIGV, 'Anterior'),
+      '=' + fv(letV.igv, 'Del mes') + '+' + fv(letV.descuentoIGV, 'Del mes'),
+      '=' + fv(letV.igv, 'Anterior') + '+' + fv(letV.descuentoIGV, 'Anterior'),
       '=' + ref('debitoDelMes') + '+' + ref('debitoAnt'),
-      // Venta No Gravada, separada por origen igual que la Base Imponible
-      // (exonerado + inafecto + exportacion).
-      '=' + fv(COL_VENTA_.exonerado, 'Del mes') + '+' + fv(COL_VENTA_.inafecto, 'Del mes') +
-        '+' + fv(COL_VENTA_.exportacion, 'Del mes'),
-      '=' + fv(COL_VENTA_.exonerado, 'Anterior') + '+' + fv(COL_VENTA_.inafecto, 'Anterior') +
-        '+' + fv(COL_VENTA_.exportacion, 'Anterior'),
+      '=' + fv(letV.exonerado, 'Del mes') + '+' + fv(letV.inafecto, 'Del mes') + '+' + fv(letV.exportacion, 'Del mes'),
+      '=' + fv(letV.exonerado, 'Anterior') + '+' + fv(letV.inafecto, 'Anterior') + '+' + fv(letV.exportacion, 'Anterior'),
       '=' + ref('ventaNoGravDelMes') + '+' + ref('ventaNoGravAnt'),
-      // Otros cargos que NO son IGV pero si forman parte del Total CP (ISC,
-      // ICBPER, Otros Tributos) -- separados en su propia columna en vez de
-      // mezclarlos con "No Gravada" (son conceptos tributarios distintos),
-      // pero se suman en Precio Venta para que cuadre con el Total CP real.
-      '=' + fv(COL_VENTA_.isc) + '+' + fv(COL_VENTA_.icbper) + '+' + fv(COL_VENTA_.otrosTributos),
-      // Precio Venta: se calcula DENTRO de la hoja (Base Imponible + Debito
-      // Fiscal + No Gravado + Otros Cargos), no se jala directo del "Total
-      // CP" de SUNAT -- asi, si ajustas a mano la Base Imponible o el
-      // Debito Fiscal de un mes, el Precio Venta se recalcula solo y queda
-      // consistente.
-      '=' + ref('ventaGravTotal') + '+' + ref('debitoTotal') + '+' + ref('ventaNoGravTotal') +
-        '+' + ref('ventaOtrosCargos'),
-      '=' + fc(COL_COMPRA_.biDG, 'Del mes'),
-      '=' + fc(COL_COMPRA_.biDG, 'Anterior'),
+      '=' + fv(letV.isc) + '+' + fv(letV.icbper) + '+' + fv(letV.otrosTributos),
+      '=' + ref('ventaGravTotal') + '+' + ref('debitoTotal') + '+' + ref('ventaNoGravTotal') + '+' + ref('ventaOtrosCargos'),
+      '=' + fc(letC.biDG, 'Del mes'),
+      '=' + fc(letC.biDG, 'Anterior'),
       '=' + ref('compraDgDelMes') + '+' + ref('compraDgAnt'),
-      // Credito Fiscal DG, separado por origen igual que la Base Imponible.
-      '=' + fc(COL_COMPRA_.igvDG, 'Del mes'),
-      '=' + fc(COL_COMPRA_.igvDG, 'Anterior'),
+      '=' + fc(letC.igvDG, 'Del mes'),
+      '=' + fc(letC.igvDG, 'Anterior'),
       '=' + ref('creditoDgDelMes') + '+' + ref('creditoDgAnt'),
-      '=' + fc(COL_COMPRA_.biDGNG),
-      '=' + fc(COL_COMPRA_.igvDGNG),
-      '=' + fc(COL_COMPRA_.biDNG),
-      '=' + fc(COL_COMPRA_.igvDNG),
-      // Compra No Gravada (Valor Adq. NG), separada por origen igual que la
-      // Base Imponible.
-      '=' + fc(COL_COMPRA_.valorAdqNG, 'Del mes'),
-      '=' + fc(COL_COMPRA_.valorAdqNG, 'Anterior'),
+      '=' + fc(letC.biDGNG),
+      '=' + fc(letC.igvDGNG),
+      '=' + fc(letC.biDNG),
+      '=' + fc(letC.igvDNG),
+      '=' + fc(letC.valorAdqNG, 'Del mes'),
+      '=' + fc(letC.valorAdqNG, 'Anterior'),
       '=' + ref('compraNoGravDelMes') + '+' + ref('compraNoGravAnt'),
-      // Otros cargos que NO son IGV pero si forman parte del Total CP (ISC,
-      // ICBPER, Otros Trib/Cargos) -- ver mismo comentario del lado Venta.
-      '=' + fc(COL_COMPRA_.isc) + '+' + fc(COL_COMPRA_.icbper) + '+' + fc(COL_COMPRA_.otrosTribCargos),
-      // Precio Compra: igual que Precio Venta, se arma sumando los
-      // componentes YA calculados en esta misma hoja, no del "Total CP" de
-      // SUNAT -- consistente con cualquier ajuste manual que hagas arriba.
+      '=' + fc(letC.isc) + '+' + fc(letC.icbper) + '+' + fc(letC.otrosTribCargos),
       '=' + ref('compraDgTotal') + '+' + ref('creditoDgTotal') + '+' + ref('compraDgng') + '+' +
         ref('igvDgng') + '+' + ref('compraDng') + '+' + ref('igvDng') + '+' + ref('compraNoGravTotal') +
         '+' + ref('compraOtrosCargos'),
-      // IGV Resultante: Debito Fiscal TOTAL menos el credito fiscal
-      // computable, calculado directo aca adentro (Credito Fiscal DG TOTAL
-      // + IGV DGNG por el % de prorrata de Parametros) -- sin pasar por una
-      // columna intermedia aparte.
       '=' + ref('debitoTotal') + '-(' + ref('creditoDgTotal') + '+' + ref('igvDgng') + '*Parametros!$B$4)',
       saldoAnterior,
       '=' + ref('igvResultante') + '+' + ref('saldoAnt'),
       0,
       0,
-      // IGV A PAGAR: resta percepciones/retenciones DEL MES *y* las que quedaron
-      // arrastradas de meses anteriores sin poder aplicarse.
       '=MAX(0' + S + ref('igvAcumulado') + '-' + ref('percepciones') + '-' + ref('retenciones') +
         '-' + ref('percepRetencArrastre') + ')',
       '=MIN(0' + S + ref('igvAcumulado') + ')',
       arrastrePercepRetenc,
-      // Lo que sobra de (percep/retenc del mes + arrastre) despues de cubrir el
-      // IGV resultante del mes, pasa a la siguiente fila como nuevo arrastre.
       '=MAX(0' + S + '(' + ref('percepciones') + '+' + ref('retenciones') + '+' + ref('percepRetencArrastre') +
         ')-MAX(0' + S + ref('igvAcumulado') + '))',
-      // Pago a cuenta de Impuesto a la Renta (Art. 85 LIR): Ingreso Neto =
-      // Venta Gravada TOTAL + Venta No Gravada (exonerada/inafecta/exportacion).
-      // El coeficiente lo escribes tu cada mes (puede cambiar Ene-Abr vs
-      // May-Dic segun tu DJ anual, o ser 1.5% si aplicas Sistema B).
       '=' + ref('ventaGravTotal') + '+' + ref('ventaNoGravTotal'),
       0,
       '=' + ref('ingresoNeto') + '*' + ref('coeficienteRenta'),
