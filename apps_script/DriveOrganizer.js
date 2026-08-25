@@ -185,70 +185,57 @@ function limpiarHojasVacias_(ss) {
 /**
  * RESTABLECER DRIVE DESDE CERO
  *
- * Flujo completo:
- *   1. Pide confirmacion (2 veces -- es destructivo).
- *   2. Manda a la Papelera TODA la estructura de carpetas en "SIRE Descargas"
- *      (subcarpetas de RUC, Venta/Compra, anio, mes y los Sheets dentro),
- *      pero SIN tocar la hoja de control (esta hoja) ni los archivos fuera
- *      de SIRE Descargas.
- *   3. Limpia los Script Properties de IDs de carpetas guardados (CARPETA_ID_RUC_*).
- *   4. Pide el rango de periodos a reimportar y lanza la importacion
- *      (identica a la opcion 6 del menu) -- las carpetas y Sheets se recrean
- *      desde cero con el formato y columnas actualizados.
+ * Solo limpia -- NO reimporta automaticamente (para evitar el limite de 6 min
+ * de Apps Script). Despues de limpiar, usa la opcion 6 del menu para
+ * reimportar el rango de periodos que necesites.
  *
- * Los archivos mandados a Papelera NO se borran definitivamente -- siguen
- * en "Papelera" de Drive y se pueden recuperar si algo salio mal.
+ * Flujo:
+ *   1. Pide confirmacion (2 veces).
+ *   2. Manda a la Papelera TODA la estructura dentro de "SIRE Descargas".
+ *   3. Limpia los Script Properties de IDs de carpetas (CARPETA_ID_RUC_*).
+ *   4. Muestra mensaje de exito y recuerda usar opcion 6 para reimportar.
  */
 function menuRestablecerDriveYReimportar() {
   var ui = SpreadsheetApp.getUi();
 
   // --- Confirmacion 1 ---
   var conf1 = ui.alert(
-    '⚠️  RESTABLECER DRIVE DESDE CERO',
+    '\u26a0\ufe0f  RESTABLECER DRIVE DESDE CERO',
     'Esta accion manda a la Papelera TODA la estructura de carpetas y archivos ' +
-    'dentro de "SIRE Descargas" (subcarpetas de RUC, Venta, Compra, años, meses, ' +
-    'Google Sheets mensuales).\n\n' +
-    'Los archivos van a la PAPELERA (no se borran definitivamente).\n' +
-    'Luego puedes reimportar todo con el formato y columnas actualizados.\n\n' +
-    '¿Deseas continuar?',
+    'dentro de "SIRE Descargas" (carpetas RUC, Venta, Compra, años, meses, Sheets).\n\n' +
+    'Los archivos van a la PAPELERA (no se borran definitivamente).\n\n' +
+    'Despues tendras que reimportar manualmente con la opcion 6 del menu.\n\n' +
+    '\u00bfDeseas continuar?',
     ui.ButtonSet.YES_NO);
-  if (conf1 !== ui.Button.YES) {
-    ui.alert('Operacion cancelada.'); return;
-  }
+  if (conf1 !== ui.Button.YES) { ui.alert('Operacion cancelada.'); return; }
 
   // --- Confirmacion 2 ---
   var conf2 = ui.alert(
-    '⚠️  SEGUNDA CONFIRMACION',
-    'Se van a enviar a la Papelera TODOS los archivos dentro de "SIRE Descargas".\n' +
-    '¿Estas seguro?',
+    '\u26a0\ufe0f  SEGUNDA CONFIRMACION',
+    'Se van a mandar a la Papelera TODOS los archivos dentro de "SIRE Descargas".\n' +
+    '\u00bfEstas seguro?',
     ui.ButtonSet.YES_NO);
-  if (conf2 !== ui.Button.YES) {
-    ui.alert('Operacion cancelada.'); return;
-  }
+  if (conf2 !== ui.Button.YES) { ui.alert('Operacion cancelada.'); return; }
 
   // --- Paso 1: vaciar carpeta raiz ---
+  var carpetasEliminadas = 0;
   try {
     var raiz = obtenerCarpetaRaiz_();
+    var idHojaControl = SpreadsheetApp.getActiveSpreadsheet().getId();
 
-    // Mandar a Papelera todas las subcarpetas (que contienen los Sheets)
+    // Mandar a Papelera todas las subcarpetas (RUC, Venta/Compra, etc.)
     var itCarpetas = raiz.getFolders();
-    var carpetasEliminadas = 0;
     while (itCarpetas.hasNext()) {
       var c = itCarpetas.next();
       if (!c.isTrashed()) { c.setTrashed(true); carpetasEliminadas++; }
     }
 
-    // Mandar a Papelera archivos sueltos dentro de raiz (si los hubiera)
-    // EXCEPTO esta hoja de control (no deberia estar dentro de raiz, pero
-    // por si acaso se verifica por ID).
-    var idHojaControl = SpreadsheetApp.getActiveSpreadsheet().getId();
+    // Archivos sueltos dentro de raiz (excepto esta hoja de control)
     var itArchivos = raiz.getFiles();
     while (itArchivos.hasNext()) {
       var f = itArchivos.next();
       if (!f.isTrashed() && f.getId() !== idHojaControl) f.setTrashed(true);
     }
-
-    Logger.log('Eliminadas ' + carpetasEliminadas + ' carpetas de RUC en SIRE Descargas.');
   } catch (e) {
     ui.alert('Error al vaciar carpetas: ' + e.message);
     return;
@@ -257,22 +244,23 @@ function menuRestablecerDriveYReimportar() {
   // --- Paso 2: limpiar Script Properties de IDs de carpetas ---
   var props = PropertiesService.getScriptProperties();
   var todas = props.getProperties();
-  var clavesEliminadas = [];
+  var clavesEliminadas = 0;
   Object.keys(todas).forEach(function(k) {
     if (k.indexOf('CARPETA_ID_RUC_') === 0) {
       props.deleteProperty(k);
-      clavesEliminadas.push(k);
+      clavesEliminadas++;
     }
   });
-  Logger.log('Properties limpiados: ' + clavesEliminadas.join(', '));
 
   ui.alert(
-    'Limpieza completada ✓',
-    'Se mandaron a la Papelera las carpetas de Drive.\n' +
-    'Script Properties de IDs limpiados: ' + clavesEliminadas.length + '\n\n' +
-    'A continuacion elige el rango de periodos para reimportar todo desde cero.',
+    'Limpieza completada \u2713',
+    'Carpetas mandadas a la Papelera: ' + carpetasEliminadas + '\n' +
+    'IDs internos limpiados: ' + clavesEliminadas + '\n\n' +
+    'Ahora usa la opcion 6 del menu\n' +
+    '"6. Importar resultados a Drive (un RANGO de periodos)"\n' +
+    'para reimportar todo con el formato actualizado.\n\n' +
+    'Tip: si tienes varias empresas, el menu te preguntara\n' +
+    'si quieres importar TODAS o solo una.',
     ui.ButtonSet.OK);
-
-  // --- Paso 3: Reimportar por rango ---
-  menuImportarRango();
 }
+

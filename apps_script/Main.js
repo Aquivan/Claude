@@ -188,9 +188,11 @@ function menuVerEstadoGitHub() {
 // ---------------------------------------------------------------------
 
 function menuImportarPeriodoActual() {
+  var rucFiltro = preguntarEmpresaFiltro_();
+  if (rucFiltro === null) return; // usuario cancelo
   var hoy = new Date();
   var periodoStr = hoy.getFullYear() + ('' + (hoy.getMonth() + 1)).padStart(2, '0');
-  ejecutarImportacion_([periodoStr], true);
+  ejecutarImportacion_([periodoStr], true, rucFiltro || undefined);
 }
 
 function menuImportarPeriodoEspecifico() {
@@ -199,31 +201,80 @@ function menuImportarPeriodoEspecifico() {
   if (resp.getSelectedButton() !== ui.Button.OK) return;
   var periodo = resp.getResponseText().trim();
   if (!/^\d{6}$/.test(periodo)) { ui.alert('Formato invalido. Usa AAAAMM, ej: 202608.'); return; }
-  ejecutarImportacion_([periodo], true);
+  var rucFiltro = preguntarEmpresaFiltro_();
+  if (rucFiltro === null) return;
+  ejecutarImportacion_([periodo], true, rucFiltro || undefined);
 }
 
 function menuImportarRango() {
   var ui = SpreadsheetApp.getUi();
-  var respDesde = ui.prompt('Importar un rango - Paso 1/2', 'Periodo inicial (AAAAMM, ej: 202601):', ui.ButtonSet.OK_CANCEL);
+  var respDesde = ui.prompt('Importar un rango - Paso 1/3', 'Periodo inicial (AAAAMM, ej: 202601):', ui.ButtonSet.OK_CANCEL);
   if (respDesde.getSelectedButton() !== ui.Button.OK) return;
   var desde = respDesde.getResponseText().trim();
   if (!/^\d{6}$/.test(desde)) { ui.alert('Formato invalido. Usa AAAAMM.'); return; }
 
-  var respHasta = ui.prompt('Importar un rango - Paso 2/2', 'Periodo final (AAAAMM, ej: 202612):', ui.ButtonSet.OK_CANCEL);
+  var respHasta = ui.prompt('Importar un rango - Paso 2/3', 'Periodo final (AAAAMM, ej: 202612):', ui.ButtonSet.OK_CANCEL);
   if (respHasta.getSelectedButton() !== ui.Button.OK) return;
   var hasta = respHasta.getResponseText().trim();
   if (!/^\d{6}$/.test(hasta)) { ui.alert('Formato invalido. Usa AAAAMM.'); return; }
+
+  var rucFiltro = preguntarEmpresaFiltro_();
+  if (rucFiltro === null) return;
 
   var periodos = rangoPeriodosStr_(desde, hasta);
   if (periodos.length > 24) {
     var confirmar = ui.alert('Rango grande',
       'Vas a importar ' + periodos.length + ' periodos. Puede tardar varios minutos ' +
-      '(y Apps Script se corta a los 6/30 minutos). Si se corta a la mitad, volve a ' +
-      'correr "Importar un RANGO" con lo que falte -- lo ya importado no se pierde.\n\n' +
+      '(Apps Script se corta a los 6 min). Si se corta, vuelve a correr con lo que falte.\n\n' +
       'Continuar?', ui.ButtonSet.YES_NO);
     if (confirmar !== ui.Button.YES) return;
   }
-  ejecutarImportacion_(periodos, true);
+  ejecutarImportacion_(periodos, true, rucFiltro || undefined);
+}
+
+/**
+ * Pregunta al usuario si importar TODAS las empresas o solo una.
+ * Retorna: '' (todas), un RUC especifico, o null si cancelo.
+ */
+function preguntarEmpresaFiltro_() {
+  var ui = SpreadsheetApp.getUi();
+  var cfg;
+  try { cfg = cargarConfigGitHub_(); } catch (e) {
+    ui.alert('Error de configuracion', e.message, ui.ButtonSet.OK); return null;
+  }
+  var empresas;
+  try { empresas = listarEmpresasGitHub_(cfg, true); } catch (e) {
+    ui.alert('Error leyendo empresas.json', e.message, ui.ButtonSet.OK); return null;
+  }
+  if (empresas.length === 0) {
+    ui.alert('No hay empresas activas en empresas.json.'); return null;
+  }
+
+  // Si solo hay una empresa, no preguntar
+  if (empresas.length === 1) return '';
+
+  var lista = empresas.map(function(e, i) {
+    return (i + 1) + '. ' + e.ruc + ' - ' + e.nombre;
+  }).join('\n');
+
+  var resp = ui.prompt(
+    'Seleccionar empresa',
+    'Empresas activas:\n' + lista + '\n\n' +
+    'Escribe el RUC para importar solo esa empresa,\n' +
+    'o deja en blanco para importar TODAS:',
+    ui.ButtonSet.OK_CANCEL);
+  if (resp.getSelectedButton() !== ui.Button.OK) return null;
+
+  var rucIngresado = resp.getResponseText().trim();
+  if (!rucIngresado) return ''; // todas
+
+  // Validar que el RUC existe en la lista
+  var existe = empresas.some(function(e) { return e.ruc === rucIngresado; });
+  if (!existe) {
+    ui.alert('El RUC "' + rucIngresado + '" no existe o no esta activo en empresas.json.');
+    return null;
+  }
+  return rucIngresado;
 }
 
 /** '202601'..'202612' -> lista de 'AAAAMM' inclusive, cruzando de anio sin problema. */
