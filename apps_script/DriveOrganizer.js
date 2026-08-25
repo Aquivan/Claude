@@ -37,8 +37,19 @@ function obtenerCarpetaRaiz_() {
 /**
  * Carpeta especifica del RUC, dentro de la raiz.
  * Formato: "<RUC> - <NOMBRE_EMPRESA>" si se conoce el nombre, o "<RUC>" si no.
- * Si ya existia una carpeta con solo el RUC o con nombre anterior, se renombra
- * automaticamente al formato claro y legible para no duplicar carpetas.
+ *
+ * LOGICA DE BUSQUEDA (en orden de prioridad):
+ *   1. Por ID guardado en Script Properties -- rapido, seguro para renombrar.
+ *      Se valida que la carpeta NO este en la Papelera Y que ESTE dentro de
+ *      'raiz' (si el usuario borro 'raiz' y la recreo, la carpeta vieja tiene
+ *      otro padre y no debe usarse).
+ *   2. Por nombre exacto dentro de 'raiz' usando getFoldersByName -- busca
+ *      el formato nuevo ("RUC - Nombre") y el formato antiguo ("RUC" suelto).
+ *      getFoldersByName NO devuelve carpetas trashadas, lo que lo hace fiable.
+ *   3. Crear la carpeta nueva si no se encontro ninguna.
+ *
+ * En cualquier caso en que el ID guardado no sirva se limpia el Property para
+ * que el siguiente intento no lo reutilice.
  */
 function obtenerCarpetaRUC_(raiz, ruc, nombreEmpresa) {
   var props = PropertiesService.getScriptProperties();
@@ -53,36 +64,55 @@ function obtenerCarpetaRUC_(raiz, ruc, nombreEmpresa) {
     }
   }
 
+  // --- 1. Busca por ID guardado ---
   if (idGuardado) {
     try {
       var carpetaGuardada = DriveApp.getFolderById(idGuardado);
-      if (!carpetaGuardada.isTrashed()) {
-        if (nombreDeseado !== ruc && carpetaGuardada.getName() !== nombreDeseado) {
+      var esValida = !carpetaGuardada.isTrashed();
+
+      // Verificar ademas que la carpeta sea hija directa de raiz -- si el
+      // usuario borro la carpeta raiz y la recreo, el ID viejo apunta a una
+      // carpeta "suelta" que ya no esta dentro del nuevo raiz.
+      if (esValida) {
+        var padres = carpetaGuardada.getParents();
+        var estaEnRaiz = false;
+        while (padres.hasNext()) {
+          if (padres.next().getId() === raiz.getId()) { estaEnRaiz = true; break; }
+        }
+        if (!estaEnRaiz) esValida = false;
+      }
+
+      if (esValida) {
+        // Si el nombre cambio (empresa renombrada), actualiza en Drive.
+        if (carpetaGuardada.getName() !== nombreDeseado) {
           carpetaGuardada.setName(nombreDeseado);
         }
         return carpetaGuardada;
       }
     } catch (e) {
-      // no existe por id
+      // ID invalido (borrada para siempre u otro error)
+    }
+    // ID ya no sirve -- eliminarlo para no reutilizarlo.
+    props.deleteProperty(claveId);
+  }
+
+  // --- 2. Buscar por nombre dentro de raiz (no devuelve trashadas) ---
+  // Intenta primero el nombre deseado, luego solo el RUC (formato antiguo).
+  var candidatos = [nombreDeseado];
+  if (nombreDeseado !== ruc) candidatos.push(ruc);
+  for (var i = 0; i < candidatos.length; i++) {
+    var it = raiz.getFoldersByName(candidatos[i]);
+    while (it.hasNext()) {
+      var f = it.next();
+      if (f.isTrashed()) continue;
+      // Renombrar si encontro el formato antiguo (solo RUC)
+      if (f.getName() !== nombreDeseado) f.setName(nombreDeseado);
+      props.setProperty(claveId, f.getId());
+      return f;
     }
   }
 
-  // Buscar si ya existe una carpeta que comience con ese RUC
-  var it = raiz.getFolders();
-  while (it.hasNext()) {
-    var f = it.next();
-    if (!f.isTrashed()) {
-      var nombreActual = f.getName();
-      if (nombreActual === ruc || nombreActual.indexOf(ruc + ' - ') === 0 || nombreActual.indexOf(ruc) === 0) {
-        if (nombreDeseado !== nombreActual) {
-          f.setName(nombreDeseado);
-        }
-        props.setProperty(claveId, f.getId());
-        return f;
-      }
-    }
-  }
-
+  // --- 3. Crear la carpeta ---
   var carpeta = raiz.createFolder(nombreDeseado);
   props.setProperty(claveId, carpeta.getId());
   return carpeta;
@@ -150,4 +180,99 @@ function limpiarHojasVacias_(ss) {
       ss.deleteSheet(h);
     }
   });
+}
+
+/**
+ * RESTABLECER DRIVE DESDE CERO
+ *
+ * Flujo completo:
+ *   1. Pide confirmacion (2 veces -- es destructivo).
+ *   2. Manda a la Papelera TODA la estructura de carpetas en "SIRE Descargas"
+ *      (subcarpetas de RUC, Venta/Compra, anio, mes y los Sheets dentro),
+ *      pero SIN tocar la hoja de control (esta hoja) ni los archivos fuera
+ *      de SIRE Descargas.
+ *   3. Limpia los Script Properties de IDs de carpetas guardados (CARPETA_ID_RUC_*).
+ *   4. Pide el rango de periodos a reimportar y lanza la importacion
+ *      (identica a la opcion 6 del menu) -- las carpetas y Sheets se recrean
+ *      desde cero con el formato y columnas actualizados.
+ *
+ * Los archivos mandados a Papelera NO se borran definitivamente -- siguen
+ * en "Papelera" de Drive y se pueden recuperar si algo salio mal.
+ */
+function menuRestablecerDriveYReimportar() {
+  var ui = SpreadsheetApp.getUi();
+
+  // --- Confirmacion 1 ---
+  var conf1 = ui.alert(
+    '⚠️  RESTABLECER DRIVE DESDE CERO',
+    'Esta accion manda a la Papelera TODA la estructura de carpetas y archivos ' +
+    'dentro de "SIRE Descargas" (subcarpetas de RUC, Venta, Compra, años, meses, ' +
+    'Google Sheets mensuales).\n\n' +
+    'Los archivos van a la PAPELERA (no se borran definitivamente).\n' +
+    'Luego puedes reimportar todo con el formato y columnas actualizados.\n\n' +
+    '¿Deseas continuar?',
+    ui.ButtonSet.YES_NO);
+  if (conf1 !== ui.Button.YES) {
+    ui.alert('Operacion cancelada.'); return;
+  }
+
+  // --- Confirmacion 2 ---
+  var conf2 = ui.alert(
+    '⚠️  SEGUNDA CONFIRMACION',
+    'Se van a enviar a la Papelera TODOS los archivos dentro de "SIRE Descargas".\n' +
+    '¿Estas seguro?',
+    ui.ButtonSet.YES_NO);
+  if (conf2 !== ui.Button.YES) {
+    ui.alert('Operacion cancelada.'); return;
+  }
+
+  // --- Paso 1: vaciar carpeta raiz ---
+  try {
+    var raiz = obtenerCarpetaRaiz_();
+
+    // Mandar a Papelera todas las subcarpetas (que contienen los Sheets)
+    var itCarpetas = raiz.getFolders();
+    var carpetasEliminadas = 0;
+    while (itCarpetas.hasNext()) {
+      var c = itCarpetas.next();
+      if (!c.isTrashed()) { c.setTrashed(true); carpetasEliminadas++; }
+    }
+
+    // Mandar a Papelera archivos sueltos dentro de raiz (si los hubiera)
+    // EXCEPTO esta hoja de control (no deberia estar dentro de raiz, pero
+    // por si acaso se verifica por ID).
+    var idHojaControl = SpreadsheetApp.getActiveSpreadsheet().getId();
+    var itArchivos = raiz.getFiles();
+    while (itArchivos.hasNext()) {
+      var f = itArchivos.next();
+      if (!f.isTrashed() && f.getId() !== idHojaControl) f.setTrashed(true);
+    }
+
+    Logger.log('Eliminadas ' + carpetasEliminadas + ' carpetas de RUC en SIRE Descargas.');
+  } catch (e) {
+    ui.alert('Error al vaciar carpetas: ' + e.message);
+    return;
+  }
+
+  // --- Paso 2: limpiar Script Properties de IDs de carpetas ---
+  var props = PropertiesService.getScriptProperties();
+  var todas = props.getProperties();
+  var clavesEliminadas = [];
+  Object.keys(todas).forEach(function(k) {
+    if (k.indexOf('CARPETA_ID_RUC_') === 0) {
+      props.deleteProperty(k);
+      clavesEliminadas.push(k);
+    }
+  });
+  Logger.log('Properties limpiados: ' + clavesEliminadas.join(', '));
+
+  ui.alert(
+    'Limpieza completada ✓',
+    'Se mandaron a la Papelera las carpetas de Drive.\n' +
+    'Script Properties de IDs limpiados: ' + clavesEliminadas.length + '\n\n' +
+    'A continuacion elige el rango de periodos para reimportar todo desde cero.',
+    ui.ButtonSet.OK);
+
+  // --- Paso 3: Reimportar por rango ---
+  menuImportarRango();
 }

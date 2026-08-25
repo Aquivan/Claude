@@ -42,6 +42,8 @@ function onOpen() {
     .addItem('Configurar webhook instantaneo (opcional -- ver Webhook.gs)', 'menuConfigurarWebhook')
     .addItem('Ver configuracion actual (sin mostrar el token)', 'menuVerConfiguracion')
     .addItem('Abrir carpeta de descargas en Drive', 'menuAbrirCarpetaDescargas')
+    .addSeparator()
+    .addItem('⚠️ Restablecer Drive y reimportar todo desde cero...', 'menuRestablecerDriveYReimportar')
     .addToUi();
 }
 
