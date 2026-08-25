@@ -183,84 +183,151 @@ function limpiarHojasVacias_(ss) {
 }
 
 /**
- * RESTABLECER DRIVE DESDE CERO
+ * RESTABLECER DRIVE DESDE CERO (Todas o una empresa especifica)
  *
- * Solo limpia -- NO reimporta automaticamente (para evitar el limite de 6 min
- * de Apps Script). Despues de limpiar, usa la opcion 6 del menu para
- * reimportar el rango de periodos que necesites.
+ * Solo limpia las carpetas correspondientes en Google Drive y elimina
+ * los identificadores internos guardados (Script Properties).
+ * NO reimporta automaticamente para evitar exceder el limite de tiempo de Google.
  *
  * Flujo:
- *   1. Pide confirmacion (2 veces).
- *   2. Manda a la Papelera TODA la estructura dentro de "SIRE Descargas".
- *   3. Limpia los Script Properties de IDs de carpetas (CARPETA_ID_RUC_*).
- *   4. Muestra mensaje de exito y recuerda usar opcion 6 para reimportar.
+ *   1. Pregunta si se desea restablecer TODAS las empresas o solo UNA (por RUC).
+ *   2. Pide confirmacion de seguridad.
+ *   3. Manda a la Papelera las carpetas correspondientes en "SIRE Descargas".
+ *   4. Limpia los Script Properties asociados (CARPETA_ID_RUC_*).
+ *   5. Muestra mensaje de confirmacion.
  */
 function menuRestablecerDriveYReimportar() {
   var ui = SpreadsheetApp.getUi();
 
-  // --- Confirmacion 1 ---
-  var conf1 = ui.alert(
-    '\u26a0\ufe0f  RESTABLECER DRIVE DESDE CERO',
-    'Esta accion manda a la Papelera TODA la estructura de carpetas y archivos ' +
-    'dentro de "SIRE Descargas" (carpetas RUC, Venta, Compra, años, meses, Sheets).\n\n' +
-    'Los archivos van a la PAPELERA (no se borran definitivamente).\n\n' +
-    'Despues tendras que reimportar manualmente con la opcion 6 del menu.\n\n' +
-    '\u00bfDeseas continuar?',
-    ui.ButtonSet.YES_NO);
-  if (conf1 !== ui.Button.YES) { ui.alert('Operacion cancelada.'); return; }
-
-  // --- Confirmacion 2 ---
-  var conf2 = ui.alert(
-    '\u26a0\ufe0f  SEGUNDA CONFIRMACION',
-    'Se van a mandar a la Papelera TODOS los archivos dentro de "SIRE Descargas".\n' +
-    '\u00bfEstas seguro?',
-    ui.ButtonSet.YES_NO);
-  if (conf2 !== ui.Button.YES) { ui.alert('Operacion cancelada.'); return; }
-
-  // --- Paso 1: vaciar carpeta raiz ---
-  var carpetasEliminadas = 0;
+  // Obtener lista de empresas configuradas
+  var cfg = null;
+  var empresas = [];
   try {
-    var raiz = obtenerCarpetaRaiz_();
-    var idHojaControl = SpreadsheetApp.getActiveSpreadsheet().getId();
+    cfg = cargarConfigGitHub_();
+    empresas = listarEmpresasGitHub_(cfg, false);
+  } catch (e) {}
 
-    // Mandar a Papelera todas las subcarpetas (RUC, Venta/Compra, etc.)
-    var itCarpetas = raiz.getFolders();
-    while (itCarpetas.hasNext()) {
-      var c = itCarpetas.next();
-      if (!c.isTrashed()) { c.setTrashed(true); carpetasEliminadas++; }
-    }
+  var textoEmpresas = '';
+  if (empresas.length > 0) {
+    textoEmpresas = '\n\nEmpresas configuradas:\n' + empresas.map(function(e, i) {
+      return (i + 1) + '. ' + e.ruc + ' - ' + e.nombre;
+    }).join('\n');
+  }
 
-    // Archivos sueltos dentro de raiz (excepto esta hoja de control)
-    var itArchivos = raiz.getFiles();
-    while (itArchivos.hasNext()) {
-      var f = itArchivos.next();
-      if (!f.isTrashed() && f.getId() !== idHojaControl) f.setTrashed(true);
-    }
-  } catch (e) {
-    ui.alert('Error al vaciar carpetas: ' + e.message);
+  // --- Paso 1: Preguntar si TODAS o UNA sola ---
+  var respRuc = ui.prompt(
+    '⚠️ RESTABLECER DRIVE',
+    'Elige el alcance de la limpieza:' + textoEmpresas + '\n\n' +
+    'Escribe el RUC para restablecer SOLO esa empresa,\n' +
+    'o deja en BLANCO para restablecer TODAS las empresas:',
+    ui.ButtonSet.OK_CANCEL);
+
+  if (respRuc.getSelectedButton() !== ui.Button.OK) {
+    ui.alert('Operacion cancelada.');
     return;
   }
 
-  // --- Paso 2: limpiar Script Properties de IDs de carpetas ---
+  var rucSeleccionado = respRuc.getResponseText().trim();
+  var esTodas = (rucSeleccionado === '');
+
+  // Si especifico RUC, validar formato basico
+  if (!esTodas && !/^\d{11}$/.test(rucSeleccionado)) {
+    ui.alert('Formato de RUC invalido. Debe tener 11 digitos numericos.');
+    return;
+  }
+
+  // --- Paso 2: Confirmacion ---
+  var mensajeConf = esTodas
+    ? 'Se mandaran a la Papelera TODAS las carpetas de empresas en "SIRE Descargas".'
+    : 'Se mandara a la Papelera la carpeta de la empresa ' + rucSeleccionado + ' en "SIRE Descargas".';
+
+  var conf = ui.alert(
+    '⚠️ CONFIRMACION DE LIMPIEZA',
+    mensajeConf + '\n\n' +
+    'Los archivos van a la Papelera de Google Drive (no se borran definitivamente).\n' +
+    '¿Deseas continuar?',
+    ui.ButtonSet.YES_NO);
+
+  if (conf !== ui.Button.YES) {
+    ui.alert('Operacion cancelada.');
+    return;
+  }
+
+  // --- Paso 3: Ejecutar limpieza ---
+  var carpetasEliminadas = 0;
   var props = PropertiesService.getScriptProperties();
-  var todas = props.getProperties();
   var clavesEliminadas = 0;
-  Object.keys(todas).forEach(function(k) {
-    if (k.indexOf('CARPETA_ID_RUC_') === 0) {
-      props.deleteProperty(k);
-      clavesEliminadas++;
+
+  try {
+    var raiz = obtenerCarpetaRaiz_();
+    var idHojaControl = SpreadsheetApp.getActiveSpreadsheet().getId();
+    var itCarpetas = raiz.getFolders();
+
+    while (itCarpetas.hasNext()) {
+      var c = itCarpetas.next();
+      if (c.isTrashed()) continue;
+
+      var nombreCarpeta = c.getName();
+      var debeEliminar = false;
+
+      if (esTodas) {
+        debeEliminar = true;
+      } else {
+        // Coincidencia por RUC exacto o "RUC - Nombre"
+        if (nombreCarpeta === rucSeleccionado || nombreCarpeta.indexOf(rucSeleccionado) === 0) {
+          debeEliminar = true;
+        }
+      }
+
+      if (debeEliminar) {
+        c.setTrashed(true);
+        carpetasEliminadas++;
+      }
     }
-  });
+
+    if (esTodas) {
+      // Limpiar archivos sueltos en raiz (excepto la hoja de control)
+      var itArchivos = raiz.getFiles();
+      while (itArchivos.hasNext()) {
+        var f = itArchivos.next();
+        if (!f.isTrashed() && f.getId() !== idHojaControl) {
+          f.setTrashed(true);
+        }
+      }
+
+      // Limpiar todas las claves de carpetas
+      var todasProps = props.getProperties();
+      Object.keys(todasProps).forEach(function(k) {
+        if (k.indexOf('CARPETA_ID_RUC_') === 0) {
+          props.deleteProperty(k);
+          clavesEliminadas++;
+        }
+      });
+    } else {
+      // Limpiar solo la clave del RUC seleccionado
+      var claveRuc = 'CARPETA_ID_RUC_' + rucSeleccionado;
+      if (props.getProperty(claveRuc)) {
+        props.deleteProperty(claveRuc);
+        clavesEliminadas++;
+      }
+    }
+
+  } catch (e) {
+    ui.alert('Error durante la limpieza: ' + e.message);
+    return;
+  }
+
+  // --- Paso 4: Mensaje de resultado ---
+  var detalle = esTodas
+    ? 'Se restablecieron TODAS las empresas.\nCarpetas enviadas a la Papelera: ' + carpetasEliminadas
+    : 'Se restablecio la empresa ' + rucSeleccionado + '.\nCarpetas enviadas a la Papelera: ' + carpetasEliminadas;
 
   ui.alert(
-    'Limpieza completada \u2713',
-    'Carpetas mandadas a la Papelera: ' + carpetasEliminadas + '\n' +
-    'IDs internos limpiados: ' + clavesEliminadas + '\n\n' +
-    'Ahora usa la opcion 6 del menu\n' +
-    '"6. Importar resultados a Drive (un RANGO de periodos)"\n' +
-    'para reimportar todo con el formato actualizado.\n\n' +
-    'Tip: si tienes varias empresas, el menu te preguntara\n' +
-    'si quieres importar TODAS o solo una.',
+    'Limpieza completada ✓',
+    detalle + '\nIDs internos limpiados: ' + clavesEliminadas + '\n\n' +
+    'Siguiente paso:\n' +
+    'Usa la opcion 5 o 6 del menu para reimportar los periodos deseados.\n' +
+    'Las carpetas y hojas se crearan con el nuevo formato y las Notas de Credito resaltadas en rojo.',
     ui.ButtonSet.OK);
 }
 

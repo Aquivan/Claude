@@ -461,29 +461,44 @@ function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
  * Funciona tanto en hojas mensuales como en "Detalle Ventas/Compras".
  */
 function colorearNotasCredito_(sheet, encabezado, nFilasDatos) {
-  if (nFilasDatos === 0) return;
+  if (!nFilasDatos || nFilasDatos <= 0 || !encabezado || encabezado.length === 0) return;
 
-  // Buscar la columna "Tipo CP/Doc." por nombre
+  // Buscar la columna "Tipo CP/Doc." o variantes
   var idxTipo = -1;
   for (var i = 0; i < encabezado.length; i++) {
     var h = String(encabezado[i] || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-    if (h.indexOf('tipo') !== -1 && (h.indexOf('cp') !== -1 || h.indexOf('doc') !== -1)) {
+    if (h.indexOf('tipo') !== -1 && (h.indexOf('cp') !== -1 || h.indexOf('doc') !== -1 || h.indexOf('comprobante') !== -1 || h.indexOf('cdp') !== -1)) {
       idxTipo = i;
       break;
     }
   }
+  if (idxTipo === -1) {
+    for (var j = 0; j < encabezado.length; j++) {
+      var h2 = String(encabezado[j] || '').trim().toLowerCase();
+      if (h2 === 'tipo' || h2 === 'tipo_cp' || h2 === 'tipocp') {
+        idxTipo = j;
+        break;
+      }
+    }
+  }
   if (idxTipo === -1) return;
 
-  var nCols = encabezado.length;
-  var datos = sheet.getRange(2, 1, nFilasDatos, nCols).getValues();
-  for (var r = 0; r < datos.length; r++) {
-    var tipo = String(datos[r][idxTipo] || '').trim();
-    if (tipo === '07') {
-      // Nota de Credito -> rojo claro
-      sheet.getRange(r + 2, 1, 1, nCols).setBackground('#FFDAD5');
-    } else if (tipo === '08') {
-      // Nota de Debito -> naranja claro (diferenciarlo visualmente)
-      sheet.getRange(r + 2, 1, 1, nCols).setBackground('#FFF0D5');
+  var nCols = sheet.getLastColumn();
+  if (nCols < 1) nCols = encabezado.length;
+
+  var valoresCol = sheet.getRange(2, idxTipo + 1, nFilasDatos, 1).getValues();
+  for (var r = 0; r < valoresCol.length; r++) {
+    var raw = valoresCol[r][0];
+    var str = String(raw === null || raw === undefined ? '' : raw).trim();
+    var num = parseInt(str, 10);
+
+    // Nota de Credito: codigo 07, 7 o palabra credito
+    if (str === '07' || str === '7' || num === 7 || str.toLowerCase().indexOf('credito') !== -1) {
+      sheet.getRange(r + 2, 1, 1, nCols).setBackground('#FFCDD2'); // rojo claro suave y visible
+    }
+    // Nota de Debito: codigo 08, 8 o palabra debito
+    else if (str === '08' || str === '8' || num === 8 || str.toLowerCase().indexOf('debito') !== -1) {
+      sheet.getRange(r + 2, 1, 1, nCols).setBackground('#FFE0B2'); // naranja claro
     }
   }
 }
