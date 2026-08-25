@@ -38,7 +38,7 @@ function generarPanelDeControl_() {
   sheet.clearFormats();
   sheet.clearNotes();
 
-  sheet.showGridLines(true);
+  sheet.setHiddenGridlines(false);
 
   var cfg = null;
   var empresas = [];
