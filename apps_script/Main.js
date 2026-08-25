@@ -384,6 +384,13 @@ function ejecutarImportacion_(periodos, mostrarResultado, rucFiltro) {
   if (errores.length > 0) mensaje += '\n\nERRORES:\n' + errores.join('\n');
   if (!mensaje) mensaje = '(sin resultados)';
 
+  // Actualizar Panel de Control automaticamente para reflejar los nuevos enlaces
+  try {
+    generarPanelDeControl_();
+  } catch (e) {
+    Logger.log('No se pudo refrescar el panel de control: ' + e.message);
+  }
+
   if (ui) {
     ui.alert('Importacion terminada', mensaje, ui.ButtonSet.OK);
   } else {

@@ -18,6 +18,8 @@ var CLAVES_GITHUB_ = ['GITHUB_TOKEN', 'GITHUB_OWNER', 'GITHUB_REPO', 'GITHUB_BRA
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('SIRE SUNAT')
+    .addItem('📊 Actualizar Panel de Control (Carátula)', 'menuActualizarPanelDeControl')
+    .addSeparator()
     .addItem('1. Ejecutar TODAS las empresas activas ahora (dispara GitHub)', 'menuEjecutarTodas')
     .addItem('2. Ejecutar con un periodo especifico (todas las empresas)...', 'menuEjecutarPeriodoEspecifico')
     .addItem('3. Ejecutar "solo reintentar fallidas" (todas las empresas)', 'menuEjecutarSoloReintentarFallidas')
