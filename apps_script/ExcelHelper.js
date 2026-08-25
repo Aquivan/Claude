@@ -113,7 +113,18 @@ function ajustarAnchoColumnas_(sheet, encabezado, matriz, nCols) {
     }
   }
   for (var i = 0; i < nCols; i++) {
-    var pxPorCaracter = 7.3; // aprox. Sheets usa pixeles, no "caracteres" como Excel
+    var hNorm = normalizarTexto_(encabezado[i] || '');
+    // items_descripcion: columna mediana sin wrap
+    if (hNorm.indexOf('items_descripcion') !== -1) {
+      sheet.setColumnWidth(i + 1, 220);
+      continue;
+    }
+    // items_cantidad: columna angosta
+    if (hNorm.indexOf('items_cantidad') !== -1) {
+      sheet.setColumnWidth(i + 1, 100);
+      continue;
+    }
+    var pxPorCaracter = 7.3;
     var anchoPx = (anchos[i] + 2) * pxPorCaracter;
     if (esTextoLargo[i]) {
       anchoPx = Math.min(Math.max(anchoPx, ANCHO_MINIMO_TEXTO_LARGO_), ANCHO_MAXIMO_TEXTO_LARGO_);
@@ -304,31 +315,31 @@ function escribirDatosEnHoja_(sheet, contenidoTexto, tipoRegistro) {
     sheet.getRange(2, 1, matriz.length, nCols).setValues(matriz);
   }
 
-  // Formato numerico/fecha por columna. "tipos" se reclasifica desde los
-  // datos reales en cada corrida, pero si una columna cae en 'texto' (ej.
-  // alguna fila con el CAR vacio o con algun caracter raro, que hace fallar
-  // intentarNumero_ para TODA la columna aunque el resto sean numeros
-  // limpios) no se le toca el formato -- y si esa misma hoja llego a tener
-  // "dd/mm/yyyy" pegado de antes (setValues no lo limpia solo), un numero
-  // grande sin relacion con fechas (ej. CAR SUNAT, 11 digitos) se muestra
-  // como #NUM! por quedar muy afuera del rango de fechas valido.
+  // Garantizar altura de fila normal (sin wrap) para todas las filas de datos
+  if (matriz.length > 0) {
+    sheet.setRowHeightsForced(2, matriz.length, 21);
+  }
+
+  // Formato numerico/fecha por columna.
   var formatosActuales = matriz.length > 0
     ? sheet.getRange(2, 1, matriz.length, nCols).getNumberFormats() : null;
   for (var col = 0; col < nCols; col++) {
     var rango = sheet.getRange(2, col + 1, matriz.length, 1);
     if (tipos[col] === 'fecha') rango.setNumberFormat('dd/mm/yyyy');
     else if (tipos[col] === 'decimal') rango.setNumberFormat('#,##0.00');
-    else if (tipos[col] === 'entero') rango.setNumberFormat('0'); // sin comas de miles: RUC/Periodo no son montos
+    else if (tipos[col] === 'entero') rango.setNumberFormat('0');
     else if (formatosActuales && /[ymdhs]/i.test(formatosActuales[0][col])) rango.setNumberFormat('General');
   }
 
-  // Autofiltro. Si la hoja se esta reutilizando (mismo periodo re-importado),
-  // puede que ya tenga un filtro de la corrida anterior -- hay que sacarlo
-  // primero o createFilter() falla ("ya existe un filtro en esta hoja").
+  // Autofiltro.
   var filtroExistente = sheet.getFilter();
   if (filtroExistente) filtroExistente.remove();
   sheet.getRange(1, 1, matriz.length + 1, nCols).createFilter();
 
   // Ancho de columna: segun el contenido MAS LARGO de cada columna.
+  // items_descripcion e items_cantidad: ancho fijo sin wrap.
   ajustarAnchoColumnas_(sheet, encabezado, matriz, nCols);
+
+  // Colorear filas de Notas de Credito (07) en rojo claro y Notas de Debito (08) en naranja
+  colorearNotasCredito_(sheet, encabezado, matriz.length);
 }

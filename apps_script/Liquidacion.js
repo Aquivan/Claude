@@ -425,24 +425,79 @@ function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
   sheet.setFrozenRows(1);
   sheet.getRange(2, 1, filas.length, nCols).setValues(filas);
 
+  // --- Eliminar columnas completamente vacias (solo encabezado, sin ningun dato) ---
+  // Se recorre de derecha a izquierda para que al borrar no se desplacen los
+  // indices de las columnas que aun no se han revisado.
+  for (var c = nCols; c >= 1; c--) {
+    if (c > sheet.getLastColumn()) continue;
+    var rangoCol = sheet.getRange(2, c, filas.length, 1).getValues();
+    var tieneAlgo = rangoCol.some(function(celda) {
+      var v = String(celda[0] || '').trim();
+      return v !== '' && v !== '0';
+    });
+    if (!tieneAlgo) {
+      sheet.deleteColumn(c);
+    }
+  }
+
+  // Recalcular nCols y encabezado real tras eliminar columnas
+  var nColsFinal = sheet.getLastColumn();
+  var encFinal = sheet.getRange(1, 1, 1, nColsFinal).getValues()[0];
+
   var filtroExistente = sheet.getFilter();
   if (filtroExistente) filtroExistente.remove();
-  sheet.getRange(1, 1, filas.length + 1, nCols).createFilter();
+  sheet.getRange(1, 1, filas.length + 1, nColsFinal).createFilter();
 
   formatearColumnasFecha_(sheet, filas, nCols);
-  ajustarAnchoColumnasDetalle_(sheet, encabezado, filas);
+  ajustarAnchoColumnasDetalle_(sheet, encFinal, filas);
+
+  // --- Colorear filas de Notas de Credito en rojo claro ---
+  colorearNotasCredito_(sheet, encFinal, filas.length);
+}
+
+/**
+ * Pinta de rojo claro todas las filas cuya columna "Tipo CP/Doc." contenga
+ * un codigo de Nota de Credito (07) o Nota de Debito (08) de SUNAT.
+ * Funciona tanto en hojas mensuales como en "Detalle Ventas/Compras".
+ */
+function colorearNotasCredito_(sheet, encabezado, nFilasDatos) {
+  if (nFilasDatos === 0) return;
+
+  // Buscar la columna "Tipo CP/Doc." por nombre
+  var idxTipo = -1;
+  for (var i = 0; i < encabezado.length; i++) {
+    var h = String(encabezado[i] || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    if (h.indexOf('tipo') !== -1 && (h.indexOf('cp') !== -1 || h.indexOf('doc') !== -1)) {
+      idxTipo = i;
+      break;
+    }
+  }
+  if (idxTipo === -1) return;
+
+  var nCols = encabezado.length;
+  var datos = sheet.getRange(2, 1, nFilasDatos, nCols).getValues();
+  for (var r = 0; r < datos.length; r++) {
+    var tipo = String(datos[r][idxTipo] || '').trim();
+    if (tipo === '07') {
+      // Nota de Credito -> rojo claro
+      sheet.getRange(r + 2, 1, 1, nCols).setBackground('#FFDAD5');
+    } else if (tipo === '08') {
+      // Nota de Debito -> naranja claro (diferenciarlo visualmente)
+      sheet.getRange(r + 2, 1, 1, nCols).setBackground('#FFF0D5');
+    }
+  }
 }
 
 function ajustarAnchoColumnasDetalle_(sheet, encabezado, filas) {
-  var PATRON_TEXTO_LARGO = ['razon social', 'raz. social', 'nombre', 'denominaci', 'descripcion'];
+  var PATRON_TEXTO_LARGO = ['razon social', 'raz. social', 'nombre', 'denominaci'];
   var muestra = filas.slice(0, 30);
   for (var col = 0; col < encabezado.length; col++) {
     var nombre = normalizarEncabezado_(encabezado[col]);
     var colNum = col + 1;
 
     if (nombre.indexOf('items_descripcion') !== -1) {
-      sheet.setColumnWidth(colNum, 280);
-      if (filas.length > 0) sheet.getRange(2, colNum, filas.length, 1).setWrap(true);
+      sheet.setColumnWidth(colNum, 220);
+      // SIN setWrap -- la fila no se expande, el texto se corta visualmente
     } else if (nombre === 'link pdf' || nombre === 'link xml') {
       sheet.setColumnWidth(colNum, 90);
     } else if (nombre.indexOf('items_cantidad') !== -1) {
