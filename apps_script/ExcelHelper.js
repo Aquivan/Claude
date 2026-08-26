@@ -114,6 +114,10 @@ function ajustarAnchoColumnas_(sheet, encabezado, matriz, nCols) {
   }
   for (var i = 0; i < nCols; i++) {
     var hNorm = normalizarTexto_(encabezado[i] || '');
+    if (hNorm.indexOf('car') !== -1) {
+      sheet.setColumnWidth(i + 1, 240); // Ancho suficiente para CAR SUNAT (27 caracteres)
+      continue;
+    }
     // items_descripcion: columna mediana sin wrap
     if (hNorm.indexOf('items_descripcion') !== -1) {
       sheet.setColumnWidth(i + 1, 220);
@@ -122,6 +126,10 @@ function ajustarAnchoColumnas_(sheet, encabezado, matriz, nCols) {
     // items_cantidad: columna angosta
     if (hNorm.indexOf('items_cantidad') !== -1) {
       sheet.setColumnWidth(i + 1, 100);
+      continue;
+    }
+    if (hNorm === 'link pdf' || hNorm === 'link xml') {
+      sheet.setColumnWidth(i + 1, 90);
       continue;
     }
     var pxPorCaracter = 7.3;
@@ -228,10 +236,27 @@ function intentarNumero_(valor) {
   return isNaN(n) || !isFinite(n) ? null : n;
 }
 
+function esColumnaTextoFijo_(nombreCol) {
+  var h = normalizarTexto_(nombreCol || '');
+  if (!h) return false;
+  var patronesTexto = [
+    'car', 'ruc', 'serie', 'nro cp', 'nro doc', 'tipo cp', 'tipo doc',
+    'tipo de nota', 'est. comp', 'incal', 'estado', 'periodo', 'moneda',
+    'dam', 'clu', 'items_', 'link '
+  ];
+  return patronesTexto.some(function (p) { return h.indexOf(p) !== -1; });
+}
+
 /** Para cada columna: 'fecha' | 'decimal' | 'entero' | 'texto'. */
-function inferirTipos_(filas, nCols) {
+function inferirTipos_(encabezado, filas, nCols) {
   var tipos = [];
   for (var col = 0; col < nCols; col++) {
+    var nomCol = (encabezado && col < encabezado.length) ? encabezado[col] : '';
+    if (esColumnaTextoFijo_(nomCol)) {
+      tipos.push('texto');
+      continue;
+    }
+
     var valores = [];
     for (var f = 0; f < filas.length; f++) {
       var v = (filas[f][col] || '').trim();
@@ -279,7 +304,7 @@ function escribirDatosEnHoja_(sheet, contenidoTexto, tipoRegistro) {
     while (encabezado.length < nCols) encabezado.push('Campo ' + (encabezado.length + 1));
   }
 
-  var tipos = inferirTipos_(filas, nCols);
+  var tipos = inferirTipos_(encabezado, filas, nCols);
 
   // Encabezado
   sheet.getRange(1, 1, 1, nCols).setValues([encabezado])
@@ -296,19 +321,18 @@ function escribirDatosEnHoja_(sheet, contenidoTexto, tipoRegistro) {
         filaOut.push('');
       } else if (tipos[c] === 'fecha') {
         filaOut.push(intentarFecha_(v) || v);
-      } else if (tipos[c] === 'entero' || tipos[c] === 'decimal') {
+      } else if (tipos[c] === 'decimal' || tipos[c] === 'entero') {
         var n = intentarNumero_(v);
         filaOut.push(n !== null ? n : v);
       } else {
-        filaOut.push(v);
+        filaOut.push(v); // texto puro (CAR SUNAT, RUC, etc. nunca se tocan)
       }
     }
     matriz.push(filaOut);
   }
 
   // Se ordena por Fecha de emision (ascendente, sin fecha al final) para que
-  // la hoja quede cronologica por defecto. El autofiltro (mas abajo) sigue
-  // permitiendo reordenar a mano por cualquier otra columna cuando quieras.
+  // la hoja quede cronologica por defecto.
   matriz = ordenarPorFechaEmision_(matriz, indiceColumnaFechaEmision_(encabezado));
 
   if (matriz.length > 0) {
@@ -321,14 +345,12 @@ function escribirDatosEnHoja_(sheet, contenidoTexto, tipoRegistro) {
   }
 
   // Formato numerico/fecha por columna.
-  var formatosActuales = matriz.length > 0
-    ? sheet.getRange(2, 1, matriz.length, nCols).getNumberFormats() : null;
   for (var col = 0; col < nCols; col++) {
     var rango = sheet.getRange(2, col + 1, matriz.length, 1);
     if (tipos[col] === 'fecha') rango.setNumberFormat('dd/mm/yyyy');
     else if (tipos[col] === 'decimal') rango.setNumberFormat('#,##0.00');
-    else if (tipos[col] === 'entero') rango.setNumberFormat('0');
-    else if (formatosActuales && /[ymdhs]/i.test(formatosActuales[0][col])) rango.setNumberFormat('General');
+    else if (tipos[col] === 'entero') rango.setNumberFormat('#,##0');
+    else rango.setNumberFormat('@'); // Plain text: evita notación científica y ### en CAR SUNAT/RUC
   }
 
   // Autofiltro.
@@ -337,7 +359,6 @@ function escribirDatosEnHoja_(sheet, contenidoTexto, tipoRegistro) {
   sheet.getRange(1, 1, matriz.length + 1, nCols).createFilter();
 
   // Ancho de columna: segun el contenido MAS LARGO de cada columna.
-  // items_descripcion e items_cantidad: ancho fijo sin wrap.
   ajustarAnchoColumnas_(sheet, encabezado, matriz, nCols);
 
   // Colorear filas de Notas de Credito (07) en rojo claro y Notas de Debito (08) en naranja

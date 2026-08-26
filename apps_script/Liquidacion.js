@@ -539,9 +539,10 @@ function ajustarAnchoColumnasDetalle_(sheet, encabezado, filas) {
     var nombre = normalizarEncabezado_(encabezado[col]);
     var colNum = col + 1;
 
-    if (nombre.indexOf('items_descripcion') !== -1) {
+    if (nombre.indexOf('car') !== -1) {
+      sheet.setColumnWidth(colNum, 240);
+    } else if (nombre.indexOf('items_descripcion') !== -1) {
       sheet.setColumnWidth(colNum, 220);
-      // SIN setWrap -- la fila no se expande, el texto se corta visualmente
     } else if (nombre === 'link pdf' || nombre === 'link xml') {
       sheet.setColumnWidth(colNum, 90);
     } else if (nombre.indexOf('items_cantidad') !== -1) {
@@ -567,28 +568,26 @@ function ajustarAnchoColumnasDetalle_(sheet, encabezado, filas) {
   }
 }
 
-/** Aplica formato dd/mm/yyyy a cualquier columna del detalle consolidado que
- * contenga objetos Date -- ver comentario en escribirDetalle_. */
+/** Aplica formato por tipo a cada columna del detalle consolidado */
 function formatearColumnasFecha_(sheet, filas, nCols) {
   if (filas.length === 0) return;
-  // Formato ACTUAL de cada columna (fila de datos), para poder detectar
-  // restos de "dd/mm/yyyy" de una corrida anterior en columnas que en
-  // este refresco ya NO tienen fechas (ej. si el orden de columnas
-  // cambio alguna vez). setValues() solo pisa el VALOR de la celda, no
-  // su formato -- un formato de fecha viejo se queda pegado para
-  // siempre si no se limpia a mano, y un numero grande sin relacion con
-  // fechas (como el CAR SUNAT, 11 digitos) formateado como fecha cae
-  // muy afuera del rango valido y Sheets lo muestra como #NUM!.
-  var formatosActuales = sheet.getRange(2, 1, filas.length, nCols).getNumberFormats();
+  var encabezado = sheet.getRange(1, 1, 1, nCols).getValues()[0];
+  
   for (var c = 0; c < nCols; c++) {
-    var esFecha = false;
-    for (var r = 0; r < filas.length; r++) {
-      if (filas[r][c] instanceof Date) { esFecha = true; break; }
-    }
-    if (esFecha) {
-      sheet.getRange(2, c + 1, filas.length, 1).setNumberFormat('dd/mm/yyyy');
-    } else if (/[ymdhs]/i.test(formatosActuales[0][c])) {
-      sheet.getRange(2, c + 1, filas.length, 1).setNumberFormat('General');
+    var nomCol = normalizarEncabezado_(encabezado[c]);
+    var rango = sheet.getRange(2, c + 1, filas.length, 1);
+
+    if (nomCol.indexOf('fecha') !== -1) {
+      rango.setNumberFormat('dd/mm/yyyy');
+    } else if (nomCol.indexOf('bi ') === 0 || nomCol.indexOf('igv') === 0 || nomCol.indexOf('mto') === 0 ||
+               nomCol.indexOf('valor') === 0 || nomCol.indexOf('total') !== -1 || nomCol.indexOf('dscto') !== -1 ||
+               nomCol.indexOf('isc') !== -1 || nomCol.indexOf('icbper') !== -1 || nomCol.indexOf('ivap') !== -1) {
+      rango.setNumberFormat('#,##0.00');
+    } else if (nomCol.indexOf('car') !== -1 || nomCol.indexOf('ruc') !== -1 || nomCol.indexOf('serie') !== -1 ||
+               nomCol.indexOf('nro') !== -1 || nomCol.indexOf('tipo') !== -1 || nomCol.indexOf('periodo') !== -1) {
+      rango.setNumberFormat('@'); // Plain text para evitar ###
+    } else {
+      rango.setNumberFormat('General');
     }
   }
 }
