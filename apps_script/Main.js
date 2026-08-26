@@ -366,19 +366,17 @@ function ejecutarImportacion_(periodos, mostrarResultado, rucFiltro) {
     });
   });
 
-  var liquidacionAuto = parsearBool_(leerPreferencia('LIQUIDACION_AUTO', 'false'));
-  if (liquidacionAuto) {
-    Object.keys(aniosPorRuc).forEach(function (ruc) {
-      aniosPorRuc[ruc].forEach(function (anio) {
-        try {
-          var urlLiq = construirLiquidacion_(ruc, anio);
-          resumen.push('Liquidacion ' + ruc + ' ' + anio + ' actualizada -> ' + urlLiq);
-        } catch (e) {
-          errores.push('Liquidacion ' + ruc + ' ' + anio + ': ' + e.message);
-        }
-      });
+  // Construir / actualizar Liquidación IGV SIEMPRE de forma 100% automática para cada RUC y año procesado
+  Object.keys(aniosPorRuc).forEach(function (ruc) {
+    aniosPorRuc[ruc].forEach(function (anio) {
+      try {
+        var urlLiq = construirLiquidacion_(ruc, anio);
+        resumen.push('📊 Liquidación ' + ruc + ' ' + anio + ' actualizada -> ' + urlLiq);
+      } catch (e) {
+        errores.push('Liquidación ' + ruc + ' ' + anio + ': ' + e.message);
+      }
     });
-  }
+  });
 
   var mensaje = resumen.join('\n');
   if (errores.length > 0) mensaje += '\n\nERRORES:\n' + errores.join('\n');
