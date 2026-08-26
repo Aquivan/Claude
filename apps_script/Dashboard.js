@@ -1,22 +1,19 @@
 /**
  * Dashboard.js
  * Construye y actualiza la pestana principal "Panel de Control" (Caratula)
- * en la hoja de calculo unificada.
- *
- * Funcionalidades:
- *   - Banner institucional con resumen de empresas y carpetas de Drive.
- *   - Accesos directos / Botones para abrir la carpeta raiz de SIRE en Drive,
- *     la carpeta de cada empresa, sus planillas de liquidacion IGV y las hojas mensuales.
- *   - Matriz por empresa y periodo con indicadores de estado:
- *       🟢 Descargado (con enlace directo al Sheet de Venta o Compra)
- *       ⚪ Pendiente (sin archivo en Drive todavia)
+ * en la hoja de calculo unificada de forma ultra-rapida (en 2-3 segundos).
  */
 
 function menuActualizarPanelDeControl() {
   var ui = SpreadsheetApp.getUi();
+  var rucFiltro = preguntarEmpresaFiltroDashboard_();
+  if (rucFiltro === null) return; // cancelado
+
   try {
-    generarPanelDeControl_();
-    ui.alert('Panel de Control actualizado', 'El Panel de Control se ha actualizado con el estado mas reciente de Drive y GitHub.', ui.ButtonSet.OK);
+    generarPanelDeControl_(rucFiltro || undefined);
+    ui.alert('Panel de Control actualizado ✓',
+      'El Panel de Control se ha actualizado con el estado mas reciente de Drive.',
+      ui.ButtonSet.OK);
   } catch (e) {
     Logger.log('Error actualizando Panel de Control: ' + e.message + '\n' + e.stack);
     ui.alert('Error', 'No se pudo actualizar el Panel de Control: ' + e.message, ui.ButtonSet.OK);
@@ -24,20 +21,46 @@ function menuActualizarPanelDeControl() {
 }
 
 /**
- * Escanea Drive y GitHub para construir la caratula interactiva.
+ * Pregunta al usuario el alcance del Panel (todas o un RUC específico).
  */
-function generarPanelDeControl_() {
+function preguntarEmpresaFiltroDashboard_() {
+  var ui = SpreadsheetApp.getUi();
+  var cfg;
+  try { cfg = cargarConfigGitHub_(); } catch (e) { return ''; }
+  var empresas;
+  try { empresas = listarEmpresasGitHub_(cfg, false); } catch (e) { return ''; }
+
+  if (!empresas || empresas.length <= 1) return '';
+
+  var lista = empresas.map(function(e, i) {
+    return (i + 1) + '. ' + e.ruc + ' - ' + e.nombre;
+  }).join('\n');
+
+  var resp = ui.prompt(
+    '📊 Actualizar Panel de Control',
+    'Empresas configuradas:\n' + lista + '\n\n' +
+    'Escribe el RUC para mostrar SOLO esa empresa en el panel,\n' +
+    'o deja en BLANCO para mostrar TODAS:',
+    ui.ButtonSet.OK_CANCEL);
+
+  if (resp.getSelectedButton() !== ui.Button.OK) return null;
+  return resp.getResponseText().trim();
+}
+
+/**
+ * Escanea Drive ultra-rapido para construir la caratula interactiva.
+ * rucFiltro: opcional, para filtrar solo una empresa.
+ */
+function generarPanelDeControl_(rucFiltro) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = obtenerOCrearHoja_(ss, 'Panel de Control');
 
-  // Asegurar que sea la primera pestana
   ss.setActiveSheet(sheet);
   ss.moveActiveSheet(1);
 
   sheet.clear();
   sheet.clearFormats();
   sheet.clearNotes();
-
   sheet.setHiddenGridlines(false);
 
   var cfg = null;
@@ -45,6 +68,9 @@ function generarPanelDeControl_() {
   try {
     cfg = cargarConfigGitHub_();
     empresas = listarEmpresasGitHub_(cfg, false);
+    if (rucFiltro) {
+      empresas = empresas.filter(function(e) { return e.ruc === rucFiltro; });
+    }
   } catch (e) {}
 
   var raiz = obtenerCarpetaRaiz_();
@@ -54,9 +80,8 @@ function generarPanelDeControl_() {
   // -------------------------------------------------------------
   // 1. BANNER INSTITUCIONAL (Header)
   // -------------------------------------------------------------
-  sheet.setRowHeight(1, 15); // margen superior
+  sheet.setRowHeight(1, 15);
 
-  // Titulo principal
   sheet.getRange('B2:H2').merge()
     .setValue('📊 SIRE SUNAT — PANEL DE CONTROL & NAVEGACIÓN CENTRAL')
     .setFontWeight('bold')
@@ -67,9 +92,8 @@ function generarPanelDeControl_() {
     .setVerticalAlignment('middle');
   sheet.setRowHeight(2, 38);
 
-  // Subtitulo con metadatos
   var fechaHora = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm:ss');
-  var textoSub = 'Última actualización: ' + fechaHora + '  |  Empresas registradas: ' + empresas.length + '  |  Año: ' + anioActual;
+  var textoSub = 'Última actualización: ' + fechaHora + '  |  Empresas: ' + empresas.length + '  |  Año: ' + anioActual;
   sheet.getRange('B3:H3').merge()
     .setValue(textoSub)
     .setFontSize(9)
@@ -82,7 +106,7 @@ function generarPanelDeControl_() {
   // -------------------------------------------------------------
   // 2. BOTONERA DE ACCESO RAPIDO (Cards / Links)
   // -------------------------------------------------------------
-  sheet.setRowHeight(4, 12); // espacio
+  sheet.setRowHeight(4, 12);
 
   var formulaDrive = urlRaiz ? '=HYPERLINK("' + urlRaiz + '", "📁 Abrir Carpeta Raíz en Google Drive")' : 'Carpeta no disponible';
   sheet.getRange('B5:D5').merge()
@@ -105,7 +129,7 @@ function generarPanelDeControl_() {
     .setBorder(true, true, true, true, false, false, '#CBD5E1', SpreadsheetApp.BorderStyle.SOLID);
   sheet.setRowHeight(5, 30);
 
-  sheet.setRowHeight(6, 15); // espacio
+  sheet.setRowHeight(6, 15);
 
   // -------------------------------------------------------------
   // 3. TABLA DE EMPRESAS Y PERIODOS
@@ -114,28 +138,33 @@ function generarPanelDeControl_() {
 
   if (empresas.length === 0) {
     sheet.getRange(filaActual, 2, 1, 7).merge()
-      .setValue('No se encontraron empresas configuradas en empresas.json o falta configurar GitHub.')
+      .setValue('No se encontraron empresas activas con el filtro seleccionado.')
       .setFontColor('#64748B')
       .setHorizontalAlignment('center');
     ajustarColumnasDashboard_(sheet);
     return;
   }
 
-  // Iterar por cada empresa
+  // Mapa en memoria de carpetas para escaneo instantaneo
+  var mapaCarpetasRaiz = {};
+  if (raiz) {
+    var itCRaiz = raiz.getFolders();
+    while (itCRaiz.hasNext()) {
+      var cF = itCRaiz.next();
+      if (!cF.isTrashed()) mapaCarpetasRaiz[cF.getName()] = cF;
+    }
+  }
+
   empresas.forEach(function(emp, indexEmpresa) {
     var ruc = emp.ruc;
     var nombre = emp.nombre || ruc;
     var activo = emp.activo;
 
-    // Buscar carpeta de la empresa en Drive
-    var carpetaEmpresa = null;
-    var urlCarpetaEmp = '';
-    try {
-      carpetaEmpresa = obtenerCarpetaRUC_(raiz, ruc, nombre);
-      if (carpetaEmpresa) urlCarpetaEmp = carpetaEmpresa.getUrl();
-    } catch (e) {}
+    // Buscar carpeta de empresa (sin llamadas lentas de red)
+    var carpetaEmpresa = obtenerCarpetaEmpresaRapida_(raiz, mapaCarpetasRaiz, ruc, nombre);
+    var urlCarpetaEmp = carpetaEmpresa ? carpetaEmpresa.getUrl() : '';
 
-    // Buscar si existe planilla de liquidacion para este anio
+    // Buscar liquidacion IGV
     var urlLiq = '';
     if (carpetaEmpresa) {
       var itLiq = carpetaEmpresa.getFilesByName('Liquidacion IGV ' + ruc + ' - ' + anioActual);
@@ -188,6 +217,9 @@ function generarPanelDeControl_() {
     sheet.setRowHeight(filaActual, 22);
     filaActual++;
 
+    // Pre-escanear subcarpetas de Venta y Compra de esta empresa una sola vez
+    var mapaArchivosEmpresa = preEscanearArchivosEmpresaRapido_(carpetaEmpresa, anioActual);
+
     // --- Filas de los 12 meses ---
     var filasMeses = [];
     var coloresFila = [];
@@ -196,12 +228,11 @@ function generarPanelDeControl_() {
       var mesNombre = MESES_NOMBRE_[m - 1];
       var periodoStr = anioActual + ('' + m).padStart(2, '0');
 
-      // Consultar archivos de ese mes en Drive
-      var infoVenta = buscarArchivoPeriodoDrive_(carpetaEmpresa, 'venta', anioActual, m, periodoStr);
-      var infoCompra = buscarArchivoPeriodoDrive_(carpetaEmpresa, 'compra', anioActual, m, periodoStr);
+      var infoVenta = mapaArchivosEmpresa['venta_' + m] || { existe: false, url: '', tieneZip: false };
+      var infoCompra = mapaArchivosEmpresa['compra_' + m] || { existe: false, url: '', tieneZip: false };
 
-      var txtVenta = infoVenta.existe ? '=HYPERLINK("' + infoVenta.url + '", "📄 Venta (' + infoVenta.filas + ' filas)")' : '⚪ Pendiente';
-      var txtCompra = infoCompra.existe ? '=HYPERLINK("' + infoCompra.url + '", "📄 Compra (' + infoCompra.filas + ' filas)")' : '⚪ Pendiente';
+      var txtVenta = infoVenta.existe ? '=HYPERLINK("' + infoVenta.url + '", "📄 Venta ' + periodoStr + '")' : '⚪ Pendiente';
+      var txtCompra = infoCompra.existe ? '=HYPERLINK("' + infoCompra.url + '", "📄 Compra ' + periodoStr + '")' : '⚪ Pendiente';
       
       var tieneZips = (infoVenta.tieneZip || infoCompra.tieneZip);
       var txtZip = tieneZips ? '📦 Guardados' : '⚪ No disponible';
@@ -212,10 +243,10 @@ function generarPanelDeControl_() {
       var colorEstado = '#F1F5F9';
       if (infoVenta.existe && infoCompra.existe) {
         estadoGlobal = '🟢 Completo';
-        colorEstado = '#DCFCE7'; // Verde claro
+        colorEstado = '#DCFCE7';
       } else if (infoVenta.existe || infoCompra.existe) {
         estadoGlobal = '🟡 Parcial';
-        colorEstado = '#FEF9C3'; // Amarillo claro
+        colorEstado = '#FEF9C3';
       }
 
       filasMeses.push([
@@ -231,84 +262,108 @@ function generarPanelDeControl_() {
       coloresFila.push(colorEstado);
     }
 
-    // Escribir los 12 meses
     var rangoDatos = sheet.getRange(filaActual, 2, 12, headersTabla.length);
     rangoDatos.setValues(filasMeses)
       .setFontSize(9)
       .setVerticalAlignment('middle')
       .setHorizontalAlignment('center');
 
-    // Aplicar alineacion a la izquierda en columnas de links
     sheet.getRange(filaActual, 4, 12, 2).setHorizontalAlignment('left');
 
-    // Aplicar colores de estado y bordes
     for (var r = 0; r < 12; r++) {
       sheet.setRowHeight(filaActual + r, 20);
       sheet.getRange(filaActual + r, 8).setBackground(coloresFila[r]).setFontWeight('bold');
     }
 
-    // Bordes exteriores de la tabla
     sheet.getRange(filaActual - 1, 2, 13, headersTabla.length)
       .setBorder(true, true, true, true, true, true, '#CBD5E1', SpreadsheetApp.BorderStyle.SOLID);
 
     filaActual += 13;
-    sheet.setRowHeight(filaActual, 16); // Separador entre empresas
+    sheet.setRowHeight(filaActual, 16);
     filaActual++;
   });
 
   ajustarColumnasDashboard_(sheet);
-
-  // Borrar "Sheet1" si todavia existe y ya tenemos el Panel de Control
   limpiarHojasVacias_(ss);
 }
 
 /**
- * Busca si un archivo de periodo existe en su respectiva subcarpeta en Drive.
+ * Busca o renombra la carpeta de empresa rápidamente.
  */
-function buscarArchivoPeriodoDrive_(carpetaEmpresa, tipo, anio, mes, periodoStr) {
-  if (!carpetaEmpresa) return { existe: false, url: '', filas: 0, tieneZip: false };
+function obtenerCarpetaEmpresaRapida_(raiz, mapaCarpetasRaiz, ruc, nombre) {
+  var nombreDeseado = ruc + ' - ' + nombre;
+  if (mapaCarpetasRaiz[nombreDeseado]) return mapaCarpetasRaiz[nombreDeseado];
+  if (mapaCarpetasRaiz[ruc]) {
+    var c = mapaCarpetasRaiz[ruc];
+    c.setName(nombreDeseado);
+    mapaCarpetasRaiz[nombreDeseado] = c;
+    return c;
+  }
+  return obtenerCarpetaRUC_(raiz, ruc, nombre);
+}
 
-  var nombreTipo = (tipo === 'venta' ? 'Venta' : 'Compra');
-  var itTipo = carpetaEmpresa.getFoldersByName(nombreTipo);
-  if (!itTipo.hasNext()) return { existe: false, url: '', filas: 0, tieneZip: false };
+/**
+ * Escanea la estructura de archivos de una empresa en Drive de forma instantánea.
+ * NO abre los Spreadsheets (lo cual tardaba 4-5 minutos).
+ */
+function preEscanearArchivosEmpresaRapido_(carpetaEmpresa, anio) {
+  var mapa = {};
+  if (!carpetaEmpresa) return mapa;
 
-  var itAnio = itTipo.next().getFoldersByName(String(anio));
-  if (!itAnio.hasNext()) return { existe: false, url: '', filas: 0, tieneZip: false };
+  ['Venta', 'Compra'].forEach(function(tipoCap) {
+    var tipoKey = tipoCap.toLowerCase();
+    var itTipo = carpetaEmpresa.getFoldersByName(tipoCap);
+    if (!itTipo.hasNext()) return;
 
-  var itMes = itAnio.next().getFoldersByName(MESES_CARPETA_[mes - 1]);
-  if (!itMes.hasNext()) return { existe: false, url: '', filas: 0, tieneZip: false };
+    var itAnio = itTipo.next().getFoldersByName(String(anio));
+    if (!itAnio.hasNext()) return;
 
-  var cMes = itMes.next();
-  var itArchivo = cMes.getFilesByName(nombreTipo + ' ' + periodoStr);
+    var cAnio = itAnio.next();
+    var itMeses = cAnio.getFolders();
 
-  var tieneZip = false;
-  var itZips = cMes.getFiles();
-  while (itZips.hasNext()) {
-    var fn = itZips.next().getName().toLowerCase();
-    if (fn.indexOf('.zip') !== -1 || fn.indexOf('.xml') !== -1) {
-      tieneZip = true;
-      break;
+    while (itMeses.hasNext()) {
+      var cMes = itMeses.next();
+      if (cMes.isTrashed()) continue;
+
+      var nomMes = cMes.getName();
+      var numMes = MESES_CARPETA_.indexOf(nomMes) + 1;
+      if (numMes < 1) continue;
+
+      var perStr = anio + ('' + numMes).padStart(2, '0');
+      var nombreBuscado = tipoCap + ' ' + perStr;
+
+      var itArchivos = cMes.getFiles();
+      var archivoEncontrado = null;
+      var tieneZip = false;
+
+      while (itArchivos.hasNext()) {
+        var f = itArchivos.next();
+        if (f.isTrashed()) continue;
+        var fn = f.getName();
+        if (fn === nombreBuscado) {
+          archivoEncontrado = f;
+        } else if (fn.toLowerCase().indexOf('.zip') !== -1 || fn.toLowerCase().indexOf('.xml') !== -1) {
+          tieneZip = true;
+        }
+      }
+
+      if (archivoEncontrado) {
+        mapa[tipoKey + '_' + numMes] = {
+          existe: true,
+          url: archivoEncontrado.getUrl(),
+          tieneZip: tieneZip
+        };
+      } else if (tieneZip) {
+        mapa[tipoKey + '_' + numMes] = {
+          existe: false,
+          url: '',
+          tieneZip: true
+        };
+      }
     }
-  }
+  });
 
-  if (itArchivo.hasNext()) {
-    var file = itArchivo.next();
-    var filasCount = 0;
-    try {
-      var ssTemp = SpreadsheetApp.open(file);
-      var sh = ssTemp.getSheetByName('Datos') || ssTemp.getSheets()[0];
-      if (sh) filasCount = Math.max(0, sh.getLastRow() - 1);
-    } catch (e) {}
-
-    return {
-      existe: true,
-      url: file.getUrl(),
-      filas: filasCount,
-      tieneZip: tieneZip
-    };
-  }
-
-  return { existe: false, url: '', filas: 0, tieneZip: tieneZip };
+  return mapa;
 }
 
 /**
@@ -324,3 +379,4 @@ function ajustarColumnasDashboard_(sheet) {
   sheet.setColumnWidth(7, 160); // Planilla Liquidacion (Link)
   sheet.setColumnWidth(8, 120); // Estado
 }
+
