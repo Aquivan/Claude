@@ -412,8 +412,8 @@ function periodoActualStr_() {
 // pasa, ej. la corrida se cancela a mano en GitHub).
 // ---------------------------------------------------------------------
 
-var INTERVALO_SEGUIMIENTO_MIN_ = 5;
-var MAX_INTENTOS_SEGUIMIENTO_ = 8; // 8 x 5min = hasta 40 minutos de margen
+var INTERVALO_SEGUIMIENTO_MIN_ = 1;
+var MAX_INTENTOS_SEGUIMIENTO_ = 10; // 8 x 5min = hasta 40 minutos de margen
 
 function programarSeguimiento_(periodos, rucFiltro, desdeMs) {
   var props = PropertiesService.getScriptProperties();
