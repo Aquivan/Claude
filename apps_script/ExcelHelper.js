@@ -33,6 +33,18 @@ var COLUMNAS_VENTA_ = [
   'DAM / CP', 'CLU',
 ];
 
+var COLUMNAS_COMPRA_ = [
+  'Ruc', 'Razon Social', 'Periodo', 'CAR SUNAT', 'Fecha de emisión',
+  'Fecha Vcto/Pago', 'Tipo CP/Doc.', 'Serie del CDP', 'Nro CP o Doc. Nro Inicial (Rango)',
+  'Tipo Doc Identidad', 'Nro Doc Identidad', 'Apellidos Nombres/ Razón Social',
+  'BI Gravado DG', 'IGV / IPM DG', 'BI Gravado DGNG', 'IGV / IPM DGNG',
+  'BI Gravado DNG', 'IGV / IPM DNG', 'Valor Adq. NG', 'ISC', 'ICBPER',
+  'Otros Trib/ Cargos', 'Total CP', 'Moneda', 'Tipo de Cambio',
+  'Fecha Emisión Doc Modificado', 'Tipo CP Modificado', 'Serie CP Modificado',
+  'Nro CP Modificado', 'IMB', 'Detracción', 'Tipo de Nota', 'Est. Comp.',
+  'Incal', 'Estado'
+];
+
 var PATRONES_TEXTO_LARGO_ = ['razon social', 'raz. social', 'nombre', 'denominaci'];
 var ANCHO_MINIMO_ = 55;
 var ANCHO_MAXIMO_ = 300;
@@ -204,9 +216,13 @@ function leerFilas_(contenidoTexto) {
   if (todasLasFilas.length === 0) return { encabezado: null, filas: [] };
 
   var primera = todasLasFilas[0];
-  var primerCampo = primera[0].toUpperCase();
-  var esEncabezado = primerCampo === 'RUC' || primerCampo === 'RUC EMISOR' ||
-    !/^[0-9.]+$/.test(primera[0]);
+  var esEncabezado = primera.some(function(celda) {
+    var s = normalizarTexto_(celda);
+    return s.indexOf('fecha') !== -1 || s.indexOf('tipo') !== -1 || s.indexOf('ruc') !== -1 ||
+           s.indexOf('total') !== -1 || s.indexOf('car') !== -1 || s.indexOf('periodo') !== -1 ||
+           s.indexOf('serie') !== -1 || s.indexOf('razon') !== -1 || s.indexOf('gravad') !== -1 ||
+           s.indexOf('comprobante') !== -1 || s.indexOf('emision') !== -1 || s.indexOf('moneda') !== -1;
+  });
 
   return esEncabezado
     ? { encabezado: primera, filas: todasLasFilas.slice(1) }
@@ -223,14 +239,6 @@ function intentarFecha_(valor) {
 function intentarNumero_(valor) {
   var v = valor.trim();
   if (!v) return null;
-  // Solo digitos, con un "-" opcional adelante y un "." opcional en medio
-  // (numero de verdad). Number(v) por si solo es DEMASIADO permisivo: acepta
-  // notacion cientifica ("1E5"), y el CAR SUNAT es un CODIGO alfanumerico
-  // que a veces trae una "E" en el medio por casualidad (ej.
-  // "2060930979301E0010000000374") -- Number() de eso da Infinity (no
-  // NaN), pasaba como "numero valido", y Sheets muestra Infinity como
-  // #NUM! en la celda. El CAR nunca es una cantidad, es un codigo: se
-  // trata como texto.
   if (!/^-?\d+(\.\d+)?$/.test(v)) return null;
   var n = Number(v);
   return isNaN(n) || !isFinite(n) ? null : n;
@@ -281,10 +289,7 @@ function inferirTipos_(encabezado, filas, nCols) {
 }
 
 /**
- * Escribe encabezado + datos en una hoja, con formato. tipoRegistro: 'venta' |
- * 'compra' (para elegir encabezados por defecto si no hay fila de encabezado
- * -- caso raro con el CSV de GitHub, que siempre trae uno, pero se deja
- * como respaldo).
+ * Escribe encabezado + datos en una hoja, con formato. tipoRegistro: 'venta' | 'compra'
  */
 function escribirDatosEnHoja_(sheet, contenidoTexto, tipoRegistro) {
   var leido = leerFilas_(contenidoTexto);
@@ -295,7 +300,7 @@ function escribirDatosEnHoja_(sheet, contenidoTexto, tipoRegistro) {
   var nCols = filas.reduce(function (max, f) { return Math.max(max, f.length); }, 0);
 
   if (encabezado === null) {
-    var base = tipoRegistro === 'venta' ? COLUMNAS_VENTA_ : [];
+    var base = tipoRegistro === 'venta' ? COLUMNAS_VENTA_ : COLUMNAS_COMPRA_;
     encabezado = [];
     for (var i = 0; i < nCols; i++) {
       encabezado.push(i < base.length ? base[i] : 'Campo ' + (i + 1));
