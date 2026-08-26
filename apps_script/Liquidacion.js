@@ -25,7 +25,7 @@
  */
 
 var MESES_NOMBRE_ = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
-                      'JUL', 'AGO', 'SET', 'OCT', 'NOV', 'DIC'];
+  'JUL', 'AGO', 'SET', 'OCT', 'NOV', 'DIC'];
 
 var COLUMNAS_CANONICAS_VENTA_ = [
   'Ruc', 'Razon Social', 'Periodo', 'CAR SUNAT', 'Fecha de emisión',
@@ -41,18 +41,6 @@ var COLUMNAS_CANONICAS_VENTA_ = [
   'DAM / CP', 'CLU', 'items_descripcion', 'items_cantidad', 'Link PDF', 'Link XML'
 ];
 
-var COLUMNAS_CANONICAS_COMPRA_ = [
-  'Ruc', 'Razon Social', 'Periodo', 'CAR SUNAT', 'Fecha de emisión',
-  'Fecha Vcto/Pago', 'Tipo CP/Doc.', 'Serie del CDP', 'Nro CP o Doc. Nro Inicial (Rango)',
-  'Tipo Doc Identidad', 'Nro Doc Identidad', 'Apellidos Nombres/ Razón Social',
-  'BI Gravado DG', 'IGV / IPM DG', 'BI Gravado DGNG', 'IGV / IPM DGNG',
-  'BI Gravado DNG', 'IGV / IPM DNG', 'Valor Adq. NG', 'ISC', 'ICBPER',
-  'Otros Trib/ Cargos', 'Total CP', 'Moneda', 'Tipo de Cambio',
-  'Fecha Emisión Doc Modificado', 'Tipo CP Modificado', 'Serie CP Modificado',
-  'Nro CP Modificado', 'IMB', 'Detracción', 'Tipo de Nota', 'Est. Comp.',
-  'Incal', 'Estado', 'items_descripcion', 'items_cantidad', 'Link PDF', 'Link XML'
-];
-
 var COL_VENTA_ = {
   periodo: 3, fechaEmision: 5,
   biGravada: 15, descuentoBI: 16, igv: 17, descuentoIGV: 18,
@@ -63,10 +51,10 @@ var COL_VENTA_ = {
 
 var COL_COMPRA_ = {
   periodo: 3, fechaEmision: 5,
-  biDG: 13, igvDG: 14, biDGNG: 15, igvDGNG: 16, biDNG: 17, igvDNG: 18,
-  valorAdqNG: 19, total: 23,
-  isc: 20, icbper: 21, otrosTribCargos: 22,
-  totalCols: 41,
+  biDG: 15, igvDG: 16, biDGNG: 17, igvDGNG: 18, biDNG: 19, igvDNG: 20,
+  valorAdqNG: 21, total: 25,
+  isc: 22, icbper: 23, otrosTribCargos: 24,
+  totalCols: 84,
 };
 
 /**
@@ -172,8 +160,6 @@ function menuGenerarLiquidacion() {
 
 /** Lee las filas de datos de un periodo ya descargado. Devuelve
  * {encabezado, filas}: encabezado es la fila de titulos real de SUNAT si la
- * hoja traia una (null si no traia), y filas es [] si el periodo no ex/** Lee las filas de datos de un periodo ya descargado. Devuelve
- * {encabezado, filas}: encabezado es la fila de titulos real de SUNAT si la
  * hoja traia una (null si no traia), y filas es [] si el periodo no existe. */
 function leerDetallePeriodo_(ruc, tipo, anio, mes) {
   var raiz = obtenerCarpetaRaiz_();
@@ -194,30 +180,30 @@ function leerDetallePeriodo_(ruc, tipo, anio, mes) {
   var ss = SpreadsheetApp.open(itArchivo.next());
   var hojas = ss.getSheets();
   for (var i = 0; i < hojas.length; i++) {
-    if (hojas[i].getLastRow() >= 2) {
-      var numFilas = hojas[i].getLastRow();
-      var numCols = hojas[i].getLastColumn();
-      var rango = hojas[i].getRange(1, 1, numFilas, numCols);
+    if (hojas[i].getLastRow() > 1) {
+      var rango = hojas[i].getDataRange();
       var valores = rango.getValues();
+      // Las columnas "Link PDF"/"Link XML" son formulas HYPERLINK() (asi se
+      // ven cortas en la hoja, "Abrir PDF" en vez de la URL completa) --
+      // getValues() por si solo devuelve el TEXTO visible ("Abrir PDF"), sin
+      // el link. Se pisan esas celdas con su formula real (via getFormulas())
+      // para que el link siga funcionando aca tambien; el resto de columnas
+      // (sin formula) queda con su valor normal, sin cambios.
       var formulas = rango.getFormulas();
-
       for (var f = 0; f < valores.length; f++) {
         for (var c = 0; c < valores[f].length; c++) {
           if (formulas[f][c]) valores[f][c] = formulas[f][c];
         }
       }
-
-      var primeraFila = valores[0];
-      var tieneEncabezado = primeraFila.some(function (celda) {
-        var s = normalizarEncabezado_(celda);
-        return s.indexOf('fecha') !== -1 || s.indexOf('tipo') !== -1 || s.indexOf('ruc') !== -1 ||
-               s.indexOf('total') !== -1 || s.indexOf('car') !== -1 || s.indexOf('periodo') !== -1 ||
-               s.indexOf('serie') !== -1 || s.indexOf('razon') !== -1 || s.indexOf('gravad') !== -1;
-      });
-
+      // La hoja puede o no tener fila de encabezado: Compras siempre trae la de
+      // SUNAT, y Ventas solo cuando es PROPUESTA (periodo no presentado). Se
+      // detecta por si la primera celda es numerica (un RUC) o texto ("Ruc").
+      // Se limpia el BOM por si quedo pegado de una descarga anterior.
+      var primeraCelda = String(valores[0][0]).replace(/^﻿/, '').replace(/^ï»¿/, '').trim();
+      var tieneEncabezado = isNaN(Number(primeraCelda)) || primeraCelda === '';
       return {
-        encabezado: tieneEncabezado ? primeraFila.map(String) : null,
-        filas: tieneEncabezado ? valores.slice(1) : valores
+        encabezado: tieneEncabezado ? valores[0].map(String) : null,
+        filas: tieneEncabezado ? valores.slice(1) : valores,
       };
     }
   }
@@ -251,31 +237,23 @@ function normalizarEncabezado_(s) {
 function buscarIndiceColumna_(encabezados, nombreBuscado) {
   if (!encabezados || encabezados.length === 0) return -1;
   var normBuscado = normalizarEncabezado_(nombreBuscado);
-  
-  // 1. Coincidencia exacta normalizada
+
+  // Coincidencia exacta normalizada
   for (var i = 0; i < encabezados.length; i++) {
     var normActual = normalizarEncabezado_(encabezados[i]);
     if (normActual === normBuscado) return i;
   }
 
-  // 2. Coincidencias específicas
+  // Coincidencias por patrones habituales
   for (var i = 0; i < encabezados.length; i++) {
     var normActual = normalizarEncabezado_(encabezados[i]);
-
-    if (normBuscado === 'link pdf' && (normActual === 'link pdf' || normActual === 'link_pdf' || normActual === 'pdf link' || normActual === 'pdf')) return i;
-    if (normBuscado === 'link xml' && (normActual === 'link xml' || normActual === 'link_xml' || normActual === 'xml link' || normActual === 'xml')) return i;
-    if (normBuscado === 'items_descripcion' && (normActual === 'items_descripcion' || normActual === 'items descripcion' || normActual === 'descripcion' || normActual === 'descripcion de items')) return i;
-    if (normBuscado === 'items_cantidad' && (normActual === 'items_cantidad' || normActual === 'items cantidad' || normActual === 'cantidad' || normActual === 'cantidad de items')) return i;
+    if (normBuscado === 'link pdf' && (normActual === 'link pdf' || normActual === 'link_pdf' || normActual === 'pdf link')) return i;
+    if (normBuscado === 'link xml' && (normActual === 'link xml' || normActual === 'link_xml' || normActual === 'xml link')) return i;
+    if (normBuscado === 'items_descripcion' && (normActual === 'items_descripcion' || normActual === 'items descripcion' || normActual.indexOf('descripcion') !== -1)) return i;
+    if (normBuscado === 'items_cantidad' && (normActual === 'items_cantidad' || normActual === 'items cantidad' || normActual.indexOf('cantidad') !== -1)) return i;
     if (normBuscado === 'fecha de emision' && (normActual.indexOf('fecha') !== -1 && normActual.indexOf('emision') !== -1 && normActual.indexOf('modific') === -1)) return i;
-    if (normBuscado === 'tipo cp/doc.' && (normActual.indexOf('modific') === -1 && normActual.indexOf('identidad') === -1 && normActual.indexOf('operacion') === -1 &&
-        (normActual === 'tipo cp/doc.' || normActual === 'tipo cp' || normActual === 'tipo doc' || (normActual.indexOf('tipo') !== -1 && (normActual.indexOf('cp') !== -1 || normActual.indexOf('cdp') !== -1 || normActual.indexOf('doc') !== -1))))) return i;
     if (normBuscado === 'periodo' && normActual === 'periodo') return i;
-    if (normBuscado === 'car sunat' && (normActual === 'car sunat' || normActual === 'car' || normActual.indexOf('car sunat') !== -1)) return i;
-    if (normBuscado === 'bi gravada' && (normActual === 'bi gravada' || normActual === 'bi gravado dg' || normActual.indexOf('bi grav') !== -1)) return i;
-    if (normBuscado === 'igv / ipm' && (normActual === 'igv / ipm' || normActual === 'igv / ipm dg' || normActual.indexOf('igv') !== -1)) return i;
-    if (normBuscado === 'total cp' && (normActual === 'total cp' || normActual === 'total' || normActual.indexOf('total') !== -1)) return i;
-    if (normBuscado === 'dam / cp' && (normActual === 'dam / cp' || normActual === 'dam' || normActual === 'dam/cp')) return i;
-    if (normBuscado === 'clu' && (normActual === 'clu')) return i;
+    if (normBuscado === 'clu' && (normActual === 'clu' || normActual === 'clu39')) return i;
   }
 
   return -1;
@@ -296,14 +274,35 @@ function formatearLinkCorto_(val, textoVisible) {
 function consolidarDetalle_(ruc, tipo, anio, cols) {
   var filas = [];
   var esVenta = (tipo === 'venta');
-  var listaCanonicos = esVenta ? COLUMNAS_CANONICAS_VENTA_.slice() : COLUMNAS_CANONICAS_COMPRA_.slice();
+  var listaCanonicos = esVenta ? COLUMNAS_CANONICAS_VENTA_.slice() : [];
 
   var periodosLeidos = [];
+  var encabezadoSUNATCompras = null;
 
   for (var mes = 1; mes <= 12; mes++) {
     var periodo = leerDetallePeriodo_(ruc, tipo, anio, mes);
     if (periodo.filas.length > 0) {
       periodosLeidos.push({ mes: mes, periodo: periodo });
+      if (!esVenta && !encabezadoSUNATCompras && periodo.encabezado) {
+        encabezadoSUNATCompras = periodo.encabezado;
+      }
+    }
+  }
+
+  if (!esVenta) {
+    if (encabezadoSUNATCompras) {
+      var baseEnc = [];
+      for (var i = 0; i < encabezadoSUNATCompras.length; i++) {
+        var h = normalizarEncabezado_(encabezadoSUNATCompras[i]);
+        if (h !== 'link pdf' && h !== 'link xml' && h !== 'items_descripcion' && h !== 'items_cantidad' && h !== 'periodo emision' && h !== 'origen') {
+          baseEnc.push(encabezadoSUNATCompras[i]);
+        }
+      }
+      listaCanonicos = baseEnc.concat(['items_descripcion', 'items_cantidad', 'Link PDF', 'Link XML']);
+    } else {
+      listaCanonicos = [];
+      for (var i = 1; i <= 80; i++) listaCanonicos.push('Campo ' + i);
+      listaCanonicos.push('items_descripcion', 'items_cantidad', 'Link PDF', 'Link XML');
     }
   }
 
@@ -312,11 +311,7 @@ function consolidarDetalle_(ruc, tipo, anio, cols) {
     var periodo = item.periodo;
     var datos = periodo.filas;
     var encMes = periodo.encabezado;
-
-    // Si la hoja no traia encabezado explícito, se asume el canónico
-    if (!encMes && datos.length > 0) {
-      encMes = listaCanonicos;
-    }
+    Logger.log(tipo + ' ' + anio + '-' + mes + ': ' + datos.length + ' filas');
 
     var indicesMapeo = listaCanonicos.map(function (colName) {
       return encMes ? buscarIndiceColumna_(encMes, colName) : -1;
@@ -330,6 +325,10 @@ function consolidarDetalle_(ruc, tipo, anio, cols) {
       for (var c = 0; c < listaCanonicos.length; c++) {
         var idx = indicesMapeo[c];
         var val = (idx !== -1 && idx < fila.length) ? fila[idx] : '';
+
+        if (idx === -1 && !encMes && c < fila.length) {
+          val = fila[c];
+        }
 
         var nombreCol = listaCanonicos[c];
         if (nombreCol === 'Link PDF') {
@@ -461,7 +460,7 @@ function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
     if (!esColumnaRelleno) continue;
 
     var rangoCol = sheet.getRange(2, c, filas.length, 1).getValues();
-    var tieneAlgo = rangoCol.some(function(celda) {
+    var tieneAlgo = rangoCol.some(function (celda) {
       var v = String(celda[0] || '').trim();
       return v !== '' && v !== '0';
     });
@@ -493,15 +492,22 @@ function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
 function colorearNotasCredito_(sheet, encabezado, nFilasDatos) {
   if (!nFilasDatos || nFilasDatos <= 0 || !encabezado || encabezado.length === 0) return;
 
-  // Buscar EXCLUSIVAMENTE la columna "Tipo CP/Doc." (omitiendo "Modificado", "Identidad" y "Operacion")
+  // Buscar la columna "Tipo CP/Doc." o variantes
   var idxTipo = -1;
   for (var i = 0; i < encabezado.length; i++) {
-    var h = normalizarEncabezado_(encabezado[i]);
-    if (h.indexOf('modific') !== -1 || h.indexOf('identidad') !== -1 || h.indexOf('operacion') !== -1 || h.indexOf('cambio') !== -1) continue;
-    if (h === 'tipo cp/doc.' || h === 'tipo cp' || h === 'tipo doc' || h === 'tipo de comprobante' ||
-        h === 'tipo' || (h.indexOf('tipo') !== -1 && (h.indexOf('cp') !== -1 || h.indexOf('cdp') !== -1 || h.indexOf('doc') !== -1))) {
+    var h = String(encabezado[i] || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    if (h.indexOf('tipo') !== -1 && (h.indexOf('cp') !== -1 || h.indexOf('doc') !== -1 || h.indexOf('comprobante') !== -1 || h.indexOf('cdp') !== -1)) {
       idxTipo = i;
       break;
+    }
+  }
+  if (idxTipo === -1) {
+    for (var j = 0; j < encabezado.length; j++) {
+      var h2 = String(encabezado[j] || '').trim().toLowerCase();
+      if (h2 === 'tipo' || h2 === 'tipo_cp' || h2 === 'tipocp') {
+        idxTipo = j;
+        break;
+      }
     }
   }
   if (idxTipo === -1) return;
@@ -515,9 +521,9 @@ function colorearNotasCredito_(sheet, encabezado, nFilasDatos) {
     var str = String(raw === null || raw === undefined ? '' : raw).trim();
     var num = parseInt(str, 10);
 
-    // Nota de Credito: codigo 07, 7, o texto con 'credito' (pero no debito)
-    if (str === '07' || str === '7' || num === 7 || (str.toLowerCase().indexOf('credito') !== -1 && str.toLowerCase().indexOf('debito') === -1)) {
-      sheet.getRange(r + 2, 1, 1, nCols).setBackground('#FFCDD2'); // rojo claro visible
+    // Nota de Credito: codigo 07, 7 o palabra credito
+    if (str === '07' || str === '7' || num === 7 || str.toLowerCase().indexOf('credito') !== -1) {
+      sheet.getRange(r + 2, 1, 1, nCols).setBackground('#FFCDD2'); // rojo claro suave y visible
     }
     // Nota de Debito: codigo 08, 8 o palabra debito
     else if (str === '08' || str === '8' || num === 8 || str.toLowerCase().indexOf('debito') !== -1) {
@@ -550,7 +556,7 @@ function ajustarAnchoColumnasDetalle_(sheet, encabezado, filas) {
         var len = v instanceof Date ? 10 : String(v === null || v === undefined ? '' : v).length;
         if (len > maxLen) maxLen = len;
       }
-      var esLargo = PATRON_TEXTO_LARGO.some(function(p) { return nombre.indexOf(p) !== -1; });
+      var esLargo = PATRON_TEXTO_LARGO.some(function (p) { return nombre.indexOf(p) !== -1; });
       var px = (maxLen + 2) * 7.3;
       if (esLargo) {
         px = Math.min(Math.max(px, 200), 330);
@@ -566,7 +572,7 @@ function ajustarAnchoColumnasDetalle_(sheet, encabezado, filas) {
 function formatearColumnasFecha_(sheet, filas, nCols) {
   if (filas.length === 0) return;
   var encabezado = sheet.getRange(1, 1, 1, nCols).getValues()[0];
-  
+
   for (var c = 0; c < nCols; c++) {
     var nomCol = normalizarEncabezado_(encabezado[c]);
     var rango = sheet.getRange(2, c + 1, filas.length, 1);
@@ -574,11 +580,11 @@ function formatearColumnasFecha_(sheet, filas, nCols) {
     if (nomCol.indexOf('fecha') !== -1) {
       rango.setNumberFormat('dd/mm/yyyy');
     } else if (nomCol.indexOf('bi ') === 0 || nomCol.indexOf('igv') === 0 || nomCol.indexOf('mto') === 0 ||
-               nomCol.indexOf('valor') === 0 || nomCol.indexOf('total') !== -1 || nomCol.indexOf('dscto') !== -1 ||
-               nomCol.indexOf('isc') !== -1 || nomCol.indexOf('icbper') !== -1 || nomCol.indexOf('ivap') !== -1) {
+      nomCol.indexOf('valor') === 0 || nomCol.indexOf('total') !== -1 || nomCol.indexOf('dscto') !== -1 ||
+      nomCol.indexOf('isc') !== -1 || nomCol.indexOf('icbper') !== -1 || nomCol.indexOf('ivap') !== -1) {
       rango.setNumberFormat('#,##0.00');
     } else if (nomCol.indexOf('car') !== -1 || nomCol.indexOf('ruc') !== -1 || nomCol.indexOf('serie') !== -1 ||
-               nomCol.indexOf('nro') !== -1 || nomCol.indexOf('tipo') !== -1 || nomCol.indexOf('periodo') !== -1) {
+      nomCol.indexOf('nro') !== -1 || nomCol.indexOf('tipo') !== -1 || nomCol.indexOf('periodo') !== -1) {
       rango.setNumberFormat('@'); // Plain text para evitar ###
     } else {
       rango.setNumberFormat('General');
@@ -970,19 +976,19 @@ function escribirTablero_(ss, anio) {
       '=' + ref('compraNoGravDelMes') + '+' + ref('compraNoGravAnt'),
       '=' + fc(letC.isc) + '+' + fc(letC.icbper) + '+' + fc(letC.otrosTribCargos),
       '=' + ref('compraDgTotal') + '+' + ref('creditoDgTotal') + '+' + ref('compraDgng') + '+' +
-        ref('igvDgng') + '+' + ref('compraDng') + '+' + ref('igvDng') + '+' + ref('compraNoGravTotal') +
-        '+' + ref('compraOtrosCargos'),
+      ref('igvDgng') + '+' + ref('compraDng') + '+' + ref('igvDng') + '+' + ref('compraNoGravTotal') +
+      '+' + ref('compraOtrosCargos'),
       '=' + ref('debitoTotal') + '-(' + ref('creditoDgTotal') + '+' + ref('igvDgng') + '*Parametros!$B$4)',
       saldoAnterior,
       '=' + ref('igvResultante') + '+' + ref('saldoAnt'),
       0,
       0,
       '=MAX(0' + S + ref('igvAcumulado') + '-' + ref('percepciones') + '-' + ref('retenciones') +
-        '-' + ref('percepRetencArrastre') + ')',
+      '-' + ref('percepRetencArrastre') + ')',
       '=MIN(0' + S + ref('igvAcumulado') + ')',
       arrastrePercepRetenc,
       '=MAX(0' + S + '(' + ref('percepciones') + '+' + ref('retenciones') + '+' + ref('percepRetencArrastre') +
-        ')-MAX(0' + S + ref('igvAcumulado') + '))',
+      ')-MAX(0' + S + ref('igvAcumulado') + '))',
       '=' + ref('ventaGravTotal') + '+' + ref('ventaNoGravTotal'),
       0,
       '=' + ref('ingresoNeto') + '*' + ref('coeficienteRenta'),
