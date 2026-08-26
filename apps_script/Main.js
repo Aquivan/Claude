@@ -139,21 +139,21 @@ function ejecutarDispatch_(inputs, mensajeBase, periodosParaImportar, rucFiltro)
 
   var mensaje = mensajeBase + '\n\nBuscando el link de la corrida en GitHub (puede tardar unos segundos)...';
   var corrida = buscarCorridaRecienDisparada_(cfg, ahora);
-  var seguimientoTexto = periodosParaImportar
-    ? ('\n\nSe programo un seguimiento automatico: en cuanto GitHub termine (se revisa ' +
-       'solo cada ' + INTERVALO_SEGUIMIENTO_MIN_ + ' minutos), se importa solo a Drive -- ' +
-       'no hace falta que hagas nada mas. Mira la pestana "Registro" de esta hoja para ' +
-       'ver cuando termine.')
-    : '';
+  var tieneWebhook = !!PropertiesService.getScriptProperties().getProperty('WEBHOOK_SECRET');
+  var seguimientoTexto = '';
+  if (tieneWebhook) {
+    seguimientoTexto = '\n\n⚡ Webhook instantáneo activo: en cuanto GitHub termine, se importará a Drive en 0 segundos.';
+  } else if (periodosParaImportar) {
+    seguimientoTexto = '\n\nSe programó un seguimiento automático: en cuanto GitHub termine, se importará a Drive.';
+    programarSeguimiento_(periodosParaImportar, rucFiltro || null, ahora);
+  }
+
   if (corrida) {
     mensaje = mensajeBase + '\n\nCorrida: ' + corrida.html_url + seguimientoTexto;
   } else {
-    mensaje = mensajeBase + '\n\nSe disparo correctamente, pero no se encontro el ' +
-      'link todavia (GitHub a veces tarda en listarla). Revisa la pestana ' +
-      '"Actions" del repo directamente, o usa el menu "7. Ver estado" en un ratito.' + seguimientoTexto;
+    mensaje = mensajeBase + '\n\nSe disparo correctamente. Revisa la pestaña "Actions" de GitHub o la carátula.' + seguimientoTexto;
   }
-  if (periodosParaImportar) programarSeguimiento_(periodosParaImportar, rucFiltro || null, ahora);
-  ui.alert('Ejecucion disparada', mensaje, ui.ButtonSet.OK);
+  ui.alert('Ejecución disparada', mensaje, ui.ButtonSet.OK);
 }
 
 function menuVerEstadoGitHub() {
@@ -600,9 +600,18 @@ function menuActivarImportacionAutomatica() {
 function menuDesactivarImportacionAutomatica() {
   var ui = SpreadsheetApp.getUi();
   var trigger = buscarTriggerImportacionAutomatica_();
-  if (!trigger) { ui.alert('La importacion automatica periodica ya estaba desactivada.'); return; }
-  ScriptApp.deleteTrigger(trigger);
-  ui.alert('Importacion automatica periodica: DESACTIVADA.');
+  if (trigger) ScriptApp.deleteTrigger(trigger);
+  limpiarSeguimiento_();
+
+  var triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function (t) {
+    var fn = t.getHandlerFunction();
+    if (fn === 'seguimientoAutomatico_' || fn === 'importarSiHayCorridaNueva_') {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+
+  ui.alert('Importación y seguimientos automáticos: DESACTIVADOS.');
 }
 
 function importarSiHayCorridaNueva_() {
