@@ -1,0 +1,4 @@
+factura,estado_pdf,estado_xml,archivo_pdf,archivo_xml,items_descripcion,items_cantidad
+F001-2001,OK-oficial,OK,2026/compra/202607/oficial/20609214938-01-F001-2001.pdf,2026/compra/202607/oficial/20609214938-01-F001-2001-XML.zip,MAX-D DIESEL B5 S50 UV,19.203
+F001-2029,OK-oficial,OK,2026/compra/202607/oficial/20609214938-01-F001-2029.pdf,2026/compra/202607/oficial/20609214938-01-F001-2029-XML.zip,MAX-D DIESEL B5 S50 UV,18.788
+FE11-8185,OK-oficial,no-disponible,2026/compra/202607/oficial/20601338263-01-FE11-8185.pdf,,,
