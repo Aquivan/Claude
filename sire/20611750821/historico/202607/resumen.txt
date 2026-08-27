@@ -1,0 +1,9 @@
+factura,estado_pdf,estado_xml,archivo_pdf,archivo_xml,items_descripcion,items_cantidad
+FN01-48628676,OK-representacion,no-disponible,2026/compra/202607/representacion/FN01-48628676.pdf,,,
+E001-3229,OK-oficial,OK,2026/compra/202607/oficial/20608466593-01-E001-3229.pdf,2026/compra/202607/oficial/20608466593-01-E001-3229-XML.zip,ALGODON ACERO 20/1,3.303
+FC35-564,OK-oficial,no-disponible,2026/compra/202607/oficial/20601844916-01-FC35-564.pdf,,,
+F100-15477,OK-oficial,OK,2026/compra/202607/oficial/20498424067-01-F100-15477.pdf,2026/compra/202607/oficial/20498424067-01-F100-15477-XML.zip,ENTRETELA CAMISERA BLANCA,7.5
+FE01-6481,OK-oficial,no-disponible,2026/compra/202607/oficial/20604848084-01-FE01-6481.pdf,,,
+E001-3215,FALLO,OK,,2026/compra/202607/oficial/20608466593-01-E001-3215-XML.zip,ALGODON AZUL ACERO 20/1,22.7152
+FE01-6463,OK-oficial,OK,2026/compra/202607/oficial/20604848084-01-FE01-6463.pdf,2026/compra/202607/oficial/20604848084-01-FE01-6463-XML.zip,PIQUET MELANGE 10% - 24/1 || CUELLO MELANGE 10% || RIB MELANGE 10% - 20/1,1.38 || 3 || 0.08
+FV15-1421457,OK-representacion,no-disponible,2026/compra/202607/representacion/FV15-1421457.pdf,,,
