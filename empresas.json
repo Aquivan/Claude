@@ -98,6 +98,20 @@
       "descarga_pdf_xml": "ambos",
       "subir_pdf_r2": true,
       "extraer_items_xml": true
+    },
+    {
+      "ruc": "20611750821",
+      "nombre": "FIVA",
+      "activo": true,
+      "tipo": "ambos",
+      "periodo": "",
+      "periodo_hasta": "",
+      "generar_markdown": true,
+      "modalidad_descarga": "",
+      "metodo_descarga_pdf": "",
+      "descarga_pdf_xml": "ambos",
+      "subir_pdf_r2": true,
+      "extraer_items_xml": true
     }
   ]
 }
