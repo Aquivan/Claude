@@ -36,6 +36,8 @@ function onOpen() {
     .addItem('Vaciar valores manuales de una liquidacion (Percep/Retenc/Coef/Ajustes)',
       'menuLimpiarValoresManualesLiquidacion')
     .addSeparator()
+    .addItem('⏰ Programar ejecución automática diaria (Hora Perú)...', 'menuProgramarEjecucionDiaria')
+    .addItem('🚫 Desactivar ejecución automática diaria', 'menuDesactivarEjecucionDiaria')
     .addItem('Activar/cambiar importacion automatica periodica...', 'menuActivarImportacionAutomatica')
     .addItem('Desactivar importacion automatica periodica', 'menuDesactivarImportacionAutomatica')
     .addSeparator()

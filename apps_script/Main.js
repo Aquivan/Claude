@@ -556,6 +556,87 @@ function buscarTriggerImportacionAutomatica_() {
 // otro numero tira error al crear el trigger.
 var INTERVALOS_VALIDOS_IMPORTACION_ = [1, 5, 10, 15, 30];
 
+function menuProgramarEjecucionDiaria() {
+  var ui = SpreadsheetApp.getUi();
+  var trigger = buscarTriggerEjecucionDiaria_();
+  var horaActual = PropertiesService.getScriptProperties().getProperty('HORA_EJECUCION_DIARIA_PERU') || '1';
+
+  var resp = ui.prompt(
+    '⏰ Programar Ejecución Diaria Automática (Hora Perú)',
+    'Escribe la hora del día en la que deseas que se ejecute automáticamente\n' +
+    'la descarga para TODAS las empresas (número del 0 al 23 en hora de Perú):\n\n' +
+    'Ejemplos:\n' +
+    '  1  = 1:00 AM Perú\n' +
+    '  6  = 6:00 AM Perú\n' +
+    '  8  = 8:00 AM Perú\n' +
+    '  22 = 10:00 PM Perú\n\n' +
+    'Hora actual configurada: ' + horaActual + ':00 hrs Perú',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (resp.getSelectedButton() !== ui.Button.OK) return;
+  var hora = parseInt(resp.getResponseText().trim(), 10);
+  if (isNaN(hora) || hora < 0 || hora > 23) {
+    ui.alert('Hora inválida', 'Debe ser un número entero entre 0 y 23.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Eliminar trigger previo si existía
+  if (trigger) ScriptApp.deleteTrigger(trigger);
+
+  // Crear trigger diario de Apps Script en esa hora exacta (Hora de Lima / Perú)
+  ScriptApp.newTrigger('dispararEjecucionProgramadaDiaria_')
+    .timeBased()
+    .everyDays(1)
+    .atHour(hora)
+    .inTimezone('America/Lima')
+    .create();
+
+  PropertiesService.getScriptProperties().setProperty('HORA_EJECUCION_DIARIA_PERU', String(hora));
+
+  ui.alert(
+    '✅ Programación Diaria Activada con Éxito',
+    'Todos los días a las ' + hora + ':00 hrs (Hora Perú), Google Apps Script ' +
+    'disparará automáticamente la ejecución completa en GitHub Actions para todas las empresas activas.\n\n' +
+    '¡Esto se ejecuta puntual vía API directa desde Google Cloud!',
+    ui.ButtonSet.OK
+  );
+}
+
+function menuDesactivarEjecucionDiaria() {
+  var ui = SpreadsheetApp.getUi();
+  var trigger = buscarTriggerEjecucionDiaria_();
+  if (trigger) ScriptApp.deleteTrigger(trigger);
+  PropertiesService.getScriptProperties().deleteProperty('HORA_EJECUCION_DIARIA_PERU');
+  ui.alert('Programación diaria desactivada', 'Se ha desactivado la ejecución programada automática.', ui.ButtonSet.OK);
+}
+
+function buscarTriggerEjecucionDiaria_() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'dispararEjecucionProgramadaDiaria_') {
+      return triggers[i];
+    }
+  }
+  return null;
+}
+
+function dispararEjecucionProgramadaDiaria_() {
+  var cfg;
+  try {
+    cfg = cargarConfigGitHub_();
+  } catch (e) {
+    Logger.log('Error cargando config en dispararEjecucionProgramadaDiaria_: ' + e.message);
+    return;
+  }
+  try {
+    dispararWorkflowGitHub_(cfg, { periodo: '', tipo: 'ambos', modo: 'completo', ruc: '' });
+    Logger.log('Ejecución diaria disparada con éxito a GitHub para todas las empresas.');
+  } catch (e) {
+    Logger.log('Error disparando ejecución diaria a GitHub: ' + e.message);
+  }
+}
+
 function menuActivarImportacionAutomatica() {
   var ui = SpreadsheetApp.getUi();
   var yaActivo = buscarTriggerImportacionAutomatica_();
