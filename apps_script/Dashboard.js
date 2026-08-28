@@ -82,37 +82,37 @@ function generarPanelDeControl_(rucFiltro) {
   // -------------------------------------------------------------
   sheet.setRowHeight(1, 15);
 
-  // Fila 2: Título principal con gradiente oscuro
-  sheet.getRange('B2:H2').merge()
+  // Fila 2: Título principal (B..G, exactamente 6 columnas)
+  sheet.getRange('B2:G2').merge()
     .setValue('📊  SIRE SUNAT — PANEL DE CONTROL & NAVEGACIÓN')
     .setFontWeight('bold')
-    .setFontSize(15)
+    .setFontSize(14)
     .setFontColor('#F8FAFC')
     .setBackground('#0F172A')
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  sheet.setRowHeight(2, 42);
+  sheet.setRowHeight(2, 40);
 
   var fechaHora = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm:ss');
   var textoSub = '🕐  Actualizado: ' + fechaHora + '    ·    🏢  ' + empresas.length + ' empresa(s)    ·    📅  Año ' + anioActual;
-  sheet.getRange('B3:H3').merge()
+  sheet.getRange('B3:G3').merge()
     .setValue(textoSub)
     .setFontSize(9)
     .setFontColor('#7DD3FC')
     .setBackground('#0F172A')
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  sheet.setRowHeight(3, 26);
+  sheet.setRowHeight(3, 24);
 
   // Separador decorativo
-  sheet.getRange('B4:H4').merge()
+  sheet.getRange('B4:G4').merge()
     .setBackground('#1E3A5F');
   sheet.setRowHeight(4, 4);
 
   // -------------------------------------------------------------
   // 2. BOTONERA DE ACCESO RAPIDO (Cards / Links)
   // -------------------------------------------------------------
-  sheet.setRowHeight(5, 14);
+  sheet.setRowHeight(5, 12);
 
   var formulaDrive = urlRaiz ? '=HYPERLINK("' + urlRaiz + '", "📁  Abrir Carpeta Raíz en Google Drive")' : 'Carpeta no disponible';
   sheet.getRange('B6:C6').merge()
@@ -125,7 +125,7 @@ function generarPanelDeControl_(rucFiltro) {
     .setVerticalAlignment('middle')
     .setBorder(true, true, true, true, false, false, '#93C5FD', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
 
-  sheet.getRange('D6:H6').merge()
+  sheet.getRange('D6:G6').merge()
     .setValue('ℹ️  Usa el menú  SIRE SUNAT  para Descargar archivos, Importar datos o Generar Liquidaciones IGV')
     .setFontSize(9)
     .setFontColor('#64748B')
@@ -135,7 +135,7 @@ function generarPanelDeControl_(rucFiltro) {
     .setBorder(true, true, true, true, false, false, '#CBD5E1', SpreadsheetApp.BorderStyle.SOLID);
   sheet.setRowHeight(6, 30);
 
-  sheet.setRowHeight(7, 16);
+  sheet.setRowHeight(7, 14);
 
   // -------------------------------------------------------------
   // 3. TABLA DE EMPRESAS Y PERIODOS
@@ -143,7 +143,7 @@ function generarPanelDeControl_(rucFiltro) {
   var filaActual = 8;
 
   if (empresas.length === 0) {
-    sheet.getRange(filaActual, 2, 1, 7).merge()
+    sheet.getRange(filaActual, 2, 1, 6).merge()
       .setValue('No se encontraron empresas activas con el filtro seleccionado.')
       .setFontColor('#64748B')
       .setHorizontalAlignment('center');
@@ -180,44 +180,39 @@ function generarPanelDeControl_(rucFiltro) {
     }
 
     // -------------------------------------------------------
-    // --- HEADER DE EMPRESA: número + nombre (col B-D) ---
+    // --- HEADER DE EMPRESA: B..G (6 columnas alineadas) ---
     var AZUL_EMP = activo ? '#1E3A5F' : '#374151';
     var AZUL_BTN = activo ? '#2563EB' : '#6B7280';
     var VERDE_BTN = urlLiq ? '#047857' : '#6B7280';
 
-    // Número e indicador activo/inactivo (col B)
-    sheet.getRange(filaActual, 2).setValue(activo ? '▶' : '■')
-      .setFontWeight('bold').setFontSize(14).setFontColor(activo ? '#38BDF8' : '#9CA3AF')
-      .setBackground(AZUL_EMP).setHorizontalAlignment('center').setVerticalAlignment('middle');
-
-    // Nombre empresa (col C-E)
-    sheet.getRange(filaActual, 3, 1, 3).merge()
-      .setValue((indexEmpresa + 1) + '.  ' + ruc + '  —  ' + nombre)
-      .setFontWeight('bold').setFontSize(10).setFontColor('#E2E8F0')
+    // 1. Nombre empresa (col B-E, 4 columnas: B, C, D, E)
+    sheet.getRange(filaActual, 2, 1, 4).merge()
+      .setValue((activo ? '▶ ' : '■ ') + (indexEmpresa + 1) + '. ' + ruc + ' — ' + nombre)
+      .setFontWeight('bold').setFontSize(10).setFontColor('#F8FAFC')
       .setBackground(AZUL_EMP).setVerticalAlignment('middle');
 
-    // Botón: Abrir en Drive (col F-G)
-    var linkCarpeta = urlCarpetaEmp ? '=HYPERLINK("' + urlCarpetaEmp + '", "📂  Abrir en Drive")' : '(Sin carpeta)';
-    sheet.getRange(filaActual, 6, 1, 2).merge()
+    // 2. Botón: Abrir en Drive (col F)
+    var linkCarpeta = urlCarpetaEmp ? '=HYPERLINK("' + urlCarpetaEmp + '", "📂 Abrir en Drive")' : '(Sin carpeta)';
+    sheet.getRange(filaActual, 6)
       .setValue(linkCarpeta)
       .setFontWeight('bold').setFontSize(9).setFontColor('#FFFFFF')
       .setBackground(AZUL_BTN).setHorizontalAlignment('center').setVerticalAlignment('middle')
       .setBorder(false, true, false, true, false, false, '#1E3A5F', SpreadsheetApp.BorderStyle.SOLID);
 
-    // Botón: Liquidación anual (col H — solo 1 por empresa) (col H)
+    // 3. Botón: Liquidación anual (col G)
     var linkLiq = urlLiq
-      ? '=HYPERLINK("' + urlLiq + '", "📊  Liquidación IGV ' + anioActual + '")'
-      : '⚪  Sin liquidación';
-    sheet.getRange(filaActual, 8)
+      ? '=HYPERLINK("' + urlLiq + '", "📊 Liquidación ' + anioActual + '")'
+      : '⚪ Sin liquidación';
+    sheet.getRange(filaActual, 7)
       .setValue(linkLiq)
       .setFontWeight('bold').setFontSize(9).setFontColor('#FFFFFF')
       .setBackground(VERDE_BTN).setHorizontalAlignment('center').setVerticalAlignment('middle')
       .setBorder(false, true, false, true, false, false, '#1E3A5F', SpreadsheetApp.BorderStyle.SOLID);
 
-    sheet.setRowHeight(filaActual, 30);
+    sheet.setRowHeight(filaActual, 28);
     filaActual++;
 
-    // --- CABECERA TABLA MENSUAL (6 columnas: sin ZIP/XML ni Liquidación mensual) ---
+    // --- CABECERA TABLA MENSUAL (6 columnas: B..G) ---
     var headersTabla = ['Mes', 'Período', 'Registro Ventas', 'Registro Compras', 'Estado', 'Última Actualización'];
     var NUM_COLS = headersTabla.length;
     sheet.getRange(filaActual, 2, 1, NUM_COLS).setValues([headersTabla])
@@ -396,13 +391,12 @@ function preEscanearArchivosEmpresaRapido_(carpetaEmpresa, anio) {
  * Ajusta anchos de columna para que el Panel de Control se vea visualmente perfecto.
  */
 function ajustarColumnasDashboard_(sheet) {
-  sheet.setColumnWidth(1, 18);  // Margen izquierdo
-  sheet.setColumnWidth(2, 40);  // B: Indicador activo (▶) / "Mes" en tabla
-  sheet.setColumnWidth(3, 200); // C: Nombre empresa (parte de merge C-E) / "Período" en tabla
-  sheet.setColumnWidth(4, 170); // D: (parte del merge C-E) / "Registro Ventas"
-  sheet.setColumnWidth(5, 170); // E: (parte del merge C-E) / "Registro Compras"
-  sheet.setColumnWidth(6, 145); // F: Botón Abrir en Drive (merge F-G) / "Estado"
-  sheet.setColumnWidth(7, 145); // G: (parte merge F-G) / "Última Actualización"
-  sheet.setColumnWidth(8, 155); // H: Botón Liquidación IGV (cabecera empresa únicamente)
+  sheet.setColumnWidth(1, 18);  // A: Margen izquierdo
+  sheet.setColumnWidth(2, 65);  // B: Mes
+  sheet.setColumnWidth(3, 85);  // C: Período
+  sheet.setColumnWidth(4, 185); // D: Registro Ventas
+  sheet.setColumnWidth(5, 185); // E: Registro Compras
+  sheet.setColumnWidth(6, 135); // F: Estado / Botón Abrir en Drive
+  sheet.setColumnWidth(7, 165); // G: Última Actualización / Botón Liquidación IGV
 }
 
