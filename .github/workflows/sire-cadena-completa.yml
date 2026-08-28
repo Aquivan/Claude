@@ -60,7 +60,7 @@ on:
   schedule:
     # Todos los dias a las 08:00 hora Peru (13:00 UTC, Peru es UTC-5 todo el
     # ano, sin horario de verano). Ajustable despues si se quiere otra hora.
-    - cron: '0 17 * * *'
+    - cron: '0 06 * * *'
 
 permissions:
   contents: write
