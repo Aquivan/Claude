@@ -195,12 +195,16 @@ function leerDetallePeriodo_(ruc, tipo, anio, mes) {
           if (formulas[f][c]) valores[f][c] = formulas[f][c];
         }
       }
-      // La hoja puede o no tener fila de encabezado: Compras siempre trae la de
-      // SUNAT, y Ventas solo cuando es PROPUESTA (periodo no presentado). Se
-      // detecta por si la primera celda es numerica (un RUC) o texto ("Ruc").
-      // Se limpia el BOM por si quedo pegado de una descarga anterior.
-      var primeraCelda = String(valores[0][0]).replace(/^﻿/, '').replace(/^ï»¿/, '').trim();
-      var tieneEncabezado = isNaN(Number(primeraCelda)) || primeraCelda === '';
+      // Detectar encabezado revisando si ALGUNA celda de la primera fila
+      // contiene una palabra clave conocida (fecha, tipo, ruc, serie, etc.).
+      // Esto evita falsos negativos cuando la primera celda es un RUC numerico.
+      var primeraFila = valores[0].map(function(c) { return normalizarEncabezado_(String(c)); });
+      var PALABRAS_ENC = ['fecha', 'tipo', 'ruc', 'total', 'car', 'periodo', 'serie',
+                          'razon', 'gravad', 'comprobante', 'emision', 'moneda',
+                          'numero', 'estado', 'nro', 'apellido', 'nombre', 'bi'];
+      var tieneEncabezado = primeraFila.some(function(c) {
+        return PALABRAS_ENC.some(function(p) { return c.indexOf(p) !== -1; });
+      });
       return {
         encabezado: tieneEncabezado ? valores[0].map(String) : null,
         filas: tieneEncabezado ? valores.slice(1) : valores,
@@ -438,6 +442,9 @@ function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
   sheet.clearContents();
   sheet.clearFormats();
 
+  // Quitar agrupaciones anteriores de columnas para empezar limpio
+  try { sheet.clearColumnGroupMetadata(); } catch(e) {}
+
   var nCols = encabezado.length;
 
   var idxFecha = indiceColumnaFechaEmision_(encabezado);
@@ -451,8 +458,6 @@ function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
   sheet.getRange(2, 1, filas.length, nCols).setValues(filas);
 
   // --- Eliminar columnas CLU / de relleno completamente vacias ---
-  // Solo se eliminan columnas secundarias de relleno (CLU1..CLU39 o Campo XX)
-  // que esten completamente vacias, para no tocar columnas tributarias estandares.
   for (var c = nCols; c >= 1; c--) {
     if (c > sheet.getLastColumn()) continue;
     var nombreCol = normalizarEncabezado_(encabezado[c - 1]);
@@ -482,6 +487,18 @@ function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
 
   // --- Colorear filas de Notas de Credito en rojo claro ---
   colorearNotasCredito_(sheet, encFinal, filas.length);
+
+  // --- Inmovilizar hasta la columna E (5 columnas: A-E) ---
+  sheet.setFrozenColumns(5);
+
+  // --- Agrupar columnas A-D (1-4) para que se puedan colapsar ---
+  try {
+    sheet.getRange(1, 1, 1, 4).shiftColumnGroupDepth(1);
+    sheet.columnGroupControlPosition = SpreadsheetApp.GroupControlTogglePosition.AFTER;
+  } catch(e) {
+    // Algunas versiones de Apps Script no soportan grouping por API - se omite sin error
+    Logger.log('Agrupacion de columnas: ' + e.message);
+  }
 }
 
 /**
@@ -559,9 +576,9 @@ function ajustarAnchoColumnasDetalle_(sheet, encabezado, filas) {
       var esLargo = PATRON_TEXTO_LARGO.some(function (p) { return nombre.indexOf(p) !== -1; });
       var px = (maxLen + 2) * 7.3;
       if (esLargo) {
-        px = Math.min(Math.max(px, 200), 330);
+        px = Math.min(Math.max(px, 180), 250); // Razón Social: máximo 250px para que no quede ancha
       } else {
-        px = Math.min(Math.max(px, 55), 220);
+        px = Math.min(Math.max(px, 55), 200);
       }
       sheet.setColumnWidth(colNum, Math.round(px));
     }

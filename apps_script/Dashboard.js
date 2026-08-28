@@ -206,7 +206,7 @@ function generarPanelDeControl_(rucFiltro) {
     filaActual++;
 
     // --- Cabecera de la Tabla Mensual ---
-    var headersTabla = ['Mes', 'Periodo', 'Registro Ventas', 'Registro Compras', 'Archivos ZIP / XML', 'Planilla Liquidación', 'Estado'];
+    var headersTabla = ['Mes', 'Periodo', 'Registro Ventas', 'Registro Compras', 'Archivos ZIP / XML', 'Planilla Liquidación', 'Estado', 'Última Actualización'];
     sheet.getRange(filaActual, 2, 1, headersTabla.length).setValues([headersTabla])
       .setFontWeight('bold')
       .setFontSize(9)
@@ -249,6 +249,19 @@ function generarPanelDeControl_(rucFiltro) {
         colorEstado = '#FEF9C3';
       }
 
+      // Fecha/hora de última actualización del archivo de Drive más reciente del mes
+      var fechaActualizacion = '';
+      var maxDate = null;
+      if (infoVenta.existe && infoVenta.lastUpdated) {
+        if (!maxDate || infoVenta.lastUpdated > maxDate) maxDate = infoVenta.lastUpdated;
+      }
+      if (infoCompra.existe && infoCompra.lastUpdated) {
+        if (!maxDate || infoCompra.lastUpdated > maxDate) maxDate = infoCompra.lastUpdated;
+      }
+      if (maxDate) {
+        fechaActualizacion = Utilities.formatDate(maxDate, 'America/Lima', 'dd/MM/yyyy HH:mm');
+      }
+
       filasMeses.push([
         mesNombre,
         periodoStr,
@@ -256,7 +269,8 @@ function generarPanelDeControl_(rucFiltro) {
         txtCompra,
         txtZip,
         txtLiqMes,
-        estadoGlobal
+        estadoGlobal,
+        fechaActualizacion
       ]);
 
       coloresFila.push(colorEstado);
@@ -269,6 +283,8 @@ function generarPanelDeControl_(rucFiltro) {
       .setHorizontalAlignment('center');
 
     sheet.getRange(filaActual, 4, 12, 2).setHorizontalAlignment('left');
+    // Columna "Ultima Actualizacion" - texto, centrado
+    sheet.getRange(filaActual, 9, 12, 1).setHorizontalAlignment('center').setFontColor('#64748B');
 
     for (var r = 0; r < 12; r++) {
       sheet.setRowHeight(filaActual + r, 20);
@@ -351,12 +367,14 @@ function preEscanearArchivosEmpresaRapido_(carpetaEmpresa, anio) {
         mapa[tipoKey + '_' + numMes] = {
           existe: true,
           url: archivoEncontrado.getUrl(),
+          lastUpdated: archivoEncontrado.getLastUpdated(),
           tieneZip: tieneZip
         };
       } else if (tieneZip) {
         mapa[tipoKey + '_' + numMes] = {
           existe: false,
           url: '',
+          lastUpdated: null,
           tieneZip: true
         };
       }
@@ -378,5 +396,6 @@ function ajustarColumnasDashboard_(sheet) {
   sheet.setColumnWidth(6, 140); // Archivos ZIP / XML
   sheet.setColumnWidth(7, 160); // Planilla Liquidacion (Link)
   sheet.setColumnWidth(8, 120); // Estado
+  sheet.setColumnWidth(9, 140); // Última Actualización
 }
 
