@@ -126,7 +126,7 @@ function ajustarAnchoColumnas_(sheet, encabezado, matriz, nCols) {
   }
   for (var i = 0; i < nCols; i++) {
     var hNorm = normalizarTexto_(encabezado[i] || '');
-    if (hNorm.indexOf('car') !== -1) {
+    if (esColumnaCAR_(hNorm)) {
       sheet.setColumnWidth(i + 1, 240); // Ancho suficiente para CAR SUNAT (27 caracteres)
       continue;
     }
@@ -244,11 +244,20 @@ function intentarNumero_(valor) {
   return isNaN(n) || !isFinite(n) ? null : n;
 }
 
+function esColumnaCAR_(nombreCol) {
+  var h = normalizarTexto_(nombreCol || '');
+  if (!h) return false;
+  if (h.indexOf('cargo') !== -1 || h.indexOf('trib') !== -1) return false;
+  return (h === 'car' || h === 'car sunat' || h.indexOf('car ') === 0 || h.indexOf('car_') === 0 || (h.indexOf('car') !== -1 && h.indexOf('cargo') === -1));
+}
+
 function esColumnaTextoFijo_(nombreCol) {
   var h = normalizarTexto_(nombreCol || '');
   if (!h) return false;
+  if (h.indexOf('cargo') !== -1 || h.indexOf('trib') !== -1) return false;
+  if (esColumnaCAR_(h)) return true;
   var patronesTexto = [
-    'car', 'ruc', 'serie', 'nro cp', 'nro doc', 'tipo cp', 'tipo doc',
+    'ruc', 'serie', 'nro cp', 'nro doc', 'tipo cp', 'tipo doc',
     'tipo de nota', 'est. comp', 'incal', 'estado', 'periodo', 'moneda',
     'dam', 'clu', 'items_', 'link '
   ];

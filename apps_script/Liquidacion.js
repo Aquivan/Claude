@@ -236,6 +236,13 @@ function normalizarEncabezado_(s) {
     .trim().toLowerCase();
 }
 
+function esColumnaCAR_(nombreCol) {
+  var h = normalizarEncabezado_(nombreCol || '');
+  if (!h) return false;
+  if (h.indexOf('cargo') !== -1 || h.indexOf('trib') !== -1) return false;
+  return (h === 'car' || h === 'car sunat' || h.indexOf('car ') === 0 || h.indexOf('car_') === 0 || (h.indexOf('car') !== -1 && h.indexOf('cargo') === -1));
+}
+
 /**
  * Busca el índice de una columna por nombre normalizado (soporta variantes de nombres y espacios).
  */
@@ -275,7 +282,7 @@ function buscarIndiceColumna_(encabezados, nombreBuscado) {
     if (normBuscado === 'items_cantidad' && (normActual === 'items_cantidad' || normActual === 'items cantidad' || normActual.indexOf('cantidad') !== -1)) return i;
     if (normBuscado === 'fecha de emision' && (normActual.indexOf('fecha') !== -1 && normActual.indexOf('emision') !== -1 && normActual.indexOf('modific') === -1)) return i;
     if (normBuscado === 'periodo' && normActual === 'periodo') return i;
-    if (normBuscado === 'car sunat' && normActual.indexOf('car') !== -1) return i;
+    if (normBuscado === 'car sunat' && esColumnaCAR_(normActual)) return i;
     if (normBuscado === 'nro doc identidad' && (normActual.indexOf('nro doc') !== -1 || normActual.indexOf('num doc') !== -1)) return i;
     if (normBuscado === 'tipo doc identidad' && normActual.indexOf('tipo doc') !== -1) return i;
     if (normBuscado === 'clu' && (normActual === 'clu' || normActual === 'clu39')) return i;
@@ -581,7 +588,7 @@ function ajustarAnchoColumnasDetalle_(sheet, encabezado, filas) {
     var nombre = normalizarEncabezado_(encabezado[col]);
     var colNum = col + 1;
 
-    if (nombre.indexOf('car') !== -1) {
+    if (esColumnaCAR_(nombre)) {
       sheet.setColumnWidth(colNum, 240);
     } else if (nombre.indexOf('items_descripcion') !== -1) {
       sheet.setColumnWidth(colNum, 220);
@@ -633,9 +640,10 @@ function formatearColumnasFecha_(sheet, filas, nCols) {
       rango.setNumberFormat('dd/mm/yyyy');
     } else if (nomCol.indexOf('bi ') === 0 || nomCol.indexOf('igv') === 0 || nomCol.indexOf('mto') === 0 ||
       nomCol.indexOf('valor') === 0 || nomCol.indexOf('total') !== -1 || nomCol.indexOf('dscto') !== -1 ||
-      nomCol.indexOf('isc') !== -1 || nomCol.indexOf('icbper') !== -1 || nomCol.indexOf('ivap') !== -1) {
+      nomCol.indexOf('isc') !== -1 || nomCol.indexOf('icbper') !== -1 || nomCol.indexOf('ivap') !== -1 ||
+      nomCol.indexOf('trib') !== -1 || nomCol.indexOf('cargo') !== -1) {
       rango.setNumberFormat('#,##0.00');
-    } else if (nomCol.indexOf('car') !== -1 || nomCol.indexOf('ruc') !== -1 || nomCol.indexOf('serie') !== -1 ||
+    } else if (esColumnaCAR_(nomCol) || nomCol.indexOf('ruc') !== -1 || nomCol.indexOf('serie') !== -1 ||
       nomCol.indexOf('nro') !== -1 || nomCol.indexOf('tipo') !== -1 || nomCol.indexOf('periodo') !== -1) {
       rango.setNumberFormat('@'); // Plain text para evitar ###
     } else {
