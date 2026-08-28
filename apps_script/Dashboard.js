@@ -82,7 +82,7 @@ function generarPanelDeControl_(rucFiltro) {
   // -------------------------------------------------------------
   sheet.setRowHeight(1, 15);
 
-  sheet.getRange('B2:H2').merge()
+  sheet.getRange('B2:I2').merge()
     .setValue('📊 SIRE SUNAT — PANEL DE CONTROL & NAVEGACIÓN CENTRAL')
     .setFontWeight('bold')
     .setFontSize(14)
@@ -94,7 +94,7 @@ function generarPanelDeControl_(rucFiltro) {
 
   var fechaHora = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm:ss');
   var textoSub = 'Última actualización: ' + fechaHora + '  |  Empresas: ' + empresas.length + '  |  Año: ' + anioActual;
-  sheet.getRange('B3:H3').merge()
+  sheet.getRange('B3:I3').merge()
     .setValue(textoSub)
     .setFontSize(9)
     .setFontColor('#94A3B8')
@@ -119,7 +119,7 @@ function generarPanelDeControl_(rucFiltro) {
     .setVerticalAlignment('middle')
     .setBorder(true, true, true, true, false, false, '#93C5FD', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
 
-  sheet.getRange('E5:H5').merge()
+  sheet.getRange('E5:I5').merge()
     .setValue('ℹ️ Usa el menú "SIRE SUNAT" arriba para Descargar, Importar o Generar Liquidaciones')
     .setFontSize(9)
     .setFontColor('#475569')
@@ -137,7 +137,7 @@ function generarPanelDeControl_(rucFiltro) {
   var filaActual = 7;
 
   if (empresas.length === 0) {
-    sheet.getRange(filaActual, 2, 1, 7).merge()
+    sheet.getRange(filaActual, 2, 1, 8).merge()
       .setValue('No se encontraron empresas activas con el filtro seleccionado.')
       .setFontColor('#64748B')
       .setHorizontalAlignment('center');
@@ -173,7 +173,7 @@ function generarPanelDeControl_(rucFiltro) {
       }
     }
 
-    // --- Header de la Empresa ---
+    // --- Header de la Empresa (B..I, 8 columnas perfectamente alineadas) ---
     sheet.getRange(filaActual, 2, 1, 4).merge()
       .setValue('🏢 ' + (indexEmpresa + 1) + '. ' + ruc + ' - ' + nombre)
       .setFontWeight('bold')
@@ -183,7 +183,7 @@ function generarPanelDeControl_(rucFiltro) {
       .setVerticalAlignment('middle');
 
     var linkCarpeta = urlCarpetaEmp ? '=HYPERLINK("' + urlCarpetaEmp + '", "📂 Abrir en Drive")' : '(Sin carpeta)';
-    sheet.getRange(filaActual, 6).merge()
+    sheet.getRange(filaActual, 6, 1, 2).merge()
       .setValue(linkCarpeta)
       .setFontWeight('bold')
       .setFontSize(9)
@@ -193,7 +193,7 @@ function generarPanelDeControl_(rucFiltro) {
       .setVerticalAlignment('middle');
 
     var linkLiq = urlLiq ? '=HYPERLINK("' + urlLiq + '", "📊 Liquidación ' + anioActual + '")' : '⚪ Sin liquidación';
-    sheet.getRange(filaActual, 7, 1, 2).merge()
+    sheet.getRange(filaActual, 8, 1, 2).merge()
       .setValue(linkLiq)
       .setFontWeight('bold')
       .setFontSize(9)
