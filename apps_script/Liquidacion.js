@@ -575,7 +575,8 @@ function colorearNotasCredito_(sheet, encabezado, nFilasDatos) {
 
 function ajustarAnchoColumnasDetalle_(sheet, encabezado, filas) {
   var PATRON_TEXTO_LARGO = ['razon social', 'raz. social', 'nombre', 'denominaci'];
-  var muestra = filas.slice(0, 30);
+  var muestra = filas.slice(0, 50);
+
   for (var col = 0; col < encabezado.length; col++) {
     var nombre = normalizarEncabezado_(encabezado[col]);
     var colNum = col + 1;
@@ -587,24 +588,34 @@ function ajustarAnchoColumnasDetalle_(sheet, encabezado, filas) {
     } else if (nombre === 'link pdf' || nombre === 'link xml') {
       sheet.setColumnWidth(colNum, 90);
     } else if (nombre.indexOf('items_cantidad') !== -1) {
-      sheet.setColumnWidth(colNum, 100);
+      sheet.setColumnWidth(colNum, 75);
     } else if (nombre === 'periodo emision' || nombre === 'origen') {
       sheet.setColumnWidth(colNum, 88);
+    } else if (nombre.indexOf('fecha') !== -1) {
+      sheet.setColumnWidth(colNum, 90);
+    } else if (nombre.indexOf('serie') !== -1) {
+      sheet.setColumnWidth(colNum, 75);
+    } else if (nombre.indexOf('nro cp') !== -1 || nombre.indexOf('nro doc') !== -1) {
+      sheet.setColumnWidth(colNum, 95);
+    } else if (nombre === 'tipo cp/doc.' || nombre === 'tipo doc identidad' || nombre === 'tipo cp modificado' || nombre === 'tipo de nota' || nombre === 'est. comp' || nombre === 'incal' || nombre === 'estado' || nombre === 'moneda' || nombre === 'tipo cambio') {
+      sheet.setColumnWidth(colNum, 55);
     } else {
       var maxLen = 0;
       for (var r = 0; r < muestra.length; r++) {
         var v = muestra[r][col];
-        var len = v instanceof Date ? 10 : String(v === null || v === undefined ? '' : v).length;
+        var len = v instanceof Date ? 10 : String(v === null || v === undefined ? '' : v).trim().length;
         if (len > maxLen) maxLen = len;
       }
       var esLargo = PATRON_TEXTO_LARGO.some(function (p) { return nombre.indexOf(p) !== -1; });
-      var px = (maxLen + 2) * 7.3;
       if (esLargo) {
-        px = Math.min(Math.max(px, 180), 250); // Razón Social: máximo 250px para que no quede ancha
+        var pxLargo = Math.min(Math.max((maxLen + 2) * 7.3, 180), 250);
+        sheet.setColumnWidth(colNum, Math.round(pxLargo));
       } else {
-        px = Math.min(Math.max(px, 55), 200);
+        // Para columnas de montos, tributos (Otros Trib/Cargos, ISC, etc.) o codigos cortos:
+        // Ajustado 100% al contenido numérico de la fila (mínimo 58px, máximo 95px) y NUNCA ensanchado por la cabecera
+        var pxCorto = Math.min(Math.max((maxLen + 2) * 7.5, 58), 95);
+        sheet.setColumnWidth(colNum, Math.round(pxCorto));
       }
-      sheet.setColumnWidth(colNum, Math.round(px));
     }
   }
 }

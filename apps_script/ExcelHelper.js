@@ -46,10 +46,10 @@ var COLUMNAS_COMPRA_ = [
 ];
 
 var PATRONES_TEXTO_LARGO_ = ['razon social', 'raz. social', 'nombre', 'denominaci'];
-var ANCHO_MINIMO_ = 55;
-var ANCHO_MAXIMO_ = 300;
-var ANCHO_MINIMO_TEXTO_LARGO_ = 200;
-var ANCHO_MAXIMO_TEXTO_LARGO_ = 330;
+var ANCHO_MINIMO_ = 58;
+var ANCHO_MAXIMO_ = 95;
+var ANCHO_MINIMO_TEXTO_LARGO_ = 180;
+var ANCHO_MAXIMO_TEXTO_LARGO_ = 250;
 
 /** Quita tildes/diacriticos y pasa a minusculas, para comparar nombres de
  * columna sin depender de acentos ("emisión" vs "emision"). */
