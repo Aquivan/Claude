@@ -82,62 +82,68 @@ function generarPanelDeControl_(rucFiltro) {
   // -------------------------------------------------------------
   sheet.setRowHeight(1, 15);
 
-  sheet.getRange('B2:I2').merge()
-    .setValue('📊 SIRE SUNAT — PANEL DE CONTROL & NAVEGACIÓN CENTRAL')
+  // Fila 2: Título principal con gradiente oscuro
+  sheet.getRange('B2:H2').merge()
+    .setValue('📊  SIRE SUNAT — PANEL DE CONTROL & NAVEGACIÓN')
     .setFontWeight('bold')
-    .setFontSize(14)
-    .setFontColor('#FFFFFF')
-    .setBackground('#1E293B')
-    .setHorizontalAlignment('center')
-    .setVerticalAlignment('middle');
-  sheet.setRowHeight(2, 38);
-
-  var fechaHora = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm:ss');
-  var textoSub = 'Última actualización: ' + fechaHora + '  |  Empresas: ' + empresas.length + '  |  Año: ' + anioActual;
-  sheet.getRange('B3:I3').merge()
-    .setValue(textoSub)
-    .setFontSize(9)
-    .setFontColor('#94A3B8')
+    .setFontSize(15)
+    .setFontColor('#F8FAFC')
     .setBackground('#0F172A')
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  sheet.setRowHeight(3, 24);
+  sheet.setRowHeight(2, 42);
+
+  var fechaHora = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm:ss');
+  var textoSub = '🕐  Actualizado: ' + fechaHora + '    ·    🏢  ' + empresas.length + ' empresa(s)    ·    📅  Año ' + anioActual;
+  sheet.getRange('B3:H3').merge()
+    .setValue(textoSub)
+    .setFontSize(9)
+    .setFontColor('#7DD3FC')
+    .setBackground('#0F172A')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(3, 26);
+
+  // Separador decorativo
+  sheet.getRange('B4:H4').merge()
+    .setBackground('#1E3A5F');
+  sheet.setRowHeight(4, 4);
 
   // -------------------------------------------------------------
   // 2. BOTONERA DE ACCESO RAPIDO (Cards / Links)
   // -------------------------------------------------------------
-  sheet.setRowHeight(4, 12);
+  sheet.setRowHeight(5, 14);
 
-  var formulaDrive = urlRaiz ? '=HYPERLINK("' + urlRaiz + '", "📁 Abrir Carpeta Raíz en Google Drive")' : 'Carpeta no disponible';
-  sheet.getRange('B5:D5').merge()
+  var formulaDrive = urlRaiz ? '=HYPERLINK("' + urlRaiz + '", "📁  Abrir Carpeta Raíz en Google Drive")' : 'Carpeta no disponible';
+  sheet.getRange('B6:C6').merge()
     .setValue(formulaDrive)
     .setFontWeight('bold')
-    .setFontSize(10)
-    .setFontColor('#1D4ED8')
-    .setBackground('#EFF6FF')
+    .setFontSize(9)
+    .setFontColor('#1E40AF')
+    .setBackground('#DBEAFE')
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle')
     .setBorder(true, true, true, true, false, false, '#93C5FD', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
 
-  sheet.getRange('E5:I5').merge()
-    .setValue('ℹ️ Usa el menú "SIRE SUNAT" arriba para Descargar, Importar o Generar Liquidaciones')
+  sheet.getRange('D6:H6').merge()
+    .setValue('ℹ️  Usa el menú  SIRE SUNAT  para Descargar archivos, Importar datos o Generar Liquidaciones IGV')
     .setFontSize(9)
-    .setFontColor('#475569')
+    .setFontColor('#64748B')
     .setBackground('#F8FAFC')
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle')
     .setBorder(true, true, true, true, false, false, '#CBD5E1', SpreadsheetApp.BorderStyle.SOLID);
-  sheet.setRowHeight(5, 30);
+  sheet.setRowHeight(6, 30);
 
-  sheet.setRowHeight(6, 15);
+  sheet.setRowHeight(7, 16);
 
   // -------------------------------------------------------------
   // 3. TABLA DE EMPRESAS Y PERIODOS
   // -------------------------------------------------------------
-  var filaActual = 7;
+  var filaActual = 8;
 
   if (empresas.length === 0) {
-    sheet.getRange(filaActual, 2, 1, 8).merge()
+    sheet.getRange(filaActual, 2, 1, 7).merge()
       .setValue('No se encontraron empresas activas con el filtro seleccionado.')
       .setFontColor('#64748B')
       .setHorizontalAlignment('center');
@@ -173,54 +179,58 @@ function generarPanelDeControl_(rucFiltro) {
       }
     }
 
-    // --- Header de la Empresa (B..I, 8 columnas perfectamente alineadas) ---
-    sheet.getRange(filaActual, 2, 1, 4).merge()
-      .setValue('🏢 ' + (indexEmpresa + 1) + '. ' + ruc + ' - ' + nombre)
-      .setFontWeight('bold')
-      .setFontSize(11)
-      .setFontColor('#FFFFFF')
-      .setBackground(activo ? '#1E40AF' : '#475569')
-      .setVerticalAlignment('middle');
+    // -------------------------------------------------------
+    // --- HEADER DE EMPRESA: número + nombre (col B-D) ---
+    var AZUL_EMP = activo ? '#1E3A5F' : '#374151';
+    var AZUL_BTN = activo ? '#2563EB' : '#6B7280';
+    var VERDE_BTN = urlLiq ? '#047857' : '#6B7280';
 
-    var linkCarpeta = urlCarpetaEmp ? '=HYPERLINK("' + urlCarpetaEmp + '", "📂 Abrir en Drive")' : '(Sin carpeta)';
+    // Número e indicador activo/inactivo (col B)
+    sheet.getRange(filaActual, 2).setValue(activo ? '▶' : '■')
+      .setFontWeight('bold').setFontSize(14).setFontColor(activo ? '#38BDF8' : '#9CA3AF')
+      .setBackground(AZUL_EMP).setHorizontalAlignment('center').setVerticalAlignment('middle');
+
+    // Nombre empresa (col C-E)
+    sheet.getRange(filaActual, 3, 1, 3).merge()
+      .setValue((indexEmpresa + 1) + '.  ' + ruc + '  —  ' + nombre)
+      .setFontWeight('bold').setFontSize(10).setFontColor('#E2E8F0')
+      .setBackground(AZUL_EMP).setVerticalAlignment('middle');
+
+    // Botón: Abrir en Drive (col F-G)
+    var linkCarpeta = urlCarpetaEmp ? '=HYPERLINK("' + urlCarpetaEmp + '", "📂  Abrir en Drive")' : '(Sin carpeta)';
     sheet.getRange(filaActual, 6, 1, 2).merge()
       .setValue(linkCarpeta)
-      .setFontWeight('bold')
-      .setFontSize(9)
-      .setFontColor('#FFFFFF')
-      .setBackground(activo ? '#2563EB' : '#64748B')
-      .setHorizontalAlignment('center')
-      .setVerticalAlignment('middle');
+      .setFontWeight('bold').setFontSize(9).setFontColor('#FFFFFF')
+      .setBackground(AZUL_BTN).setHorizontalAlignment('center').setVerticalAlignment('middle')
+      .setBorder(false, true, false, true, false, false, '#1E3A5F', SpreadsheetApp.BorderStyle.SOLID);
 
-    var linkLiq = urlLiq ? '=HYPERLINK("' + urlLiq + '", "📊 Liquidación ' + anioActual + '")' : '⚪ Sin liquidación';
-    sheet.getRange(filaActual, 8, 1, 2).merge()
+    // Botón: Liquidación anual (col H — solo 1 por empresa) (col H)
+    var linkLiq = urlLiq
+      ? '=HYPERLINK("' + urlLiq + '", "📊  Liquidación IGV ' + anioActual + '")'
+      : '⚪  Sin liquidación';
+    sheet.getRange(filaActual, 8)
       .setValue(linkLiq)
-      .setFontWeight('bold')
-      .setFontSize(9)
-      .setFontColor('#FFFFFF')
-      .setBackground(urlLiq ? '#059669' : '#64748B')
-      .setHorizontalAlignment('center')
-      .setVerticalAlignment('middle');
+      .setFontWeight('bold').setFontSize(9).setFontColor('#FFFFFF')
+      .setBackground(VERDE_BTN).setHorizontalAlignment('center').setVerticalAlignment('middle')
+      .setBorder(false, true, false, true, false, false, '#1E3A5F', SpreadsheetApp.BorderStyle.SOLID);
 
-    sheet.setRowHeight(filaActual, 28);
+    sheet.setRowHeight(filaActual, 30);
     filaActual++;
 
-    // --- Cabecera de la Tabla Mensual ---
-    var headersTabla = ['Mes', 'Periodo', 'Registro Ventas', 'Registro Compras', 'Archivos ZIP / XML', 'Planilla Liquidación', 'Estado', 'Última Actualización'];
-    sheet.getRange(filaActual, 2, 1, headersTabla.length).setValues([headersTabla])
-      .setFontWeight('bold')
-      .setFontSize(9)
-      .setFontColor('#334155')
-      .setBackground('#E2E8F0')
-      .setHorizontalAlignment('center')
-      .setVerticalAlignment('middle');
+    // --- CABECERA TABLA MENSUAL (6 columnas: sin ZIP/XML ni Liquidación mensual) ---
+    var headersTabla = ['Mes', 'Período', 'Registro Ventas', 'Registro Compras', 'Estado', 'Última Actualización'];
+    var NUM_COLS = headersTabla.length;
+    sheet.getRange(filaActual, 2, 1, NUM_COLS).setValues([headersTabla])
+      .setFontWeight('bold').setFontSize(9)
+      .setFontColor('#1E3A5F').setBackground('#BFDBFE')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
     sheet.setRowHeight(filaActual, 22);
     filaActual++;
 
     // Pre-escanear subcarpetas de Venta y Compra de esta empresa una sola vez
     var mapaArchivosEmpresa = preEscanearArchivosEmpresaRapido_(carpetaEmpresa, anioActual);
 
-    // --- Filas de los 12 meses ---
+    // --- FILAS DE LOS 12 MESES ---
     var filasMeses = [];
     var coloresFila = [];
 
@@ -231,76 +241,74 @@ function generarPanelDeControl_(rucFiltro) {
       var infoVenta = mapaArchivosEmpresa['venta_' + m] || { existe: false, url: '', tieneZip: false };
       var infoCompra = mapaArchivosEmpresa['compra_' + m] || { existe: false, url: '', tieneZip: false };
 
-      var txtVenta = infoVenta.existe ? '=HYPERLINK("' + infoVenta.url + '", "📄 Venta ' + periodoStr + '")' : '⚪ Pendiente';
-      var txtCompra = infoCompra.existe ? '=HYPERLINK("' + infoCompra.url + '", "📄 Compra ' + periodoStr + '")' : '⚪ Pendiente';
-      
-      var tieneZips = (infoVenta.tieneZip || infoCompra.tieneZip);
-      var txtZip = tieneZips ? '📦 Guardados' : '⚪ No disponible';
+      var txtVenta = infoVenta.existe
+        ? '=HYPERLINK("' + infoVenta.url + '", "📄  Venta ' + periodoStr + '")'
+        : (infoVenta.tieneZip ? '⏳ Pendiente import.' : '⚪ Pendiente');
+      var txtCompra = infoCompra.existe
+        ? '=HYPERLINK("' + infoCompra.url + '", "📄  Compra ' + periodoStr + '")'
+        : (infoCompra.tieneZip ? '⏳ Pendiente import.' : '⚪ Pendiente');
 
-      var txtLiqMes = urlLiq ? '=HYPERLINK("' + urlLiq + '", "📊 Ver IGV ' + mesNombre + '")' : '⚪ Pendiente';
-
-      var estadoGlobal = '⚪ Sin descargar';
-      var colorEstado = '#F1F5F9';
+      var estadoGlobal, colorEstado, colorFila;
       if (infoVenta.existe && infoCompra.existe) {
-        estadoGlobal = '🟢 Completo';
-        colorEstado = '#DCFCE7';
+        estadoGlobal = '✅ Completo';
+        colorEstado = '#166534';  // verde oscuro texto
+        colorFila    = '#DCFCE7'; // fondo verde muy claro
       } else if (infoVenta.existe || infoCompra.existe) {
         estadoGlobal = '🟡 Parcial';
-        colorEstado = '#FEF9C3';
+        colorEstado = '#92400E';
+        colorFila    = '#FEF9C3';
+      } else {
+        estadoGlobal = '⚪ Sin datos';
+        colorEstado = '#64748B';
+        colorFila    = '#F8FAFC';
       }
 
-      // Fecha/hora de última actualización del archivo de Drive más reciente del mes
-      var fechaActualizacion = '';
       var maxDate = null;
-      if (infoVenta.existe && infoVenta.lastUpdated) {
-        if (!maxDate || infoVenta.lastUpdated > maxDate) maxDate = infoVenta.lastUpdated;
-      }
-      if (infoCompra.existe && infoCompra.lastUpdated) {
-        if (!maxDate || infoCompra.lastUpdated > maxDate) maxDate = infoCompra.lastUpdated;
-      }
-      if (maxDate) {
-        fechaActualizacion = Utilities.formatDate(maxDate, 'America/Lima', 'dd/MM/yyyy HH:mm');
-      }
+      if (infoVenta.existe && infoVenta.lastUpdated && (!maxDate || infoVenta.lastUpdated > maxDate)) maxDate = infoVenta.lastUpdated;
+      if (infoCompra.existe && infoCompra.lastUpdated && (!maxDate || infoCompra.lastUpdated > maxDate)) maxDate = infoCompra.lastUpdated;
+      var fechaActualizacion = maxDate ? Utilities.formatDate(maxDate, 'America/Lima', 'dd/MM/yyyy HH:mm') : '';
 
-      filasMeses.push([
-        mesNombre,
-        periodoStr,
-        txtVenta,
-        txtCompra,
-        txtZip,
-        txtLiqMes,
-        estadoGlobal,
-        fechaActualizacion
-      ]);
-
-      coloresFila.push(colorEstado);
+      filasMeses.push([mesNombre, periodoStr, txtVenta, txtCompra, estadoGlobal, fechaActualizacion]);
+      coloresFila.push({ fondo: colorFila, texto: colorEstado });
     }
 
-    var rangoDatos = sheet.getRange(filaActual, 2, 12, headersTabla.length);
-    rangoDatos.setValues(filasMeses)
-      .setFontSize(9)
-      .setVerticalAlignment('middle')
-      .setHorizontalAlignment('center');
+    var rangoDatos = sheet.getRange(filaActual, 2, 12, NUM_COLS);
+    rangoDatos.setValues(filasMeses).setFontSize(9).setVerticalAlignment('middle').setHorizontalAlignment('center');
 
+    // Alineación izquierda para Ventas y Compras
     sheet.getRange(filaActual, 4, 12, 2).setHorizontalAlignment('left');
-    // Columna "Ultima Actualizacion" - texto, centrado
-    sheet.getRange(filaActual, 9, 12, 1).setHorizontalAlignment('center').setFontColor('#64748B');
+    // Última Actualización: color tenue
+    sheet.getRange(filaActual, 7, 12, 1).setHorizontalAlignment('center').setFontColor('#94A3B8');
 
     for (var r = 0; r < 12; r++) {
       sheet.setRowHeight(filaActual + r, 20);
-      sheet.getRange(filaActual + r, 8).setBackground(coloresFila[r]).setFontWeight('bold');
+      // Fondo alternado suave en filas + color del estado
+      var bgFila = (r % 2 === 0) ? coloresFila[r].fondo : mezclarConBlanco_(coloresFila[r].fondo);
+      sheet.getRange(filaActual + r, 2, 1, NUM_COLS).setBackground(bgFila);
+      sheet.getRange(filaActual + r, 6).setFontColor(coloresFila[r].texto).setFontWeight('bold');
     }
 
-    sheet.getRange(filaActual - 1, 2, 13, headersTabla.length)
-      .setBorder(true, true, true, true, true, true, '#CBD5E1', SpreadsheetApp.BorderStyle.SOLID);
+    // Borde de la tabla completa
+    sheet.getRange(filaActual - 1, 2, 13, NUM_COLS)
+      .setBorder(true, true, true, true, true, true, '#93C5FD', SpreadsheetApp.BorderStyle.SOLID);
 
     filaActual += 13;
-    sheet.setRowHeight(filaActual, 16);
+    sheet.setRowHeight(filaActual, 18);
     filaActual++;
   });
 
   ajustarColumnasDashboard_(sheet);
   limpiarHojasVacias_(ss);
+}
+
+/**
+ * Aclara ligeramente un color hex mezclándolo con blanco para filas alternas.
+ */
+function mezclarConBlanco_(hex) {
+  if (!hex || hex.length < 7) return '#FFFFFF';
+  var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  r = Math.round(r + (255-r)*0.35); g = Math.round(g + (255-g)*0.35); b = Math.round(b + (255-b)*0.35);
+  return '#' + ('0'+r.toString(16)).slice(-2) + ('0'+g.toString(16)).slice(-2) + ('0'+b.toString(16)).slice(-2);
 }
 
 /**
@@ -388,14 +396,13 @@ function preEscanearArchivosEmpresaRapido_(carpetaEmpresa, anio) {
  * Ajusta anchos de columna para que el Panel de Control se vea visualmente perfecto.
  */
 function ajustarColumnasDashboard_(sheet) {
-  sheet.setColumnWidth(1, 20);  // Margen izquierdo
-  sheet.setColumnWidth(2, 65);  // Mes
-  sheet.setColumnWidth(3, 85);  // Periodo
-  sheet.setColumnWidth(4, 190); // Registro Ventas (Link)
-  sheet.setColumnWidth(5, 190); // Registro Compras (Link)
-  sheet.setColumnWidth(6, 140); // Archivos ZIP / XML
-  sheet.setColumnWidth(7, 160); // Planilla Liquidacion (Link)
-  sheet.setColumnWidth(8, 120); // Estado
-  sheet.setColumnWidth(9, 140); // Última Actualización
+  sheet.setColumnWidth(1, 18);  // Margen izquierdo
+  sheet.setColumnWidth(2, 40);  // B: Indicador activo (▶) / "Mes" en tabla
+  sheet.setColumnWidth(3, 200); // C: Nombre empresa (parte de merge C-E) / "Período" en tabla
+  sheet.setColumnWidth(4, 170); // D: (parte del merge C-E) / "Registro Ventas"
+  sheet.setColumnWidth(5, 170); // E: (parte del merge C-E) / "Registro Compras"
+  sheet.setColumnWidth(6, 145); // F: Botón Abrir en Drive (merge F-G) / "Estado"
+  sheet.setColumnWidth(7, 145); // G: (parte merge F-G) / "Última Actualización"
+  sheet.setColumnWidth(8, 155); // H: Botón Liquidación IGV (cabecera empresa únicamente)
 }
 
