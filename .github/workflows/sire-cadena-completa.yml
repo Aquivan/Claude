@@ -1104,7 +1104,7 @@ jobs:
         if: matrix.empresa.extraer_items_xml == true
         run: |
           cat > /tmp/extraer_items.py << 'PYEOF'
-          import csv, glob, os, sys, zipfile
+          import csv, glob, os, re, sys, zipfile
           import xml.etree.ElementTree as ET
 
           ruc, dir_descargas, ruta_compras, ruta_ventas, facturas_csv = sys.argv[1:6]
@@ -1115,47 +1115,93 @@ jobs:
           def get_tag_name(elem):
               return elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
 
-          def parse_xml_items(zip_path):
-              if not os.path.isfile(zip_path):
-                  return "", ""
+          def parse_xml_content(xml_bytes):
               try:
-                  with zipfile.ZipFile(zip_path) as z:
+                  root = ET.fromstring(xml_bytes)
+              except Exception:
+                  return None, "", ""
+
+              doc_id = ""
+              for elem in root.iter():
+                  if get_tag_name(elem) == "ID" and elem.text:
+                      t_id = elem.text.strip()
+                      if '-' in t_id:
+                          partes = t_id.split('-')
+                          if len(partes[0]) in (3, 4):
+                              doc_id = t_id
+                              break
+
+              lines = [elem for elem in root.iter() if get_tag_name(elem) in ("InvoiceLine", "CreditNoteLine", "DebitNoteLine")]
+              descs, qtys = [], []
+              for line in lines:
+                  qty_val = "1"
+                  desc_val = ""
+                  for elem in line.iter():
+                      t = get_tag_name(elem)
+                      if t in ("InvoicedQuantity", "CreditedQuantity", "DebitedQuantity", "Quantity"):
+                          if elem.text and elem.text.strip():
+                              qty_val = elem.text.strip()
+                      elif t == "Description":
+                          if elem.text and elem.text.strip():
+                              desc_val = elem.text.strip()
+
+                  try:
+                      f_qty = float(qty_val)
+                      if f_qty.is_integer():
+                          qty_val = str(int(f_qty))
+                      else:
+                          qty_val = str(round(f_qty, 4))
+                  except Exception:
+                      pass
+
+                  desc_val = " ".join(desc_val.replace("|", "-").split())
+                  if desc_val:
+                      descs.append(desc_val)
+                      qtys.append(qty_val)
+
+              return doc_id, " || ".join(descs), " || ".join(qtys)
+
+          def parse_xml_file(filepath):
+              if not os.path.isfile(filepath):
+                  return None, "", ""
+
+              # Caso 1: Archivo .xml directo
+              if filepath.lower().endswith(".xml"):
+                  try:
+                      with open(filepath, "rb") as f:
+                          return parse_xml_content(f.read())
+                  except Exception:
+                      return None, "", ""
+
+              # Caso 2: Archivo .zip que contiene .xml
+              try:
+                  with zipfile.ZipFile(filepath) as z:
                       for name in z.namelist():
                           if name.lower().endswith(".xml"):
-                              root = ET.fromstring(z.read(name))
-                              lines = [elem for elem in root.iter() if get_tag_name(elem) in ("InvoiceLine", "CreditNoteLine", "DebitNoteLine")]
-                              descs, qtys = [], []
-                              for line in lines:
-                                  qty_val = "1"
-                                  desc_val = ""
-                                  for elem in line.iter():
-                                      t = get_tag_name(elem)
-                                      if t in ("InvoicedQuantity", "CreditedQuantity", "DebitedQuantity", "Quantity"):
-                                          if elem.text and elem.text.strip():
-                                              qty_val = elem.text.strip()
-                                      elif t == "Description":
-                                          if elem.text and elem.text.strip():
-                                              desc_val = elem.text.strip()
+                              return parse_xml_content(z.read(name))
+              except Exception:
+                  pass
 
-                                  try:
-                                      f_qty = float(qty_val)
-                                      if f_qty.is_integer():
-                                          qty_val = str(int(f_qty))
-                                      else:
-                                          qty_val = str(round(f_qty, 4))
-                                  except Exception:
-                                      pass
+              return None, "", ""
 
-                                  desc_val = " ".join(desc_val.replace("|", "-").split())
-                                  descs.append(desc_val)
-                                  qtys.append(qty_val)
-
-                              return " || ".join(descs), " || ".join(qtys)
-              except Exception as e:
-                  return "", ""
-              return "", ""
+          def generar_claves(serie, numero):
+              s = str(serie or '').strip().upper()
+              n = str(numero or '').strip()
+              n_clean = n.lstrip('0') or '0'
+              claves = [f"{s}-{n}", f"{s}-{n_clean}"]
+              if n_clean.isdigit():
+                  claves.append(f"{s}-{int(n_clean):08d}")
+              return list(set(claves))
 
           items_por_factura = {}
+
+          def registrar_items(serie, numero, descs, qtys):
+              if not descs and not qtys:
+                  return
+              for k in generar_claves(serie, numero):
+                  items_por_factura[k] = (descs, qtys)
+
+          # 1. Leer XMLs listados en resumen.txt
           if os.path.exists(ruta_resumen):
               with open(ruta_resumen, encoding="utf-8", errors="replace") as f:
                   for r in csv.DictReader(f):
@@ -1163,12 +1209,30 @@ jobs:
                       xml_rel = r.get("archivo_xml", "").strip()
                       if fac and xml_rel and xml_rel != "-":
                           zip_path = os.path.join(dir_descargas, xml_rel) if not xml_rel.startswith(dir_descargas) else xml_rel
-                          descs, qtys = parse_xml_items(zip_path)
+                          doc_id, descs, qtys = parse_xml_file(zip_path)
                           if descs or qtys:
-                              items_por_factura[fac] = (descs, qtys)
+                              if '-' in fac:
+                                  partes = fac.split('-')
+                                  registrar_items(partes[0], '-'.join(partes[1:]), descs, qtys)
+                              if doc_id and '-' in doc_id:
+                                  partes = doc_id.split('-')
+                                  registrar_items(partes[0], '-'.join(partes[1:]), descs, qtys)
 
-          print(f"Items extraidos de {len(items_por_factura)} XML(s).")
+          # 2. Escaneo exhaustivo de respaldo en toda la carpeta de descargas
+          if os.path.isdir(dir_descargas):
+              for root_dir, _, files in os.walk(dir_descargas):
+                  for fn in files:
+                      fn_lower = fn.lower()
+                      if fn_lower.endswith(".xml") or fn_lower.endswith(".zip"):
+                          full_path = os.path.join(root_dir, fn)
+                          doc_id, descs, qtys = parse_xml_file(full_path)
+                          if (descs or qtys) and doc_id and '-' in doc_id:
+                              partes = doc_id.split('-')
+                              registrar_items(partes[0], '-'.join(partes[1:]), descs, qtys)
 
+          print(f"Items extraidos de {len(items_por_factura)} claves de comprobantes.")
+
+          # 3. Actualizar resumen.txt
           if os.path.exists(ruta_resumen):
               with open(ruta_resumen, encoding="utf-8", errors="replace") as f:
                   filas_resumen = list(csv.DictReader(f))
@@ -1180,7 +1244,13 @@ jobs:
 
                   for row in filas_resumen:
                       fac = row.get("factura", "").strip()
-                      d, q = items_por_factura.get(fac, ("", ""))
+                      d, q = "", ""
+                      if '-' in fac:
+                          partes = fac.split('-')
+                          for k in generar_claves(partes[0], '-'.join(partes[1:])):
+                              if k in items_por_factura:
+                                  d, q = items_por_factura[k]
+                                  break
                       row["items_descripcion"] = d
                       row["items_cantidad"] = q
 
@@ -1217,8 +1287,11 @@ jobs:
               for row in filas[1:]:
                   serie = row[idx_serie].strip() if len(row) > idx_serie else ""
                   numero = row[idx_numero].strip() if len(row) > idx_numero else ""
-                  fac_key = f"{serie}-{numero}"
-                  d, q = items_por_factura.get(fac_key, ("", ""))
+                  d, q = "", ""
+                  for k in generar_claves(serie, numero):
+                      if k in items_por_factura:
+                          d, q = items_por_factura[k]
+                          break
                   filas_nuevas.append(row + [d, q])
 
               with open(ruta_csv, "w", newline="", encoding="utf-8") as f:
