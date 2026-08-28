@@ -58,9 +58,21 @@ on:
           - "true"
           - "false"
   schedule:
-    # Todos los dias a las 08:00 hora Peru (13:00 UTC, Peru es UTC-5 todo el
-    # año, sin horario de verano).
-    - cron: '0 13 * * *'
+    # ---------------------------------------------------------------------------
+    # PROGRAMACIÓN AUTOMÁTICA (HORA PERÚ = UTC - 5)
+    # Formato: 'MINUTO HORA_UTC * * *'  -->  (Hora Perú + 5 = Hora UTC)
+    #
+    # Ejemplos:
+    #   1:00 AM Perú  -->  '0 06 * * *'
+    #   6:00 AM Perú  -->  '0 11 * * *'
+    #   8:00 AM Perú  -->  '0 13 * * *'
+    #   11:00 PM Perú -->  '0 04 * * *' (del día siguiente UTC)
+    #
+    # IMPORTANTE: El primer valor (minutos) SIEMPRE debe ser un número (ej. 0),
+    # NUNCA un asterisco (*), porque el asterisco hace que se intente ejecutar
+    # 60 veces en esa hora y GitHub lo bloquea.
+    # ---------------------------------------------------------------------------
+    - cron: '0 06 * * *'
 
 permissions:
   contents: write
