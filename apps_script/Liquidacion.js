@@ -516,13 +516,15 @@ function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
   // --- Colorear filas de Notas de Credito en rojo claro ---
   colorearNotasCredito_(sheet, encFinal, filas.length);
 
-  // --- Inmovilizar hasta la columna E (5 columnas: A-E) ---
-  sheet.setFrozenColumns(5);
-
-  // --- Agrupar columnas A-D (1-4) y dejarlas colapsadas por defecto (como en la captura) ---
+  // --- Agrupar columnas A-D (1-4) y dejarlas colapsadas por defecto ---
   try {
+    // 1. Limpiar cualquier nivel de agrupacion previo para evitar que se acumulen signos (+)
+    for (var d = 0; d < 8; d++) {
+      try { sheet.getRange(1, 1, 1, 4).shiftColumnGroupDepth(-1); } catch(eNeg) { break; }
+    }
+    // 2. Crear un único grupo limpio de nivel 1
     sheet.getRange(1, 1, 1, 4).shiftColumnGroupDepth(1);
-    sheet.columnGroupControlPosition = SpreadsheetApp.GroupControlTogglePosition.AFTER;
+    sheet.setColumnGroupControlPosition(SpreadsheetApp.GroupControlTogglePosition.AFTER);
     sheet.collapseAllColumnGroups();
   } catch(e) {
     Logger.log('Agrupacion de columnas: ' + e.message);

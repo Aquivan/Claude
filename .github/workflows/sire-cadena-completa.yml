@@ -59,8 +59,8 @@ on:
           - "false"
   schedule:
     # Todos los dias a las 08:00 hora Peru (13:00 UTC, Peru es UTC-5 todo el
-    # ano, sin horario de verano). Ajustable despues si se quiere otra hora.
-    - cron: '* 06 * * *'
+    # año, sin horario de verano).
+    - cron: '0 13 * * *'
 
 permissions:
   contents: write
@@ -1115,21 +1115,66 @@ jobs:
           def get_tag_name(elem):
               return elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
 
-          def parse_xml_content(xml_bytes):
+          def parse_xml_content(xml_bytes, filename_hint=""):
+              root = None
               try:
                   root = ET.fromstring(xml_bytes)
               except Exception:
-                  return None, "", ""
+                  pass
 
+              if root is None:
+                  for enc in ['utf-8', 'latin1', 'cp1252', 'iso-8859-1']:
+                      try:
+                          txt = xml_bytes.decode(enc, errors='replace')
+                          txt_clean = re.sub(r'<\?xml[^>]+encoding=[\'"][^\'"]+[\'"][^>]*\?>', '<?xml version="1.0" encoding="UTF-8"?>', txt)
+                          root = ET.fromstring(txt_clean.encode('utf-8'))
+                          break
+                      except Exception:
+                          continue
+
+              if root is None:
+                  return "", "", "", ""
+
+              # Document ID: buscar EXCLUSIVAMENTE como hijo directo de la raíz (Invoice, CreditNote, DebitNote)
               doc_id = ""
+              for child in root:
+                  if get_tag_name(child) == "ID" and child.text:
+                      doc_id = child.text.strip()
+                      break
+
+              if not doc_id:
+                  for elem in root.iter():
+                      tag = get_tag_name(elem)
+                      if tag == "ID" and elem.text:
+                          t_id = elem.text.strip()
+                          if '-' in t_id:
+                              partes = t_id.split('-')
+                              if len(partes[0]) in (3, 4) and len(partes) == 2 and partes[1].isdigit():
+                                  doc_id = t_id
+                                  break
+
+              # Extraer RUC del Emisor (Proveedor)
+              emisor_ruc = ""
               for elem in root.iter():
-                  if get_tag_name(elem) == "ID" and elem.text:
-                      t_id = elem.text.strip()
-                      if '-' in t_id:
-                          partes = t_id.split('-')
-                          if len(partes[0]) in (3, 4):
-                              doc_id = t_id
-                              break
+                  tag = get_tag_name(elem)
+                  if tag == "AccountingSupplierParty":
+                      for sub in elem.iter():
+                          subtag = get_tag_name(sub)
+                          if subtag in ("ID", "CompanyID") and sub.text:
+                              val = sub.text.strip()
+                              if len(val) == 11 and val.isdigit():
+                                  emisor_ruc = val
+                                  break
+                      if emisor_ruc:
+                          break
+
+              if filename_hint:
+                  m = re.search(r'(\d{11})-(\d{2})-([A-Za-z0-9]{3,4})-(\d+)', filename_hint)
+                  if m:
+                      if not emisor_ruc:
+                          emisor_ruc = m.group(1)
+                      if not doc_id:
+                          doc_id = f"{m.group(3)}-{m.group(4)}"
 
               lines = [elem for elem in root.iter() if get_tag_name(elem) in ("InvoiceLine", "CreditNoteLine", "DebitNoteLine")]
               descs, qtys = [], []
@@ -1142,6 +1187,9 @@ jobs:
                           if elem.text and elem.text.strip():
                               qty_val = elem.text.strip()
                       elif t == "Description":
+                          if elem.text and elem.text.strip():
+                              desc_val = elem.text.strip()
+                      elif t == "Name" and not desc_val:
                           if elem.text and elem.text.strip():
                               desc_val = elem.text.strip()
 
@@ -1159,46 +1207,54 @@ jobs:
                       descs.append(desc_val)
                       qtys.append(qty_val)
 
-              return doc_id, " || ".join(descs), " || ".join(qtys)
+              return doc_id, emisor_ruc, " || ".join(descs), " || ".join(qtys)
 
           def parse_xml_file(filepath):
               if not os.path.isfile(filepath):
-                  return None, "", ""
+                  return "", "", "", ""
+              fn = os.path.basename(filepath)
 
               # Caso 1: Archivo .xml directo
               if filepath.lower().endswith(".xml"):
                   try:
                       with open(filepath, "rb") as f:
-                          return parse_xml_content(f.read())
+                          return parse_xml_content(f.read(), fn)
                   except Exception:
-                      return None, "", ""
+                      return "", "", "", ""
 
               # Caso 2: Archivo .zip que contiene .xml
               try:
                   with zipfile.ZipFile(filepath) as z:
                       for name in z.namelist():
                           if name.lower().endswith(".xml"):
-                              return parse_xml_content(z.read(name))
+                              return parse_xml_content(z.read(name), name or fn)
               except Exception:
                   pass
 
-              return None, "", ""
+              return "", "", "", ""
 
-          def generar_claves(serie, numero):
+          def generar_claves(serie, numero, ruc_emisor=""):
               s = str(serie or '').strip().upper()
               n = str(numero or '').strip()
               n_clean = n.lstrip('0') or '0'
-              claves = [f"{s}-{n}", f"{s}-{n_clean}"]
+              base_claves = [f"{s}-{n}", f"{s}-{n_clean}"]
               if n_clean.isdigit():
-                  claves.append(f"{s}-{int(n_clean):08d}")
+                  base_claves.append(f"{s}-{int(n_clean):08d}")
+              base_claves = list(set(base_claves))
+
+              claves = list(base_claves)
+              if ruc_emisor:
+                  r = str(ruc_emisor).strip()
+                  for b in base_claves:
+                      claves.append(f"{r}_{b}")
               return list(set(claves))
 
           items_por_factura = {}
 
-          def registrar_items(serie, numero, descs, qtys):
+          def registrar_items(serie, numero, ruc_emisor, descs, qtys):
               if not descs and not qtys:
                   return
-              for k in generar_claves(serie, numero):
+              for k in generar_claves(serie, numero, ruc_emisor):
                   items_por_factura[k] = (descs, qtys)
 
           # 1. Leer XMLs listados en resumen.txt
@@ -1209,14 +1265,14 @@ jobs:
                       xml_rel = r.get("archivo_xml", "").strip()
                       if fac and xml_rel and xml_rel != "-":
                           zip_path = os.path.join(dir_descargas, xml_rel) if not xml_rel.startswith(dir_descargas) else xml_rel
-                          doc_id, descs, qtys = parse_xml_file(zip_path)
+                          doc_id, em_ruc, descs, qtys = parse_xml_file(zip_path)
                           if descs or qtys:
                               if '-' in fac:
                                   partes = fac.split('-')
-                                  registrar_items(partes[0], '-'.join(partes[1:]), descs, qtys)
+                                  registrar_items(partes[0], '-'.join(partes[1:]), em_ruc, descs, qtys)
                               if doc_id and '-' in doc_id:
                                   partes = doc_id.split('-')
-                                  registrar_items(partes[0], '-'.join(partes[1:]), descs, qtys)
+                                  registrar_items(partes[0], '-'.join(partes[1:]), em_ruc, descs, qtys)
 
           # 2. Escaneo exhaustivo de respaldo en toda la carpeta de descargas
           if os.path.isdir(dir_descargas):
@@ -1225,10 +1281,10 @@ jobs:
                       fn_lower = fn.lower()
                       if fn_lower.endswith(".xml") or fn_lower.endswith(".zip"):
                           full_path = os.path.join(root_dir, fn)
-                          doc_id, descs, qtys = parse_xml_file(full_path)
+                          doc_id, em_ruc, descs, qtys = parse_xml_file(full_path)
                           if (descs or qtys) and doc_id and '-' in doc_id:
                               partes = doc_id.split('-')
-                              registrar_items(partes[0], '-'.join(partes[1:]), descs, qtys)
+                              registrar_items(partes[0], '-'.join(partes[1:]), em_ruc, descs, qtys)
 
           print(f"Items extraidos de {len(items_por_factura)} claves de comprobantes.")
 
@@ -1281,17 +1337,35 @@ jobs:
               except ValueError:
                   return
 
+              idx_ruc = -1
+              for nom in ["nro doc identidad", "num doc identidad", "ruc"]:
+                  if nom in norm_headers:
+                      idx_ruc = norm_headers.index(nom)
+                      break
+
               headers_nuevos = headers + ["items_descripcion", "items_cantidad"]
               filas_nuevas = [headers_nuevos]
 
               for row in filas[1:]:
                   serie = row[idx_serie].strip() if len(row) > idx_serie else ""
                   numero = row[idx_numero].strip() if len(row) > idx_numero else ""
+                  ruc_em = row[idx_ruc].strip() if (idx_ruc != -1 and len(row) > idx_ruc) else ""
                   d, q = "", ""
-                  for k in generar_claves(serie, numero):
-                      if k in items_por_factura:
-                          d, q = items_por_factura[k]
-                          break
+
+                  # 1. Búsqueda exacta por RUC de Proveedor + Serie + Número
+                  if ruc_em:
+                      for k in generar_claves(serie, numero, ruc_em):
+                          if k.startswith(f"{ruc_em}_") and k in items_por_factura:
+                              d, q = items_por_factura[k]
+                              break
+
+                  # 2. Fallback general solo si no hubo coincidencia por RUC
+                  if not d and not q:
+                      for k in generar_claves(serie, numero):
+                          if k in items_por_factura:
+                              d, q = items_por_factura[k]
+                              break
+
                   filas_nuevas.append(row + [d, q])
 
               with open(ruta_csv, "w", newline="", encoding="utf-8") as f:
