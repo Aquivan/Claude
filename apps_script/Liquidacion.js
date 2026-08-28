@@ -225,30 +225,48 @@ function periodoDeEmision_(valor) {
 
 /**
  * Normaliza nombres de encabezado para comparar sin importar mayúsculas, minúsculas,
- * tildes, BOM o espacios.
+ * tildes, BOM o espacios múltiples.
  */
 function normalizarEncabezado_(s) {
   if (!s) return '';
   return String(s)
     .replace(/^﻿/, '').replace(/^ï»¿/, '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
     .trim().toLowerCase();
 }
 
 /**
- * Busca el índice de una columna por nombre normalizado (soporta variantes de nombres).
+ * Busca el índice de una columna por nombre normalizado (soporta variantes de nombres y espacios).
  */
 function buscarIndiceColumna_(encabezados, nombreBuscado) {
   if (!encabezados || encabezados.length === 0) return -1;
   var normBuscado = normalizarEncabezado_(nombreBuscado);
 
-  // Coincidencia exacta normalizada
+  // 1. Coincidencia exacta normalizada
   for (var i = 0; i < encabezados.length; i++) {
     var normActual = normalizarEncabezado_(encabezados[i]);
     if (normActual === normBuscado) return i;
   }
 
-  // Coincidencias por patrones habituales
+  // 2. Búsqueda de Proveedor / Cliente (Razón Social de la contraparte)
+  var esContraparte = (normBuscado.indexOf('apellidos nombres') !== -1 ||
+                       (normBuscado.indexOf('razon social') !== -1 && normBuscado.indexOf('apellidos y nombres') === -1));
+  if (esContraparte) {
+    for (var i = 0; i < encabezados.length; i++) {
+      var normActual = normalizarEncabezado_(encabezados[i]);
+      if (normActual.indexOf('apellidos y nombres o') !== -1) continue; // Saltear col propia de empresa (col 2)
+      if (normActual.indexOf('apellidos nombres') !== -1 ||
+          normActual.indexOf('razon social') !== -1 ||
+          normActual.indexOf('raz. social') !== -1 ||
+          normActual.indexOf('proveedor') !== -1 ||
+          normActual.indexOf('cliente') !== -1) {
+        return i;
+      }
+    }
+  }
+
+  // 3. Coincidencias por patrones habituales
   for (var i = 0; i < encabezados.length; i++) {
     var normActual = normalizarEncabezado_(encabezados[i]);
     if (normBuscado === 'link pdf' && (normActual === 'link pdf' || normActual === 'link_pdf' || normActual === 'pdf link')) return i;
@@ -257,6 +275,9 @@ function buscarIndiceColumna_(encabezados, nombreBuscado) {
     if (normBuscado === 'items_cantidad' && (normActual === 'items_cantidad' || normActual === 'items cantidad' || normActual.indexOf('cantidad') !== -1)) return i;
     if (normBuscado === 'fecha de emision' && (normActual.indexOf('fecha') !== -1 && normActual.indexOf('emision') !== -1 && normActual.indexOf('modific') === -1)) return i;
     if (normBuscado === 'periodo' && normActual === 'periodo') return i;
+    if (normBuscado === 'car sunat' && normActual.indexOf('car') !== -1) return i;
+    if (normBuscado === 'nro doc identidad' && (normActual.indexOf('nro doc') !== -1 || normActual.indexOf('num doc') !== -1)) return i;
+    if (normBuscado === 'tipo doc identidad' && normActual.indexOf('tipo doc') !== -1) return i;
     if (normBuscado === 'clu' && (normActual === 'clu' || normActual === 'clu39')) return i;
   }
 
@@ -491,14 +512,17 @@ function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
   // --- Inmovilizar hasta la columna E (5 columnas: A-E) ---
   sheet.setFrozenColumns(5);
 
-  // --- Agrupar columnas A-D (1-4) para que se puedan colapsar ---
+  // --- Agrupar columnas A-D (1-4) y dejarlas colapsadas por defecto (como en la captura) ---
   try {
     sheet.getRange(1, 1, 1, 4).shiftColumnGroupDepth(1);
     sheet.columnGroupControlPosition = SpreadsheetApp.GroupControlTogglePosition.AFTER;
+    sheet.collapseAllColumnGroups();
   } catch(e) {
-    // Algunas versiones de Apps Script no soportan grouping por API - se omite sin error
     Logger.log('Agrupacion de columnas: ' + e.message);
   }
+  try {
+    sheet.hideColumns(1, 4);
+  } catch(e) {}
 }
 
 /**
