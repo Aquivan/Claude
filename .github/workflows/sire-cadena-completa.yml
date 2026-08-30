@@ -73,7 +73,7 @@ on:
     # 60 veces en esa hora y GitHub lo bloquea.
     # Última actualización: 2026-08-29 (re-registro forzado del planificador)
     # ---------------------------------------------------------------------------
-    - cron: '45 9 * * *'
+    - cron: '0 6 * * *'
 
 permissions:
   contents: write
