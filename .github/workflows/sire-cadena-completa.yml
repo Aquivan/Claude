@@ -1818,17 +1818,15 @@ jobs:
             -o /tmp/webhook_resp.txt -w "HTTP %{http_code}\n"
           cat /tmp/webhook_resp.txt
 
-      - name: Subir tambien como artefacto descargable
+      - name: Subir reporte como artefacto descargable (solo archivos livianos, 24 horas)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sire-y-facturas-${{ matrix.empresa.ruc }}
+          name: sire-reportes-${{ matrix.empresa.ruc }}
           path: |
             ${{ env.RUTA_COMPRAS_CSV }}
             ${{ env.RUTA_VENTAS_CSV }}
             ${{ env.FACTURAS_CSV }}
-            ${{ env.DIR_DESCARGAS }}/
-            sire/${{ matrix.empresa.ruc }}/extraido_venta/
-            sire/${{ matrix.empresa.ruc }}/extraido_compra/
-          retention-days: 7
+          retention-days: 1
           if-no-files-found: ignore
+

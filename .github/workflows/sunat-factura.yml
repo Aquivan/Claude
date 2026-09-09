@@ -113,9 +113,10 @@ jobs:
           echo "PDF generado: factura_${SERIE}-${NUMERO}.pdf"
           ls -la factura_*.pdf
 
-      - name: Subir PDF como artefacto descargable
+      - name: Subir PDF como artefacto descargable (24 horas)
         uses: actions/upload-artifact@v4
         with:
           name: factura-sunat
           path: factura_*.pdf
-          retention-days: 7
+          retention-days: 1
+

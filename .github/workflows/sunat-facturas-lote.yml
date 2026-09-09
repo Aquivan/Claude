@@ -298,12 +298,14 @@ jobs:
             sleep 3
           done
 
-      - name: Subir tambien como artefacto descargable
+      - name: Subir resumen como artefacto descargable (solo archivos livianos, 24 horas)
         uses: actions/upload-artifact@v4
         with:
-          name: facturas-sunat-lote
-          path: facturas_descargadas/
-          retention-days: 7
+          name: facturas-sunat-lote-resumen
+          path: facturas_descargadas/resumen.txt
+          retention-days: 1
+          if-no-files-found: ignore
+
 
       - name: Avisar a Google Sheets que ya termino (reemplaza el polling)
         if: always()
