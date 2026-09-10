@@ -1,0 +1,44 @@
+# ==============================================================================
+# RESPALDO DEL PASO: Subir reporte como artefacto descargable
+# Guardado el: 2026-09-10
+#
+# Este fragmento es el paso que antes estaba al final de los workflows de GitHub Actions.
+# Se respalda aquí como referencia histórica por si en el futuro se desea consultar.
+# ==============================================================================
+
+# 1. Fragmento original de .github/workflows/sire-cadena-completa.yml:
+# ------------------------------------------------------------------
+#       - name: Subir reporte como artefacto descargable
+#         if: always()
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: sire-y-facturas-${{ matrix.empresa.ruc }}
+#           path: |
+#             ${{ env.RUTA_COMPRAS_CSV }}
+#             ${{ env.RUTA_VENTAS_CSV }}
+#             ${{ env.FACTURAS_CSV }}
+#             ${{ env.DIR_DESCARGAS }}/
+#             sire/${{ matrix.empresa.ruc }}/extraido_venta/
+#             sire/${{ matrix.empresa.ruc }}/extraido_compra/
+#           retention-days: 7
+#           if-no-files-found: ignore
+
+
+# 2. Fragmento original de .github/workflows/sunat-facturas-lote.yml:
+# ------------------------------------------------------------------
+#       - name: Subir tambien como artefacto descargable
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: facturas-sunat-lote
+#           path: facturas_descargadas/
+#           retention-days: 7
+
+
+# 3. Fragmento original de .github/workflows/sunat-factura.yml:
+# -----------------------------------------------------------
+#       - name: Subir PDF como artefacto descargable
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: factura-sunat
+#           path: factura_*.pdf
+#           retention-days: 7

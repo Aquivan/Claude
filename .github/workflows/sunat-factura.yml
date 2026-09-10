@@ -115,8 +115,10 @@ jobs:
 
       - name: Subir PDF como artefacto descargable (24 horas)
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: factura-sunat
           path: factura_*.pdf
           retention-days: 1
+
 
