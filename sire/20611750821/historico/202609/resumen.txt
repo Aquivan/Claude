@@ -1,2 +1,3 @@
 factura,estado_pdf,estado_xml,archivo_pdf,archivo_xml,items_descripcion,items_cantidad
+FN01-51056500,OK-representacion,no-disponible,2026/compra/202609/representacion/FN01-51056500.pdf,,,
 FV13-1475114,YA-DESCARGADO,no-disponible,2026/compra/202609/representacion/FV13-1475114.pdf,,,
