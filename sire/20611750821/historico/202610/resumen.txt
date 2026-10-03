@@ -1,2 +1,2 @@
 factura,estado_pdf,estado_xml,archivo_pdf,archivo_xml,items_descripcion,items_cantidad
-FE01-6729,OK-oficial,OK,2026/compra/202610/oficial/20604848084-01-FE01-6729.pdf,2026/compra/202610/oficial/20604848084-01-FE01-6729-XML.zip,ALGODON ALICRADO AZUL MARINO,1.51
+FE01-6729,YA-DESCARGADO,YA-DESCARGADO,2026/compra/202610/oficial/20604848084-01-FE01-6729.pdf,2026/compra/202610/oficial/20604848084-01-FE01-6729-XML.zip,ALGODON ALICRADO AZUL MARINO,1.51
