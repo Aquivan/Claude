@@ -1,0 +1,139 @@
+# Despliegue automatico del codigo de apps_script/ a la Google Sheet
+# ------------------------------------------------------------
+# Mismo mecanismo que el repo "voucher": sube apps_script/*.js y
+# appsscript.json al proyecto de Apps Script de la Sheet
+# "Descarga Sire completa", sin copiar y pegar en el editor.
+#
+# Se dispara solo cuando cambia algo dentro de apps_script/ (las
+# descargas diarias del SIRE no lo activan), o a mano desde
+# Actions > "Desplegar Apps Script (SIRE)" > Run workflow:
+#   - comparar : baja el codigo que esta HOY en la Sheet y muestra en
+#                el log las diferencias con el repo. No cambia nada.
+#   - subir    : sube el codigo del repo a la Sheet (reemplaza todo).
+#
+# ------------------------------------------------------------
+# CONFIGURACION NECESARIA (una sola vez, en GitHub de este repo):
+#   Settings > Secrets and variables > Actions > New repository secret
+#
+#   CLASPRC_JSON -> contenido COMPLETO del archivo ~/.clasprc.json que
+#                   se genera al correr `clasp login` con la cuenta de
+#                   Google duena de la Sheet. Es el mismo valor que ya
+#                   usa el repo "voucher" si es la misma cuenta.
+#
+#   SCRIPT_ID    -> opcional. Si no existe se usa el scriptId de
+#                   .clasp.json de este repo.
+#
+# CLASPRC_JSON es una credencial sensible (refresh token de Google):
+# solo va como secret, nunca se commitea.
+#
+# Requisito previo: Apps Script API activada en
+# https://script.google.com/home/usersettings
+# ------------------------------------------------------------
+
+name: Desplegar Apps Script (SIRE)
+
+on:
+  push:
+    branches:
+      - claude/python-codes-izve18
+      - claude/tender-wozniak-vnf3iq
+    paths:
+      - 'apps_script/**'
+  workflow_dispatch:
+    inputs:
+      accion:
+        description: "comparar = solo mostrar diferencias Sheet vs repo. subir = subir el codigo del repo a la Sheet."
+        required: true
+        default: "comparar"
+        type: choice
+        options:
+          - comparar
+          - subir
+
+concurrency:
+  group: appsscript-sire-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar clasp
+        run: npm install -g @google/clasp@3.3.0
+
+      - name: Verificar secret y scriptId
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID_SECRET: ${{ secrets.SCRIPT_ID }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "::error::Falta el secret CLASPRC_JSON. Revisa las instrucciones al inicio de este archivo."
+            exit 1
+          fi
+          SCRIPT_ID="${SCRIPT_ID_SECRET:-$(python3 -c 'import json;print(json.load(open(".clasp.json"))["scriptId"])')}"
+          if [ -z "$SCRIPT_ID" ]; then
+            echo "::error::No hay scriptId (ni secret SCRIPT_ID ni .clasp.json)."
+            exit 1
+          fi
+          echo "SCRIPT_ID=$SCRIPT_ID" >> "$GITHUB_ENV"
+
+      - name: Escribir credenciales de clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+
+      - name: Confirmar autenticacion
+        run: clasp show-authorized-user
+
+      # Siempre se baja primero lo que hay hoy en la Sheet y se muestra la
+      # diferencia, asi el log de cada despliegue deja constancia de que
+      # se reemplazo (por si alguien edito directo en el editor).
+      - name: Comparar codigo de la Sheet vs repo
+        run: |
+          mkdir -p /tmp/actual
+          printf '{"scriptId":"%s","rootDir":"/tmp/actual"}' "$SCRIPT_ID" > /tmp/actual/.clasp.json
+          (cd /tmp/actual && clasp pull)
+          echo "Archivos en la Sheet:"; ls -1 /tmp/actual
+          echo "================ DIFERENCIAS (- Sheet / + repo) ================"
+          for f in apps_script/*.js apps_script/appsscript.json; do
+            base=$(basename "$f")
+            remoto="/tmp/actual/$base"
+            [ -f "$remoto" ] || remoto="/tmp/actual/${base%.js}.gs"
+            if [ -f "$remoto" ]; then
+              diff -u "$remoto" "$f" || true
+            else
+              echo "+++ NUEVO (no existe en la Sheet): $base"
+            fi
+          done
+          for r in /tmp/actual/*.js /tmp/actual/*.gs; do
+            [ -f "$r" ] || continue
+            n=$(basename "$r"); n="${n%.gs}"; n="${n%.js}"
+            [ -f "apps_script/$n.js" ] || echo "--- SOLO EN LA SHEET (se borraria al subir): $(basename "$r")"
+          done
+
+      - name: Subir el codigo a Apps Script
+        if: github.event_name == 'push' || inputs.accion == 'subir'
+        run: |
+          python3 - <<'EOF'
+          import json, os
+          cfg = json.load(open(".clasp.json"))
+          cfg["scriptId"] = os.environ["SCRIPT_ID"]
+          json.dump(cfg, open(".clasp.json", "w"), indent=2)
+          EOF
+          clasp push --force
+          echo "Codigo subido a la Sheet."
+
+      - name: Limpiar credenciales
+        if: always()
+        run: rm -rf "$HOME/.clasprc.json" /tmp/actual
