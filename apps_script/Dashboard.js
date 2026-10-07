@@ -82,8 +82,8 @@ function generarPanelDeControl_(rucFiltro) {
   // -------------------------------------------------------------
   sheet.setRowHeight(1, 15);
 
-  // Fila 2: Título principal (B..G, exactamente 6 columnas)
-  sheet.getRange('B2:G2').merge()
+  // Fila 2: Título principal (B..L: tabla B..G + resumen IGV H..L)
+  sheet.getRange('B2:L2').merge()
     .setValue('📊  SIRE SUNAT — PANEL DE CONTROL & NAVEGACIÓN')
     .setFontWeight('bold')
     .setFontSize(14)
@@ -95,7 +95,7 @@ function generarPanelDeControl_(rucFiltro) {
 
   var fechaHora = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm:ss');
   var textoSub = '🕐  Actualizado: ' + fechaHora + '    ·    🏢  ' + empresas.length + ' empresa(s)    ·    📅  Año ' + anioActual;
-  sheet.getRange('B3:G3').merge()
+  sheet.getRange('B3:L3').merge()
     .setValue(textoSub)
     .setFontSize(9)
     .setFontColor('#7DD3FC')
@@ -105,7 +105,7 @@ function generarPanelDeControl_(rucFiltro) {
   sheet.setRowHeight(3, 24);
 
   // Separador decorativo
-  sheet.getRange('B4:G4').merge()
+  sheet.getRange('B4:L4').merge()
     .setBackground('#1E3A5F');
   sheet.setRowHeight(4, 4);
 
@@ -125,7 +125,7 @@ function generarPanelDeControl_(rucFiltro) {
     .setVerticalAlignment('middle')
     .setBorder(true, true, true, true, false, false, '#93C5FD', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
 
-  sheet.getRange('D6:G6').merge()
+  sheet.getRange('D6:L6').merge()
     .setValue('ℹ️  Usa el menú  SIRE SUNAT  para Descargar archivos, Importar datos o Generar Liquidaciones IGV')
     .setFontSize(9)
     .setFontColor('#64748B')
@@ -172,12 +172,20 @@ function generarPanelDeControl_(rucFiltro) {
 
     // Buscar liquidacion IGV
     var urlLiq = '';
+    var archivoLiq = null;
     if (carpetaEmpresa) {
       var itLiq = carpetaEmpresa.getFilesByName('Liquidacion IGV ' + ruc + ' - ' + anioActual);
-      if (itLiq.hasNext()) {
-        urlLiq = itLiq.next().getUrl();
+      while (itLiq.hasNext()) {
+        var fLiq = itLiq.next();
+        if (fLiq.isTrashed()) continue;
+        archivoLiq = fLiq;
+        urlLiq = fLiq.getUrl();
+        break;
       }
     }
+
+    // Resumen IGV por periodo, leido (solo lectura) de la hoja "Liquidacion"
+    var resumenIgv = leerResumenIgvLiquidacion_(archivoLiq);
 
     // -------------------------------------------------------
     // --- HEADER DE EMPRESA: B..G (6 columnas alineadas) ---
@@ -209,6 +217,14 @@ function generarPanelDeControl_(rucFiltro) {
       .setBackground(VERDE_BTN).setHorizontalAlignment('center').setVerticalAlignment('middle')
       .setBorder(false, true, false, true, false, false, '#1E3A5F', SpreadsheetApp.BorderStyle.SOLID);
 
+    // 4. Titulo del bloque Resumen IGV (cols H..L)
+    sheet.getRange(filaActual, 8, 1, NUM_COLS_IGV_).merge()
+      .setValue(resumenIgv.error
+        ? '💰 Resumen IGV — ' + resumenIgv.error
+        : '💰 Resumen IGV (tomado de la Liquidación ' + anioActual + ')')
+      .setFontWeight('bold').setFontSize(9).setFontColor('#FFFFFF')
+      .setBackground('#674EA7').setHorizontalAlignment('center').setVerticalAlignment('middle');
+
     sheet.setRowHeight(filaActual, 28);
     filaActual++;
 
@@ -219,7 +235,11 @@ function generarPanelDeControl_(rucFiltro) {
       .setFontWeight('bold').setFontSize(9)
       .setFontColor('#1E3A5F').setBackground('#BFDBFE')
       .setHorizontalAlignment('center').setVerticalAlignment('middle');
-    sheet.setRowHeight(filaActual, 22);
+    sheet.getRange(filaActual, 8, 1, NUM_COLS_IGV_).setValues([TITULOS_IGV_DASHBOARD_])
+      .setFontWeight('bold').setFontSize(9).setWrap(true)
+      .setFontColor('#3B2470').setBackground('#DDD3F3')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sheet.setRowHeight(filaActual, 30);
     filaActual++;
 
     // Pre-escanear subcarpetas de Venta y Compra de esta empresa una sola vez
@@ -228,6 +248,7 @@ function generarPanelDeControl_(rucFiltro) {
     // --- FILAS DE LOS 12 MESES ---
     var filasMeses = [];
     var coloresFila = [];
+    var filasIgv = [];
 
     for (var m = 1; m <= 12; m++) {
       var mesNombre = MESES_NOMBRE_[m - 1];
@@ -264,6 +285,11 @@ function generarPanelDeControl_(rucFiltro) {
       var fechaActualizacion = maxDate ? Utilities.formatDate(maxDate, 'America/Lima', 'dd/MM/yyyy HH:mm') : '';
 
       filasMeses.push([mesNombre, periodoStr, txtVenta, txtCompra, estadoGlobal, fechaActualizacion]);
+
+      var igv = resumenIgv.porPeriodo[periodoStr];
+      filasIgv.push(igv
+        ? [igv.debito, igv.credito, igv.creditoAnt, igv.aPagar, igv.aFavor]
+        : ['', '', '', '', '']);
       coloresFila.push({ fondo: colorFila, texto: colorEstado });
     }
 
@@ -287,6 +313,28 @@ function generarPanelDeControl_(rucFiltro) {
     sheet.getRange(filaActual - 1, 2, 13, NUM_COLS)
       .setBorder(true, true, true, true, true, true, '#93C5FD', SpreadsheetApp.BorderStyle.SOLID);
 
+    // --- BLOQUE RESUMEN IGV (H..L) ---
+    var rangoIgv = sheet.getRange(filaActual, 8, 12, NUM_COLS_IGV_);
+    rangoIgv.setValues(filasIgv).setFontSize(9).setVerticalAlignment('middle')
+      .setHorizontalAlignment('right').setNumberFormat('#,##0.00;-#,##0.00;"-"')
+      .setBackground('#FAF7FF');
+    for (var ri = 0; ri < 12; ri++) {
+      var fIgv = filasIgv[ri];
+      // IGV por pagar en rojo, saldo a favor en verde (solo si hay monto)
+      if (typeof fIgv[3] === 'number' && fIgv[3] > 0) {
+        sheet.getRange(filaActual + ri, 11).setFontColor('#B91C1C').setFontWeight('bold').setBackground('#FDECEC');
+      }
+      if (typeof fIgv[4] === 'number' && fIgv[4] > 0) {
+        sheet.getRange(filaActual + ri, 12).setFontColor('#166534').setFontWeight('bold').setBackground('#E7F8EC');
+      }
+      // Credito de compras de meses anteriores: resaltado en ambar como referencia
+      if (typeof fIgv[2] === 'number' && fIgv[2] !== 0) {
+        sheet.getRange(filaActual + ri, 10).setFontColor('#92400E').setFontWeight('bold').setBackground('#FEF3C7');
+      }
+    }
+    sheet.getRange(filaActual - 1, 8, 13, NUM_COLS_IGV_)
+      .setBorder(true, true, true, true, true, true, '#C4B5FD', SpreadsheetApp.BorderStyle.SOLID);
+
     filaActual += 13;
     sheet.setRowHeight(filaActual, 18);
     filaActual++;
@@ -294,6 +342,63 @@ function generarPanelDeControl_(rucFiltro) {
 
   ajustarColumnasDashboard_(sheet);
   limpiarHojasVacias_(ss);
+}
+
+// Columnas H..L del Panel: resumen IGV por mes, leido de la hoja "Liquidacion"
+// de cada empresa (Liquidacion.js). Solo lectura: el Panel nunca escribe en
+// la liquidacion.
+var TITULOS_IGV_DASHBOARD_ = [
+  'IGV Ventas (Débito)',
+  'IGV Compras (Crédito total)',
+  'Crédito de compras de meses anteriores',
+  'IGV POR PAGAR',
+  'Saldo a favor (pasa al mes sig.)',
+];
+var NUM_COLS_IGV_ = TITULOS_IGV_DASHBOARD_.length;
+
+/**
+ * Lee de la hoja "Liquidacion" del archivo dado los montos IGV de cada mes.
+ * Ubica las columnas por su TITULO (no por letra), asi sigue funcionando
+ * aunque se agreguen columnas a la liquidacion en el futuro.
+ * Devuelve { porPeriodo: { '202601': {debito, credito, creditoAnt, aPagar, aFavor} }, error }
+ */
+function leerResumenIgvLiquidacion_(archivoLiq) {
+  var res = { porPeriodo: {}, error: '' };
+  if (!archivoLiq) { res.error = 'sin liquidación generada'; return res; }
+  try {
+    var hoja = SpreadsheetApp.openById(archivoLiq.getId()).getSheetByName('Liquidacion');
+    if (!hoja) { res.error = 'falta la pestaña Liquidacion'; return res; }
+    var datos = hoja.getRange(1, 1, Math.min(hoja.getLastRow(), 20), hoja.getLastColumn()).getValues();
+    var enc = datos[0].map(function (t) { return String(t).trim(); });
+    function col(clave) {
+      var titulo = COLUMNAS_TABLERO_.filter(function (c) { return c.clave === clave; })[0].titulo;
+      return enc.indexOf(titulo);
+    }
+    var iPer = col('periodo'), iDeb = col('debitoTotal'), iCred = col('creditoDgTotal'),
+        iCredAnt = col('creditoDgAnt'), iPagar = col('igvAPagar'), iFavor = col('saldoArrastrar');
+    if ([iPer, iDeb, iCred, iCredAnt, iPagar, iFavor].indexOf(-1) !== -1) {
+      res.error = 'columnas de la liquidación no reconocidas';
+      return res;
+    }
+    function num(v) { return typeof v === 'number' ? v : ''; }
+    for (var i = 1; i < datos.length; i++) {
+      var per = String(datos[i][iPer]).trim();
+      if (!/^\d{6}$/.test(per)) continue;
+      var favor = num(datos[i][iFavor]);
+      res.porPeriodo[per] = {
+        debito: num(datos[i][iDeb]),
+        credito: num(datos[i][iCred]),
+        creditoAnt: num(datos[i][iCredAnt]),
+        aPagar: num(datos[i][iPagar]),
+        // En la liquidacion el saldo a favor se guarda en negativo; aqui positivo
+        aFavor: favor === '' ? '' : Math.abs(favor),
+      };
+    }
+  } catch (e) {
+    Logger.log('No se pudo leer la liquidacion ' + archivoLiq.getName() + ': ' + e.message);
+    res.error = 'no se pudo leer la liquidación';
+  }
+  return res;
 }
 
 /**
@@ -398,5 +503,10 @@ function ajustarColumnasDashboard_(sheet) {
   sheet.setColumnWidth(5, 185); // E: Registro Compras
   sheet.setColumnWidth(6, 135); // F: Estado / Botón Abrir en Drive
   sheet.setColumnWidth(7, 165); // G: Última Actualización / Botón Liquidación IGV
+  sheet.setColumnWidth(8, 110);  // H: IGV Ventas (Débito)
+  sheet.setColumnWidth(9, 110);  // I: IGV Compras (Crédito total)
+  sheet.setColumnWidth(10, 125); // J: Crédito de compras de meses anteriores
+  sheet.setColumnWidth(11, 110); // K: IGV POR PAGAR
+  sheet.setColumnWidth(12, 120); // L: Saldo a favor
 }
 
