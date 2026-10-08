@@ -90,9 +90,20 @@ function leerVouchers_(cfg) {
       idUsuario: col('ID Usuario'), empresa: col('Empresa'), idBenef: col('ID Beneficiario'),
       refs: col('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc'), porRetener: col('Por Retener'),
     };
-    // Leer solo hasta la ultima columna util (evita cargar columnas de imagenes al final)
+    // Leer SOLO las columnas de datos, una por una: asi nunca se cargan las
+    // columnas con imagenes (que hacen muy lenta la lectura de esa hoja).
+    var nFilas = sh.getLastRow() - 1;
     var ultima = Math.max.apply(null, Object.keys(c).map(function (k) { return c[k]; })) + 1;
-    var datos = sh.getRange(2, 1, sh.getLastRow() - 1, ultima).getValues();
+    var columnas = {};
+    Object.keys(c).forEach(function (k) {
+      if (c[k] >= 0 && !columnas[c[k]]) columnas[c[k]] = sh.getRange(2, c[k] + 1, nFilas, 1).getValues();
+    });
+    var datos = [];
+    for (var fi = 0; fi < nFilas; fi++) {
+      var fila = new Array(ultima);
+      for (var ci in columnas) fila[ci] = columnas[ci][fi][0];
+      datos.push(fila);
+    }
     datos.forEach(function (r, i) {
       var monto = aNumero_(r[c.monto]);
       var fecha = aFecha_(r[c.fecha]);

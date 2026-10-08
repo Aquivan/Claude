@@ -37,7 +37,19 @@ function huellaMarcas_(ss) {
 function actualizarTodo_(forzar) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) return 'Ya hay una actualización en curso; intenta en un minuto.';
+  var inicio = Date.now();
   try {
+    return actualizarTodoInterno_(forzar);
+  } catch (e) {
+    try { bitacora_(ssPrincipal_(), 'ERROR', inicio, e.message + ' | ' + String(e.stack || '').slice(0, 400)); } catch (e2) { /* sin bitacora */ }
+    throw e;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function actualizarTodoInterno_(forzar) {
+  {
     var ss = ssPrincipal_();
     var props = PropertiesService.getDocumentProperties();
     var cfg = leerConfig_(ss);
@@ -46,6 +58,7 @@ function actualizarTodo_(forzar) {
     if (!forzar && huella === props.getProperty('huella')) return 'Sin cambios.';
 
     var t0 = Date.now();
+    bitacora_(ss, 'Inicio', t0, forzar ? 'manual' : 'automática');
     var decisiones = leerYGuardarDecisiones_(ss);
     var docs = leerDocumentosSire_(cfg, liqs).filter(function (d) {
       var t = normTipo_(d.tipo);
@@ -65,20 +78,37 @@ function actualizarTodo_(forzar) {
       res.errores.unshift({ tipo: 'Voucher repetido', detalle: 'Mismo banco, operación, fecha y monto que ' + d.otra + ' (se tomó solo una vez)', fuente: d.fuente });
     });
 
+    bitacora_(ss, 'Lectura y cruce', t0, docs.length + ' docs SIRE, ' + vch.pagos.length + ' vouchers, ' + manual.length + ' manuales');
+
     var hoy = new Date();
     var filasDocs = construirFilasDocumentos_(res, cfg, hoy);
-    escribirDocumentos_(ss, filasDocs);
-    escribirMovimientos_(ss, res, cfg);
-    escribirConciliar_(ss, res, cfg);
-    escribirPanel_(ss, filasDocs, res, cfg, liqs);
-    try { renderConsulta_(ss); } catch (e) { Logger.log('Consulta: ' + e.message); }
+    var t1 = Date.now();
+    escribirDocumentos_(ss, filasDocs); bitacora_(ss, 'Documentos', t1, filasDocs.length + ' filas'); t1 = Date.now();
+    escribirPanel_(ss, filasDocs, res, cfg, liqs); bitacora_(ss, 'Panel', t1, ''); t1 = Date.now();
+    escribirMovimientos_(ss, res, cfg); bitacora_(ss, 'Movimientos', t1, res.movimientos.length + ' filas'); t1 = Date.now();
+    escribirConciliar_(ss, res, cfg); bitacora_(ss, 'Conciliar', t1, res.sugerencias.length + ' sugerencias, ' + res.errores.length + ' avisos, ' + res.sinCruzar.length + ' sin cruzar'); t1 = Date.now();
+    if (Date.now() - t0 < 300000) {
+      try { renderConsulta_(ss); bitacora_(ss, 'Consulta', t1, ''); } catch (e) { bitacora_(ss, 'Consulta ERROR', t1, e.message); }
+    } else {
+      bitacora_(ss, 'Consulta omitida', t1, 'poco tiempo restante; se redibuja al cambiar un selector');
+    }
 
     props.setProperty('huella', huellaExterna_(ss, cfg, liqs) + '|' + huellaMarcas_(ss));
     props.setProperty('ultimaActualizacion', new Date().toISOString());
     var aplicados = res.pagos.filter(function (p) { return p.aplicado && p.modalidad === MODALIDAD.PAGO; }).length;
     return 'Listo en ' + Math.round((Date.now() - t0) / 1000) + ' s: ' + filasDocs.length + ' documentos de ' + liqs.length +
       ' liquidaciones, ' + aplicados + ' vouchers cruzados, ' + res.sugerencias.length + ' sugerencias por revisar.';
-  } finally {
-    lock.releaseLock();
   }
+}
+
+/** Registra una etapa en la hoja oculta _Registro (para revisar tiempos y errores). */
+function bitacora_(ss, etapa, desde, detalle) {
+  var sh = ss.getSheetByName('_Registro');
+  if (!sh) {
+    sh = ss.insertSheet('_Registro');
+    sh.getRange(1, 1, 1, 4).setValues([['Fecha', 'Etapa', 'Segundos', 'Detalle']]).setFontWeight('bold');
+    sh.hideSheet();
+  }
+  sh.appendRow([new Date(), etapa, Math.round((Date.now() - desde) / 100) / 10, String(detalle || '').slice(0, 500)]);
+  if (sh.getLastRow() > 400) sh.deleteRows(2, sh.getLastRow() - 300);
 }

@@ -62,12 +62,15 @@ function escribirDocumentos_(ss, filas) {
   sh.getRange(2, 18, n, 1).setNumberFormat('dd/mm/yyyy');
   sh.getRange(2, 9, n, 7).setNumberFormat('#,##0.00;-#,##0.00;"-"');
   sh.getRange(2, 3, n, 1).setNumberFormat('@');
-  var iEstado = ENC_DOCS_.indexOf('Estado');
-  var fondos = filas.map(function (f) {
-    var c = COLOR_ESTADO[f[iEstado]] || COLOR.BLANCO;
-    return ENC_DOCS_.map(function () { return c; });
-  });
-  sh.getRange(2, 1, n, ENC_DOCS_.length).setBackgrounds(fondos).setFontSize(9).setVerticalAlignment('middle');
+  // Color de fila segun Estado con formato condicional (mucho mas rapido que
+  // pintar celda por celda y se mantiene si el usuario filtra u ordena).
+  var letraEstado = String.fromCharCode(65 + ENC_DOCS_.indexOf('Estado'));
+  var rango = sh.getRange(2, 1, n, ENC_DOCS_.length);
+  sh.setConditionalFormatRules(Object.keys(COLOR_ESTADO).map(function (est) {
+    return SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$' + letraEstado + '2="' + est + '"')
+      .setBackground(COLOR_ESTADO[est]).setRanges([rango]).build();
+  }));
+  rango.setFontSize(9).setVerticalAlignment('middle');
   sh.getRange(2, 15, n, 1).setFontWeight('bold');
   sh.getRange(1, 1, n + 1, ENC_DOCS_.length).createFilter();
   [110, 80, 95, 230, 105, 78, 78, 50, 95, 80, 80, 80, 70, 95, 95, 130, 60, 78, 260, 40, 10].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
@@ -117,8 +120,11 @@ function escribirConciliar_(ss, res, cfg) {
   var porClave = {};
   res.docs.forEach(function (d) { porClave[d.clave] = d; });
   function quien(ruc, nombre) { return ruc ? nombreEmpresa_(cfg, ruc, nombre) + (cfg.grupo.indexOf(ruc) === -1 && ruc ? ' (' + ruc + ')' : '') : (nombre || '¿?'); }
-  var sug = res.sugerencias.slice().sort(function (a, b) { return (b.pago.fecha || 0) - (a.pago.fecha || 0); });
-  titulo_(sh, fila, '🟡 SUGERENCIAS POR REVISAR (' + sug.length + ')', '#92400E', '#FEF3C7'); fila++;
+  var sugTodas = res.sugerencias.slice().sort(function (a, b) { return (b.pago.fecha || 0) - (a.pago.fecha || 0); });
+  var MAX_SUG = 300;
+  var sug = sugTodas.slice(0, MAX_SUG);
+  titulo_(sh, fila, '🟡 SUGERENCIAS POR REVISAR (' + sugTodas.length + ')' +
+    (sugTodas.length > MAX_SUG ? ' · se muestran las ' + MAX_SUG + ' más recientes' : ''), '#92400E', '#FEF3C7'); fila++;
   var encS = ['✔ Aplicar', '✖ Descartar', 'Fecha', 'Operación', 'Banco', 'Monto', 'Moneda', 'Paga', 'Beneficiario', 'Factura(s) sugerida(s)', 'Saldo de esas facturas', 'Motivo', 'Fuente', 'ID pago', 'Claves'];
   var filasS = sug.map(function (s) {
     var d0 = s.docs[0];

@@ -395,6 +395,8 @@ function ejecutarCruce_(entrada) {
       if (p.beneficiarioRuc && d.emisorRuc !== p.beneficiarioRuc) return false;
       if (p.pagadorRuc && d.receptorRuc !== p.pagadorRuc) return false;
       if (!p.beneficiarioRuc && !p.pagadorRuc) return false;
+      // Sin RUC del beneficiario: solo facturas cuyo emisor se llame parecido
+      if (!p.beneficiarioRuc && !nombreParecido_(p.beneficiarioNombre, d.emisorNombre)) return false;
       if (pendiente(d) <= 0.05) return false;
       if (p.fecha && d.fecha && Math.abs(p.fecha.getTime() - d.fecha.getTime()) > ventanaMs) return false;
       return true;
@@ -429,15 +431,18 @@ function ejecutarCruce_(entrada) {
       return;
     }
     if (modo !== 'INTELIGENTE') return;
+    // Si no se sabe a quien se pago (sin RUC de beneficiario) se exige monto
+    // exacto y nombre parecido, para no llenar Conciliar de coincidencias casuales.
+    var tolP = p.beneficiarioRuc ? tol : 0.05;
     var props = [];
     cands.forEach(function (d) {
       var m = montoEnMonedaDoc(p, d);
       if (m == null) return;
-      var c = coincide(m, pendiente(d), tol);
+      var c = coincide(m, pendiente(d), tolP);
       if (c) props.push({ docs: [d], nota: c === 'exacto' ? (exactos.length > 1 ? 'Monto igual en varias facturas' : 'Monto igual') : c });
     });
     // Suma de 2 o 3 facturas del mismo emisor/receptor
-    var lim = cands.slice(0, 30);
+    var lim = p.beneficiarioRuc ? cands.slice(0, 30) : [];
     for (var i = 0; i < lim.length && props.length < 6; i++) {
       for (var j = i + 1; j < lim.length && props.length < 6; j++) {
         var s2 = pendiente(lim[i]) + pendiente(lim[j]);
@@ -485,6 +490,16 @@ function ejecutarCruce_(entrada) {
     docs: lista, movimientos: movimientos, sugerencias: sugerencias, sinCruzar: sinCruzar,
     remanentes: remanentes, errores: errores, pagos: pagos,
   };
+}
+
+/** ¿El nombre del voucher se parece a la razon social de la factura? */
+function nombreParecido_(nombreVoucher, nombreDoc) {
+  var a = normNombre_(nombreVoucher).split(' ').filter(function (t) { return t.length >= 3; });
+  var b = normNombre_(nombreDoc).split(' ').filter(function (t) { return t.length >= 3; });
+  if (!a.length || !b.length) return false;
+  if (a[0] === b[0] && (a.length === 1 || b.indexOf(a[1]) !== -1 || a[1] === b[1])) return true;
+  var comunes = a.filter(function (t) { return b.indexOf(t) !== -1; }).length;
+  return comunes / a.length >= 0.6 && comunes >= 2;
 }
 
 function etiquetaDoc_(d) {
