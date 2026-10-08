@@ -72,10 +72,15 @@ jobs:
         run: |
           if [ -f .clasp.json ]; then echo "::error::Ya existe cobranzas/.clasp.json; no se crea otro proyecto."; exit 1; fi
           if [ -z "$SHEET_ID" ]; then echo "::error::Falta sheet_id"; exit 1; fi
-          clasp create-script --type sheets --title "Cobranzas Grupo" --parentId "$SHEET_ID" --rootDir . \
-            || clasp create --type sheets --title "Cobranzas Grupo" --parentId "$SHEET_ID" --rootDir .
-          echo "======== .clasp.json (guardar en el repo como cobranzas/.clasp.json) ========"
-          python3 -c "import json;d=json.load(open('.clasp.json'));print('SCRIPT_ID=' + d['scriptId']);print(json.dumps(d))"
+          # Se crea fuera del repo: dentro, clasp encuentra el .clasp.json de la raiz y no crea nada.
+          mkdir -p /tmp/nuevo && cd /tmp/nuevo
+          clasp create-script --type sheets --title "Cobranzas Grupo" --parentId "$SHEET_ID" --rootDir .
+          test -f .clasp.json || { echo "::error::clasp no creo el proyecto"; exit 1; }
+          SID=$(python3 -c "import json;print(json.load(open('.clasp.json'))['scriptId'])")
+          cd "$GITHUB_WORKSPACE/cobranzas"
+          printf '{"scriptId":"%s","rootDir":".","parentId":["%s"]}' "$SID" "$SHEET_ID" > .clasp.json
+          echo "======== guardar en el repo como cobranzas/.clasp.json ========"
+          cat .clasp.json; echo
           clasp push --force
           echo "Codigo subido."
 
