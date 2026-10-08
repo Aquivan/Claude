@@ -1,0 +1,163 @@
+/**
+ * Consulta.js
+ * Pestaña 🔎 Consulta: estado de cuenta por Empresa ⇄ Cliente/Proveedor.
+ * Se redibuja al cambiar cualquier selector (onEdit) y en cada actualizacion.
+ * Lee de 📋 Documentos y 💳 Movimientos (no vuelve a leer SIRE ni vouchers).
+ */
+
+var CONSULTA_ = { EMPRESA: 'B4', VER: 'D4', CONTRA: 'F4', MOSTRAR: 'J4', FILA_ENC: 9, LISTA_COL: 26 };
+var TIPO_DOC_ = { '01': 'Factura', '03': 'Boleta', '07': 'Nota de crédito', '08': 'Nota de débito', '02': 'Recibo honorarios', '12': 'Ticket', '14': 'Servicio público' };
+
+function onEdit(e) {
+  try {
+    var sh = e.range.getSheet();
+    if (sh.getName() !== HOJA.CONSULTA) return;
+    var a1 = e.range.getA1Notation();
+    if ([CONSULTA_.EMPRESA, CONSULTA_.VER, CONSULTA_.CONTRA, CONSULTA_.MOSTRAR].indexOf(a1) === -1) return;
+    if (a1 === CONSULTA_.EMPRESA || a1 === CONSULTA_.VER) sh.getRange(CONSULTA_.CONTRA).setValue('(Todas)');
+    renderConsulta_(e.source);
+  } catch (err) {
+    e.source.toast('No se pudo actualizar la consulta: ' + err.message, '🔎 Consulta', 6);
+  }
+}
+
+function leerTablaHoja_(ss, nombre) {
+  var sh = ss.getSheetByName(nombre);
+  if (!sh || sh.getLastRow() < 2) return { enc: [], filas: [] };
+  var v = sh.getDataRange().getValues();
+  return { enc: v[0], filas: v.slice(1) };
+}
+
+function prepararSelectores_(sh, empresas) {
+  if (sh.getRange('B3').getValue() === 'Empresa') return;
+  sh.getRange('B1:M1').merge().setValue('🔎  CONSULTA · ESTADO DE CUENTA').setFontSize(15).setFontWeight('bold')
+    .setFontColor('#F8FAFC').setBackground(COLOR.OSCURO).setVerticalAlignment('middle');
+  sh.setRowHeight(1, 40);
+  sh.getRange('B2:M2').merge().setValue('Elige empresa, si quieres ver lo que te deben (Por cobrar) o lo que debes (Por pagar), y el cliente/proveedor. ' +
+    'Para ver la imagen de un voucher: menú 💼 Cobranzas → 🖼 Abrir visor de vouchers y haz clic en la fila del pago.')
+    .setFontSize(9).setFontColor(COLOR.TEXTO_SUAVE).setWrap(true);
+  sh.setRowHeight(2, 30);
+  [['B3', 'Empresa'], ['D3', 'Ver'], ['F3', 'Cliente / Proveedor'], ['J3', 'Mostrar']].forEach(function (p) {
+    sh.getRange(p[0]).setValue(p[1]).setFontSize(8).setFontWeight('bold').setFontColor(COLOR.TEXTO_SUAVE);
+  });
+  sh.getRange('F4:H4').merge();
+  [CONSULTA_.EMPRESA, CONSULTA_.VER, 'F4:H4', CONSULTA_.MOSTRAR].forEach(function (a) {
+    sh.getRange(a).setBackground('#FEF9C3').setFontWeight('bold').setBorder(true, true, true, true, false, false, '#EAB308', SpreadsheetApp.BorderStyle.SOLID);
+  });
+  sh.getRange(CONSULTA_.EMPRESA).setValue(empresas[0] || '(Todas)');
+  sh.getRange(CONSULTA_.VER).setValue('Por pagar')
+    .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['Por pagar', 'Por cobrar']).build());
+  sh.getRange(CONSULTA_.CONTRA).setValue('(Todas)');
+  sh.getRange(CONSULTA_.MOSTRAR).setValue('Con saldo')
+    .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['Con saldo', 'Todo']).build());
+  sh.setRowHeight(4, 26);
+  sh.setColumnWidth(1, 16);
+  [190, 80, 210, 95, 105, 80, 105, 105, 140, 80, 210, 110].forEach(function (w, i) { sh.setColumnWidth(i + 2, w); });
+  sh.setFrozenRows(CONSULTA_.FILA_ENC);
+}
+
+function renderConsulta_(ss) {
+  var sh = obtenerOCrearHoja_(ss, HOJA.CONSULTA);
+  var D = leerTablaHoja_(ss, HOJA.DOCS), M = leerTablaHoja_(ss, HOJA.MOVS);
+  var cd = indiceColumnas_(D.enc), cm = indiceColumnas_(M.enc);
+  var empresas = [];
+  D.filas.forEach(function (f) { if (empresas.indexOf(f[0]) === -1) empresas.push(f[0]); });
+  empresas.sort();
+  prepararSelectores_(sh, empresas);
+  sh.getRange(CONSULTA_.EMPRESA).setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList(['(Todas)'].concat(empresas)).build());
+
+  var emp = sh.getRange(CONSULTA_.EMPRESA).getValue();
+  var ver = sh.getRange(CONSULTA_.VER).getValue() || 'Por pagar';
+  var contra = String(sh.getRange(CONSULTA_.CONTRA).getValue() || '(Todas)');
+  var mostrar = sh.getRange(CONSULTA_.MOSTRAR).getValue() || 'Con saldo';
+
+  var iRuc = cd('RUC contraparte'), iCp = cd('Contraparte'), iSaldo = cd('Saldo'), iEstado = cd('Estado');
+  var base = D.filas.filter(function (f) { return (emp === '(Todas)' || f[0] === emp) && f[1] === ver; });
+
+  // Lista de clientes/proveedores (columna oculta Z) para el desplegable
+  var cps = {};
+  base.forEach(function (f) {
+    var k = f[iCp] + ' · ' + f[iRuc];
+    cps[k] = (cps[k] || 0) + Math.max(0, Number(f[iSaldo]) || 0);
+  });
+  var lista = ['(Todas)'].concat(Object.keys(cps).sort(function (a, b) { return cps[b] - cps[a] || a.localeCompare(b); }));
+  sh.getRange(1, CONSULTA_.LISTA_COL, sh.getMaxRows(), 1).clearContent();
+  sh.getRange(1, CONSULTA_.LISTA_COL, lista.length, 1).setValues(lista.map(function (x) { return [x]; }));
+  sh.getRange(CONSULTA_.CONTRA).setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInRange(sh.getRange(1, CONSULTA_.LISTA_COL, lista.length, 1), true).setAllowInvalid(true).build());
+  sh.hideColumns(CONSULTA_.LISTA_COL);
+
+  var rucSel = contra === '(Todas)' ? '' : (contra.split(' · ').pop() || '');
+  var docs = base.filter(function (f) {
+    if (rucSel && String(f[iRuc]) !== rucSel) return false;
+    if (mostrar === 'Con saldo' && Math.abs(Number(f[iSaldo]) || 0) <= 0.10) return false;
+    return true;
+  }).sort(function (a, b) { return String(a[iCp]).localeCompare(b[iCp]) || ((a[cd('Emisión')] || 0) - (b[cd('Emisión')] || 0)); });
+
+  var movsPorClave = {};
+  var mClave = cm('Clave');
+  M.filas.forEach(function (m) { (movsPorClave[m[mClave]] = movsPorClave[m[mClave]] || []).push(m); });
+
+  // ---- Resumen ----
+  var sum = { tot: 0, nc: 0, ret: 0, det: 0, pag: 0, saldo: 0 };
+  docs.forEach(function (f) {
+    sum.tot += Number(f[cd('Total')]) || 0; sum.nc += Number(f[cd('N/C')]) || 0; sum.ret += Number(f[cd('Retención')]) || 0;
+    sum.det += Number(f[cd('Detracción')]) || 0; sum.pag += Number(f[cd('Pagado')]) || 0; sum.saldo += Number(f[iSaldo]) || 0;
+  });
+  var limpiar = sh.getRange(6, 2, Math.max(sh.getMaxRows() - 5, 1), 12);
+  limpiar.breakApart(); limpiar.clear();
+  var tarjetas = [['FACTURADO', sum.tot], ['NOTAS DE CRÉDITO', sum.nc], ['RETENCIONES', sum.ret], ['DETRACCIONES', sum.det], ['PAGADO', sum.pag], ['SALDO', sum.saldo]];
+  tarjetas.forEach(function (t, i) {
+    var c = 2 + i * 2;
+    var fuerte = i === 5;
+    sh.getRange(6, c, 1, 2).merge().setValue(t[0]).setFontSize(8).setFontWeight('bold').setHorizontalAlignment('center')
+      .setFontColor(fuerte ? '#FFFFFF' : COLOR.AZUL).setBackground(fuerte ? '#B91C1C' : '#E0E7FF');
+    sh.getRange(7, c, 1, 2).merge().setValue(t[1]).setFontSize(13).setFontWeight('bold').setHorizontalAlignment('center')
+      .setNumberFormat('#,##0.00').setFontColor(fuerte ? '#FFFFFF' : COLOR.AZUL).setBackground(fuerte ? '#B91C1C' : '#E0E7FF');
+  });
+  sh.setRowHeight(7, 30);
+
+  // ---- Detalle ----
+  var enc = ['Documento / Movimiento', 'Fecha', 'Cliente / Proveedor', 'Concepto', 'Operación', 'Banco', 'Importe', 'Saldo', 'Estado / Origen', 'Vence', 'Detalle', 'Fuente'];
+  var filas = [], fondos = [], negritas = [];
+  var LIMITE = 4000, cpActual = null;
+  for (var i = 0; i < docs.length && filas.length < LIMITE; i++) {
+    var f = docs[i];
+    if (!rucSel && f[iCp] !== cpActual) {
+      cpActual = f[iCp];
+      var sub = docs.filter(function (x) { return x[iCp] === cpActual; }).reduce(function (t, x) { return t + (Number(x[iSaldo]) || 0); }, 0);
+      filas.push(['▸ ' + cpActual + '  (' + f[iRuc] + ')', '', '', '', '', '', '', sub, '', '', '', '']);
+      fondos.push(COLOR.AZUL); negritas.push(true);
+    }
+    var doc = String(f[cd('Documento')]);
+    var tipoNom = TIPO_DOC_[doc.slice(0, 2)] || 'Documento';
+    filas.push([doc, f[cd('Emisión')], f[iCp], tipoNom, '', '', f[cd('Total')], f[iSaldo], f[iEstado], f[cd('Vence')], String(f[cd('Producto')] || '').slice(0, 80), '']);
+    fondos.push(COLOR_ESTADO[f[iEstado]] || COLOR.BLANCO); negritas.push(true);
+    (movsPorClave[f[cd('Clave')]] || []).sort(function (a, b) { return (a[0] || 0) - (b[0] || 0); }).forEach(function (m) {
+      filas.push(['      └ ' + m[cm('Modalidad')], m[cm('Fecha')], '', m[cm('Modalidad')], String(m[cm('N° operación')]), m[cm('Banco')],
+        -Number(m[cm('Monto aplicado')]), '', m[cm('Origen')], '', m[cm('Nota')], m[cm('Fuente')]]);
+      fondos.push(COLOR.BLANCO); negritas.push(false);
+    });
+  }
+  escribirTabla_(sh, CONSULTA_.FILA_ENC, 2, enc, filas);
+  if (filas.length) {
+    var r0 = CONSULTA_.FILA_ENC + 1, n = filas.length;
+    sh.getRange(r0, 2, n, enc.length).setBackgrounds(fondos.map(function (c) { return enc.map(function () { return c; }); }))
+      .setFontWeights(negritas.map(function (b) { return enc.map(function () { return b ? 'bold' : 'normal'; }); }))
+      .setFontSize(9).setVerticalAlignment('middle');
+    sh.getRange(r0, 3, n, 1).setNumberFormat('dd/mm/yyyy');
+    sh.getRange(r0, 11, n, 1).setNumberFormat('dd/mm/yyyy');
+    sh.getRange(r0, 8, n, 2).setNumberFormat('#,##0.00;-#,##0.00;"-"');
+    sh.getRange(r0, 6, n, 1).setNumberFormat('@');
+    var colores = fondos.map(function (c) { return enc.map(function () { return c === COLOR.AZUL ? '#FFFFFF' : '#0F172A'; }); });
+    sh.getRange(r0, 2, n, enc.length).setFontColors(colores);
+  }
+  if (docs.length && filas.length >= LIMITE) {
+    sh.getRange(CONSULTA_.FILA_ENC + filas.length + 2, 2).setValue('… se muestran las primeras ' + LIMITE + ' filas. Elige un cliente/proveedor para ver el detalle completo.')
+      .setFontColor(COLOR.TEXTO_SUAVE);
+  }
+  if (!docs.length) {
+    sh.getRange(CONSULTA_.FILA_ENC + 1, 2).setValue('Sin documentos para esta selección.').setFontColor(COLOR.TEXTO_SUAVE);
+  }
+}

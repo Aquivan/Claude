@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_blank">
+  <style>
+    body { font-family: 'Google Sans', Roboto, Arial, sans-serif; margin: 0; padding: 12px; color: #0f172a; background: #f8fafc; }
+    .vacio { color: #64748b; font-size: 13px; text-align: center; margin-top: 40px; line-height: 1.5; }
+    .tarjeta { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    .monto { font-size: 22px; font-weight: 700; color: #1e3a5f; }
+    .fila { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px dashed #e2e8f0; }
+    .fila span:first-child { color: #64748b; }
+    .fila span:last-child { font-weight: 600; text-align: right; max-width: 65%; }
+    img { width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #e2e8f0; cursor: zoom-in; }
+    .fuente { font-size: 10px; color: #94a3b8; margin-top: 8px; }
+    .cargando { font-size: 11px; color: #94a3b8; }
+    a { color: #2563eb; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="contenido"><div class="vacio">Haz clic en una fila de pago en<br><b>🔎 Consulta</b>, <b>💳 Movimientos</b> o <b>✅ Conciliar</b><br>para ver aquí su voucher.</div></div>
+  <div id="estado" class="cargando"></div>
+  <script>
+    var ultima = '';
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    function fmt(n) { var x = Number(n); return isNaN(x) ? esc(n) : x.toLocaleString('es-PE', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+    function pintar(r) {
+      if (!r || r.igual) return;
+      if (!r.fuente) { ultima = ''; return; }
+      ultima = r.fuente;
+      if (r.error) { document.getElementById('contenido').innerHTML = '<div class="vacio">' + esc(r.error) + '</div>'; return; }
+      var h = '<div class="tarjeta">';
+      h += '<div class="monto">' + esc(r.moneda) + ' ' + fmt(r.monto) + '</div>';
+      [['Fecha', r.fecha], ['Operación', r.operacion], ['Banco', r.banco], ['Beneficiario', r.beneficiario], ['Concepto', r.descripcion], ['Facturas (Tipo y Nº Doc.)', r.refs || '—']]
+        .forEach(function (p) { h += '<div class="fila"><span>' + p[0] + '</span><span>' + esc(p[1]) + '</span></div>'; });
+      if (r.imagen) h += '<a href="' + esc(r.imagen) + '"><img src="' + esc(r.imagen) + '" alt="voucher"></a>';
+      else h += '<div class="vacio" style="margin-top:14px">Este voucher no tiene imagen guardada.</div>';
+      if (r.enlace) h += '<div style="margin-top:6px"><a href="' + esc(r.enlace) + '">Abrir archivo original en Drive ↗</a></div>';
+      h += '<div class="fuente">' + esc(r.fuente) + (r.archivo ? ' · ' + esc(r.archivo) : '') + '</div></div>';
+      document.getElementById('contenido').innerHTML = h;
+    }
+    function consultar() {
+      google.script.run.withSuccessHandler(function (r) { pintar(r); setTimeout(consultar, 1500); })
+        .withFailureHandler(function (e) { document.getElementById('estado').textContent = 'Reintentando… ' + (e && e.message ? e.message : ''); setTimeout(consultar, 4000); })
+        .voucherSeleccionado(ultima);
+    }
+    consultar();
+  </script>
+</body>
+</html>
