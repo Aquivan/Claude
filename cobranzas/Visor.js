@@ -7,7 +7,7 @@
  */
 
 function abrirVisorVoucher() {
-  var html = HtmlService.createHtmlOutputFromFile('Visor').setTitle('🖼 Visor de vouchers');
+  var html = HtmlService.createHtmlOutputFromFile('VisorPanel').setTitle('🖼 Visor de vouchers');
   SpreadsheetApp.getUi().showSidebar(html);
 }
 
