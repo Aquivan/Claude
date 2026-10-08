@@ -1,0 +1,113 @@
+# Agrega el Asistente IA (vouchers_ia/) al proyecto Apps Script de la hoja
+# de Vouchers SIN reemplazar su codigo actual:
+#   1. Descarga el codigo que esta HOY en la hoja (clasp pull).
+#   2. Le agrega solo IACliente.js y AsistenteIA.js, y una linea al inicio de
+#      onOpen() para que aparezca el menu "🧠 Asistente IA".
+#   3. revisar = solo muestra lo que haria. subir = sube ese mismo codigo
+#      (el de la hoja + lo nuevo), asi nada de lo existente cambia.
+# Solo se ejecuta a mano (Actions → Run workflow).
+
+name: Asistente IA en hoja Vouchers
+
+on:
+  workflow_dispatch:
+    inputs:
+      accion:
+        description: "revisar (no cambia nada) o subir"
+        required: true
+        default: "revisar"
+        type: choice
+        options:
+          - revisar
+          - subir
+      script_id:
+        description: "ID del proyecto Apps Script de la hoja Vouchers"
+        required: true
+
+concurrency:
+  group: asistente-vouchers
+  cancel-in-progress: false
+
+jobs:
+  asistente:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Descargar el codigo del repo
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar clasp
+        run: npm install -g @google/clasp@3.3.0
+
+      - name: Escribir credenciales de clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then echo "::error::Falta el secret CLASPRC_JSON"; exit 1; fi
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+          clasp show-authorized-user
+
+      - name: Descargar el codigo actual de la hoja Vouchers (solo lectura)
+        env:
+          SID: ${{ inputs.script_id }}
+        run: |
+          mkdir -p /tmp/hoja
+          printf '{"scriptId":"%s","rootDir":"/tmp/hoja"}' "$SID" > /tmp/hoja/.clasp.json
+          cd /tmp/hoja && clasp pull
+          echo "=========== ARCHIVOS QUE HAY HOY EN LA HOJA ==========="
+          ls -1 /tmp/hoja | grep -v '^\.clasp' 
+          cp -r /tmp/hoja /tmp/original
+
+      - name: Agregar el asistente (sin tocar lo demas)
+        run: |
+          python3 - <<'PY'
+          import os, re, sys, shutil
+          d = '/tmp/hoja'
+          codigo = [f for f in os.listdir(d) if f.endswith(('.js', '.gs'))]
+          nuevos = ['IACliente', 'AsistenteIA']
+          existentes = {os.path.splitext(f)[0]: f for f in codigo}
+          # 1) No debe haber nombres IA_ ya usados por el codigo actual.
+          for f in codigo:
+              if os.path.splitext(f)[0] in nuevos: continue
+              t = open(os.path.join(d, f), encoding='utf-8').read()
+              if re.search(r'\b(function|var|const|let)\s+IA_', t):
+                  print('::error::El archivo ' + f + ' ya usa nombres IA_; no se sube nada.'); sys.exit(1)
+          # 2) Copiar los dos archivos nuevos (reemplaza solo versiones previas del asistente).
+          for n in nuevos:
+              if n in existentes: os.remove(os.path.join(d, existentes[n]))
+              shutil.copy('vouchers_ia/' + n + '.js', os.path.join(d, n + '.js'))
+          # 3) Una linea al inicio de onOpen().
+          con = [f for f in codigo if os.path.splitext(f)[0] not in nuevos and re.search(r'function\s+onOpen\s*\(', open(os.path.join(d, f), encoding='utf-8').read())]
+          if len(con) != 1:
+              print('::error::Se esperaba un solo onOpen() y hay ' + str(len(con)) + '; no se sube nada.'); sys.exit(1)
+          ruta = os.path.join(d, con[0])
+          t = open(ruta, encoding='utf-8').read()
+          if 'IA_agregarMenu_' not in t:
+              t2 = re.sub(r'(function\s+onOpen\s*\([^)]*\)\s*\{)', r"\1\n  try { IA_agregarMenu_(); } catch (e) { Logger.log('Menu Asistente IA: ' + e.message); }", t, count=1)
+              open(ruta, 'w', encoding='utf-8').write(t2)
+          print('onOpen esta en: ' + con[0])
+          # Avisos utiles
+          todo = ''.join(open(os.path.join(d, f), encoding='utf-8').read() for f in codigo)
+          print('CFG (carpetas del bot) disponible: ' + ('si' if re.search(r'\bCFG\b', todo) else 'no (no leera fotos, lo demas funciona)'))
+          man = open(os.path.join(d, 'appsscript.json'), encoding='utf-8').read()
+          print('Permiso para llamar a la IA (external_request): ' + ('ya lo tiene' if 'external_request' in man or 'oauthScopes' not in man else 'FALTA'))
+          PY
+          echo "=========== CAMBIOS EN ARCHIVOS QUE YA EXISTIAN ==========="
+          diff -ruN --strip-trailing-cr -x '.clasp.json' -x 'IACliente.js' -x 'AsistenteIA.js' /tmp/original /tmp/hoja | grep -E '^[+-][^+-]' || true
+          echo "Archivos nuevos: IACliente.js ($(wc -l < /tmp/hoja/IACliente.js) lineas), AsistenteIA.js ($(wc -l < /tmp/hoja/AsistenteIA.js) lineas)"
+
+      - name: Subir a la hoja Vouchers
+        if: inputs.accion == 'subir'
+        run: |
+          cd /tmp/hoja && clasp push --force
+          echo "Asistente IA subido. El resto del codigo de la hoja quedo igual."
+
+      - name: Limpiar credenciales
+        if: always()
+        run: rm -rf "$HOME/.clasprc.json" /tmp/hoja /tmp/original
