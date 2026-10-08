@@ -38,7 +38,7 @@ function actualizarTodo_(forzar) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) return 'Ya hay una actualización en curso; intenta en un minuto.';
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = ssPrincipal_();
     var props = PropertiesService.getDocumentProperties();
     var cfg = leerConfig_(ss);
     var liqs = buscarLiquidaciones_(cfg);

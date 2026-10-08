@@ -117,3 +117,11 @@ function limpiarHoja_(sheet) {
   sheet.clearConditionalFormatRules();
   if (sheet.getMaxColumns() > 0) sheet.showColumns(1, sheet.getMaxColumns());
 }
+
+// ID de la Sheet "Cuentas por Cobrar y Pagar · Grupo" (para cuando el codigo
+// corre fuera de la hoja, por ejemplo desde el enlace web).
+var ID_HOJA_PRINCIPAL_ = '1o9nD0mwC-x33X5RXShRIn4PWNOWC5o_ehTJoY6G-Ez0';
+
+function ssPrincipal_() {
+  return SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(ID_HOJA_PRINCIPAL_);
+}
