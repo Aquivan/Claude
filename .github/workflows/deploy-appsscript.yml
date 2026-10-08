@@ -105,16 +105,35 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"/tmp/actual"}' "$SCRIPT_ID" > /tmp/actual/.clasp.json
           (cd /tmp/actual && clasp pull)
           echo "Archivos en la Sheet:"; ls -1 /tmp/actual
-          echo "================ DIFERENCIAS (- Sheet / + repo) ================"
+          # Resumen por archivo (ignora saltos de linea Windows/Linux). Solo
+          # muestra codigo de los archivos DIFERENTES, y como maximo 80 lineas
+          # cada uno, para que el log no se corte. Nota: GitHub reemplaza por
+          # *** cualquier texto igual a una linea del secret (ej. "{" o "}"),
+          # eso es solo visual.
+          echo "================ RESUMEN Sheet vs repo ================"
           for f in apps_script/*.js apps_script/appsscript.json; do
             base=$(basename "$f")
             remoto="/tmp/actual/$base"
             [ -f "$remoto" ] || remoto="/tmp/actual/${base%.js}.gs"
             if [ -f "$remoto" ]; then
-              diff -u "$remoto" "$f" || true
+              if diff -q --strip-trailing-cr "$remoto" "$f" >/dev/null; then
+                echo "IGUAL      $base"
+              else
+                n=$(diff --strip-trailing-cr "$remoto" "$f" | grep -c '^[<>]' || true)
+                echo "DIFERENTE  $base  ($n lineas cambian)"
+              fi
             else
-              echo "+++ NUEVO (no existe en la Sheet): $base"
+              echo "NUEVO      $base  (no existe en la Sheet)"
             fi
+          done
+          echo "================ DETALLE de los DIFERENTES (- Sheet / + repo) ================"
+          for f in apps_script/*.js apps_script/appsscript.json; do
+            base=$(basename "$f")
+            remoto="/tmp/actual/$base"
+            [ -f "$remoto" ] || remoto="/tmp/actual/${base%.js}.gs"
+            [ -f "$remoto" ] || continue
+            diff -q --strip-trailing-cr "$remoto" "$f" >/dev/null && continue
+            diff -u --strip-trailing-cr "$remoto" "$f" | head -80 || true
           done
           for r in /tmp/actual/*.js /tmp/actual/*.gs; do
             [ -f "$r" ] || continue
