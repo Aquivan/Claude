@@ -69,38 +69,47 @@ jobs:
           python3 - <<'PY'
           import os, re, sys, shutil
           d = '/tmp/hoja'
-          codigo = [f for f in os.listdir(d) if f.endswith(('.js', '.gs'))]
+          # Archivos de codigo (tambien los que estan en subcarpetas, ej. src/).
+          codigo = []
+          for raiz, _, fs in os.walk(d):
+              for f in fs:
+                  if f.endswith(('.js', '.gs')):
+                      codigo.append(os.path.relpath(os.path.join(raiz, f), d))
           nuevos = ['IACliente', 'AsistenteIA']
-          existentes = {os.path.splitext(f)[0]: f for f in codigo}
+          def base(f): return os.path.splitext(os.path.basename(f))[0]
+          def leer(f): return open(os.path.join(d, f), encoding='utf-8').read()
           # 1) No debe haber nombres IA_ ya usados por el codigo actual.
           for f in codigo:
-              if os.path.splitext(f)[0] in nuevos: continue
-              t = open(os.path.join(d, f), encoding='utf-8').read()
-              if re.search(r'\b(function|var|const|let)\s+IA_', t):
+              if base(f) in nuevos: continue
+              if re.search(r'\b(function|var|const|let)\s+IA_', leer(f)):
                   print('::error::El archivo ' + f + ' ya usa nombres IA_; no se sube nada.'); sys.exit(1)
-          # 2) Copiar los dos archivos nuevos (reemplaza solo versiones previas del asistente).
-          for n in nuevos:
-              if n in existentes: os.remove(os.path.join(d, existentes[n]))
-              shutil.copy('vouchers_ia/' + n + '.js', os.path.join(d, n + '.js'))
-          # 3) Una linea al inicio de onOpen().
-          con = [f for f in codigo if os.path.splitext(f)[0] not in nuevos and re.search(r'function\s+onOpen\s*\(', open(os.path.join(d, f), encoding='utf-8').read())]
+          # 2) onOpen() debe existir una sola vez.
+          con = [f for f in codigo if base(f) not in nuevos and re.search(r'function\s+onOpen\s*\(', leer(f))]
           if len(con) != 1:
               print('::error::Se esperaba un solo onOpen() y hay ' + str(len(con)) + '; no se sube nada.'); sys.exit(1)
+          # 3) Copiar los dos archivos nuevos en la misma carpeta que onOpen (reemplaza solo versiones previas del asistente).
+          carpeta = os.path.dirname(con[0])
+          for f in codigo:
+              if base(f) in nuevos: os.remove(os.path.join(d, f))
+          for n in nuevos:
+              shutil.copy('vouchers_ia/' + n + '.js', os.path.join(d, carpeta, n + '.js'))
+          # 4) Una linea al inicio de onOpen().
           ruta = os.path.join(d, con[0])
-          t = open(ruta, encoding='utf-8').read()
+          t = leer(con[0])
           if 'IA_agregarMenu_' not in t:
               t2 = re.sub(r'(function\s+onOpen\s*\([^)]*\)\s*\{)', r"\1\n  try { IA_agregarMenu_(); } catch (e) { Logger.log('Menu Asistente IA: ' + e.message); }", t, count=1)
               open(ruta, 'w', encoding='utf-8').write(t2)
-          print('onOpen esta en: ' + con[0])
+          print('onOpen esta en: ' + con[0] + ' · archivos nuevos en: ' + (carpeta or '(raiz)'))
           # Avisos utiles
-          todo = ''.join(open(os.path.join(d, f), encoding='utf-8').read() for f in codigo)
+          todo = ''.join(leer(f) for f in codigo if base(f) not in nuevos)
           print('CFG (carpetas del bot) disponible: ' + ('si' if re.search(r'\bCFG\b', todo) else 'no (no leera fotos, lo demas funciona)'))
-          man = open(os.path.join(d, 'appsscript.json'), encoding='utf-8').read()
+          man = leer('appsscript.json')
           print('Permiso para llamar a la IA (external_request): ' + ('ya lo tiene' if 'external_request' in man or 'oauthScopes' not in man else 'FALTA'))
           PY
           echo "=========== CAMBIOS EN ARCHIVOS QUE YA EXISTIAN ==========="
-          diff -ruN --strip-trailing-cr -x '.clasp.json' -x 'IACliente.js' -x 'AsistenteIA.js' /tmp/original /tmp/hoja | grep -E '^[+-][^+-]' || true
-          echo "Archivos nuevos: IACliente.js ($(wc -l < /tmp/hoja/IACliente.js) lineas), AsistenteIA.js ($(wc -l < /tmp/hoja/AsistenteIA.js) lineas)"
+          diff -ruN --strip-trailing-cr -x '.clasp.json' -x 'IACliente.js' -x 'AsistenteIA.js' /tmp/original /tmp/hoja | grep -E '^([+-][^+-]|\+\+\+)' || true
+          echo "=========== ARCHIVOS NUEVOS ==========="
+          find /tmp/hoja -name 'IACliente.js' -o -name 'AsistenteIA.js' | xargs wc -l
 
       - name: Subir a la hoja Vouchers
         if: inputs.accion == 'subir'
