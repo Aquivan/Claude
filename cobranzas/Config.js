@@ -48,6 +48,9 @@ function onOpen() {
     .addSeparator()
     .addItem('⚙️ Instalar / reparar', 'menuInstalar')
     .addToUi();
+  // Menu del Asistente IA (modulo aparte, ver AsistenteIA.js). Si fallara,
+  // no afecta al menu de Cobranzas.
+  try { IA_agregarMenu_(); } catch (e) { Logger.log('Menu Asistente IA: ' + e.message); }
 }
 
 function menuActualizarAhora() {
