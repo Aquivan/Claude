@@ -73,6 +73,10 @@ function generarPanelDeControl_(rucFiltro) {
     }
   } catch (e) {}
 
+  // Largo (en caracteres) del monto mas largo de cada columna H..L, para
+  // ajustar el ancho de esas columnas al contenido al final.
+  var largoMaxIgv = TITULOS_IGV_DASHBOARD_.map(function () { return 0; });
+
   var raiz = obtenerCarpetaRaiz_();
   var urlRaiz = raiz ? raiz.getUrl() : '';
   var anioActual = new Date().getFullYear();
@@ -239,7 +243,7 @@ function generarPanelDeControl_(rucFiltro) {
       .setFontWeight('bold').setFontSize(9).setWrap(true)
       .setFontColor('#3B2470').setBackground('#DDD3F3')
       .setHorizontalAlignment('center').setVerticalAlignment('middle');
-    sheet.setRowHeight(filaActual, 30);
+    sheet.setRowHeight(filaActual, 42); // titulos IGV en hasta 3 lineas
     filaActual++;
 
     // Pre-escanear subcarpetas de Venta y Compra de esta empresa una sola vez
@@ -287,9 +291,13 @@ function generarPanelDeControl_(rucFiltro) {
       filasMeses.push([mesNombre, periodoStr, txtVenta, txtCompra, estadoGlobal, fechaActualizacion]);
 
       var igv = resumenIgv.porPeriodo[periodoStr];
-      filasIgv.push(igv
+      var valoresIgv = igv
         ? [igv.debito, igv.credito, igv.creditoAnt, igv.aPagar, igv.aFavor]
-        : ['', '', '', '', '']);
+        : ['', '', '', '', ''];
+      valoresIgv.forEach(function (v, k) {
+        largoMaxIgv[k] = Math.max(largoMaxIgv[k], textoMonto_(v).length);
+      });
+      filasIgv.push(valoresIgv);
       coloresFila.push({ fondo: colorFila, texto: colorEstado });
     }
 
@@ -340,8 +348,19 @@ function generarPanelDeControl_(rucFiltro) {
     filaActual++;
   });
 
-  ajustarColumnasDashboard_(sheet);
+  ajustarColumnasDashboard_(sheet, largoMaxIgv);
   limpiarHojasVacias_(ss);
+}
+
+/**
+ * Texto con que se ve un monto en las columnas IGV (formato #,##0.00; el 0 y
+ * los vacios se ven como "-"). Solo se usa para medir el ancho necesario.
+ */
+function textoMonto_(v) {
+  if (typeof v !== 'number' || v === 0) return '-';
+  var partes = Math.abs(v).toFixed(2).split('.');
+  partes[0] = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return (v < 0 ? '-' : '') + partes.join('.');
 }
 
 // Columnas H..L del Panel: resumen IGV por mes, leido de la hoja "Liquidacion"
@@ -495,7 +514,7 @@ function preEscanearArchivosEmpresaRapido_(carpetaEmpresa, anio) {
 /**
  * Ajusta anchos de columna para que el Panel de Control se vea visualmente perfecto.
  */
-function ajustarColumnasDashboard_(sheet) {
+function ajustarColumnasDashboard_(sheet, largoMaxIgv) {
   sheet.setColumnWidth(1, 18);  // A: Margen izquierdo
   sheet.setColumnWidth(2, 65);  // B: Mes
   sheet.setColumnWidth(3, 85);  // C: Período
@@ -503,10 +522,12 @@ function ajustarColumnasDashboard_(sheet) {
   sheet.setColumnWidth(5, 185); // E: Registro Compras
   sheet.setColumnWidth(6, 135); // F: Estado / Botón Abrir en Drive
   sheet.setColumnWidth(7, 165); // G: Última Actualización / Botón Liquidación IGV
-  sheet.setColumnWidth(8, 110);  // H: IGV Ventas (Débito)
-  sheet.setColumnWidth(9, 110);  // I: IGV Compras (Crédito total)
-  sheet.setColumnWidth(10, 125); // J: Crédito de compras de meses anteriores
-  sheet.setColumnWidth(11, 110); // K: IGV POR PAGAR
-  sheet.setColumnWidth(12, 120); // L: Saldo a favor
+  // H..L (resumen IGV): ancho ajustado al monto mas largo de cada columna.
+  // ~7px por caracter en letra 9 (negrita incluida) + margen; minimo 82px
+  // para que el titulo quepa en 3 lineas.
+  for (var k = 0; k < NUM_COLS_IGV_; k++) {
+    var largo = largoMaxIgv ? largoMaxIgv[k] : 12;
+    sheet.setColumnWidth(8 + k, Math.max(82, largo * 7 + 18));
+  }
 }
 
