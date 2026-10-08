@@ -14,8 +14,12 @@ function actualizacionAutomatica() {
   }
 }
 
+// Subir este numero cuando cambie la forma de calcular o escribir, para que la
+// siguiente actualizacion automatica rehaga todo aunque los datos no cambien.
+var VERSION_CALCULO_ = '2';
+
 function huellaExterna_(ss, cfg, liqs) {
-  var partes = [Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd')]; // cambia de dia: recalcular vencidos
+  var partes = ['v' + VERSION_CALCULO_, Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd')]; // cambia de dia: recalcular vencidos
   try { partes.push(DriveApp.getFileById(cfg.idVouchers).getLastUpdated().getTime()); } catch (e) { partes.push('sin-vouchers'); }
   liqs.forEach(function (l) { partes.push(l.id + ':' + l.actualizado); });
   var man = ss.getSheetByName(HOJA.MANUAL);
@@ -51,6 +55,8 @@ function actualizarTodo_(forzar) {
 function actualizarTodoInterno_(forzar) {
   {
     var ss = ssPrincipal_();
+    // La hoja debe estar en hora de Peru; si no, las fechas se ven un dia antes.
+    if (ss.getSpreadsheetTimeZone() !== 'America/Lima') ss.setSpreadsheetTimeZone('America/Lima');
     var props = PropertiesService.getDocumentProperties();
     var cfg = leerConfig_(ss);
     var liqs = buscarLiquidaciones_(cfg);
