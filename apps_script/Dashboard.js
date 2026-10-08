@@ -73,9 +73,17 @@ function generarPanelDeControl_(rucFiltro) {
     }
   } catch (e) {}
 
-  // Largo (en caracteres) del monto mas largo de cada columna H..L, para
+  // Largo (en caracteres) del monto mas largo de cada columna H..M, para
   // ajustar el ancho de esas columnas al contenido al final.
   var largoMaxIgv = TITULOS_IGV_DASHBOARD_.map(function () { return 0; });
+  // Lo mismo para B..G (largo del texto visible mas largo de cada columna) y
+  // para los textos que ocupan varias columnas combinadas (nombre de empresa
+  // en B..E y boton de carpeta raiz en B..D).
+  var medidas = { tabla: [0, 0, 0, 0, 0, 0], nombreEmpresa: 0, carpetaRaiz: 0 };
+  function medir(i, texto) {
+    medidas.tabla[i] = Math.max(medidas.tabla[i], String(texto).length);
+  }
+  var ULT_COL = 7 + NUM_COLS_IGV_; // ultima columna del panel (M)
 
   var raiz = obtenerCarpetaRaiz_();
   var urlRaiz = raiz ? raiz.getUrl() : '';
@@ -86,8 +94,8 @@ function generarPanelDeControl_(rucFiltro) {
   // -------------------------------------------------------------
   sheet.setRowHeight(1, 15);
 
-  // Fila 2: Título principal (B..L: tabla B..G + resumen IGV H..L)
-  sheet.getRange('B2:L2').merge()
+  // Fila 2: Título principal (B..M: tabla B..G + resumen IGV/IR H..M)
+  sheet.getRange(2, 2, 1, ULT_COL - 1).merge()
     .setValue('📊  SIRE SUNAT — PANEL DE CONTROL & NAVEGACIÓN')
     .setFontWeight('bold')
     .setFontSize(14)
@@ -99,7 +107,7 @@ function generarPanelDeControl_(rucFiltro) {
 
   var fechaHora = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm:ss');
   var textoSub = '🕐  Actualizado: ' + fechaHora + '    ·    🏢  ' + empresas.length + ' empresa(s)    ·    📅  Año ' + anioActual;
-  sheet.getRange('B3:L3').merge()
+  sheet.getRange(3, 2, 1, ULT_COL - 1).merge()
     .setValue(textoSub)
     .setFontSize(9)
     .setFontColor('#7DD3FC')
@@ -109,7 +117,7 @@ function generarPanelDeControl_(rucFiltro) {
   sheet.setRowHeight(3, 24);
 
   // Separador decorativo
-  sheet.getRange('B4:L4').merge()
+  sheet.getRange(4, 2, 1, ULT_COL - 1).merge()
     .setBackground('#1E3A5F');
   sheet.setRowHeight(4, 4);
 
@@ -118,8 +126,10 @@ function generarPanelDeControl_(rucFiltro) {
   // -------------------------------------------------------------
   sheet.setRowHeight(5, 12);
 
-  var formulaDrive = urlRaiz ? '=HYPERLINK("' + urlRaiz + '", "📁  Abrir Carpeta Raíz en Google Drive")' : 'Carpeta no disponible';
-  sheet.getRange('B6:C6').merge()
+  var textoDrive = urlRaiz ? '📁 Abrir carpeta raíz en Drive' : 'Carpeta no disponible';
+  medidas.carpetaRaiz = textoDrive.length;
+  var formulaDrive = urlRaiz ? '=HYPERLINK("' + urlRaiz + '", "' + textoDrive + '")' : textoDrive;
+  sheet.getRange('B6:D6').merge()
     .setValue(formulaDrive)
     .setFontWeight('bold')
     .setFontSize(9)
@@ -129,7 +139,7 @@ function generarPanelDeControl_(rucFiltro) {
     .setVerticalAlignment('middle')
     .setBorder(true, true, true, true, false, false, '#93C5FD', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
 
-  sheet.getRange('D6:L6').merge()
+  sheet.getRange(6, 5, 1, ULT_COL - 4).merge()
     .setValue('ℹ️  Usa el menú  SIRE SUNAT  para Descargar archivos, Importar datos o Generar Liquidaciones IGV')
     .setFontSize(9)
     .setFontColor('#64748B')
@@ -198,13 +208,16 @@ function generarPanelDeControl_(rucFiltro) {
     var VERDE_BTN = urlLiq ? '#047857' : '#6B7280';
 
     // 1. Nombre empresa (col B-E, 4 columnas: B, C, D, E)
+    var textoNombre = (activo ? '▶ ' : '■ ') + (indexEmpresa + 1) + '. ' + ruc + ' — ' + nombre;
+    medidas.nombreEmpresa = Math.max(medidas.nombreEmpresa, textoNombre.length);
     sheet.getRange(filaActual, 2, 1, 4).merge()
-      .setValue((activo ? '▶ ' : '■ ') + (indexEmpresa + 1) + '. ' + ruc + ' — ' + nombre)
+      .setValue(textoNombre)
       .setFontWeight('bold').setFontSize(10).setFontColor('#F8FAFC')
       .setBackground(AZUL_EMP).setVerticalAlignment('middle');
 
     // 2. Botón: Abrir en Drive (col F)
     var linkCarpeta = urlCarpetaEmp ? '=HYPERLINK("' + urlCarpetaEmp + '", "📂 Abrir en Drive")' : '(Sin carpeta)';
+    medir(4, urlCarpetaEmp ? '📂 Abrir en Drive' : '(Sin carpeta)');
     sheet.getRange(filaActual, 6)
       .setValue(linkCarpeta)
       .setFontWeight('bold').setFontSize(9).setFontColor('#FFFFFF')
@@ -215,17 +228,18 @@ function generarPanelDeControl_(rucFiltro) {
     var linkLiq = urlLiq
       ? '=HYPERLINK("' + urlLiq + '", "📊 Liquidación ' + anioActual + '")'
       : '⚪ Sin liquidación';
+    medir(5, urlLiq ? '📊 Liquidación ' + anioActual : '⚪ Sin liquidación');
     sheet.getRange(filaActual, 7)
       .setValue(linkLiq)
       .setFontWeight('bold').setFontSize(9).setFontColor('#FFFFFF')
       .setBackground(VERDE_BTN).setHorizontalAlignment('center').setVerticalAlignment('middle')
       .setBorder(false, true, false, true, false, false, '#1E3A5F', SpreadsheetApp.BorderStyle.SOLID);
 
-    // 4. Titulo del bloque Resumen IGV (cols H..L)
+    // 4. Titulo del bloque Resumen IGV + IR (cols H..M)
     sheet.getRange(filaActual, 8, 1, NUM_COLS_IGV_).merge()
       .setValue(resumenIgv.error
-        ? '💰 Resumen IGV — ' + resumenIgv.error
-        : '💰 Resumen IGV (tomado de la Liquidación ' + anioActual + ')')
+        ? '💰 Resumen IGV e IR — ' + resumenIgv.error
+        : '💰 Resumen IGV e IR (tomado de la Liquidación ' + anioActual + ')')
       .setFontWeight('bold').setFontSize(9).setFontColor('#FFFFFF')
       .setBackground('#674EA7').setHorizontalAlignment('center').setVerticalAlignment('middle');
 
@@ -235,6 +249,7 @@ function generarPanelDeControl_(rucFiltro) {
     // --- CABECERA TABLA MENSUAL (6 columnas: B..G) ---
     var headersTabla = ['Mes', 'Período', 'Registro Ventas', 'Registro Compras', 'Estado', 'Última Actualización'];
     var NUM_COLS = headersTabla.length;
+    headersTabla.forEach(function (h, i) { medir(i, h); });
     sheet.getRange(filaActual, 2, 1, NUM_COLS).setValues([headersTabla])
       .setFontWeight('bold').setFontSize(9)
       .setFontColor('#1E3A5F').setBackground('#BFDBFE')
@@ -289,11 +304,16 @@ function generarPanelDeControl_(rucFiltro) {
       var fechaActualizacion = maxDate ? Utilities.formatDate(maxDate, 'America/Lima', 'dd/MM/yyyy HH:mm') : '';
 
       filasMeses.push([mesNombre, periodoStr, txtVenta, txtCompra, estadoGlobal, fechaActualizacion]);
+      // Texto VISIBLE (sin la formula HYPERLINK) para medir el ancho
+      [mesNombre, periodoStr,
+        infoVenta.existe ? '📄  Venta ' + periodoStr : txtVenta,
+        infoCompra.existe ? '📄  Compra ' + periodoStr : txtCompra,
+        estadoGlobal, fechaActualizacion].forEach(function (t, i) { medir(i, t); });
 
       var igv = resumenIgv.porPeriodo[periodoStr];
       var valoresIgv = igv
-        ? [igv.debito, igv.credito, igv.creditoAnt, igv.aPagar, igv.aFavor]
-        : ['', '', '', '', ''];
+        ? [igv.debito, igv.credito, igv.creditoAnt, igv.aPagar, igv.aFavor, igv.irPagar]
+        : TITULOS_IGV_DASHBOARD_.map(function () { return ''; });
       valoresIgv.forEach(function (v, k) {
         largoMaxIgv[k] = Math.max(largoMaxIgv[k], textoMonto_(v).length);
       });
@@ -321,7 +341,7 @@ function generarPanelDeControl_(rucFiltro) {
     sheet.getRange(filaActual - 1, 2, 13, NUM_COLS)
       .setBorder(true, true, true, true, true, true, '#93C5FD', SpreadsheetApp.BorderStyle.SOLID);
 
-    // --- BLOQUE RESUMEN IGV (H..L) ---
+    // --- BLOQUE RESUMEN IGV + IR (H..M) ---
     var rangoIgv = sheet.getRange(filaActual, 8, 12, NUM_COLS_IGV_);
     rangoIgv.setValues(filasIgv).setFontSize(9).setVerticalAlignment('middle')
       .setHorizontalAlignment('right').setNumberFormat('#,##0.00;-#,##0.00;"-"')
@@ -331,6 +351,10 @@ function generarPanelDeControl_(rucFiltro) {
       // IGV por pagar en rojo, saldo a favor en verde (solo si hay monto)
       if (typeof fIgv[3] === 'number' && fIgv[3] > 0) {
         sheet.getRange(filaActual + ri, 11).setFontColor('#B91C1C').setFontWeight('bold').setBackground('#FDECEC');
+      }
+      // IR por pagar (pago a cuenta de renta), con el color de renta de la liquidacion
+      if (typeof fIgv[5] === 'number' && fIgv[5] > 0) {
+        sheet.getRange(filaActual + ri, 13).setFontColor('#A64D79').setFontWeight('bold').setBackground('#FBEAF1');
       }
       if (typeof fIgv[4] === 'number' && fIgv[4] > 0) {
         sheet.getRange(filaActual + ri, 12).setFontColor('#166534').setFontWeight('bold').setBackground('#E7F8EC');
@@ -348,7 +372,7 @@ function generarPanelDeControl_(rucFiltro) {
     filaActual++;
   });
 
-  ajustarColumnasDashboard_(sheet, largoMaxIgv);
+  ajustarColumnasDashboard_(sheet, largoMaxIgv, medidas);
   limpiarHojasVacias_(ss);
 }
 
@@ -363,7 +387,7 @@ function textoMonto_(v) {
   return (v < 0 ? '-' : '') + partes.join('.');
 }
 
-// Columnas H..L del Panel: resumen IGV por mes, leido de la hoja "Liquidacion"
+// Columnas H..M del Panel: resumen IGV e IR por mes, leido de la hoja "Liquidacion"
 // de cada empresa (Liquidacion.js). Solo lectura: el Panel nunca escribe en
 // la liquidacion.
 var TITULOS_IGV_DASHBOARD_ = [
@@ -372,6 +396,7 @@ var TITULOS_IGV_DASHBOARD_ = [
   'Crédito de compras de meses anteriores',
   'IGV POR PAGAR',
   'Saldo a favor (pasa al mes sig.)',
+  'IR por pagar (Pago a cuenta Renta)',
 ];
 var NUM_COLS_IGV_ = TITULOS_IGV_DASHBOARD_.length;
 
@@ -379,7 +404,7 @@ var NUM_COLS_IGV_ = TITULOS_IGV_DASHBOARD_.length;
  * Lee de la hoja "Liquidacion" del archivo dado los montos IGV de cada mes.
  * Ubica las columnas por su TITULO (no por letra), asi sigue funcionando
  * aunque se agreguen columnas a la liquidacion en el futuro.
- * Devuelve { porPeriodo: { '202601': {debito, credito, creditoAnt, aPagar, aFavor} }, error }
+ * Devuelve { porPeriodo: { '202601': {debito, credito, creditoAnt, aPagar, aFavor, irPagar} }, error }
  */
 function leerResumenIgvLiquidacion_(archivoLiq) {
   var res = { porPeriodo: {}, error: '' };
@@ -399,6 +424,8 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
       res.error = 'columnas de la liquidación no reconocidas';
       return res;
     }
+    // Pago a cuenta de renta: opcional (si no existiera, la columna IR queda vacia)
+    var iRenta = col('pagoACuentaRenta');
     function num(v) { return typeof v === 'number' ? v : ''; }
     for (var i = 1; i < datos.length; i++) {
       var per = String(datos[i][iPer]).trim();
@@ -411,6 +438,7 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
         aPagar: num(datos[i][iPagar]),
         // En la liquidacion el saldo a favor se guarda en negativo; aqui positivo
         aFavor: favor === '' ? '' : Math.abs(favor),
+        irPagar: iRenta === -1 ? '' : num(datos[i][iRenta]),
       };
     }
   } catch (e) {
@@ -514,15 +542,35 @@ function preEscanearArchivosEmpresaRapido_(carpetaEmpresa, anio) {
 /**
  * Ajusta anchos de columna para que el Panel de Control se vea visualmente perfecto.
  */
-function ajustarColumnasDashboard_(sheet, largoMaxIgv) {
+function ajustarColumnasDashboard_(sheet, largoMaxIgv, medidas) {
   sheet.setColumnWidth(1, 18);  // A: Margen izquierdo
-  sheet.setColumnWidth(2, 65);  // B: Mes
-  sheet.setColumnWidth(3, 85);  // C: Período
-  sheet.setColumnWidth(4, 185); // D: Registro Ventas
-  sheet.setColumnWidth(5, 185); // E: Registro Compras
-  sheet.setColumnWidth(6, 135); // F: Estado / Botón Abrir en Drive
-  sheet.setColumnWidth(7, 165); // G: Última Actualización / Botón Liquidación IGV
-  // H..L (resumen IGV): ancho ajustado al monto mas largo de cada columna.
+
+  // B..G ajustadas al texto visible mas largo de cada columna (~7px por
+  // caracter en letra 9 + margen), con un minimo para que no queden apretadas.
+  var minimos = [45, 60, 90, 90, 95, 115];
+  var anchos = minimos.map(function (min, i) {
+    var largo = medidas ? medidas.tabla[i] : 0;
+    return Math.max(min, Math.round(largo * 7 + 20));
+  });
+  if (medidas) {
+    // Textos combinados: si no caben en la suma de sus columnas, el faltante
+    // se reparte entre D y E (las de Registro Ventas/Compras).
+    function asegurar(desde, hasta, px) {
+      var suma = 0;
+      for (var i = desde; i <= hasta; i++) suma += anchos[i];
+      var falta = px - suma;
+      if (falta > 0) {
+        anchos[2] += Math.ceil(falta / 2);
+        if (hasta >= 3) anchos[3] += Math.ceil(falta / 2);
+        else anchos[2] += Math.ceil(falta / 2);
+      }
+    }
+    asegurar(0, 3, Math.round(medidas.nombreEmpresa * 7.8 + 24)); // nombre empresa B..E (letra 10)
+    asegurar(0, 2, Math.round(medidas.carpetaRaiz * 7 + 24));      // boton carpeta raiz B..D
+  }
+  anchos.forEach(function (w, i) { sheet.setColumnWidth(2 + i, w); });
+
+  // H..M (resumen IGV e IR): ancho ajustado al monto mas largo de cada columna.
   // ~7px por caracter en letra 9 (negrita incluida) + margen; minimo 82px
   // para que el titulo quepa en 3 lineas.
   for (var k = 0; k < NUM_COLS_IGV_; k++) {
