@@ -10,6 +10,7 @@ var HOJA = {
   DOCS: '📋 Documentos',
   MOVS: '💳 Movimientos',
   CONC: '✅ Conciliar',
+  OTROS: '📂 Otros pagos',
   MANUAL: '✍️ Registro manual',
   CONFIG: '⚙️ Config',
   DECISIONES: '_Decisiones',

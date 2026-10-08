@@ -281,6 +281,7 @@ function ejecutarCruce_(entrada) {
   // Los pagos en efectivo con facturas indicadas se reparten JUNTOS (lote),
   // para poder reacomodar el dinero entre vouchers que comparten facturas.
   var dec = entrada.decisiones || {};
+  var categorias = entrada.categorias || [];
   var lote = [];
   function mismaMoneda(p, lista) {
     return lista.every(function (d) { return String(d.moneda || 'PEN').toUpperCase() === String(p.moneda || d.moneda || 'PEN').toUpperCase(); });
@@ -291,6 +292,7 @@ function ejecutarCruce_(entrada) {
     p.aplicado = true;
   }
   pagos.forEach(function (p) {
+    if (!p.parse.refs.length && categoriaPorTexto_(p.refs, categorias)) return; // ej. "PLANILLA" escrito en Tipo y Nº Doc.
     p.parse.noEntendido.forEach(function (t) {
       errores.push({ tipo: 'Referencia no entendida', pagoId: p.id, detalle: '"' + t + '" en "' + p.refs + '"', fuente: p.fuente });
     });
@@ -467,9 +469,16 @@ function ejecutarCruce_(entrada) {
     }
   });
 
-  // ---------------- 8. Sin cruzar ----------------
+  // ---------------- 8. Pagos sin factura (planilla, AFP, SUNAT…) y sin cruzar ----------------
+  var sinFactura = [];
   pagos.forEach(function (p) {
     if (p.aplicado || p.sugerido || p.modalidad !== MODALIDAD.PAGO) return;
+    var texto = [p.refs, p.beneficiarioNombre, p.descripcion].join(' ');
+    var cat = categoriaPorTexto_(texto, categorias);
+    if (!cat && !p.beneficiarioRuc && esPersonaNatural_(p.beneficiarioNombre)) {
+      cat = { categoria: '👤 Persona natural (planilla / honorarios / otros)', clave: 'persona natural' };
+    }
+    if (cat) { sinFactura.push({ pago: p, categoria: cat.categoria, regla: cat.clave }); p.sinFactura = true; return; }
     var motivo;
     if (p.parse.refs.length) motivo = 'La referencia escrita no se encontró en SIRE';
     else if (!p.pagadorRuc && !p.beneficiarioRuc) motivo = 'Falta RUC de quién paga y del beneficiario';
@@ -488,8 +497,44 @@ function ejecutarCruce_(entrada) {
   });
   return {
     docs: lista, movimientos: movimientos, sugerencias: sugerencias, sinCruzar: sinCruzar,
-    remanentes: remanentes, errores: errores, pagos: pagos,
+    sinFactura: sinFactura, remanentes: remanentes, errores: errores, pagos: pagos,
   };
+}
+
+function normTexto_(s) {
+  return String(s == null ? '' : s).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9*& ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Categoria de un pago sin factura segun palabras clave (tabla de ⚙️ Config).
+ * categorias = [{clave:'AFP', categoria:'Aportes AFP'}]. La clave se busca como
+ * palabra o frase completa dentro del texto (beneficiario, descripcion y "Tipo y Nº Doc.").
+ */
+function categoriaPorTexto_(texto, categorias) {
+  var t = ' ' + normTexto_(texto) + ' ';
+  if (t.trim() === '') return null;
+  for (var i = 0; i < (categorias || []).length; i++) {
+    var k = normTexto_(categorias[i].clave);
+    if (k && t.indexOf(' ' + k + ' ') !== -1) return categorias[i];
+  }
+  return null;
+}
+
+var PALABRAS_EMPRESA_ = ['SAC', 'S A C', 'SA', 'S A', 'EIRL', 'E I R L', 'SRL', 'S R L', 'SAA', 'SCRL', 'CORPORACION', 'EMPRESA',
+  'INVERSIONES', 'GRUPO', 'COMERCIAL', 'COMPANIA', 'CIA', 'DISTRIBUIDORA', 'INDUSTRIA', 'INDUSTRIAS', 'SERVICIOS', 'TRANSPORTES',
+  'TRANSPORTE', 'BANCO', 'CAJA', 'COOPERATIVA', 'ASOCIACION', 'MUNICIPALIDAD', 'COMITE', 'CONSORCIO', 'LABORATORIO', 'NEGOCIACIONES',
+  'IMPORTACIONES', 'EXPORTACIONES', 'SOCIEDAD', 'LIMITADA', 'ANONIMA', 'AFP', 'EPS', 'SUNAT', 'ME', 'M E', 'VENTAS', 'PERU', 'LTDA'];
+
+/** Nombre de una persona (no empresa): 2 a 6 palabras sin terminos de empresa. */
+function esPersonaNatural_(nombre) {
+  var t = normTexto_(nombre);
+  if (!t) return false;
+  var palabras = t.split(' ');
+  if (palabras.length < 2 || palabras.length > 6) return false;
+  if (/\d/.test(t)) return false;
+  var conPuntos = ' ' + t + ' ';
+  return !PALABRAS_EMPRESA_.some(function (w) { return conPuntos.indexOf(' ' + w + ' ') !== -1; });
 }
 
 /** ¿El nombre del voucher se parece a la razon social de la factura? */

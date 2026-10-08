@@ -16,7 +16,7 @@ function actualizacionAutomatica() {
 
 // Subir este numero cuando cambie la forma de calcular o escribir, para que la
 // siguiente actualizacion automatica rehaga todo aunque los datos no cambien.
-var VERSION_CALCULO_ = '2';
+var VERSION_CALCULO_ = '3';
 
 function huellaExterna_(ss, cfg, liqs) {
   var partes = ['v' + VERSION_CALCULO_, Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd')]; // cambia de dia: recalcular vencidos
@@ -77,7 +77,7 @@ function actualizarTodoInterno_(forzar) {
 
     var res = ejecutarCruce_({
       docs: docs, pagos: vch.pagos.concat(manual), decisiones: decisiones,
-      grupo: cfg.grupo, alias: cfg.aliasNombre,
+      grupo: cfg.grupo, alias: cfg.aliasNombre, categorias: cfg.categorias,
       opciones: { modo: cfg.modo, tolerancia: cfg.tolerancia, diasVentana: cfg.ventana },
     });
     vch.duplicados.forEach(function (d) {
@@ -93,6 +93,7 @@ function actualizarTodoInterno_(forzar) {
     escribirPanel_(ss, filasDocs, res, cfg, liqs); bitacora_(ss, 'Panel', t1, ''); t1 = Date.now();
     escribirMovimientos_(ss, res, cfg); bitacora_(ss, 'Movimientos', t1, res.movimientos.length + ' filas'); t1 = Date.now();
     escribirConciliar_(ss, res, cfg); bitacora_(ss, 'Conciliar', t1, res.sugerencias.length + ' sugerencias, ' + res.errores.length + ' avisos, ' + res.sinCruzar.length + ' sin cruzar'); t1 = Date.now();
+    escribirOtrosPagos_(ss, res, cfg); bitacora_(ss, 'Otros pagos', t1, res.sinFactura.length + ' pagos sin factura'); t1 = Date.now();
     if (Date.now() - t0 < 300000) {
       try { renderConsulta_(ss); bitacora_(ss, 'Consulta', t1, ''); } catch (e) { bitacora_(ss, 'Consulta ERROR', t1, e.message); }
     } else {

@@ -290,3 +290,60 @@ function escribirPanel_(ss, filasDocs, res, cfg, liqs) {
   [16, 170, 105, 105, 105, 105, 115, 170, 105, 105, 105, 20, 20].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   sh.setColumnWidth(10, 115);
 }
+
+/**
+ * 📂 Otros pagos: vouchers que NO pagan una factura (planilla, AFP, SUNAT,
+ * honorarios, préstamos…). Resumen por categoría y empresa + detalle.
+ */
+function escribirOtrosPagos_(ss, res, cfg) {
+  var sh = obtenerOCrearHoja_(ss, HOJA.OTROS);
+  limpiarHoja_(sh);
+  var lista = (res.sinFactura || []).slice().sort(function (a, b) { return (b.pago.fecha || 0) - (a.pago.fecha || 0); });
+  sh.getRange(1, 1, 1, 11).merge().setValue('📂 OTROS PAGOS — vouchers sin factura de compra (planilla, AFP, SUNAT, honorarios, préstamos…)')
+    .setFontSize(13).setFontWeight('bold').setFontColor(COLOR.BLANCO).setBackground(COLOR.OSCURO);
+  sh.setRowHeight(1, 32);
+  sh.getRange(2, 1, 1, 11).merge()
+    .setValue('Se clasifican con la tabla "PAGOS SIN FACTURA" de ⚙️ Config (puedes agregar palabras). Si un pago SÍ corresponde a una factura, escribe la factura en "Tipo y Nº Doc." del voucher y saldrá de aquí. ' +
+      'También puedes escribir la categoría en "Tipo y Nº Doc." (ej. PLANILLA, AFP, PRESTAMO).')
+    .setWrap(true).setFontSize(9).setFontColor(COLOR.TEXTO_SUAVE);
+  sh.setRowHeight(2, 34);
+
+  function quien(ruc) { return ruc ? nombreEmpresa_(cfg, ruc) : '¿?'; }
+  function enSoles(p) { return String(p.moneda || 'PEN').toUpperCase() === 'USD' ? p.monto * 3.75 : p.monto; }
+
+  // Resumen por categoria y empresa que paga
+  var res1 = {};
+  lista.forEach(function (x) {
+    var k = x.categoria + '|' + quien(x.pago.pagadorRuc);
+    var r = res1[k] || (res1[k] = { cat: x.categoria, emp: quien(x.pago.pagadorRuc), n: 0, total: 0 });
+    r.n++; r.total += enSoles(x.pago);
+  });
+  var filasR = Object.keys(res1).map(function (k) { return res1[k]; })
+    .sort(function (a, b) { return a.cat.localeCompare(b.cat) || b.total - a.total; })
+    .map(function (r) { return [r.cat, r.emp, r.n, r.total]; });
+  var fila = 4;
+  sh.getRange(fila, 1, 1, 4).merge().setValue('RESUMEN POR CATEGORÍA (montos en S/, USD a 3.75 referencial)').setFontWeight('bold').setFontColor(COLOR.AZUL);
+  fila++;
+  escribirTabla_(sh, fila, 1, ['Categoría', 'Empresa que paga', 'Cantidad', 'Total S/'], filasR);
+  if (filasR.length) sh.getRange(fila + 1, 4, filasR.length, 1).setNumberFormat('#,##0.00');
+  fila += filasR.length + 3;
+
+  sh.getRange(fila, 1, 1, 6).merge().setValue('DETALLE (' + lista.length + ')').setFontWeight('bold').setFontColor(COLOR.AZUL);
+  fila++;
+  var enc = ['Fecha', 'Empresa que paga', 'Beneficiario', 'Monto', 'Moneda', 'Operación', 'Banco', 'Categoría', 'Regla', 'Descripción', 'Fuente'];
+  var filas = lista.map(function (x) {
+    var p = x.pago;
+    return [p.fecha || '', quien(p.pagadorRuc), p.beneficiarioNombre || '', p.monto, p.moneda, String(p.operacion || ''), p.banco,
+      x.categoria, x.regla, p.descripcion || '', p.fuente];
+  });
+  escribirTabla_(sh, fila, 1, enc, filas);
+  if (filas.length) {
+    sh.getRange(fila + 1, 1, filas.length, 1).setNumberFormat('dd/mm/yyyy');
+    sh.getRange(fila + 1, 4, filas.length, 1).setNumberFormat('#,##0.00');
+    sh.getRange(fila + 1, 6, filas.length, 1).setNumberFormat('@');
+    sh.getRange(fila, 1, filas.length + 1, enc.length).createFilter();
+  }
+  sh.getRange(4, 1, Math.max(sh.getLastRow() - 3, 1), 11).setFontSize(9);
+  [80, 120, 240, 95, 55, 100, 80, 220, 120, 220, 110].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+  sh.setFrozenRows(2);
+}

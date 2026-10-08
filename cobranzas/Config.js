@@ -14,6 +14,20 @@ var EMPRESAS_INICIALES_ = [
   ['20611750821', 'FIVA', 'FIVA'],
 ];
 
+// Pagos que NO tienen factura de compra (no deben quedar como "sin cruzar").
+// Palabra o frase (en beneficiario, descripcion o "Tipo y Nº Doc.") → categoria.
+var CATEGORIAS_INICIALES_ = [
+  ['AFP', '🏦 Aportes AFP'], ['PRIMA', '🏦 Aportes AFP'], ['PROFUTURO', '🏦 Aportes AFP'], ['HABITAT', '🏦 Aportes AFP'], ['INTEGRA', '🏦 Aportes AFP'],
+  ['ESSALUD', '🩺 EsSalud / EPS'], ['EPS', '🩺 EsSalud / EPS'], ['ONP', '🏛 Tributos SUNAT'],
+  ['SUNAT', '🏛 Tributos SUNAT'], ['1662', '🏛 Tributos SUNAT'], ['DETRACCION', '🏛 Tributos SUNAT'],
+  ['PLANILLA', '👥 Planilla'], ['REMUNERACION', '👥 Planilla'], ['HABERES', '👥 Planilla'], ['SUELDO', '👥 Planilla'],
+  ['GRATIFICACION', '👥 Planilla'], ['CTS', '👥 Planilla'], ['VACACIONES', '👥 Planilla'],
+  ['RXH', '🧾 Recibo por honorarios'], ['HONORARIOS', '🧾 Recibo por honorarios'], ['RECIBO POR HONORARIOS', '🧾 Recibo por honorarios'],
+  ['PRESTAMO', '💳 Préstamos y cuotas'], ['PAGO DE CUOTA', '💳 Préstamos y cuotas'], ['CUOTA', '💳 Préstamos y cuotas'], ['COBRO TARJETA DE CREDITO', '💳 Préstamos y cuotas'],
+  ['RETIRO EN EFECTIVO', '💵 Retiro de efectivo'], ['COMISION', '🏦 Gastos bancarios'], ['ITF', '🏦 Gastos bancarios'],
+  ['ALQUILER', '🏠 Alquileres'], ['OTROS', '📦 Otros pagos'],
+];
+
 var PARAMETROS_ = [
   // [fila, nombre, valor por defecto, nota]
   [3, 'ID Sheet de Vouchers', '1CS0GZiKclm2SroNgrpiBZsavYVobqBv9rgKzjQDII1c', 'Sistema de Vouchers'],
@@ -54,7 +68,7 @@ function menuInstalar() {
 }
 
 function instalar_(ss) {
-  var orden = [HOJA.PANEL, HOJA.CONSULTA, HOJA.DOCS, HOJA.MOVS, HOJA.CONC, HOJA.MANUAL, HOJA.CONFIG];
+  var orden = [HOJA.PANEL, HOJA.CONSULTA, HOJA.DOCS, HOJA.MOVS, HOJA.CONC, HOJA.OTROS, HOJA.MANUAL, HOJA.CONFIG];
   orden.forEach(function (n, i) {
     var sh = obtenerOCrearHoja_(ss, n);
     ss.setActiveSheet(sh);
@@ -84,6 +98,7 @@ function crearConfig_(ss) {
     PARAMETROS_.forEach(function (p) {
       if (!sh.getRange(p[0], 1).getValue()) sh.getRange(p[0], 1, 1, 3).setValues([[p[1], p[2], p[3]]]);
     });
+    crearTablaCategorias_(sh);
     return;
   }
   sh.getRange('A1').setValue('PARÁMETROS').setFontWeight('bold').setFontSize(12);
@@ -100,6 +115,7 @@ function crearConfig_(ss) {
 
   sh.getRange('L1').setValue('DÍAS DE CRÉDITO POR CONTRAPARTE').setFontWeight('bold').setFontSize(12);
   sh.getRange('L2:M2').setValues([['RUC', 'Días']]);
+  crearTablaCategorias_(sh);
 
   [sh.getRange('A2:C2'), sh.getRange('E2:G2'), sh.getRange('I2:J2'), sh.getRange('L2:M2')].forEach(function (r) {
     r.setFontWeight('bold').setFontColor(COLOR.BLANCO).setBackground(COLOR.AZUL).setWrap(true);
@@ -129,6 +145,16 @@ function crearRegistroManual_(ss) {
   sh.getRange('L1').setValue('ℹ️ Aquí registras retenciones, detracciones u otros descuentos (y pagos sin voucher). Cuando tengas la descarga automática de retenciones, escribirá en estas mismas columnas.')
     .setWrap(true).setFontColor(COLOR.TEXTO_SUAVE);
   sh.setColumnWidth(12, 320);
+}
+
+/** Tabla de categorias de pagos sin factura (columnas O:P). No pisa si ya existe. */
+function crearTablaCategorias_(sh) {
+  if (sh.getRange('O1').getValue()) return;
+  sh.getRange('O1').setValue('PAGOS SIN FACTURA (palabra → categoría)').setFontWeight('bold').setFontSize(12);
+  sh.getRange('O2:P2').setValues([['Palabra o frase (en beneficiario, descripción o Tipo y Nº Doc.)', 'Categoría']])
+    .setFontWeight('bold').setFontColor(COLOR.BLANCO).setBackground(COLOR.AZUL).setWrap(true);
+  sh.getRange(3, 15, CATEGORIAS_INICIALES_.length, 2).setValues(CATEGORIAS_INICIALES_);
+  sh.setColumnWidth(15, 260); sh.setColumnWidth(16, 220);
 }
 
 /** Lee la configuracion de la hoja ⚙️ Config. */
@@ -166,5 +192,13 @@ function leerConfig_(ss) {
   });
   alias.forEach(function (r) { cfg.aliasNombre[normNombre_(r[0])] = aRuc_(r[1]); });
   dias.forEach(function (r) { cfg.diasPorRuc[aRuc_(r[0])] = Number(r[1]); });
+  // Categorias de pagos sin factura (si la tabla aun no existe se crea con las iniciales)
+  crearTablaCategorias_(sh);
+  var ultCat = Math.max(sh.getLastRow(), 3);
+  cfg.categorias = sh.getRange(3, 15, ultCat - 2, 2).getValues()
+    .filter(function (r) { return String(r[0]).trim() && String(r[1]).trim(); })
+    .map(function (r) { return { clave: String(r[0]).trim(), categoria: String(r[1]).trim() }; })
+    // frases largas primero (ej. "RECIBO POR HONORARIOS" antes que "HONORARIOS")
+    .sort(function (a, b) { return b.clave.length - a.clave.length; });
   return cfg;
 }
