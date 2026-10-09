@@ -47,48 +47,53 @@ jobs:
           curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o prev.html
           curl -sS -A "$UA" -c "$JAR" -b "$JAR" "$MENU" -o menu.html
 
-          echo "================ 1) MENU SOL: opciones con 'retenci' ================"
+          echo "================ A) e-factura: rutas de la API en el codigo publico de la pagina ================"
+          curl -sS -m 30 -A "$UA" -L https://e-factura.sunat.gob.pe/ -o ef.html
+          for js in $(grep -oE '(src|href)="[^"]+\.js"' ef.html | sed -E 's/.*="([^"]+)"/\1/' | head -20); do
+            case "$js" in http*) u="$js";; /*) u="https://e-factura.sunat.gob.pe$js";; *) u="https://e-factura.sunat.gob.pe/$js";; esac
+            curl -sS -m 30 -A "$UA" "$u" -o "ef_$(basename "$js")"
+          done
           python3 - <<'PY'
-          import re, glob, html
+          import re, glob
           vistos = set()
-          for f in ['login.html', 'prev.html', 'menu.html']:
+          for f in glob.glob('ef_*.js') + ['ef.html']:
               t = open(f, encoding='utf-8', errors='ignore').read()
-              for m in re.finditer(r'.{0,220}[Rr]etenci.{0,220}', t):
-                  s = re.sub(r'\s+', ' ', html.unescape(m.group(0)))
-                  if s not in vistos:
-                      vistos.add(s); print('-', s[:440])
-          print('(total coincidencias:', len(vistos), ')')
-          # Codigos de menu tipo 11.x.x.x.x cerca de la palabra
-          for f in ['login.html', 'prev.html', 'menu.html']:
-              t = open(f, encoding='utf-8', errors='ignore').read()
-              for m in re.finditer(r'(\d+(?:\.\d+){3,5})[^\n]{0,160}[Rr]etenci', t):
-                  print('CODIGO', m.group(1), '->', re.sub(r'\s+', ' ', m.group(0))[:200])
+              for pat in [r'.{0,200}consultacpe.{0,300}', r'.{0,120}(fecEmision|fecIni|fechaIni|fecDesde|indTipo|tipoConsulta|codCpe|numRuc)[A-Za-z]*.{0,200}']:
+                  for m in re.finditer(pat, t):
+                      s = re.sub(r'\s+', ' ', m.group(0))
+                      k = s[:120]
+                      if k not in vistos:
+                          vistos.add(k); print('-', f, '::', s[:520])
+          print('(archivos js:', len(glob.glob('ef_*.js')), ', coincidencias:', len(vistos), ')')
           PY
 
-          echo "================ 2) CONSULTA CLASICA CPE (formulario) ================"
-          curl -sS -A "$UA" -c "$JAR" -b "$JAR" -L "$MENU?action=execute&code=11.9.5.1.1" -o cpegem.html
+          echo "================ B) Formulario clasico de consulta de CRE (11.9.7.1.1) ================"
+          curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
+          curl -sS -A "$UA" -c "$JAR" -b "$JAR" -L "$MENU?action=execute&code=11.9.7.1.1" -o cre.html
           python3 - <<'PY'
           import re, html
-          t = open('cpegem.html', encoding='utf-8', errors='ignore').read()
+          t = open('cre.html', encoding='utf-8', errors='ignore').read()
+          print('tamano', len(t))
+          for m in re.finditer(r'<(input|select|form)[^>]*>', t, re.I):
+              print(' ', re.sub(r'\s+', ' ', m.group(0))[:200])
           for sel in re.finditer(r'<select[^>]*name="?([\w]+)"?[^>]*>(.*?)</select>', t, re.S | re.I):
               ops = re.findall(r'<option[^>]*value="?([^">]*)"?[^>]*>(.*?)</option>', sel.group(2), re.S | re.I)
               print('SELECT', sel.group(1), ':', '; '.join(v + '=' + re.sub(r'\s+', ' ', html.unescape(x)).strip() for v, x in ops))
-          for m in re.finditer(r'.{0,160}[Rr]etenci.{0,160}', t):
-              print('-', re.sub(r'\s+', ' ', m.group(0))[:320])
-          print('(tamano', len(t), ')')
+          for m in re.finditer(r'(url|action|\.do|\.htm|ajax|fetch|\$\.(get|post))[^\n]{0,200}', t):
+              print('  JS:', re.sub(r'\s+', ' ', m.group(0))[:220])
           PY
 
-          echo "================ 3) API de consultas (e-factura): parametros ================"
-          EXEC_LOC=$(curl -sS -A "$UA" -c "$JAR" -b "$JAR" -D - -o /dev/null \
-            "$MENU?action=execute&code=11.38.1.1.1" | grep -i "^location:" | sed 's/[Ll]ocation: //' | tr -d '\r')
-          TOKEN=$(echo "$EXEC_LOC" | grep -oE 'token=[^&]*' | cut -d= -f2)
-          echo "token obtenido: $([ -n "$TOKEN" ] && echo si || echo no)"
-          B="https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe"
-          for p in parametros comprobantes/parametros parametros/tipocomprobante parametros/comprobantes; do
-            code=$(curl -sS -o resp.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" \
-              -H "Accept: application/json, text/plain, */*" -H "Origin: https://e-factura.sunat.gob.pe" \
-              -H "Referer: https://e-factura.sunat.gob.pe/" -A "$UA" "$B/$p")
-            echo "--- GET $p -> HTTP $code"
-            head -c 2500 resp.json; echo
-          done
-          rm -f "$JAR" *.html resp.json
+          echo "================ C) Cuenta de control: retenciones que le efectuaron (12.8.2.1.2) ================"
+          curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
+          curl -sS -A "$UA" -c "$JAR" -b "$JAR" -L "$MENU?action=execute&code=12.8.2.1.2" -o cta.html
+          python3 - <<'PY'
+          import re, html
+          t = open('cta.html', encoding='utf-8', errors='ignore').read()
+          print('tamano', len(t))
+          for m in re.finditer(r'<(input|select|form|frame|iframe)[^>]*>', t, re.I):
+              print(' ', re.sub(r'\s+', ' ', m.group(0))[:200])
+          txt = re.sub(r'<[^>]+>', ' ', t); txt = re.sub(r'\s+', ' ', html.unescape(txt))
+          print('TEXTO:', txt[:1200])
+          PY
+
+          rm -f "$JAR" *.html resp.json ef_*.js
