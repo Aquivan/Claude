@@ -1,0 +1,2 @@
+empresa_ruc,tipo,periodo,comprobante,fecha_retencion,ruc_agente,ruc_proveedor,proveedor,doc_tipo,doc_numero,doc_fecha,doc_moneda,doc_importe_total,pago_numero,pago_fecha,pago_importe,tipo_cambio,importe_retenido,importe_pagado_neto
+20447969531,Emitido,202601,E001-119,15/01/2026,20447969531,20610201751,GRUPO CALICHA SOCIEDAD ANONIMA CERRADA,Factura,E001-219,15/05/2025,PEN,43095.00,1,15/01/2026,43095.00,1.00,1292.85,41802.15

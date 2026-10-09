@@ -1,0 +1,2 @@
+empresa_ruc,tipo,periodo,fecha_emision,comprobante,serie,numero,ruc_agente,agente,ruc_proveedor,proveedor,regimen,tasa,importe_retenido,importe_pagado,moneda,estado,facturas,correo_receptor,pdf,xml,observacion
+20447969531,Emitido,202601,15/01/2026,E001-119,E001,119,20447969531,CORPORACION GRANIX E.I.R.L.,20610201751,GRUPO CALICHA SOCIEDAD ANONIMA CERRADA,Tasa 3%,3,1292.85,41802.15,PEN,EMITIDO,1,grupocalicha@gmail.com,20447969531/2026/01/pdf/20447969531-E001-119.pdf,20447969531/2026/01/xml/20447969531-E001-119.xml,
