@@ -1,12 +1,16 @@
 # Proyecto "Retenciones · Grupo" (carpeta retenciones/). Descarga de SUNAT SOL
 # los comprobantes de retencion (CRE) EMITIDOS y RECIBIDOS, con su PDF y XML,
 # de una empresa o de todas las empresas activas de empresas.json (las mismas
-# de SIRE). Solo escribe en retenciones/datos/ y solo si guardar=true.
+# de SIRE). Solo escribe en retenciones/datos/ (si guardar=true o en la corrida
+# automatica diaria). Si un mes falla, igual se guarda lo que si se bajo.
 # No toca ningun otro proyecto. Nunca imprime claves ni tokens.
 
 name: Retenciones - descargar CRE (SUNAT SOL)
 
 on:
+  # Todos los dias ~6:07 a. m. de Lima: mes anterior y mes actual de todas las empresas.
+  schedule:
+    - cron: '7 11 * * *'
   workflow_dispatch:
     inputs:
       empresa:
@@ -49,7 +53,7 @@ jobs:
           sparse-checkout-cone-mode: false
       - id: e
         env:
-          EMPRESA: ${{ inputs.empresa }}
+          EMPRESA: ${{ inputs.empresa || 'todas' }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
@@ -84,18 +88,21 @@ jobs:
           DIAG: ${{ inputs.diagnostico }}
         run: |
           extra=""
-          if [ "$ARCHIVOS" != "true" ]; then extra="$extra --sin-archivos"; fi
+          if [ "$ARCHIVOS" = "false" ]; then extra="$extra --sin-archivos"; fi
+          # Corrida automatica (sin datos de entrada): desde el mes anterior.
+          if [ -z "$PERIODO" ]; then PERIODO=$(TZ=America/Lima date -d "$(TZ=America/Lima date +%Y-%m-01) -1 month" +%Y%m); fi
+          echo "Meses: $PERIODO a ${HASTA:-actual}"
           if [ "$DIAG" = "true" ]; then extra="$extra --diagnostico"; fi
           python3 retenciones/scripts/descargar_cre.py --periodo "$PERIODO" --hasta "$HASTA" --salida retenciones/datos $extra
 
       - name: Guardar en el repositorio
-        if: ${{ success() && inputs.guardar }}
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.guardar) }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add retenciones/datos
           git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
-          git commit -m "Retenciones CRE ${{ matrix.ruc }} ${{ inputs.periodo }}-${{ inputs.hasta || 'actual' }} [skip ci]"
+          git commit -m "Retenciones CRE ${{ matrix.ruc }} ${{ inputs.periodo || 'automatico' }}-${{ inputs.hasta || 'actual' }} [skip ci]"
           logrado=0
           for intento in 1 2 3 4 5; do
             if git push; then logrado=1; break; fi
