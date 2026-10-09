@@ -1,7 +1,7 @@
 # Proyecto "Retenciones · Grupo" (carpeta retenciones/). Hace la consulta de
 # comprobantes de retencion con un navegador Chrome real y guarda FOTOS de cada
 # pantalla y un VIDEO del recorrido como archivo descargable de esta ejecucion
-# (seccion "Artifacts", se borra solo a los 7 dias). No guarda nada en el
+# (seccion "Artifacts", se borra sola a los 3 dias). No guarda nada en el
 # repositorio ni toca otros proyectos. Nunca imprime claves.
 
 name: Retenciones - ver pantallas (fotos y video)
@@ -50,4 +50,4 @@ jobs:
         with:
           name: pantallas-${{ inputs.ruc }}-${{ inputs.periodo }}
           path: pantallas/
-          retention-days: 7
+          retention-days: 3

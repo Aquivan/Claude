@@ -27,6 +27,8 @@ ORIG = "https://e-menu.sunat.gob.pe/cl-ti-itmenu/AutenticaMenuInternet.htm"
 MENU = "https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm"
 STATE = ("rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAADdAADZXhlcHQABnBhcmFtc3QASyomKiYvY2wtdGktaXRtZW51L01lbnVJbnRlcm5ldC5odG0mYjY0ZDI2YThiNWFmMDkxOTIzYjIzYjY0MDdhMWMxZGI0MWU3MzNhNnQABGV4ZWNweA==")
 CODIGO_MENU_CRE = "11.9.7.1.1"
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36")
 
 # Lista de elementos del formulario (id, name, tipo, texto) para el log.
 JS_FORMULARIO = """() => [...document.querySelectorAll('input,select,button,a.btn,label')]
@@ -50,7 +52,7 @@ def main():
 
     with sync_playwright() as p:
         nav = p.chromium.launch()
-        ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE",
+        ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA,
                               record_video_dir=a.salida, record_video_size={"width": 1366, "height": 900})
         pag = ctx.new_page()
 
@@ -87,10 +89,10 @@ def main():
             sys.exit(1)
         pag.wait_for_load_state("networkidle", timeout=60000)
         pag.wait_for_timeout(3000)
+        print("Despues de ingresar:", pag.url.split("?")[0], "| titulo:", pag.title())
         foto("menu_SOL_despues_de_ingresar")
 
         # 2) Abrir la opcion "Consulta del comprobante de retencion electronico"
-        pag.request.post(MENU, form={"action": "prevApp"})
         pag.goto(f"{MENU}?action=execute&code={CODIGO_MENU_CRE}", wait_until="networkidle", timeout=60000)
         pag.wait_for_timeout(3000)
         print("Pagina abierta:", pag.url.split("?")[0], "| titulo:", pag.title())
