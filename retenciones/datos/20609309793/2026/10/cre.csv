@@ -1,0 +1,2 @@
+empresa_ruc,tipo,periodo,fecha_emision,comprobante,serie,numero,ruc_agente,agente,ruc_proveedor,proveedor,regimen,tasa,importe_retenido,importe_pagado,moneda,estado,facturas,correo_receptor,pdf,xml,observacion
+20609309793,Emitido,202610,03/10/2026,E001-78,E001,78,20609309793,BKF CORPORACION E.I.R.L.,20566226830,ENERGY PERU COMPANY E.I.R.L.,Tasa 3%,3,57.66,1864.31,PEN,EMITIDO,1,administracion@energy-peru.com,20609309793/2026/10/pdf/20609309793-E001-78.pdf,20609309793/2026/10/xml/20609309793-E001-78.xml,
