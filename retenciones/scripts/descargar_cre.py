@@ -2,22 +2,34 @@
 descargar_cre.py — Proyecto "Retenciones · Grupo".
 
 Descarga de SUNAT (SOL) los Comprobantes de Retención Electrónicos (CRE)
-EMITIDOS y RECIBIDOS de UNA empresa para UN periodo (mes) y los guarda en:
+EMITIDOS y RECIBIDOS de UNA empresa, mes por mes, con su PDF y XML oficiales,
+y los deja ordenados igual que SIRE:
 
-    retenciones/datos/<RUC>/<AAAAMM>_cre.csv       (un renglón por CRE)
-    retenciones/datos/<RUC>/<AAAAMM>_detalle.csv   (un renglón por factura retenida)
+    retenciones/datos/<RUC>/<AAAA>/<MM>/cre.csv        un renglón por comprobante de retención
+    retenciones/datos/<RUC>/<AAAA>/<MM>/detalle.csv    un renglón por factura retenida (sacado del XML)
+    retenciones/datos/<RUC>/<AAAA>/<MM>/pdf/<RUC emisor>-<serie>-<número>.pdf
+    retenciones/datos/<RUC>/<AAAA>/<MM>/xml/<RUC emisor>-<serie>-<número>.xml
 
-Solo LEE en SUNAT (consulta "Consultar Emisión y Recepción" de SOL). No emite,
-no revierte ni modifica nada. Las claves SOL llegan por variables de entorno
-(SUNAT_RUC, SUNAT_USUARIO, SUNAT_CLAVE) y nunca se imprimen.
+Rutas en SUNAT (solo LECTURA, no emite ni revierte nada):
+  - Lista:  menú 11.9.7.1.1 "Consulta del comprobante de retención electrónico"
+            (los filtros "TODOS" de esa pantalla se envían como "000").
+  - PDF/XML: API de consultas de comprobantes (menú 11.38.1.1.1), código 20 =
+            Comprobante de Retención; es la misma vía que usa la descarga de facturas.
 
-Uso:  python descargar_cre.py --periodo 202609 [--salida retenciones/datos] [--diagnostico]
+Las claves SOL llegan por variables de entorno (SUNAT_RUC, SUNAT_USUARIO,
+SUNAT_CLAVE) y nunca se imprimen.
+
+Uso:  python descargar_cre.py --periodo 202601 [--hasta 202609] [--salida retenciones/datos]
+                              [--sin-archivos] [--diagnostico]
+      (--hasta vacío = hasta el mes actual)
 """
 import argparse
+import base64
 import calendar
 import csv
 import html
 import http.cookiejar
+import io
 import json
 import os
 import re
@@ -26,6 +38,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
+import zipfile
+from datetime import datetime, timedelta, timezone
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
@@ -34,20 +49,42 @@ SEC = f"https://api-seguridad.sunat.gob.pe/v1/clientessol/{CID}/oauth2"
 ORIG = "https://e-menu.sunat.gob.pe/cl-ti-itmenu/AutenticaMenuInternet.htm"
 MENU = "https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm"
 STATE = ("rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAADdAADZXhlcHQABnBhcmFtc3QASyomKiYvY2wtdGktaXRtZW51L01lbnVJbnRlcm5ldC5odG0mYjY0ZDI2YThiNWFmMDkxOTIzYjIzYjY0MDdhMWMxZGI0MWU3MzNhNnQABGV4ZWNweA==")
-CODIGO_MENU_CRE = "11.9.7.1.1"   # Consulta de Comprobante de Retención (emitidos y recibidos)
+CODIGO_MENU_CRE = "11.9.7.1.1"     # Consulta del comprobante de retención electrónico
+CODIGO_MENU_API = "11.38.1.1.1"    # Consulta de comprobantes (da el token de la API de PDF/XML)
 BASE_CRE = "https://ww1.sunat.gob.pe/ol-ti-itcpretencion/consulta"
+API_CPE = "https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe/comprobantes"
 TIMEOUT = 40
+LIMA = timezone(timedelta(hours=-5))
+
+REGIMENES = {"01": "Tasa 3%", "02": "Tasa 6%"}
+TIPOS_DOC = {"01": "Factura", "03": "Boleta", "07": "Nota de crédito", "08": "Nota de débito",
+             "12": "Ticket", "20": "Comprobante de retención"}
+
+COLS_CRE = ["empresa_ruc", "tipo", "periodo", "fecha_emision", "comprobante", "serie", "numero",
+            "ruc_agente", "agente", "ruc_proveedor", "proveedor", "regimen", "tasa",
+            "importe_retenido", "importe_pagado", "moneda", "estado", "facturas", "correo_receptor",
+            "pdf", "xml", "observacion"]
+COLS_DET = ["empresa_ruc", "tipo", "periodo", "comprobante", "fecha_retencion", "ruc_agente",
+            "ruc_proveedor", "proveedor", "doc_tipo", "doc_numero", "doc_fecha", "doc_moneda",
+            "doc_importe_total", "pago_numero", "pago_fecha", "pago_importe", "tipo_cambio",
+            "importe_retenido", "importe_pagado_neto"]
+
+
+class SinRedireccion(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
 
 
 class Sol:
-    """Sesion de SOL con cookies, reintentos y pausas cortas entre pedidos."""
+    """Sesión de SOL con cookies, reintentos y pausas cortas entre pedidos."""
 
     def __init__(self):
         self.jar = http.cookiejar.CookieJar()
         self.op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
+        self.op_sin = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar), SinRedireccion)
         self.ultima_url = ""
 
-    def pedir(self, url, datos=None, headers=None, intentos=4):
+    def pedir(self, url, datos=None, headers=None, intentos=4, binario=False):
         if isinstance(datos, dict):
             datos = urllib.parse.urlencode(datos).encode("utf-8")
         h = {"User-Agent": UA}
@@ -58,7 +95,8 @@ class Sol:
                 req = urllib.request.Request(url, data=datos, headers=h)
                 with self.op.open(req, timeout=TIMEOUT) as r:
                     self.ultima_url = r.geturl()
-                    return r.status, r.read().decode("utf-8", errors="ignore")
+                    cuerpo = r.read()
+                    return r.status, cuerpo if binario else cuerpo.decode("utf-8", errors="ignore")
             except urllib.error.HTTPError as e:
                 cuerpo = e.read().decode("utf-8", errors="ignore")
                 if e.code < 500 or i == intentos:
@@ -68,6 +106,15 @@ class Sol:
                 error = str(e)
             time.sleep(5 * i)
         raise RuntimeError(f"SUNAT no respondió en {url.split('?')[0]} tras {intentos} intentos ({error})")
+
+    def ubicacion(self, url):
+        """Devuelve la cabecera Location (sin seguir la redirección)."""
+        req = urllib.request.Request(url, headers={"User-Agent": UA})
+        try:
+            with self.op_sin.open(req, timeout=TIMEOUT) as r:
+                return r.headers.get("Location", "")
+        except urllib.error.HTTPError as e:
+            return e.headers.get("Location", "")
 
     def login(self, ruc, usuario, clave):
         self.pedir(f"{SEC}/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false"
@@ -83,92 +130,14 @@ class Sol:
         _, t = self.pedir(f"{MENU}?action=execute&code={codigo}")
         return t
 
-
-def rango_mes(periodo):
-    a, m = int(periodo[:4]), int(periodo[4:])
-    ultimo = calendar.monthrange(a, m)[1]
-    return f"01/{m:02d}/{a}", f"{ultimo:02d}/{m:02d}/{a}"
-
-
-def texto(s):
-    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", s or ""))).strip()
+    def token_api(self):
+        self.pedir(MENU, {"action": "prevApp"})
+        loc = self.ubicacion(f"{MENU}?action=execute&code={CODIGO_MENU_API}")
+        m = re.search(r"token=([^&]+)", loc or "")
+        return urllib.parse.unquote(m.group(1)) if m else ""
 
 
-def valores_combos(pagina):
-    """Lee de la pagina los valores validos de tipo de documento y estado (si vienen en el HTML/JS)."""
-    res = {}
-    for nombre in ["lstTipoDocumento", "lstTipoEstado", "lstRegiPercep"]:
-        m = re.search(nombre + r"\s*=\s*(\[.*?\]|\{.*?\})\s*;", pagina, re.S)
-        if m:
-            try:
-                res[nombre] = json.loads(m.group(1))
-            except Exception:
-                res[nombre] = m.group(1)[:300]
-    return res
-
-
-def buscar(sol, tipo, fini, ffin, tipo_doc, estado, serie=""):
-    st, t = sol.pedir(f"{BASE_CRE}/buscarComprobanteEmiRec", {
-        "opcionTipoCompReten": tipo, "tipoDocReceptor": tipo_doc, "numDocReceptor": "",
-        "serieCompReten": serie, "numeroCompReten": "", "fechaInicio": fini, "fechaFin": ffin,
-        "estadoCompReten": estado,
-    }, {"X-Requested-With": "XMLHttpRequest", "Referer": f"{BASE_CRE}/iniConsulComp",
-        "Accept": "application/json, text/javascript, */*; q=0.01"}, intentos=2)
-    try:
-        return st, json.loads(t)
-    except Exception:
-        return st, {"_error": texto(t)[:300]}
-
-
-def detalle(sol, cre):
-    q = urllib.parse.urlencode({k: str(cre.get(k, "")).strip() for k in ["codCpe", "numSerieCpe", "numCpe", "numRuc"]})
-    _, t = sol.pedir(f"{BASE_CRE}/cargarDetalleComprobante?{q}", headers={"Referer": f"{BASE_CRE}/iniConsulComp"})
-    try:
-        return json.loads(t)
-    except Exception:
-        pass
-    # HTML: tomar la(s) tabla(s) como filas de texto
-    filas = []
-    for tabla in re.findall(r"<table.*?</table>", t, re.S | re.I):
-        cab = [texto(x) for x in re.findall(r"<th[^>]*>(.*?)</th>", tabla, re.S | re.I)]
-        for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", tabla, re.S | re.I):
-            celdas = [texto(x) for x in re.findall(r"<td[^>]*>(.*?)</td>", tr, re.S | re.I)]
-            if celdas:
-                filas.append(dict(zip(cab, celdas)) if cab and len(cab) == len(celdas) else {"celdas": celdas})
-    return {"_html_filas": filas, "_html_len": len(t)}
-
-
-def plano(d, pref=""):
-    """Aplana un dict (para CSV)."""
-    out = {}
-    for k, v in (d or {}).items():
-        if isinstance(v, dict):
-            out.update(plano(v, pref + k + "."))
-        elif isinstance(v, list):
-            out[pref + k] = json.dumps(v, ensure_ascii=False)
-        elif k.lower().startswith("fecha") and isinstance(v, (int, float)) and v > 1e11:
-            # SUNAT manda la fecha en milisegundos; se pasa a dd/mm/aaaa (hora de Peru, UTC-5)
-            out[pref + k] = time.strftime("%d/%m/%Y", time.gmtime(v / 1000 - 5 * 3600))
-        else:
-            out[pref + k] = v
-    return out
-
-
-def guardar_csv(ruta, filas):
-    if not filas:
-        return
-    campos = []
-    for f in filas:
-        for k in f:
-            if k not in campos:
-                campos.append(k)
-    os.makedirs(os.path.dirname(ruta), exist_ok=True)
-    with open(ruta, "w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=campos)
-        w.writeheader()
-        for f in filas:
-            w.writerow(f)
-
+# ---------------------------------------------------------------- utilidades
 
 def periodos(desde, hasta):
     a, m = int(desde[:4]), int(desde[4:])
@@ -180,51 +149,194 @@ def periodos(desde, hasta):
             a, m = a + 1, 1
 
 
+def rango_mes(periodo):
+    a, m = int(periodo[:4]), int(periodo[4:])
+    return f"01/{m:02d}/{a}", f"{calendar.monthrange(a, m)[1]:02d}/{m:02d}/{a}"
+
+
+def texto(s):
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", s or ""))).strip()
+
+
+def fecha_ms(v):
+    try:
+        return datetime.fromtimestamp(float(v) / 1000, LIMA).strftime("%d/%m/%Y")
+    except Exception:
+        return str(v or "").strip()
+
+
+def fecha_iso(s):
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", s or "")
+    return f"{m.group(3)}/{m.group(2)}/{m.group(1)}" if m else (s or "")
+
+
+def estados_de_pagina(pagina):
+    """Busca en el JavaScript de la página la lista de estados (EMITIDO, REVERTIDO...)."""
+    for m in re.finditer(r"\[\{[^\[\]]*?REVERTIDO[^\[\]]*?\}\]", pagina, re.S | re.I):
+        try:
+            return {str(x.get("codigo", "")).strip(): str(x.get("descripcionCorta") or x.get("descripcion") or "").strip()
+                    for x in json.loads(m.group(0))}
+        except Exception:
+            continue
+    return {}
+
+
+def buscar(sol, tipo, fini, ffin, serie=""):
+    st, t = sol.pedir(f"{BASE_CRE}/buscarComprobanteEmiRec", {
+        "opcionTipoCompReten": tipo, "tipoDocReceptor": "000", "numDocReceptor": "",
+        "serieCompReten": serie, "numeroCompReten": "", "fechaInicio": fini, "fechaFin": ffin,
+        "estadoCompReten": "000",
+    }, {"X-Requested-With": "XMLHttpRequest", "Referer": f"{BASE_CRE}/iniConsulComp",
+        "Accept": "application/json, text/javascript, */*; q=0.01"}, intentos=3)
+    try:
+        return st, json.loads(t)
+    except Exception:
+        return st, {"_error": texto(t)[:300]}
+
+
+def bajar_archivo(sol, token, id_api, accion):
+    """accion 01 = PDF, 02 = XML. Devuelve los bytes del archivo (sacado del zip) o None."""
+    for intento in range(5):
+        st, t = sol.pedir(f"{API_CPE}/{id_api}/{accion}?formato=x", headers={
+            "Authorization": f"Bearer {token}", "Accept": "application/json, text/plain, */*",
+            "Origin": "https://e-factura.sunat.gob.pe", "Referer": "https://e-factura.sunat.gob.pe/"},
+            intentos=1)
+        try:
+            d = json.loads(t)
+            raw = base64.b64decode(d["valArchivo"])
+            try:
+                zf = zipfile.ZipFile(io.BytesIO(raw))
+                return zf.read(zf.namelist()[0])
+            except zipfile.BadZipFile:
+                return raw
+        except Exception:
+            time.sleep(4)
+    return None
+
+
+# ------------------------------------------------------------------ XML UBL
+
+def _hijos(e, nombre):
+    return [c for c in e if c.tag.rsplit("}", 1)[-1] == nombre]
+
+
+def _uno(e, *ruta):
+    for n in ruta:
+        if e is None:
+            return None
+        h = _hijos(e, n)
+        e = h[0] if h else None
+    return e
+
+
+def _txt(e, *ruta):
+    x = _uno(e, *ruta)
+    return (x.text or "").strip() if x is not None and x.text else ""
+
+
+def leer_xml(contenido):
+    """Lee un CRE UBL (Retention-1). Devuelve (cabecera, [facturas])."""
+    raiz = ET.fromstring(contenido)
+    cab = {
+        "agente": _txt(raiz, "AgentParty", "PartyLegalEntity", "RegistrationName"),
+        "proveedor": _txt(raiz, "ReceiverParty", "PartyLegalEntity", "RegistrationName"),
+        "ruc_proveedor_xml": _txt(raiz, "ReceiverParty", "PartyIdentification", "ID"),
+        "tasa": _txt(raiz, "SUNATRetentionPercent"),
+        "regimen_xml": _txt(raiz, "SUNATRetentionSystemCode"),
+        "importe_retenido": _txt(raiz, "TotalInvoiceAmount"),
+        "importe_pagado": _txt(raiz, "SUNATTotalPaid"),
+        "observacion": _txt(raiz, "Note"),
+    }
+    tot = _uno(raiz, "TotalInvoiceAmount")
+    cab["moneda"] = tot.get("currencyID", "") if tot is not None else ""
+    facturas = []
+    for ref in _hijos(raiz, "SUNATRetentionDocumentReference"):
+        doc = _uno(ref, "ID")
+        total = _uno(ref, "TotalInvoiceAmount")
+        info = _uno(ref, "SUNATRetentionInformation")
+        facturas.append({
+            "doc_tipo": TIPOS_DOC.get(doc.get("schemeID", "") if doc is not None else "", doc.get("schemeID", "") if doc is not None else ""),
+            "doc_numero": (doc.text or "").strip() if doc is not None and doc.text else "",
+            "doc_fecha": fecha_iso(_txt(ref, "IssueDate")),
+            "doc_moneda": total.get("currencyID", "") if total is not None else "",
+            "doc_importe_total": (total.text or "").strip() if total is not None and total.text else "",
+            "pago_numero": _txt(ref, "Payment", "ID"),
+            "pago_fecha": fecha_iso(_txt(ref, "Payment", "PaidDate")),
+            "pago_importe": _txt(ref, "Payment", "PaidAmount"),
+            "tipo_cambio": _txt(info, "ExchangeRate", "CalculationRate"),
+            "importe_retenido": _txt(info, "SUNATRetentionAmount"),
+            "fecha_retencion": fecha_iso(_txt(info, "SUNATRetentionDate")),
+            "importe_pagado_neto": _txt(info, "SUNATNetTotalPaid"),
+        })
+    return cab, facturas
+
+
+# --------------------------------------------------------------------- CSV
+
+def leer_csv(ruta):
+    if not os.path.exists(ruta):
+        return []
+    with open(ruta, encoding="utf-8") as fh:
+        return list(csv.DictReader(fh))
+
+
+def guardar_csv(ruta, columnas, filas):
+    os.makedirs(os.path.dirname(ruta), exist_ok=True)
+    with open(ruta, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=columnas, extrasaction="ignore")
+        w.writeheader()
+        for f in filas:
+            w.writerow({c: f.get(c, "") for c in columnas})
+
+
+# -------------------------------------------------------------------- main
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--periodo", required=True, help="AAAAMM (primer mes)")
-    ap.add_argument("--hasta", default="", help="AAAAMM ultimo mes (vacio = solo --periodo)")
+    ap.add_argument("--hasta", default="", help="AAAAMM último mes (vacío = mes actual)")
     ap.add_argument("--salida", default="retenciones/datos")
-    ap.add_argument("--diagnostico", action="store_true", help="muestra estructura (sin nombres ni montos)")
+    ap.add_argument("--sin-archivos", action="store_true", help="no bajar PDF/XML")
+    ap.add_argument("--diagnostico", action="store_true", help="más detalle técnico en el log (sin claves)")
     a = ap.parse_args()
     ruc, usuario, clave = (os.environ.get(k, "") for k in ["SUNAT_RUC", "SUNAT_USUARIO", "SUNAT_CLAVE"])
     if not (ruc and usuario and clave):
         sys.exit("Faltan SUNAT_RUC / SUNAT_USUARIO / SUNAT_CLAVE")
-    lista_periodos = list(periodos(a.periodo, a.hasta or a.periodo))
+    hasta = a.hasta or datetime.now(LIMA).strftime("%Y%m")
+    lista_periodos = list(periodos(a.periodo, hasta))
     if not lista_periodos or len(lista_periodos) > 24:
-        sys.exit("Rango de periodos invalido (maximo 24 meses)")
+        sys.exit("Rango de periodos inválido (máximo 24 meses)")
 
     sol = Sol()
     sol.login(ruc, usuario, clave)
     print("Login OK")
     pagina = sol.abrir_opcion(CODIGO_MENU_CRE)
-    print("Consulta CRE abierta:", sol.ultima_url.split("?")[0], f"({len(pagina)} caracteres)")
-    if a.diagnostico:
-        combos = valores_combos(pagina)
-        print("Estados posibles:", json.dumps(combos.get("lstTipoEstado"), ensure_ascii=False)[:600])
+    print("Consulta CRE abierta:", sol.ultima_url.split("?")[0])
+    estados = estados_de_pagina(pagina)
+    print("Estados de SUNAT:", estados or "(no se encontraron en la página; se guarda el código)")
 
-    # La pagina de SUNAT manda "000" (= TODOS) en tipo de documento y estado, y
-    # trae la serie "E001" escrita por defecto (visto en ver_pantallas.py el
-    # 09/10/2026). Primero se busca sin serie (todas); si no hay nada, con E001.
-    candidatos = [("000", "000", ""), ("000", "000", "E001")]
-    errores = 0
-    resumen_total = {}
+    token = ""
+    if not a.sin_archivos:
+        token = sol.token_api()
+        print("Token para PDF/XML:", "obtenido" if token else "NO obtenido (se guardará solo la lista)")
+        sol.abrir_opcion(CODIGO_MENU_CRE)  # volver a la consulta de retenciones
+
+    errores, total = 0, {}
     for periodo in lista_periodos:
         fini, ffin = rango_mes(periodo)
+        carpeta = os.path.join(a.salida, ruc, periodo[:4], periodo[4:])
         cabeceras, detalles, resumen = [], [], {}
         for tipo in ["emitido", "recibido"]:
             lista = None
-            for td, es, serie in candidatos:
-                st, d = buscar(sol, tipo, fini, ffin, td, es, serie)
-                ok = isinstance(d, dict) and "listaCompRetencion" in d
-                if not ok:
+            for serie in ["", "E001"]:
+                st, d = buscar(sol, tipo, fini, ffin, serie)
+                if not (isinstance(d, dict) and "listaCompRetencion" in d):
                     print(f"  {periodo} {tipo}: serie='{serie}' -> HTTP {st} {d.get('_error', '')[:120]}")
                     time.sleep(2)
                     continue
-                if a.diagnostico:
-                    print(f"  {periodo} {tipo}: serie='{serie}' -> {len(d.get('listaCompRetencion') or [])} CRE")
-                if lista is None or len(d.get("listaCompRetencion") or []) > len(lista):
-                    lista = d.get("listaCompRetencion") or []
+                encontrados = d.get("listaCompRetencion") or []
+                if lista is None or len(encontrados) > len(lista):
+                    lista = encontrados
                 if lista:
                     break
                 time.sleep(1)
@@ -234,38 +346,79 @@ def main():
                 continue
             resumen[tipo] = len(lista)
             if a.diagnostico and lista:
-                print(f"    campos de cada CRE ({tipo}):", sorted(lista[0].keys()))
-            for cre in lista:
-                fila = {"empresa_ruc": ruc, "periodo": periodo, "tipo": tipo}
-                fila.update(plano(cre))
-                cabeceras.append(fila)
-                time.sleep(1)
-                det = detalle(sol, cre)
-                if a.diagnostico and not detalles:
-                    print("    estructura del detalle:", json.dumps(
-                        {k: (sorted(v[0].keys()) if isinstance(v, list) and v and isinstance(v[0], dict) else type(v).__name__)
-                         for k, v in (det.items() if isinstance(det, dict) else [])}, ensure_ascii=False)[:800])
-                items = []
-                if isinstance(det, dict):
-                    for v in det.values():
-                        if isinstance(v, list) and v and isinstance(v[0], dict):
-                            items = v
-                            break
-                for it in items:
-                    f = {"empresa_ruc": ruc, "periodo": periodo, "tipo": tipo,
-                         "cre_serie": str(cre.get("numSerieCpe", "")).strip(), "cre_numero": str(cre.get("numCpe", "")).strip(),
-                         "cre_ruc_emisor": str(cre.get("numRuc", "")).strip()}
-                    f.update(plano(it))
-                    detalles.append(f)
-            time.sleep(1)
-        carpeta = os.path.join(a.salida, ruc)
-        guardar_csv(os.path.join(carpeta, f"{periodo}_cre.csv"), cabeceras)
-        guardar_csv(os.path.join(carpeta, f"{periodo}_detalle.csv"), detalles)
-        resumen["lineas_detalle"] = len(detalles)
-        resumen_total[periodo] = resumen
-        print(f"{periodo}: emitidos={resumen.get('emitido')} recibidos={resumen.get('recibido')} lineas_detalle={len(detalles)}")
+                print(f"    {tipo}: estados = {sorted(set(str(x.get('codEstadoCpe', '')).strip() for x in lista))}")
 
-    print("RESUMEN", json.dumps({"ruc": ruc, "meses": resumen_total}, ensure_ascii=False))
+            for cre in lista:
+                emisor = str(cre.get("numRuc", "")).strip()
+                serie = str(cre.get("numSerieCpe", "")).strip()
+                numero = str(cre.get("numCpe", "")).strip()
+                base = f"{emisor}-{serie}-{numero}"
+                receptor = str(cre.get("numDocRecep", "")).strip()
+                cod_estado = str(cre.get("codEstadoCpe", "")).strip()
+                fila = {
+                    "empresa_ruc": ruc, "tipo": "Emitido" if tipo == "emitido" else "Recibido",
+                    "periodo": periodo, "fecha_emision": fecha_ms(cre.get("fechaEmision")),
+                    "comprobante": f"{serie}-{numero}", "serie": serie, "numero": numero,
+                    "ruc_agente": emisor, "ruc_proveedor": receptor,
+                    "regimen": REGIMENES.get(str(cre.get("codRegimenRet", "")).strip(), str(cre.get("codRegimenRet", "")).strip()),
+                    "importe_retenido": cre.get("montoTotalRetenido", ""),
+                    "estado": estados.get(cod_estado, cod_estado),
+                    "correo_receptor": str(cre.get("codCorreoRecep", "") or "").strip(),
+                    "observacion": str(cre.get("descObservacion", "") or "").strip(),
+                }
+                ruta_pdf = os.path.join(carpeta, "pdf", base + ".pdf")
+                ruta_xml = os.path.join(carpeta, "xml", base + ".xml")
+                if token:
+                    id_api = f"{emisor}-20-{serie}-{numero}-{'1' if tipo == 'emitido' else '2'}"
+                    for ruta, accion in [(ruta_xml, "02"), (ruta_pdf, "01")]:
+                        if os.path.exists(ruta):
+                            continue
+                        contenido = bajar_archivo(sol, token, id_api, accion)
+                        if contenido:
+                            os.makedirs(os.path.dirname(ruta), exist_ok=True)
+                            with open(ruta, "wb") as fh:
+                                fh.write(contenido)
+                        else:
+                            print(f"    no se pudo bajar {'PDF' if accion == '01' else 'XML'} de {base}")
+                        time.sleep(0.5)
+                if os.path.exists(ruta_pdf):
+                    fila["pdf"] = os.path.relpath(ruta_pdf, a.salida).replace(os.sep, "/")
+                facturas = []
+                if os.path.exists(ruta_xml):
+                    fila["xml"] = os.path.relpath(ruta_xml, a.salida).replace(os.sep, "/")
+                    try:
+                        with open(ruta_xml, "rb") as fh:
+                            cab, facturas = leer_xml(fh.read())
+                        for k in ["agente", "proveedor", "tasa", "importe_pagado", "moneda"]:
+                            if cab.get(k):
+                                fila[k] = cab[k]
+                        if cab.get("importe_retenido"):
+                            fila["importe_retenido"] = cab["importe_retenido"]
+                        if not fila["observacion"] and cab.get("observacion"):
+                            fila["observacion"] = cab["observacion"]
+                    except Exception as e:
+                        print(f"    XML ilegible {base}: {str(e)[:100]}")
+                fila["facturas"] = len(facturas) if facturas else ""
+                cabeceras.append(fila)
+                for f in facturas:
+                    det = {"empresa_ruc": ruc, "tipo": fila["tipo"], "periodo": periodo,
+                           "comprobante": fila["comprobante"], "ruc_agente": emisor,
+                           "ruc_proveedor": receptor, "proveedor": fila.get("proveedor", "")}
+                    det.update(f)
+                    detalles.append(det)
+            time.sleep(1)
+
+        if cabeceras:
+            cabeceras.sort(key=lambda f: (f["tipo"], f["serie"], int(f["numero"]) if f["numero"].isdigit() else 0))
+            guardar_csv(os.path.join(carpeta, "cre.csv"), COLS_CRE, cabeceras)
+            guardar_csv(os.path.join(carpeta, "detalle.csv"), COLS_DET, detalles)
+        pdfs = sum(1 for f in cabeceras if f.get("pdf"))
+        total[periodo] = {"emitidos": resumen.get("emitido"), "recibidos": resumen.get("recibido"),
+                          "facturas": len(detalles), "pdf": pdfs}
+        print(f"{periodo}: emitidos={resumen.get('emitido')} recibidos={resumen.get('recibido')} "
+              f"facturas={len(detalles)} pdf={pdfs}/{len(cabeceras)}")
+
+    print("RESUMEN", json.dumps({"meses": total}, ensure_ascii=False))
     if errores:
         sys.exit(2)
 

@@ -1,6 +1,7 @@
 # Proyecto "Retenciones · Grupo" (carpeta retenciones/). Descarga de SUNAT SOL
-# los comprobantes de retencion (CRE) EMITIDOS y RECIBIDOS de UNA empresa y UN
-# rango de meses (un solo login). Solo escribe en retenciones/datos/ (y solo si guardar=true).
+# los comprobantes de retencion (CRE) EMITIDOS y RECIBIDOS, con su PDF y XML,
+# de una empresa o de todas las empresas activas de empresas.json (las mismas
+# de SIRE). Solo escribe en retenciones/datos/ y solo si guardar=true.
 # No toca ningun otro proyecto. Nunca imprime claves ni tokens.
 
 name: Retenciones - descargar CRE (SUNAT SOL)
@@ -8,39 +9,67 @@ name: Retenciones - descargar CRE (SUNAT SOL)
 on:
   workflow_dispatch:
     inputs:
-      ruc:
-        description: "RUC de la empresa (su Environment con claves SOL)"
+      empresa:
+        description: "RUC de una empresa, o 'todas' (las activas de empresas.json)"
         required: true
-        default: "20447969531"
+        default: "todas"
       periodo:
-        description: "Periodo AAAAMM (ej. 202609)"
+        description: "Primer mes AAAAMM"
         required: true
         default: "202601"
       hasta:
-        description: "Ultimo periodo AAAAMM (vacio = solo un mes; maximo 24 meses)"
+        description: "Ultimo mes AAAAMM (vacio = mes actual; maximo 24 meses)"
         required: false
-        default: "202609"
+        default: ""
+      archivos:
+        description: "Bajar tambien PDF y XML de cada comprobante"
+        type: boolean
+        default: true
       diagnostico:
         description: "Mostrar detalle tecnico en el log (sin claves)"
         type: boolean
-        default: true
-      guardar:
-        description: "Guardar los CSV en el repositorio (retenciones/datos/)"
-        type: boolean
         default: false
+      guardar:
+        description: "Guardar en el repositorio (retenciones/datos/)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
 
-concurrency:
-  group: retenciones-${{ inputs.ruc }}
-  cancel-in-progress: false
-
 jobs:
-  descargar:
+  empresas:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: ${{ inputs.ruc }}
+    outputs:
+      lista: ${{ steps.e.outputs.lista }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: empresas.json
+          sparse-checkout-cone-mode: false
+      - id: e
+        env:
+          EMPRESA: ${{ inputs.empresa }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          sel = os.environ["EMPRESA"].strip()
+          emp = [e for e in json.load(open("empresas.json"))["empresas"] if e.get("activo")]
+          rucs = [e["ruc"] for e in emp] if sel.lower() == "todas" else [sel]
+          print("lista=" + json.dumps(rucs))
+          PY
+          cat "$GITHUB_OUTPUT"
+
+  descargar:
+    needs: empresas
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        ruc: ${{ fromJson(needs.empresas.outputs.lista) }}
+    environment: ${{ matrix.ruc }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,26 +80,28 @@ jobs:
           SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
           PERIODO: ${{ inputs.periodo }}
           HASTA: ${{ inputs.hasta }}
+          ARCHIVOS: ${{ inputs.archivos }}
           DIAG: ${{ inputs.diagnostico }}
         run: |
           extra=""
-          if [ "$DIAG" = "true" ]; then extra="--diagnostico"; fi
+          if [ "$ARCHIVOS" != "true" ]; then extra="$extra --sin-archivos"; fi
+          if [ "$DIAG" = "true" ]; then extra="$extra --diagnostico"; fi
           python3 retenciones/scripts/descargar_cre.py --periodo "$PERIODO" --hasta "$HASTA" --salida retenciones/datos $extra
 
-      - name: Guardar CSV en el repositorio
+      - name: Guardar en el repositorio
         if: ${{ success() && inputs.guardar }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add retenciones/datos
           git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
-          git commit -m "Retenciones CRE ${{ inputs.ruc }} ${{ inputs.periodo }}-${{ inputs.hasta }} [skip ci]"
+          git commit -m "Retenciones CRE ${{ matrix.ruc }} ${{ inputs.periodo }}-${{ inputs.hasta || 'actual' }} [skip ci]"
           logrado=0
-          for intento in 1 2 3; do
+          for intento in 1 2 3 4 5; do
             if git push; then logrado=1; break; fi
             echo "Push rechazado, reintentando con rebase (intento $intento)..."
             git fetch origin "$GITHUB_REF_NAME"
             git rebase "origin/$GITHUB_REF_NAME"
-            sleep 3
+            sleep $((intento * 3))
           done
           [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir retenciones/datos"; exit 1; }
