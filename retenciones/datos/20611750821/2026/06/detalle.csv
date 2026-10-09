@@ -1,1 +1,2 @@
 empresa_ruc,tipo,periodo,comprobante,fecha_retencion,ruc_agente,ruc_proveedor,proveedor,doc_tipo,doc_numero,doc_fecha,doc_moneda,doc_importe_total,pago_numero,pago_fecha,pago_importe,tipo_cambio,importe_retenido,importe_pagado_neto
+20611750821,Recibido,202606,R001-1073,03/06/2026,20143703313,20611750821,,Factura,E001,01/06/2026,PEN,1510.07,1151554,03/06/2026,1464.77,1.0,45.3,
