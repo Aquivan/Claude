@@ -214,6 +214,75 @@ def bajar_archivo(sol, token, id_api, accion):
     return None
 
 
+def detalle_html(sol, cre, diagnostico=False):
+    """Respaldo cuando SUNAT no entrega el XML: detalle desde la pantalla de SUNAT."""
+    q = urllib.parse.urlencode({k: str(cre.get(k, "")).strip() for k in ["codCpe", "numSerieCpe", "numCpe", "numRuc"]})
+    _, t = sol.pedir(f"{BASE_CRE}/cargarDetalleComprobante?{q}", headers={"Referer": f"{BASE_CRE}/iniConsulComp"}, intentos=2)
+    try:
+        d = json.loads(t)
+        tablas = [v for v in (d.values() if isinstance(d, dict) else []) if isinstance(v, list) and v and isinstance(v[0], dict)]
+        filas_json = tablas[0] if tablas else []
+        if diagnostico:
+            print("    detalle (JSON) campos:", sorted(filas_json[0].keys()) if filas_json else list(d)[:20])
+        return [{k: (fecha_ms(v) if k.lower().startswith("fec") and isinstance(v, (int, float)) else v) for k, v in f.items()}
+                for f in filas_json], True
+    except Exception:
+        pass
+    salida = []
+    for tabla in re.findall(r"<table.*?</table>", t, re.S | re.I):
+        cab = [texto(x) for x in re.findall(r"<th[^>]*>(.*?)</th>", tabla, re.S | re.I)]
+        if diagnostico and cab:
+            print("    detalle (HTML) columnas:", cab)
+        for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", tabla, re.S | re.I):
+            celdas = [texto(x) for x in re.findall(r"<td[^>]*>(.*?)</td>", tr, re.S | re.I)]
+            if cab and len(celdas) == len(cab):
+                salida.append(dict(zip(cab, celdas)))
+    return salida, False
+
+
+def mapear_detalle(fila):
+    """Lleva una fila del detalle de pantalla (nombres de SUNAT) a las columnas de detalle.csv."""
+    def norm(k):
+        return re.sub(r"[^a-z]", "", html.unescape(k).lower().translate(str.maketrans("áéíóúñ", "aeioun")))
+    out = {}
+    serie = numero = ""
+    for k, v in fila.items():
+        n, v = norm(k), str(v if v is not None else "").strip()
+        if not v:
+            continue
+        if "tipocambio" in n:
+            out["tipo_cambio"] = v
+        elif "neto" in n:
+            out["importe_pagado_neto"] = v
+        elif "retenid" in n or ("retencion" in n and ("monto" in n or "importe" in n)):
+            out["importe_retenido"] = v
+        elif "fecha" in n and "pago" in n:
+            out["pago_fecha"] = v
+        elif "fecha" in n and "retencion" in n:
+            out["fecha_retencion"] = v
+        elif "fecha" in n:
+            out.setdefault("doc_fecha", v)
+        elif "moneda" in n:
+            out["doc_moneda"] = v
+        elif ("pago" in n or "pagado" in n) and ("monto" in n or "importe" in n):
+            out["pago_importe"] = v
+        elif ("total" in n or "importe" in n or "monto" in n) and "pago" not in n:
+            out.setdefault("doc_importe_total", v)
+        elif "numeropago" in n or n == "nropago":
+            out["pago_numero"] = v
+        elif "tipo" in n:
+            out["doc_tipo"] = TIPOS_DOC.get(v, v)
+        elif "serie" in n and ("numero" in n or "nro" in n):
+            out["doc_numero"] = v
+        elif "serie" in n:
+            serie = v
+        elif "numero" in n or n.startswith("nro"):
+            numero = v
+    if serie or numero:
+        out.setdefault("doc_numero", f"{serie}-{numero}".strip("-"))
+    return out
+
+
 # ------------------------------------------------------------------ XML UBL
 
 def _hijos(e, nombre):
@@ -322,6 +391,7 @@ def main():
         sol.abrir_opcion(CODIGO_MENU_CRE)  # volver a la consulta de retenciones
 
     errores, total = 0, {}
+    ya_mostro = [False]
     for periodo in lista_periodos:
         fini, ffin = rango_mes(periodo)
         carpeta = os.path.join(a.salida, ruc, periodo[:4], periodo[4:])
@@ -398,6 +468,17 @@ def main():
                             fila["observacion"] = cab["observacion"]
                     except Exception as e:
                         print(f"    XML ilegible {base}: {str(e)[:100]}")
+                if not facturas and not os.path.exists(ruta_xml):
+                    try:
+                        filas_html, _ = detalle_html(sol, cre, a.diagnostico and not ya_mostro[0])
+                        if a.diagnostico and filas_html and not ya_mostro[0]:
+                            print("    detalle de pantalla, 1ra fila:", {k: str(v)[:30] for k, v in filas_html[0].items()})
+                        ya_mostro[0] = ya_mostro[0] or bool(filas_html)
+                        facturas = [mapear_detalle(f) for f in filas_html]
+                        if facturas:
+                            fila["observacion"] = (fila["observacion"] + " " if fila["observacion"] else "") + "(detalle desde pantalla SUNAT: sin XML)"
+                    except Exception as e:
+                        print(f"    sin detalle para {base}: {str(e)[:100]}")
                 fila["facturas"] = len(facturas) if facturas else ""
                 cabeceras.append(fila)
                 for f in facturas:
