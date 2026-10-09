@@ -347,3 +347,40 @@ function escribirOtrosPagos_(ss, res, cfg) {
   [80, 120, 240, 95, 55, 100, 80, 220, 120, 220, 110].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   sh.setFrozenRows(2);
 }
+
+/**
+ * Hoja oculta _PagosNoAplicados: vouchers del grupo que no se aplicaron (o
+ * sobraron) a ninguna factura. La usa 🔎 Consulta para mostrarlos debajo del
+ * estado de cuenta de cada cliente/proveedor.
+ */
+var ENC_NO_APLICADOS_ = ['Empresa', 'Tipo', 'RUC contraparte', 'Contraparte', 'Fecha', 'Operación', 'Banco', 'Monto voucher',
+  'Sin aplicar', 'Moneda', 'Referencia escrita', 'Situación', 'Fuente'];
+
+function escribirNoAplicados_(ss, res, cfg) {
+  var sh = obtenerOCrearHoja_(ss, HOJA.NO_APLICADOS);
+  sh.clear();
+  var motivo = {};
+  res.sinCruzar.forEach(function (s) { motivo[s.pago.id] = s.motivo; });
+  var filas = [];
+  function agregar(p, sinAplicar, moneda, situacion) {
+    var enGrupo = function (r) { return r && cfg.grupo.indexOf(r) !== -1; };
+    if (enGrupo(p.pagadorRuc)) {
+      filas.push([nombreEmpresa_(cfg, p.pagadorRuc, ''), 'Por pagar', p.beneficiarioRuc || '', p.beneficiarioNombre || '', p.fecha || '',
+        p.operacion || '', p.banco || '', p.monto, sinAplicar, moneda, p.refs || '', situacion, p.fuente]);
+    }
+    if (enGrupo(p.beneficiarioRuc)) {
+      filas.push([nombreEmpresa_(cfg, p.beneficiarioRuc, ''), 'Por cobrar', p.pagadorRuc || '', '', p.fecha || '',
+        p.operacion || '', p.banco || '', p.monto, sinAplicar, moneda, p.refs || '', situacion, p.fuente]);
+    }
+  }
+  (res.pagos || []).forEach(function (p) {
+    if (p.aplicado || p.sinFactura || p.modalidad !== MODALIDAD.PAGO) return;
+    agregar(p, p.monto, p.moneda, p.sugerido ? '🟡 Hay sugerencia por confirmar en ✅ Conciliar' : (motivo[p.id] || 'Sin aplicar'));
+  });
+  (res.remanentes || []).forEach(function (r) {
+    agregar(r.pago, r.monto, r.moneda, '⚠️ Sobra después de cancelar ' + r.docs);
+  });
+  sh.getRange(1, 1, 1, ENC_NO_APLICADOS_.length).setValues([ENC_NO_APLICADOS_]);
+  if (filas.length) sh.getRange(2, 1, filas.length, ENC_NO_APLICADOS_.length).setValues(filas);
+  sh.hideSheet();
+}

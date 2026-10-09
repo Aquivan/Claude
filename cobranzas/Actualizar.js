@@ -16,7 +16,7 @@ function actualizacionAutomatica() {
 
 // Subir este numero cuando cambie la forma de calcular o escribir, para que la
 // siguiente actualizacion automatica rehaga todo aunque los datos no cambien.
-var VERSION_CALCULO_ = '4';
+var VERSION_CALCULO_ = '5';
 
 function huellaExterna_(ss, cfg, liqs) {
   var partes = ['v' + VERSION_CALCULO_, Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd')]; // cambia de dia: recalcular vencidos
@@ -81,7 +81,8 @@ function actualizarTodoInterno_(forzar) {
       opciones: { modo: cfg.modo, tolerancia: cfg.tolerancia, diasVentana: cfg.ventana },
     });
     vch.duplicados.forEach(function (d) {
-      res.errores.unshift({ tipo: 'Voucher repetido', detalle: 'Mismo banco, operación, fecha y monto que ' + d.otra + ' (se tomó solo una vez)', fuente: d.fuente });
+      res.errores.unshift({ tipo: 'Voucher repetido', detalle: 'Mismo banco, operación y monto que ' + d.otra + ' (se tomó solo una vez, el de ' + d.otra.split('!')[0] + ')' +
+        (d.tomados.length ? '; de esta fila se completó: ' + d.tomados.join(', ') : ''), fuente: d.fuente });
     });
 
     bitacora_(ss, 'Lectura y cruce', t0, docs.length + ' docs SIRE, ' + vch.pagos.length + ' vouchers, ' + manual.length + ' manuales');
@@ -94,6 +95,7 @@ function actualizarTodoInterno_(forzar) {
     escribirMovimientos_(ss, res, cfg); bitacora_(ss, 'Movimientos', t1, res.movimientos.length + ' filas'); t1 = Date.now();
     escribirConciliar_(ss, res, cfg); bitacora_(ss, 'Conciliar', t1, res.sugerencias.length + ' sugerencias, ' + res.errores.length + ' avisos, ' + res.sinCruzar.length + ' sin cruzar'); t1 = Date.now();
     escribirOtrosPagos_(ss, res, cfg); bitacora_(ss, 'Otros pagos', t1, res.sinFactura.length + ' pagos sin factura'); t1 = Date.now();
+    escribirNoAplicados_(ss, res, cfg); t1 = Date.now();
     if (Date.now() - t0 < 300000) {
       try { renderConsulta_(ss); bitacora_(ss, 'Consulta', t1, ''); } catch (e) { bitacora_(ss, 'Consulta ERROR', t1, e.message); }
     } else {

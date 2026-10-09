@@ -72,13 +72,26 @@ function leerDocumentosSire_(cfg, liquidaciones) {
   return docs;
 }
 
-/** Lee los vouchers de las pestañas configuradas. Solo columnas de datos (no imagenes). */
+/**
+ * Lee los vouchers de las pestañas configuradas. Solo columnas de datos (no imagenes).
+ *
+ * Un mismo voucher puede estar en "Originales" y en "Fotos" (o repetido en la
+ * misma pestaña). Se cuenta UNA sola vez:
+ *   - Manda la pestaña "Originales" (luego las demas en el orden de Config).
+ *   - Se considera el mismo voucher si coinciden banco, N° de operacion y monto,
+ *     con fechas a 5 dias o menos (la foto puede leer la fecha distinto).
+ *   - Si al de Originales le falta RUC de quien paga, beneficiario o la
+ *     factura y el repetido si los tiene, se completan desde el repetido.
+ */
 function leerVouchers_(cfg) {
   var res = { pagos: [], duplicados: [] };
   if (!cfg.idVouchers) return res;
   var ss = SpreadsheetApp.openById(cfg.idVouchers);
-  var vistos = {};
-  cfg.pestanasVouchers.forEach(function (nombre) {
+  var porClave = {}; // banco|op|monto -> pagos ya tomados
+  var pestanas = cfg.pestanasVouchers.slice().sort(function (a, b) {
+    return (/original/i.test(b) ? 1 : 0) - (/original/i.test(a) ? 1 : 0);
+  });
+  pestanas.forEach(function (nombre) {
     var sh = ss.getSheetByName(nombre);
     if (!sh || sh.getLastRow() < 2) return;
     var enc = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
@@ -112,12 +125,10 @@ function leerVouchers_(cfg) {
       var banco = String(r[c.banco] || '').trim();
       var id = [banco.toUpperCase(), op, fmtFechaClave_(fecha), monto.toFixed(2)].join('|');
       var fuente = nombre + '!' + (i + 2);
-      if (vistos[id]) { res.duplicados.push({ id: id, fuente: fuente, otra: vistos[id] }); return; }
-      vistos[id] = fuente;
       var pagador = c.idUsuario >= 0 ? aRuc_(r[c.idUsuario]) : '';
       if (!pagador && c.empresa >= 0 && r[c.empresa]) pagador = cfg.aliasEmpresa[normHeader_(r[c.empresa])] || '';
       if (!pagador && c.idCliente >= 0) pagador = aRuc_(r[c.idCliente]);
-      res.pagos.push({
+      var pago = {
         id: id, fecha: fecha, monto: monto, moneda: String(r[c.moneda] || 'PEN').toUpperCase().trim(),
         pagadorRuc: pagador,
         beneficiarioRuc: c.idBenef >= 0 ? aRuc_(r[c.idBenef]) : '',
@@ -125,7 +136,21 @@ function leerVouchers_(cfg) {
         refs: c.refs >= 0 ? String(r[c.refs] || '') : '',
         banco: banco, operacion: op, modalidad: MODALIDAD.PAGO, fuente: fuente,
         descripcion: c.descripcion >= 0 ? String(r[c.descripcion] || '') : '',
-      });
+      };
+      var clave = op ? [banco.toUpperCase(), op, monto.toFixed(2)].join('|') : id;
+      var previo = (porClave[clave] || []).filter(function (q) {
+        return !q.fecha || !fecha || Math.abs(q.fecha.getTime() - fecha.getTime()) <= 5 * 86400000;
+      })[0];
+      if (previo) {
+        var tomados = [];
+        if (!previo.pagadorRuc && pago.pagadorRuc) { previo.pagadorRuc = pago.pagadorRuc; tomados.push('quién paga'); }
+        if (!previo.beneficiarioRuc && pago.beneficiarioRuc) { previo.beneficiarioRuc = pago.beneficiarioRuc; tomados.push('ID Beneficiario'); }
+        if (!String(previo.refs).trim() && String(pago.refs).trim()) { previo.refs = pago.refs; tomados.push('factura'); }
+        res.duplicados.push({ id: id, fuente: fuente, otra: previo.fuente, tomados: tomados });
+        return;
+      }
+      (porClave[clave] = porClave[clave] || []).push(pago);
+      res.pagos.push(pago);
     });
   });
   return res;

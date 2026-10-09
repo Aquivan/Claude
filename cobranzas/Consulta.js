@@ -151,7 +151,7 @@ function renderConsulta_(ss) {
       var mod = m[cm('Modalidad')];
       var etiqueta = mod === MODALIDAD.NC ? 'Nota de crédito ' + m[cm('N° operación')] : mod === MODALIDAD.ND ? 'Nota de débito ' + m[cm('N° operación')] : mod;
       filas.push(['      └ ' + etiqueta, m[cm('Fecha')], '', mod, String(m[cm('N° operación')]), m[cm('Banco')],
-        -Number(m[cm('Monto aplicado')]), '', m[cm('Origen')], '', m[cm('Nota')], m[cm('Fuente')]]);
+        -Number(m[cm('Monto aplicado')]), '', origenConsulta_(m[cm('Origen')]), '', m[cm('Nota')], m[cm('Fuente')]]);
       fondos.push(COLOR.BLANCO); negritas.push(false);
     });
   }
@@ -175,4 +175,51 @@ function renderConsulta_(ss) {
   if (!docs.length) {
     sh.getRange(CONSULTA_.FILA_ENC + 1, 2).setValue('Sin documentos para esta selección.').setFontColor(COLOR.TEXTO_SUAVE);
   }
+
+  // ---- Vouchers de esta seleccion que no se aplicaron a ninguna factura ----
+  var fila = CONSULTA_.FILA_ENC + Math.max(filas.length, 1) + 3;
+  var NA = leerTablaHoja_(ss, HOJA.NO_APLICADOS), cn = indiceColumnas_(NA.enc);
+  var nombreSel = rucSel ? contra.split(' · ')[0] : '';
+  var noAp = NA.filas.filter(function (r) {
+    if ((emp !== '(Todas)' && r[0] !== emp) || r[1] !== ver) return false;
+    if (!rucSel) return true;
+    var ruc = String(r[cn('RUC contraparte')] || '');
+    if (ruc) return ruc === rucSel;
+    return !!nombreSel && nombreParecido_(r[cn('Contraparte')], nombreSel);
+  }).sort(function (a, b) { return (b[cn('Fecha')] || 0) - (a[cn('Fecha')] || 0); });
+  var totNoAp = noAp.reduce(function (t, r) { return t + (Number(r[cn('Sin aplicar')]) || 0); }, 0);
+  sh.getRange(fila, 2, 1, 12).merge().setValue('💳 VOUCHERS DE ESTA SELECCIÓN QUE NO SE APLICARON A NINGUNA FACTURA (' + noAp.length + ')' +
+    (noAp.length ? ' · sin aplicar: ' + totNoAp.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''))
+    .setFontWeight('bold').setFontSize(10).setFontColor('#92400E').setBackground('#FEF3C7');
+  fila++;
+  if (noAp.length) {
+    var filasNa = noAp.slice(0, 500).map(function (r) {
+      return [r[cn('Fecha')], String(r[cn('Operación')]), r[cn('Banco')], r[cn('Contraparte')] || r[cn('RUC contraparte')], r[cn('Monto voucher')],
+        r[cn('Sin aplicar')], r[cn('Moneda')], r[cn('Referencia escrita')], r[cn('Situación')], r[cn('Fuente')]];
+    });
+    escribirTabla_(sh, fila, 2, ['Fecha', 'Operación', 'Banco', 'Beneficiario / Cliente', 'Monto voucher', 'Sin aplicar', 'Moneda',
+      'Factura escrita en el voucher', 'Por qué no se aplicó', 'Fuente'], filasNa);
+    var nNa = filasNa.length;
+    sh.getRange(fila + 1, 2, nNa, 10).setFontSize(9).setVerticalAlignment('middle');
+    sh.getRange(fila + 1, 2, nNa, 1).setNumberFormat('dd/mm/yyyy');
+    sh.getRange(fila + 1, 3, nNa, 1).setNumberFormat('@');
+    sh.getRange(fila + 1, 6, nNa, 2).setNumberFormat('#,##0.00');
+    fila += nNa + 1;
+  } else {
+    sh.getRange(fila, 2).setValue('Ninguno: todos los vouchers de esta selección están aplicados a facturas.').setFontColor(COLOR.TEXTO_SUAVE).setFontSize(9);
+    fila++;
+  }
+  sh.getRange(fila + 1, 2, 1, 12).merge().setValue('Origen de cada pago: 🟢 Referenciado en voucher = la factura está escrita en "Tipo y Nº Doc." · ' +
+    '🔵 Exacto · sin ref. = el sistema lo cruzó solo por monto (no está escrita en el voucher) · 🟡 Confirmado con ✔ = sugerencia que aprobaste · ' +
+    '✍️ Manual = Registro manual · 📄 N/C SIRE = nota de crédito').setFontSize(8).setFontColor(COLOR.TEXTO_SUAVE).setWrap(true);
+  sh.setRowHeight(fila + 1, 28);
+}
+
+// Como se muestra el origen de cada pago en la Consulta (mas claro que en Movimientos).
+// Funcion (no variable global) porque ORIGEN se define en otro archivo.
+function origenConsulta_(o) {
+  if (o === ORIGEN.REFERENCIADO) return '🟢 Referenciado en voucher';
+  if (o === ORIGEN.EXACTO) return '🔵 Exacto · sin ref.';
+  if (o === ORIGEN.CONFIRMADO) return '🟡 Confirmado con ✔';
+  return o;
 }

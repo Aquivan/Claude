@@ -14,6 +14,7 @@ var HOJA = {
   MANUAL: '✍️ Registro manual',
   CONFIG: '⚙️ Config',
   DECISIONES: '_Decisiones',
+  NO_APLICADOS: '_PagosNoAplicados',
 };
 
 var COLOR = {
