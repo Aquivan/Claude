@@ -228,15 +228,31 @@ def detalle_html(sol, cre, diagnostico=False):
                 for f in filas_json], True
     except Exception:
         pass
-    salida = []
+    salida, cab = [], []
     for tabla in re.findall(r"<table.*?</table>", t, re.S | re.I):
         cab = [texto(x) for x in re.findall(r"<th[^>]*>(.*?)</th>", tabla, re.S | re.I)]
-        if diagnostico and cab:
-            print("    detalle (HTML) columnas:", cab)
+        utiles = [c for c in cab if c]
         for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", tabla, re.S | re.I):
             celdas = [texto(x) for x in re.findall(r"<td[^>]*>(.*?)</td>", tr, re.S | re.I)]
-            if cab and len(celdas) == len(cab):
-                salida.append(dict(zip(cab, celdas)))
+            if utiles and len(celdas) >= len(utiles):
+                salida.append(dict(zip(utiles, celdas)))
+    if not salida:
+        # Las filas vienen en una variable JavaScript (lista de objetos) que la pantalla dibuja.
+        for m in re.finditer(r"(\[\s*\{.*?\}\s*\])\s*[;,)]", t, re.S):
+            try:
+                lista = json.loads(m.group(1))
+            except Exception:
+                continue
+            if lista and isinstance(lista[0], dict) and len(lista[0]) >= 4:
+                salida = [{k: (fecha_ms(v) if "fec" in k.lower() and isinstance(v, (int, float)) else v) for k, v in f.items()}
+                          for f in lista]
+                break
+    if diagnostico:
+        print("    detalle de pantalla: columnas", [c for c in cab if c], "| filas", len(salida),
+              "| campos", sorted(salida[0].keys()) if salida else "-")
+        if not salida:
+            i = t.find("<tbody")
+            print("    (fragmento)", re.sub(r"\s+", " ", t[i:i + 600] if i >= 0 else t[:600]))
     return salida, False
 
 
@@ -252,9 +268,13 @@ def mapear_detalle(fila):
             continue
         if "tipocambio" in n:
             out["tipo_cambio"] = v
+        elif "pago" in n and ("nro" in n or "numero" in n or n.startswith("num")):
+            out["pago_numero"] = v
+        elif "tasa" in n:
+            continue
         elif "neto" in n:
             out["importe_pagado_neto"] = v
-        elif "retenid" in n or ("retencion" in n and ("monto" in n or "importe" in n)):
+        elif ("retenid" in n or "retencion" in n or "mtoret" in n) and "fecha" not in n:
             out["importe_retenido"] = v
         elif "fecha" in n and "pago" in n:
             out["pago_fecha"] = v
@@ -268,8 +288,6 @@ def mapear_detalle(fila):
             out["pago_importe"] = v
         elif ("total" in n or "importe" in n or "monto" in n) and "pago" not in n:
             out.setdefault("doc_importe_total", v)
-        elif "numeropago" in n or n == "nropago":
-            out["pago_numero"] = v
         elif "tipo" in n:
             out["doc_tipo"] = TIPOS_DOC.get(v, v)
         elif "serie" in n and ("numero" in n or "nro" in n):
