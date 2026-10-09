@@ -44,6 +44,18 @@ function RET_csvObjetos_(texto) {
   });
 }
 
+function RET_r2_(x) { return Math.round((x || 0) * 100) / 100; }
+
+/** Abrevia formas societarias largas: "EMPRESA INDIVIDUAL DE RESPONSABILIDAD LIMITADA" → "E.I.R.L." */
+function RET_nombreCorto_(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim()
+    .replace(/EMPRESA INDIVIDUAL DE RESPONSABILIDAD LIMITADA/i, 'E.I.R.L.')
+    .replace(/SOCIEDAD ANONIMA CERRADA/i, 'S.A.C.')
+    .replace(/SOCIEDAD COMERCIAL DE RESPONSABILIDAD LIMITADA/i, 'S.R.L.')
+    .replace(/SOCIEDAD ANONIMA ABIERTA/i, 'S.A.A.')
+    .replace(/SOCIEDAD ANONIMA$/i, 'S.A.');
+}
+
 function RET_esRevertido_(estado) { return /REVERT|ANULAD|BAJA/i.test(String(estado || '')); }
 
 /* ------------------------------------------------------- lectura de datos */
@@ -65,13 +77,22 @@ function RET_leerDatos_(cfg) {
     var filas = RET_csvObjetos_(textos[ruta]);
     if (/cre\.csv$/.test(ruta)) cre = cre.concat(filas); else det = det.concat(filas);
   });
-  // Razón social oficial (del XML de SUNAT) cuando está; si no, la de empresas.json.
+  // Nombres por RUC: los del XML oficial de SUNAT (y si no, empresas.json). Sirven para
+  // completar los comprobantes que SUNAT entregó sin XML.
+  var nombres = {};
+  Object.keys(empresas).forEach(function (r) { nombres[r] = RET_nombreCorto_(empresas[r]); });
   cre.forEach(function (c) {
-    var oficial = c.tipo === 'Recibido' ? c.proveedor : c.agente;
-    if (oficial && c.empresa_ruc) empresas[c.empresa_ruc] = oficial;
+    if (c.agente) nombres[c.ruc_agente] = RET_nombreCorto_(c.agente);
+    if (c.proveedor) nombres[c.ruc_proveedor] = RET_nombreCorto_(c.proveedor);
   });
-  cre.forEach(function (c) { c.empresa = empresas[c.empresa_ruc] || c.empresa_ruc; });
-  det.forEach(function (d) { d.empresa = empresas[d.empresa_ruc] || d.empresa_ruc; });
+  cre.forEach(function (c) {
+    c.agente = nombres[c.ruc_agente] || c.agente || '';
+    c.proveedor = nombres[c.ruc_proveedor] || c.proveedor || '';
+    if (empresas[c.empresa_ruc] !== undefined || nombres[c.empresa_ruc]) empresas[c.empresa_ruc] = nombres[c.empresa_ruc];
+    c.empresa = nombres[c.empresa_ruc] || c.empresa_ruc;
+  });
+  det.forEach(function (d) { if (!d.proveedor || nombres[d.ruc_proveedor]) d.proveedor = nombres[d.ruc_proveedor] || d.proveedor; });
+  det.forEach(function (d) { d.empresa = nombres[d.empresa_ruc] || d.empresa_ruc; });
   var orden = function (a, b) {
     return (a.empresa + a.periodo + a.serie).localeCompare(b.empresa + b.periodo + b.serie) ||
       (parseInt(a.numero, 10) || 0) - (parseInt(b.numero, 10) || 0);
@@ -181,10 +202,10 @@ function RET_escribirPanel_(datos, cfg) {
   });
   var filas = Object.keys(porEmpresa).map(function (ruc) {
     var e = porEmpresa[ruc];
-    return [e.nombre, ruc, e.en, e.ei, e.rn, e.ri, e.rev, e.total ? e.pdf + ' / ' + e.total : '—'];
+    return [e.nombre, ruc, e.en, RET_r2_(e.ei), e.rn, RET_r2_(e.ri), e.rev, e.total ? e.pdf + ' / ' + e.total : '—'];
   }).sort(function (a, b) { return String(a[0]).localeCompare(String(b[0])); });
   var tot = filas.reduce(function (t, f) { return [t[0] + f[2], t[1] + f[3], t[2] + f[4], t[3] + f[5], t[4] + f[6]]; }, [0, 0, 0, 0, 0]);
-  filas.push(['TOTAL GRUPO', '', tot[0], tot[1], tot[2], tot[3], tot[4], '']);
+  filas.push(['TOTAL GRUPO', '', tot[0], RET_r2_(tot[1]), tot[2], RET_r2_(tot[3]), tot[4], '']);
 
   var f0 = 4;
   hoja.getRange(f0, 1).setValue('Resumen por empresa').setFontWeight('bold').setFontSize(12);
@@ -214,8 +235,8 @@ function RET_escribirPanel_(datos, cfg) {
     });
     var nombres = Object.keys(m).sort();
     var cuerpo = nombres.map(function (nom) {
-      var vals = lista.map(function (p) { return m[nom][p] || ''; });
-      return [nom].concat(vals).concat([vals.reduce(function (s, v) { return s + (v || 0); }, 0)]);
+      var vals = lista.map(function (p) { return m[nom][p] ? RET_r2_(m[nom][p]) : ''; });
+      return [nom].concat(vals).concat([RET_r2_(vals.reduce(function (s, v) { return s + (v || 0); }, 0))]);
     });
     if (!cuerpo.length) cuerpo = [['(sin comprobantes)'].concat(lista.map(function () { return ''; })).concat([''])];
     hoja.getRange(fila + 2, 1, cuerpo.length, cab.length).setValues(cuerpo);
