@@ -48,8 +48,7 @@ function prepararSelectores_(sh, empresas) {
   sh.getRange(CONSULTA_.VER).setValue('Por pagar')
     .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['Por pagar', 'Por cobrar']).build());
   sh.getRange(CONSULTA_.CONTRA).setValue('(Todas)');
-  sh.getRange(CONSULTA_.MOSTRAR).setValue('Con saldo')
-    .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['Con saldo', 'Todo']).build());
+  sh.getRange(CONSULTA_.MOSTRAR).setValue('Con saldo');
   sh.setRowHeight(4, 26);
   sh.setColumnWidth(1, 16);
   [190, 80, 210, 95, 105, 80, 105, 105, 140, 80, 210, 110].forEach(function (w, i) { sh.setColumnWidth(i + 2, w); });
@@ -71,6 +70,8 @@ function renderConsulta_(ss) {
   var ver = sh.getRange(CONSULTA_.VER).getValue() || 'Por pagar';
   var contra = String(sh.getRange(CONSULTA_.CONTRA).getValue() || '(Todas)');
   var mostrar = sh.getRange(CONSULTA_.MOSTRAR).getValue() || 'Con saldo';
+  sh.getRange(CONSULTA_.MOSTRAR).setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList(['Con saldo', 'Con nota de crédito', 'Todo']).build());
 
   var iRuc = cd('RUC contraparte'), iCp = cd('Contraparte'), iSaldo = cd('Saldo'), iEstado = cd('Estado');
   var base = D.filas.filter(function (f) { return (emp === '(Todas)' || f[0] === emp) && f[1] === ver; });
@@ -89,19 +90,24 @@ function renderConsulta_(ss) {
   sh.hideColumns(CONSULTA_.LISTA_COL);
 
   var rucSel = contra === '(Todas)' ? '' : (contra.split(' · ').pop() || '');
-  var docs = base.filter(function (f) {
-    if (rucSel && String(f[iRuc]) !== rucSel) return false;
-    if (mostrar === 'Con saldo' && Math.abs(Number(f[iSaldo]) || 0) <= 0.10) return false;
+  var iNc = cd('N/C');
+  function conNc(f) { return Math.abs(Number(f[iNc]) || 0) > 0.005; }
+  // Todos los documentos de la seleccion (para los totales) y los que se listan segun "Mostrar".
+  var todos = base.filter(function (f) { return !rucSel || String(f[iRuc]) === rucSel; });
+  function seMuestra(f) {
+    if (mostrar === 'Con saldo') return Math.abs(Number(f[iSaldo]) || 0) > 0.10;
+    if (mostrar === 'Con nota de crédito') return conNc(f);
     return true;
-  }).sort(function (a, b) { return String(a[iCp]).localeCompare(b[iCp]) || ((a[cd('Emisión')] || 0) - (b[cd('Emisión')] || 0)); });
+  }
+  var docs = todos.filter(seMuestra).sort(function (a, b) { return String(a[iCp]).localeCompare(b[iCp]) || ((a[cd('Emisión')] || 0) - (b[cd('Emisión')] || 0)); });
 
   var movsPorClave = {};
   var mClave = cm('Clave');
   M.filas.forEach(function (m) { (movsPorClave[m[mClave]] = movsPorClave[m[mClave]] || []).push(m); });
 
-  // ---- Resumen ----
+  // ---- Resumen (siempre de TODOS los documentos de la seleccion, aunque el detalle este filtrado) ----
   var sum = { tot: 0, nc: 0, ret: 0, det: 0, pag: 0, saldo: 0 };
-  docs.forEach(function (f) {
+  todos.forEach(function (f) {
     sum.tot += Number(f[cd('Total')]) || 0; sum.nc += Number(f[cd('N/C')]) || 0; sum.ret += Number(f[cd('Retención')]) || 0;
     sum.det += Number(f[cd('Detracción')]) || 0; sum.pag += Number(f[cd('Pagado')]) || 0; sum.saldo += Number(f[iSaldo]) || 0;
   });
@@ -117,6 +123,13 @@ function renderConsulta_(ss) {
       .setNumberFormat('#,##0.00').setFontColor(fuerte ? '#FFFFFF' : COLOR.AZUL).setBackground(fuerte ? '#B91C1C' : '#E0E7FF');
   });
   sh.setRowHeight(7, 30);
+  var ocultos = todos.length - docs.length;
+  if (ocultos > 0) {
+    var ocultosNc = todos.filter(function (f) { return !seMuestra(f) && conNc(f); }).length;
+    sh.getRange(8, 2, 1, 12).merge().setValue('ℹ️ Totales de los ' + todos.length + ' documentos. En el detalle se ocultan ' + ocultos +
+      (mostrar === 'Con saldo' ? ' ya cancelados' : '') + (ocultosNc ? ' (' + ocultosNc + ' con nota de crédito)' : '') +
+      '. Para verlos, cambia "Mostrar" a "Todo" o "Con nota de crédito".').setFontSize(8).setFontColor(COLOR.TEXTO_SUAVE);
+  }
 
   // ---- Detalle ----
   var enc = ['Documento / Movimiento', 'Fecha', 'Cliente / Proveedor', 'Concepto', 'Operación', 'Banco', 'Importe', 'Saldo', 'Estado / Origen', 'Vence', 'Detalle', 'Fuente'];
@@ -135,7 +148,9 @@ function renderConsulta_(ss) {
     filas.push([doc, f[cd('Emisión')], f[iCp], tipoNom, '', '', f[cd('Total')], f[iSaldo], f[iEstado], f[cd('Vence')], String(f[cd('Producto')] || '').slice(0, 80), '']);
     fondos.push(COLOR_ESTADO[f[iEstado]] || COLOR.BLANCO); negritas.push(true);
     (movsPorClave[f[cd('Clave')]] || []).sort(function (a, b) { return (a[0] || 0) - (b[0] || 0); }).forEach(function (m) {
-      filas.push(['      └ ' + m[cm('Modalidad')], m[cm('Fecha')], '', m[cm('Modalidad')], String(m[cm('N° operación')]), m[cm('Banco')],
+      var mod = m[cm('Modalidad')];
+      var etiqueta = mod === MODALIDAD.NC ? 'Nota de crédito ' + m[cm('N° operación')] : mod === MODALIDAD.ND ? 'Nota de débito ' + m[cm('N° operación')] : mod;
+      filas.push(['      └ ' + etiqueta, m[cm('Fecha')], '', mod, String(m[cm('N° operación')]), m[cm('Banco')],
         -Number(m[cm('Monto aplicado')]), '', m[cm('Origen')], '', m[cm('Nota')], m[cm('Fuente')]]);
       fondos.push(COLOR.BLANCO); negritas.push(false);
     });
