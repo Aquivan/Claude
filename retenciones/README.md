@@ -4,7 +4,7 @@ Descarga automáticamente de SUNAT los **comprobantes de retención (CRE) emitid
 
 No comparte código ni hojas con Cobranzas, SIRE ni Vouchers.
 
-- **Hoja:** "Retenciones · Grupo", dentro de la carpeta de Drive "Retenciones · Grupo".
+- **Hoja:** "Retenciones · Grupo" (https://docs.google.com/spreadsheets/d/1YpgrLWya8jPIhxurz0wvRuAf4A-Ts6K79NZhkBk6zpw), dentro de la carpeta de Drive "Retenciones · Grupo" (https://drive.google.com/drive/folders/1evkFKBWQXKIY-eeKqEsBB2Ajv2WAHebH).
 - **PDF en Drive:** `Retenciones · Grupo/PDF Retenciones/<RUC - Empresa>/<Emitidas|Recibidas>/<AAAA>/<NN_Mes>/E001-198 - PROVEEDOR.pdf`.
 
 ## Cómo funciona (igual que SIRE)
