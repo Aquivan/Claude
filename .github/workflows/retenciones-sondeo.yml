@@ -47,26 +47,6 @@ jobs:
           curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o prev.html
           curl -sS -A "$UA" -c "$JAR" -b "$JAR" "$MENU" -o menu.html
 
-          echo "================ A) e-factura: rutas de la API en el codigo publico de la pagina ================"
-          curl -sS -m 30 -A "$UA" -L https://e-factura.sunat.gob.pe/ -o ef.html
-          for js in $(grep -oE '(src|href)="[^"]+\.js"' ef.html | sed -E 's/.*="([^"]+)"/\1/' | head -20); do
-            case "$js" in http*) u="$js";; /*) u="https://e-factura.sunat.gob.pe$js";; *) u="https://e-factura.sunat.gob.pe/$js";; esac
-            curl -sS -m 30 -A "$UA" "$u" -o "ef_$(basename "$js")"
-          done
-          python3 - <<'PY'
-          import re, glob
-          vistos = set()
-          for f in glob.glob('ef_*.js') + ['ef.html']:
-              t = open(f, encoding='utf-8', errors='ignore').read()
-              for pat in [r'.{0,200}consultacpe.{0,300}', r'.{0,120}(fecEmision|fecIni|fechaIni|fecDesde|indTipo|tipoConsulta|codCpe|numRuc)[A-Za-z]*.{0,200}']:
-                  for m in re.finditer(pat, t):
-                      s = re.sub(r'\s+', ' ', m.group(0))
-                      k = s[:120]
-                      if k not in vistos:
-                          vistos.add(k); print('-', f, '::', s[:520])
-          print('(archivos js:', len(glob.glob('ef_*.js')), ', coincidencias:', len(vistos), ')')
-          PY
-
           echo "================ B) Formulario clasico de consulta de CRE (11.9.7.1.1) ================"
           curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
           curl -sS -A "$UA" -c "$JAR" -b "$JAR" -L "$MENU?action=execute&code=11.9.7.1.1" -o cre.html
@@ -79,8 +59,14 @@ jobs:
           for sel in re.finditer(r'<select[^>]*name="?([\w]+)"?[^>]*>(.*?)</select>', t, re.S | re.I):
               ops = re.findall(r'<option[^>]*value="?([^">]*)"?[^>]*>(.*?)</option>', sel.group(2), re.S | re.I)
               print('SELECT', sel.group(1), ':', '; '.join(v + '=' + re.sub(r'\s+', ' ', html.unescape(x)).strip() for v, x in ops))
-          for m in re.finditer(r'(url|action|\.do|\.htm|ajax|fetch|\$\.(get|post))[^\n]{0,200}', t):
-              print('  JS:', re.sub(r'\s+', ' ', m.group(0))[:220])
+          for sel in re.finditer(r'<select[^>]*id="?([\w]+)"?[^>]*>(.*?)</select>', t, re.S | re.I):
+              ops = re.findall(r'<option[^>]*value="?([^">]*)"?[^>]*>(.*?)</option>', sel.group(2), re.S | re.I)
+              print('SELECT', sel.group(1), ':', '; '.join(v + '=' + re.sub(r'\s+', ' ', html.unescape(x)).strip() for v, x in ops))
+          # Codigo JS alrededor de cada llamada ajax (para ver nombres de parametros y respuesta)
+          for m in re.finditer(r'\.ajax\(|url\s*:\s*"\./[^"]+"', t):
+              ini = max(0, m.start() - 1500); fin = min(len(t), m.end() + 2500)
+              print('----- JS AJAX -----')
+              print(re.sub(r'[ \t]+', ' ', t[ini:fin]))
           PY
 
           echo "================ C) Cuenta de control: retenciones que le efectuaron (12.8.2.1.2) ================"
@@ -93,7 +79,11 @@ jobs:
           for m in re.finditer(r'<(input|select|form|frame|iframe)[^>]*>', t, re.I):
               print(' ', re.sub(r'\s+', ' ', m.group(0))[:200])
           txt = re.sub(r'<[^>]+>', ' ', t); txt = re.sub(r'\s+', ' ', html.unescape(txt))
-          print('TEXTO:', txt[:1200])
+          for sel in re.finditer(r'<select[^>]*name="?([\w]+)"?[^>]*>(.*?)</select>', t, re.S | re.I):
+              ops = re.findall(r'<option[^>]*value="?([^">]*)"?[^>]*>(.*?)</option>', sel.group(2), re.S | re.I)
+              print('SELECT', sel.group(1), ':', '; '.join(v + '=' + re.sub(r'\s+', ' ', html.unescape(x)).strip() for v, x in ops)[:600])
+          for m in re.finditer(r'function btClick_consultar\(\)', t):
+              print('----- JS consultar -----'); print(re.sub(r'[ \t]+', ' ', t[m.start():m.start() + 2500]))
           PY
 
           rm -f "$JAR" *.html resp.json ef_*.js
