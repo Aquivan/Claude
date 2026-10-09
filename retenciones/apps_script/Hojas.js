@@ -308,7 +308,7 @@ function RET_menuActualizarTodo() {
       return { d: d, p: p };
     });
     ui.alert('✅ Listo.\n\nComprobantes: ' + r.d.cre.length + '\nFacturas: ' + r.d.det.length +
-      '\nPDF nuevos en Drive: ' + r.p.nuevos + (r.p.pendientes ? '\nPDF que faltan (siguen solos en 1 minuto): ' + r.p.pendientes : ''));
+      '\nPDF nuevos en Drive: ' + r.p.nuevos + (r.p.renombrados ? '\nPDF renombrados con el nombre del proveedor: ' + r.p.renombrados : '') + (r.p.pendientes ? '\nPDF que faltan (siguen solos en 1 minuto): ' + r.p.pendientes : ''));
   } catch (e) { ui.alert('❌ ' + e.message); }
 }
 
