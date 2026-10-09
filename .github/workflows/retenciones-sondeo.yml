@@ -47,43 +47,39 @@ jobs:
           curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o prev.html
           curl -sS -A "$UA" -c "$JAR" -b "$JAR" "$MENU" -o menu.html
 
-          echo "================ B) Formulario clasico de consulta de CRE (11.9.7.1.1) ================"
+          echo "================ B) Buscador de CRE: prueba real (solo lectura, septiembre 2026) ================"
           curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
-          curl -sS -A "$UA" -c "$JAR" -b "$JAR" -L "$MENU?action=execute&code=11.9.7.1.1" -o cre.html
+          curl -sS -A "$UA" -c "$JAR" -b "$JAR" -L "$MENU?action=execute&code=11.9.7.1.1" -o cre.html -w 'URL final: %{url_effective}\n'
           python3 - <<'PY'
           import re, html
           t = open('cre.html', encoding='utf-8', errors='ignore').read()
-          print('tamano', len(t))
-          for m in re.finditer(r'<(input|select|form)[^>]*>', t, re.I):
-              print(' ', re.sub(r'\s+', ' ', m.group(0))[:200])
-          for sel in re.finditer(r'<select[^>]*name="?([\w]+)"?[^>]*>(.*?)</select>', t, re.S | re.I):
-              ops = re.findall(r'<option[^>]*value="?([^">]*)"?[^>]*>(.*?)</option>', sel.group(2), re.S | re.I)
-              print('SELECT', sel.group(1), ':', '; '.join(v + '=' + re.sub(r'\s+', ' ', html.unescape(x)).strip() for v, x in ops))
           for sel in re.finditer(r'<select[^>]*id="?([\w]+)"?[^>]*>(.*?)</select>', t, re.S | re.I):
               ops = re.findall(r'<option[^>]*value="?([^">]*)"?[^>]*>(.*?)</option>', sel.group(2), re.S | re.I)
               print('SELECT', sel.group(1), ':', '; '.join(v + '=' + re.sub(r'\s+', ' ', html.unescape(x)).strip() for v, x in ops))
-          # Codigo JS alrededor de cada llamada ajax (para ver nombres de parametros y respuesta)
-          for m in re.finditer(r'\.ajax\(|url\s*:\s*"\./[^"]+"', t):
-              ini = max(0, m.start() - 1500); fin = min(len(t), m.end() + 2500)
-              print('----- JS AJAX -----')
-              print(re.sub(r'[ \t]+', ' ', t[ini:fin]))
+          for m in re.finditer(r'.{0,80}\btipo\s*=.{0,160}', t):
+              print('TIPO:', re.sub(r'\s+', ' ', m.group(0)))
           PY
-
-          echo "================ C) Cuenta de control: retenciones que le efectuaron (12.8.2.1.2) ================"
-          curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o /dev/null
-          curl -sS -A "$UA" -c "$JAR" -b "$JAR" -L "$MENU?action=execute&code=12.8.2.1.2" -o cta.html
-          python3 - <<'PY'
-          import re, html
-          t = open('cta.html', encoding='utf-8', errors='ignore').read()
-          print('tamano', len(t))
-          for m in re.finditer(r'<(input|select|form|frame|iframe)[^>]*>', t, re.I):
-              print(' ', re.sub(r'\s+', ' ', m.group(0))[:200])
-          txt = re.sub(r'<[^>]+>', ' ', t); txt = re.sub(r'\s+', ' ', html.unescape(txt))
-          for sel in re.finditer(r'<select[^>]*name="?([\w]+)"?[^>]*>(.*?)</select>', t, re.S | re.I):
-              ops = re.findall(r'<option[^>]*value="?([^">]*)"?[^>]*>(.*?)</option>', sel.group(2), re.S | re.I)
-              print('SELECT', sel.group(1), ':', '; '.join(v + '=' + re.sub(r'\s+', ' ', html.unescape(x)).strip() for v, x in ops)[:600])
-          for m in re.finditer(r'function btClick_consultar\(\)', t):
-              print('----- JS consultar -----'); print(re.sub(r'[ \t]+', ' ', t[m.start():m.start() + 2500]))
+          BASE="https://ww1.sunat.gob.pe/ol-ti-itcpretencion/consulta"
+          for tipo in emitido recibido; do
+            curl -sS -A "$UA" -c "$JAR" -b "$JAR" -H "X-Requested-With: XMLHttpRequest" -H "Referer: $BASE/iniConsulComp" \
+              --data-urlencode "opcionTipoCompReten=$tipo" --data-urlencode "tipoDocReceptor=" --data-urlencode "numDocReceptor=" \
+              --data-urlencode "serieCompReten=" --data-urlencode "numeroCompReten=" \
+              --data-urlencode "fechaInicio=01/09/2026" --data-urlencode "fechaFin=30/09/2026" --data-urlencode "estadoCompReten=" \
+              "$BASE/buscarComprobanteEmiRec" -o res_$tipo.json -w "--- $tipo -> HTTP %{http_code}\n"
+            python3 - "$tipo" <<'PY'
+          import json, sys
+          t = open('res_' + sys.argv[1] + '.json', encoding='utf-8', errors='ignore').read()
+          try:
+              d = json.loads(t)
+          except Exception:
+              print('No es JSON:', t[:400]); sys.exit()
+          lista = d.get('listaCompRetencion') or []
+          print('mensaje:', d.get('mensaje'), '| comprobantes:', len(lista))
+          if lista:
+              print('campos:', sorted(lista[0].keys()))
+              r = lista[0]
+              print('ejemplo (solo montos/fechas):', {k: r[k] for k in r if any(x in k.lower() for x in ['fec', 'mto', 'monto', 'imp', 'tot', 'serie', 'cpe', 'estado', 'regimen', 'tasa', 'mone'])})
           PY
+          done
 
-          rm -f "$JAR" *.html resp.json ef_*.js
+          rm -f "$JAR" *.html resp.json ef_*.js res_*.json
