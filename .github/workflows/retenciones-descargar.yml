@@ -1,0 +1,71 @@
+# Proyecto "Retenciones · Grupo" (carpeta retenciones/). Descarga de SUNAT SOL
+# los comprobantes de retencion (CRE) EMITIDOS y RECIBIDOS de UNA empresa y UN
+# mes. Solo escribe en retenciones/datos/ (y solo si guardar=true).
+# No toca ningun otro proyecto. Nunca imprime claves ni tokens.
+
+name: Retenciones - descargar CRE (SUNAT SOL)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa (su Environment con claves SOL)"
+        required: true
+        default: "20447969531"
+      periodo:
+        description: "Periodo AAAAMM (ej. 202609)"
+        required: true
+        default: "202609"
+      diagnostico:
+        description: "Mostrar detalle tecnico en el log (sin claves)"
+        type: boolean
+        default: true
+      guardar:
+        description: "Guardar los CSV en el repositorio (retenciones/datos/)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: retenciones-${{ inputs.ruc }}
+  cancel-in-progress: false
+
+jobs:
+  descargar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Descargar CRE emitidos y recibidos
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          PERIODO: ${{ inputs.periodo }}
+          DIAG: ${{ inputs.diagnostico }}
+        run: |
+          extra=""
+          if [ "$DIAG" = "true" ]; then extra="--diagnostico"; fi
+          python3 retenciones/scripts/descargar_cre.py --periodo "$PERIODO" --salida retenciones/datos $extra
+
+      - name: Guardar CSV en el repositorio
+        if: ${{ success() && inputs.guardar }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add retenciones/datos
+          git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
+          git commit -m "Retenciones CRE ${{ inputs.ruc }} ${{ inputs.periodo }} [skip ci]"
+          logrado=0
+          for intento in 1 2 3; do
+            if git push; then logrado=1; break; fi
+            echo "Push rechazado, reintentando con rebase (intento $intento)..."
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep 3
+          done
+          [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir retenciones/datos"; exit 1; }
