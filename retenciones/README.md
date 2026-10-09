@@ -12,6 +12,8 @@ No comparte código ni hojas con Cobranzas, SIRE ni Vouchers.
 | `datos/<RUC>/<AAAAMM>_cre.csv` | Cabecera de cada CRE (emitido / recibido). |
 | `datos/<RUC>/<AAAAMM>_detalle.csv` | Comprobantes retenidos dentro de cada CRE. |
 | `../.github/workflows/retenciones-descargar.yml` | Ejecuta la descarga para una empresa y un mes (manual). |
+| `scripts/ver_pantallas.py` | Hace la misma consulta con un navegador Chrome real y guarda fotos de cada pantalla y un video (para verlo con sus propios ojos). |
+| `../.github/workflows/retenciones-ver-pantallas.yml` | Ejecuta `ver_pantallas.py`; las fotos y el video quedan en "Artifacts" de la ejecución (7 días), no en el repositorio. |
 | `../.github/workflows/retenciones-sondeo.yml` | Sondeo de solo lectura usado en la investigación. |
 
 ## Cómo se ejecuta

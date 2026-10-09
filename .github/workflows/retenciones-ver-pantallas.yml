@@ -1,0 +1,53 @@
+# Proyecto "Retenciones · Grupo" (carpeta retenciones/). Hace la consulta de
+# comprobantes de retencion con un navegador Chrome real y guarda FOTOS de cada
+# pantalla y un VIDEO del recorrido como archivo descargable de esta ejecucion
+# (seccion "Artifacts", se borra solo a los 7 dias). No guarda nada en el
+# repositorio ni toca otros proyectos. Nunca imprime claves.
+
+name: Retenciones - ver pantallas (fotos y video)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa (su Environment con claves SOL)"
+        required: true
+        default: "20447969531"
+      periodo:
+        description: "Mes a buscar AAAAMM"
+        required: true
+        default: "202608"
+
+permissions:
+  contents: read
+
+jobs:
+  ver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: retenciones/scripts
+
+      - name: Instalar navegador
+        run: |
+          pip install playwright==1.47.0
+          python -m playwright install --with-deps chromium
+
+      - name: Recorrido con fotos y video
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          PERIODO: ${{ inputs.periodo }}
+        run: python retenciones/scripts/ver_pantallas.py --periodo "$PERIODO" --salida pantallas
+
+      - name: Subir fotos y video
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pantallas-${{ inputs.ruc }}-${{ inputs.periodo }}
+          path: pantallas/
+          retention-days: 7
