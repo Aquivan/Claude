@@ -40,8 +40,12 @@ var IA_PENDIENTE_ = '🟡 Pendiente';
 
 function IA_agregarMenu_() {
   SpreadsheetApp.getUi().createMenu('🧠 Asistente IA')
-    .addItem('▶ Sugerir ahora', 'IA_menuSugerir')
+    .addItem('▶ Sugerir ahora (todas las pestañas)', 'IA_menuSugerir')
+    .addItem('▶ Sugerir solo en Originales', 'IA_menuSugerirOriginales')
+    .addItem('▶ Sugerir solo en Fotos', 'IA_menuSugerirFotos')
     .addItem('✅ Pasar marcados ✔ al voucher', 'IA_menuPasar')
+    .addSeparator()
+    .addItem('➕ Agregar columnas ID Usuario / ID Beneficiario donde falten', 'IA_menuAgregarColumnas')
     .addSeparator()
     .addItem('🔑 Guardar clave de IA', 'IA_menuGuardarClave')
     .addItem('🧪 Probar conexión con la IA', 'IA_menuProbar')
@@ -51,10 +55,48 @@ function IA_agregarMenu_() {
     .addToUi();
 }
 
-function IA_menuSugerir() {
+function IA_menuSugerir() { IA_sugerirEn_(null); }
+function IA_menuSugerirOriginales() { IA_sugerirEn_(['Originales']); }
+function IA_menuSugerirFotos() { IA_sugerirEn_(['Fotos']); }
+
+function IA_sugerirEn_(pestanas) {
   var ss = IA_ss_();
-  ss.toast('Buscando vouchers sin ID Beneficiario…', '🧠 Asistente IA', 30);
-  ss.toast(IA_vuelta_(true), '🧠 Asistente IA', 10);
+  ss.toast('Buscando vouchers sin ID Beneficiario' + (pestanas ? ' en ' + pestanas.join(', ') : '') + '…', '🧠 Asistente IA', 30);
+  ss.toast(IA_vuelta_(true, pestanas), '🧠 Asistente IA', 10);
+}
+
+/**
+ * Agrega al FINAL de cada pestaña de vouchers las columnas "ID Usuario" e
+ * "ID Beneficiario" si no existen (solo el encabezado; no toca ningun dato
+ * ni columna existente). Pide confirmacion antes.
+ */
+function IA_menuAgregarColumnas() {
+  var ss = IA_ss_();
+  var ui = SpreadsheetApp.getUi();
+  var p = IA_leerParam_(IA_hoja_(ss));
+  var plan = [];
+  p.pestanas.forEach(function (nombre) {
+    var sh = ss.getSheetByName(nombre);
+    if (!sh) return;
+    var c = IA_columnasVoucher_(sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0]);
+    var faltan = [];
+    if (c.idUsuario < 0) faltan.push('ID Usuario');
+    if (c.idBenef < 0) faltan.push('ID Beneficiario');
+    if (faltan.length) plan.push({ sh: sh, faltan: faltan });
+  });
+  if (!plan.length) { ui.alert('Todas las pestañas ya tienen las columnas ID Usuario e ID Beneficiario.'); return; }
+  var texto = plan.map(function (x) { return '• ' + x.sh.getName() + ': ' + x.faltan.join(' y '); }).join('\n');
+  var r = ui.alert('➕ Agregar columnas', 'Se agregarán al FINAL (después de la última columna) estos encabezados:\n\n' + texto +
+    '\n\nNo se mueve ni se borra nada de lo que ya existe. ¿Continuar?', ui.ButtonSet.YES_NO);
+  if (r !== ui.Button.YES) return;
+  plan.forEach(function (x) {
+    var col = x.sh.getLastColumn() + 1;
+    if (x.sh.getMaxColumns() < col + x.faltan.length - 1) x.sh.insertColumnsAfter(x.sh.getMaxColumns(), x.faltan.length);
+    x.sh.getRange(1, col, 1, x.faltan.length).setValues([x.faltan]).setFontWeight('bold');
+    // Formato texto para no perder ceros de DNI; si la pestaña es una "Tabla" con columnas tipadas, se omite.
+    try { x.sh.getRange(2, col, Math.max(1, x.sh.getMaxRows() - 1), x.faltan.length).setNumberFormat('@'); SpreadsheetApp.flush(); } catch (e) { /* sin formato */ }
+  });
+  ui.alert('Listo. Ya puedes usar "▶ Sugerir" también en: ' + plan.map(function (x) { return x.sh.getName(); }).join(', '));
 }
 
 function IA_menuPasar() {
@@ -110,13 +152,14 @@ function IA_ss_() {
   return SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(CFG.SPREADSHEET_ID);
 }
 
-function IA_vuelta_(manual) {
+function IA_vuelta_(manual, soloPestanas) {
   if (!IA_tomarTurno_()) return 'El asistente ya está trabajando; intenta en un minuto.';
   var ss = IA_ss_();
   var sh = IA_hoja_(ss);
   var t0 = Date.now();
   try {
     var p = IA_leerParam_(sh);
+    if (soloPestanas) p.pestanas = soloPestanas;
     var marcas = IA_aplicarMarcas_(ss, sh);
     var vch = IA_leerVouchersIA_(ss, p.pestanas);
     var cob = IA_leerCobranzas_(p.idCobranzas);
@@ -169,7 +212,7 @@ function IA_vuelta_(manual) {
       (marcas.pasados ? ', ' + marcas.pasados + ' pasados al voucher' : '') +
       (completadas ? ', ' + completadas + ' ya completados a mano' : '') +
       (cob.error ? ' · Cobranzas no disponible: ' + cob.error : '') +
-      (vch.sinColumna.length ? ' · Sin columna ID Beneficiario en: ' + vch.sinColumna.join(', ') : '') +
+      (vch.sinColumna.length ? ' · ⚠️ Sin columna ID Beneficiario en: ' + vch.sinColumna.join(', ') + ' (menú ➕ Agregar columnas)' : '') +
       (errores ? ' · ' + errores + ' errores de IA (último: ' + ultimoError.substring(0, 160) + ')' : '');
     sh.getRange(10, 2).setValue(msg);
     SpreadsheetApp.flush();
