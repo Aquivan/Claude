@@ -1,0 +1,2 @@
+empresa_ruc,tipo,periodo,comprobante,fecha_retencion,ruc_agente,ruc_proveedor,proveedor,doc_tipo,doc_numero,doc_fecha,doc_moneda,doc_importe_total,pago_numero,pago_fecha,pago_importe,tipo_cambio,importe_retenido,importe_pagado_neto
+20447968216,Emitido,202605,E001-5,22/05/2026,20447968216,20601239150,CORPORACION MERCANTIL DE ALIMENTOS S.A.C. - COMERAL,Factura,F007-61,20/04/2026,PEN,69120.00,1,22/05/2026,69120.00,1.00,2073.6,67046.4
