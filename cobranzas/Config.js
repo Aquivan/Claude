@@ -28,13 +28,18 @@ var CATEGORIAS_INICIALES_ = [
   ['ALQUILER', '🏠 Alquileres'], ['OTROS', '📦 Otros pagos'],
 ];
 
+// Modos de cruce (de mas estricto a mas amplio).
+var MODOS_ = ['SOLO REFERENCIADOS', 'ESTRICTO', 'INTELIGENTE'];
+var MODOS_AYUDA_ = 'SOLO REFERENCIADOS = solo lo escrito en el voucher (Tipo y Nº Doc.), lo que confirmaste con ✔ y el registro manual. ' +
+  'ESTRICTO = además cruza solo por monto exacto (🔵 Exacto). INTELIGENTE = además propone sugerencias en ✅ Conciliar';
+
 var PARAMETROS_ = [
   // [fila, nombre, valor por defecto, nota]
   [3, 'ID Sheet de Vouchers', '1CS0GZiKclm2SroNgrpiBZsavYVobqBv9rgKzjQDII1c', 'Sistema de Vouchers'],
   [4, 'Pestañas de vouchers', 'Originales,Fotos', 'Separadas por coma'],
   [5, 'Años SIRE a leer', '', 'Vacío = año actual y anterior. Lee las hojas "Liquidacion IGV <RUC> - <año>"'],
   [6, 'Días de crédito por defecto', 30, 'Si SIRE no trae fecha de vencimiento'],
-  [7, 'Modo de cruce', 'INTELIGENTE', 'INTELIGENTE = además propone sugerencias. ESTRICTO = solo referenciados y exactos'],
+  [7, 'Modo de cruce', 'INTELIGENTE', MODOS_AYUDA_],
   [8, 'Tolerancia sugerencias (S/)', 1, 'Diferencia máxima para proponer una sugerencia'],
   [9, 'Ventana de días para sugerencias', 120, 'Distancia máxima entre fecha de pago y de factura'],
   [10, 'Controlar documentos emitidos desde', '', 'dd/mm/aaaa. Vacío = todo lo que hay en SIRE. Úsalo para no ver como deuda lo antiguo que ya se pagó sin voucher'],
@@ -42,8 +47,13 @@ var PARAMETROS_ = [
 ];
 
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('💼 Cobranzas')
+  var ui = SpreadsheetApp.getUi();
+  ui.createMenu('💼 Cobranzas')
     .addItem('🔄 Actualizar ahora', 'menuActualizarAhora')
+    .addSubMenu(ui.createMenu('🎚 Modo de cruce y actualizar')
+      .addItem('🟢 Solo referenciados (lo escrito en el voucher)', 'menuModoReferenciados')
+      .addItem('🔵 Estricto (+ exactos por monto)', 'menuModoEstricto')
+      .addItem('🟡 Inteligente (+ sugerencias)', 'menuModoInteligente'))
     .addItem('🖼 Abrir visor de vouchers', 'abrirVisorVoucher')
     .addSeparator()
     .addItem('⚙️ Instalar / reparar', 'menuInstalar')
@@ -58,6 +68,20 @@ function menuActualizarAhora() {
   ss.toast('Leyendo SIRE y vouchers…', '💼 Cobranzas', 30);
   var r = actualizarTodo_(true);
   ss.toast(r, '💼 Cobranzas', 8);
+}
+
+function menuModoReferenciados() { cambiarModoYActualizar_('SOLO REFERENCIADOS'); }
+function menuModoEstricto() { cambiarModoYActualizar_('ESTRICTO'); }
+function menuModoInteligente() { cambiarModoYActualizar_('INTELIGENTE'); }
+
+/** Cambia el modo en ⚙️ Config (celda B7) y recalcula todo con ese modo. */
+function cambiarModoYActualizar_(modo) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(HOJA.CONFIG);
+  sh.getRange('B7').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(MODOS_).build()).setValue(modo);
+  sh.getRange('C7').setValue(MODOS_AYUDA_);
+  ss.toast('Modo ' + modo + ': recalculando…', '💼 Cobranzas', 30);
+  ss.toast('Modo ' + modo + ' · ' + actualizarTodo_(true), '💼 Cobranzas', 10);
 }
 
 function menuInstalar() {
@@ -107,7 +131,7 @@ function crearConfig_(ss) {
   sh.getRange('A1').setValue('PARÁMETROS').setFontWeight('bold').setFontSize(12);
   sh.getRange('A2:C2').setValues([['Parámetro', 'Valor', 'Ayuda']]);
   PARAMETROS_.forEach(function (p) { sh.getRange(p[0], 1, 1, 3).setValues([[p[1], p[2], p[3]]]); });
-  sh.getRange('B7').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['INTELIGENTE', 'ESTRICTO']).build());
+  sh.getRange('B7').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(MODOS_).build());
 
   sh.getRange('E1').setValue('EMPRESAS DEL GRUPO').setFontWeight('bold').setFontSize(12);
   sh.getRange('E2:G2').setValues([['RUC', 'Alias (como se escribe en Vouchers → Empresa)', 'Razón social']]);
@@ -179,7 +203,7 @@ function leerConfig_(ss) {
     pestanasVouchers: String(v[1] || 'Originales').split(',').map(function (s) { return s.trim(); }).filter(Boolean),
     anios: anios,
     diasCredito: Number(v[3]) || 30,
-    modo: String(v[4] || 'INTELIGENTE').toUpperCase(),
+    modo: /SOLO|REFERENC/i.test(String(v[4])) ? 'SOLO REFERENCIADOS' : String(v[4] || 'INTELIGENTE').toUpperCase().trim(),
     tolerancia: v[5] === '' ? 1 : Number(v[5]),
     ventana: Number(v[6]) || 120,
     desde: aFecha_(v[7]),

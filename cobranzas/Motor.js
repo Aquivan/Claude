@@ -112,7 +112,7 @@ function normNombre_(s) {
  *            refs(texto), banco, operacion, modalidad, fuente, esManual}],
  *   decisiones: { [pagoId]: {estado:'OK'|'NO', docs:[clave...]} },
  *   grupo: [ruc...], alias: {nombreNormalizado: ruc},
- *   opciones: {modo:'INTELIGENTE'|'ESTRICTO', tolerancia: 1.0, diasVentana: 120}
+ *   opciones: {modo:'INTELIGENTE'|'ESTRICTO'|'SOLO REFERENCIADOS', tolerancia: 1.0, diasVentana: 120}
  * }
  */
 function ejecutarCruce_(entrada) {
@@ -418,6 +418,7 @@ function ejecutarCruce_(entrada) {
 
   pagos.forEach(function (p) {
     if (p.aplicado || p.modalidad !== MODALIDAD.PAGO) return;
+    if (modo === 'SOLO REFERENCIADOS') return; // solo lo escrito en el voucher / confirmado / manual
     if (p.parse.refs.length) return; // tenia referencia pero no se encontro: no adivinar
     var cands = candidatos(p);
     var exactos = cands.filter(function (d) {
