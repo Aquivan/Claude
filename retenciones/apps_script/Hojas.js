@@ -24,7 +24,8 @@ function RET_num_(v) {
 
 function RET_fecha_(s) {
   var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || '').trim());
-  return m ? new Date(+m[3], +m[2] - 1, +m[1]) : (s || '');
+  // Mediodía: así ningún cambio de zona horaria mueve la fecha al día anterior.
+  return m ? new Date(+m[3], +m[2] - 1, +m[1], 12) : (s || '');
 }
 
 function RET_periodoTexto_(p) {
@@ -172,7 +173,7 @@ function RET_escribirDetalle_(datos) {
       RET_num_(d.tipo_cambio), RET_num_(d.importe_retenido), RET_num_(d.importe_pagado_neto)];
   });
   RET_escribirTabla_(RET_HOJA.DETALLE, '🧾 Detalle: facturas incluidas en cada comprobante de retención',
-    filas.length + ' facturas · sacado del XML oficial de cada comprobante', RET_ENC_DETALLE, filas,
+    filas.length + ' facturas · del XML oficial de cada comprobante (o de su PDF cuando SUNAT no entregó el XML) · las notas de crédito aplicadas no tienen pago ni retención', RET_ENC_DETALLE, filas,
     { 2: '@', 3: '@', 4: 'dd/mm/yyyy', 5: '@', 6: '@', 9: '@', 10: 'dd/mm/yyyy', 13: '@', 12: '#,##0.00', 14: 'dd/mm/yyyy', 15: '#,##0.00', 16: '0.000', 17: '#,##0.00', 18: '#,##0.00' },
     [230, 80, 75, 110, 95, 105, 105, 240, 90, 110, 90, 70, 115, 60, 90, 110, 80, 105, 115]);
 }
@@ -270,6 +271,9 @@ function RET_ordenarPestanas_() {
 /* -------------------------------------------------------------- acciones */
 
 function RET_actualizarDatos_() {
+  // La hoja debe estar en hora de Lima; si no, las fechas se ven un día antes.
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (ss.getSpreadsheetTimeZone() !== 'America/Lima') ss.setSpreadsheetTimeZone('America/Lima');
   var cfg = RET_leerConfig_();
   var datos = RET_leerDatos_(cfg);
   RET_escribirCre_(datos, false);
