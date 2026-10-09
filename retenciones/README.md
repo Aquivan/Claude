@@ -18,7 +18,7 @@ No comparte código ni hojas con Cobranzas, SIRE ni Vouchers.
 
 GitHub → Actions → **Retenciones - descargar CRE (SUNAT SOL)** → Run workflow:
 - `ruc`: empresa (usa su Environment con las claves SOL ya existentes).
-- `periodo`: AAAAMM.
+- `periodo` y `hasta`: rango de meses AAAAMM (un solo ingreso a SOL, máximo 24 meses).
 - `diagnostico`: muestra detalle técnico en el log (nunca claves).
 - `guardar`: si se marca, guarda los CSV en `retenciones/datos/`.
 

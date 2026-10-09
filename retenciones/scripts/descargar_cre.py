@@ -167,89 +167,99 @@ def guardar_csv(ruta, filas):
             w.writerow(f)
 
 
+def periodos(desde, hasta):
+    a, m = int(desde[:4]), int(desde[4:])
+    fin = int(hasta)
+    while a * 100 + m <= fin:
+        yield f"{a}{m:02d}"
+        m += 1
+        if m > 12:
+            a, m = a + 1, 1
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--periodo", required=True, help="AAAAMM")
+    ap.add_argument("--periodo", required=True, help="AAAAMM (primer mes)")
+    ap.add_argument("--hasta", default="", help="AAAAMM ultimo mes (vacio = solo --periodo)")
     ap.add_argument("--salida", default="retenciones/datos")
     ap.add_argument("--diagnostico", action="store_true", help="muestra estructura (sin nombres ni montos)")
     a = ap.parse_args()
     ruc, usuario, clave = (os.environ.get(k, "") for k in ["SUNAT_RUC", "SUNAT_USUARIO", "SUNAT_CLAVE"])
     if not (ruc and usuario and clave):
         sys.exit("Faltan SUNAT_RUC / SUNAT_USUARIO / SUNAT_CLAVE")
-    fini, ffin = rango_mes(a.periodo)
+    lista_periodos = list(periodos(a.periodo, a.hasta or a.periodo))
+    if not lista_periodos or len(lista_periodos) > 24:
+        sys.exit("Rango de periodos invalido (maximo 24 meses)")
 
     sol = Sol()
     sol.login(ruc, usuario, clave)
     print("Login OK")
     pagina = sol.abrir_opcion(CODIGO_MENU_CRE)
     print("Consulta CRE abierta:", sol.ultima_url.split("?")[0], f"({len(pagina)} caracteres)")
-    combos = valores_combos(pagina)
     if a.diagnostico:
-        print("Combos en la pagina:", json.dumps(combos, ensure_ascii=False)[:1500])
-        m = re.search(r"function initComponentes\(\)", pagina)
-        if m:
-            print("--- initComponentes ---\n" + re.sub(r"[ \t]+", " ", pagina[m.start():m.start() + 2500]))
+        combos = valores_combos(pagina)
+        print("Estados posibles:", json.dumps(combos.get("lstTipoEstado"), ensure_ascii=False)[:600])
 
-    # Valores a probar para los dos filtros que la pagina llena por JavaScript.
-    tipos_doc = [""]
-    estados = [""]
-    if isinstance(combos.get("lstTipoDocumento"), list) and combos["lstTipoDocumento"]:
-        tipos_doc = [""] + [str(x.get("codigo", "")) for x in combos["lstTipoDocumento"][:1]]
-    if isinstance(combos.get("lstTipoEstado"), list) and combos["lstTipoEstado"]:
-        estados = [str(x.get("codigo", "")) for x in combos["lstTipoEstado"]][:3] or [""]
-    candidatos = [(td, es) for td in tipos_doc + ["-", "6"] for es in estados + ["-", "0"]]
-
-    cabeceras, detalles, resumen = [], [], {}
+    # "-" = "todos" en ambos filtros (confirmado en la prueba del 09/10/2026;
+    # con valores vacios SUNAT responde HTTP 500).
+    candidatos = [("-", "-"), ("6", "-"), ("-", "0")]
     elegido = None
-    for tipo in ["emitido", "recibido"]:
-        lista = None
-        pruebas = [elegido] if elegido else candidatos[:8]
-        for td, es in pruebas:
-            st, d = buscar(sol, tipo, fini, ffin, td, es)
-            ok = isinstance(d, dict) and "listaCompRetencion" in d
-            print(f"  {tipo}: tipoDoc='{td}' estado='{es}' -> HTTP {st} {'OK' if ok else d.get('_error', '')[:120]}")
-            if ok:
+    errores = 0
+    resumen_total = {}
+    for periodo in lista_periodos:
+        fini, ffin = rango_mes(periodo)
+        cabeceras, detalles, resumen = [], [], {}
+        for tipo in ["emitido", "recibido"]:
+            lista = None
+            for td, es in ([elegido] if elegido else candidatos):
+                st, d = buscar(sol, tipo, fini, ffin, td, es)
+                ok = isinstance(d, dict) and "listaCompRetencion" in d
+                if not ok:
+                    print(f"  {periodo} {tipo}: tipoDoc='{td}' estado='{es}' -> HTTP {st} {d.get('_error', '')[:120]}")
+                    time.sleep(2)
+                    continue
                 elegido = (td, es)
                 lista = d.get("listaCompRetencion") or []
-                if d.get("mensaje"):
-                    print("    mensaje SUNAT:", str(d["mensaje"])[:200])
                 break
-            time.sleep(2)
-        if lista is None:
-            resumen[tipo] = "ERROR: SUNAT no aceptó la consulta"
-            continue
-        resumen[tipo] = len(lista)
-        if a.diagnostico and lista:
-            print(f"    campos de cada CRE ({tipo}):", sorted(lista[0].keys()))
-        for cre in lista:
-            fila = {"empresa_ruc": ruc, "periodo": a.periodo, "tipo": tipo}
-            fila.update(plano(cre))
-            cabeceras.append(fila)
+            if lista is None:
+                resumen[tipo] = "ERROR"
+                errores += 1
+                continue
+            resumen[tipo] = len(lista)
+            if a.diagnostico and lista:
+                print(f"    campos de cada CRE ({tipo}):", sorted(lista[0].keys()))
+            for cre in lista:
+                fila = {"empresa_ruc": ruc, "periodo": periodo, "tipo": tipo}
+                fila.update(plano(cre))
+                cabeceras.append(fila)
+                time.sleep(1)
+                det = detalle(sol, cre)
+                if a.diagnostico and not detalles:
+                    print("    estructura del detalle:", json.dumps(
+                        {k: (sorted(v[0].keys()) if isinstance(v, list) and v and isinstance(v[0], dict) else type(v).__name__)
+                         for k, v in (det.items() if isinstance(det, dict) else [])}, ensure_ascii=False)[:800])
+                items = []
+                if isinstance(det, dict):
+                    for v in det.values():
+                        if isinstance(v, list) and v and isinstance(v[0], dict):
+                            items = v
+                            break
+                for it in items:
+                    f = {"empresa_ruc": ruc, "periodo": periodo, "tipo": tipo,
+                         "cre_serie": str(cre.get("numSerieCpe", "")).strip(), "cre_numero": str(cre.get("numCpe", "")).strip(),
+                         "cre_ruc_emisor": str(cre.get("numRuc", "")).strip()}
+                    f.update(plano(it))
+                    detalles.append(f)
             time.sleep(1)
-            det = detalle(sol, cre)
-            if a.diagnostico and len(detalles) == 0:
-                print("    estructura del detalle:", json.dumps(
-                    {k: (sorted(v[0].keys()) if isinstance(v, list) and v and isinstance(v[0], dict) else type(v).__name__)
-                     for k, v in (det.items() if isinstance(det, dict) else [])}, ensure_ascii=False)[:800])
-            items = []
-            if isinstance(det, dict):
-                for k, v in det.items():
-                    if isinstance(v, list) and v and isinstance(v[0], dict):
-                        items = v
-                        break
-            for it in items:
-                f = {"empresa_ruc": ruc, "periodo": a.periodo, "tipo": tipo,
-                     "cre_serie": str(cre.get("numSerieCpe", "")).strip(), "cre_numero": str(cre.get("numCpe", "")).strip(),
-                     "cre_ruc_emisor": str(cre.get("numRuc", "")).strip()}
-                f.update(plano(it))
-                detalles.append(f)
+        carpeta = os.path.join(a.salida, ruc)
+        guardar_csv(os.path.join(carpeta, f"{periodo}_cre.csv"), cabeceras)
+        guardar_csv(os.path.join(carpeta, f"{periodo}_detalle.csv"), detalles)
+        resumen["lineas_detalle"] = len(detalles)
+        resumen_total[periodo] = resumen
+        print(f"{periodo}: emitidos={resumen.get('emitido')} recibidos={resumen.get('recibido')} lineas_detalle={len(detalles)}")
 
-    carpeta = os.path.join(a.salida, ruc)
-    guardar_csv(os.path.join(carpeta, f"{a.periodo}_cre.csv"), cabeceras)
-    guardar_csv(os.path.join(carpeta, f"{a.periodo}_detalle.csv"), detalles)
-    print("RESUMEN", json.dumps({"ruc": ruc, "periodo": a.periodo, "cre": resumen,
-                                 "lineas_detalle": len(detalles)}, ensure_ascii=False))
-    if any(str(v).startswith("ERROR") for v in resumen.values()):
+    print("RESUMEN", json.dumps({"ruc": ruc, "meses": resumen_total}, ensure_ascii=False))
+    if errores:
         sys.exit(2)
 
 

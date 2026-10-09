@@ -1,6 +1,6 @@
 # Proyecto "Retenciones · Grupo" (carpeta retenciones/). Descarga de SUNAT SOL
 # los comprobantes de retencion (CRE) EMITIDOS y RECIBIDOS de UNA empresa y UN
-# mes. Solo escribe en retenciones/datos/ (y solo si guardar=true).
+# rango de meses (un solo login). Solo escribe en retenciones/datos/ (y solo si guardar=true).
 # No toca ningun otro proyecto. Nunca imprime claves ni tokens.
 
 name: Retenciones - descargar CRE (SUNAT SOL)
@@ -15,6 +15,10 @@ on:
       periodo:
         description: "Periodo AAAAMM (ej. 202609)"
         required: true
+        default: "202601"
+      hasta:
+        description: "Ultimo periodo AAAAMM (vacio = solo un mes; maximo 24 meses)"
+        required: false
         default: "202609"
       diagnostico:
         description: "Mostrar detalle tecnico en el log (sin claves)"
@@ -46,11 +50,12 @@ jobs:
           SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
           SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
           PERIODO: ${{ inputs.periodo }}
+          HASTA: ${{ inputs.hasta }}
           DIAG: ${{ inputs.diagnostico }}
         run: |
           extra=""
           if [ "$DIAG" = "true" ]; then extra="--diagnostico"; fi
-          python3 retenciones/scripts/descargar_cre.py --periodo "$PERIODO" --salida retenciones/datos $extra
+          python3 retenciones/scripts/descargar_cre.py --periodo "$PERIODO" --hasta "$HASTA" --salida retenciones/datos $extra
 
       - name: Guardar CSV en el repositorio
         if: ${{ success() && inputs.guardar }}
@@ -59,7 +64,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add retenciones/datos
           git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
-          git commit -m "Retenciones CRE ${{ inputs.ruc }} ${{ inputs.periodo }} [skip ci]"
+          git commit -m "Retenciones CRE ${{ inputs.ruc }} ${{ inputs.periodo }}-${{ inputs.hasta }} [skip ci]"
           logrado=0
           for intento in 1 2 3; do
             if git push; then logrado=1; break; fi
