@@ -87,10 +87,12 @@ jobs:
           con = [f for f in codigo if base(f) not in nuevos and re.search(r'function\s+onOpen\s*\(', leer(f))]
           if len(con) != 1:
               print('::error::Se esperaba un solo onOpen() y hay ' + str(len(con)) + '; no se sube nada.'); sys.exit(1)
-          # 3) Copiar los dos archivos nuevos en la misma carpeta que onOpen (reemplaza solo versiones previas del asistente).
-          carpeta = os.path.dirname(con[0])
+          # 3) Los archivos del asistente van en su PROPIA carpeta "asistente_ia/",
+          #    separados del codigo del bot (reemplaza solo versiones previas del asistente).
+          carpeta = 'asistente_ia'
           for f in codigo:
               if base(f) in nuevos: os.remove(os.path.join(d, f))
+          os.makedirs(os.path.join(d, carpeta), exist_ok=True)
           for n in nuevos:
               shutil.copy('vouchers_ia/' + n + '.js', os.path.join(d, carpeta, n + '.js'))
           # 4) Una linea al inicio de onOpen().
