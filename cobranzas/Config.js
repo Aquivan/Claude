@@ -57,6 +57,7 @@ function onOpen() {
       .addItem('🟡 Inteligente (+ sugerencias)', 'menuModoInteligente'))
     .addItem('🖼 Abrir visor de vouchers', 'abrirVisorVoucher')
     .addItem('✍️ Registrar cobro/pago manual (efectivo, compensación…)', 'menuNuevoRegistroManual')
+    .addItem('🔁 Reasignar una retención a otra factura', 'menuReasignarRetencion')
     .addSeparator()
     .addItem('⚙️ Instalar / reparar', 'menuInstalar')
     .addToUi();
@@ -86,6 +87,19 @@ function menuNuevoRegistroManual() {
   sh.setActiveRange(sh.getRange(fila, 3));
   ss.toast('Complete: RUC de quien paga, RUC del emisor de la factura, Documento(s) (ej. 01_E001-123) y Monto. ' +
     'Cambie la Modalidad si no es efectivo. Luego 💼 Cobranzas → 🔄 Actualizar ahora.', '✍️ Registro manual', 15);
+}
+
+/** Abre 🔁 Reasignar retenciones en la primera fila libre. */
+function menuReasignarRetencion() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = hojaReasignar_(ss);
+  var fila = 4;
+  var v = sh.getRange(4, 1, Math.max(sh.getLastRow() - 3, 1), 4).getValues();
+  while (fila - 4 < v.length && v[fila - 4].join('') !== '') fila++;
+  ss.setActiveSheet(sh);
+  sh.setActiveRange(sh.getRange(fila, 1));
+  ss.toast('Escriba el comprobante de retención, la factura original y a qué factura(s) pasarla. ' +
+    'Vea a la derecha las 💡 SUGERIDAS. Luego 💼 Cobranzas → 🔄 Actualizar ahora.', '🔁 Reasignar retención', 15);
 }
 
 function menuModoReferenciados() { cambiarModoYActualizar_('SOLO REFERENCIADOS'); }

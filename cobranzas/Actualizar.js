@@ -16,7 +16,7 @@ function actualizacionAutomatica() {
 
 // Subir este numero cuando cambie la forma de calcular o escribir, para que la
 // siguiente actualizacion automatica rehaga todo aunque los datos no cambien.
-var VERSION_CALCULO_ = '6';
+var VERSION_CALCULO_ = '7';
 
 function huellaExterna_(ss, cfg, liqs) {
   var partes = ['v' + VERSION_CALCULO_, Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd')]; // cambia de dia: recalcular vencidos
@@ -25,6 +25,8 @@ function huellaExterna_(ss, cfg, liqs) {
   if (cfg.idRetenciones) { try { partes.push('ret:' + DriveApp.getFileById(cfg.idRetenciones).getLastUpdated().getTime()); } catch (e) { partes.push('sin-retenciones'); } }
   var man = ss.getSheetByName(HOJA.MANUAL);
   if (man && man.getLastRow() > 1) partes.push(hashTexto_(JSON.stringify(man.getRange(2, 1, man.getLastRow() - 1, 10).getDisplayValues())));
+  var reas = ss.getSheetByName(HOJA_REASIGNAR_);
+  if (reas && reas.getLastRow() > 3) partes.push(hashTexto_(JSON.stringify(reas.getRange(4, 1, reas.getLastRow() - 3, 6).getDisplayValues())));
   var conf = ss.getSheetByName(HOJA.CONFIG);
   if (conf) partes.push(hashTexto_(JSON.stringify(conf.getDataRange().getDisplayValues())));
   return partes.join('#');
@@ -76,6 +78,7 @@ function actualizarTodoInterno_(forzar) {
     var vch = leerVouchers_(cfg);
     var manual = leerRegistroManual_(ss);
     var ret = leerRetencionesSunat_(cfg, manual);
+    aplicarReasignaciones_(ss, ret);
 
     var res = ejecutarCruce_({
       docs: docs, pagos: vch.pagos.concat(manual, ret.pagos), decisiones: decisiones,
@@ -99,6 +102,7 @@ function actualizarTodoInterno_(forzar) {
     escribirConciliar_(ss, res, cfg); bitacora_(ss, 'Conciliar', t1, res.sugerencias.length + ' sugerencias, ' + res.errores.length + ' avisos, ' + res.sinCruzar.length + ' sin cruzar'); t1 = Date.now();
     escribirOtrosPagos_(ss, res, cfg); bitacora_(ss, 'Otros pagos', t1, res.sinFactura.length + ' pagos sin factura'); t1 = Date.now();
     escribirNoAplicados_(ss, res, cfg); t1 = Date.now();
+    try { escribirSugeridasReasignar_(ss, res, cfg); } catch (e) { bitacora_(ss, 'Reasignar ERROR', t1, e.message); }
     if (Date.now() - t0 < 300000) {
       try { renderConsulta_(ss); bitacora_(ss, 'Consulta', t1, ''); } catch (e) { bitacora_(ss, 'Consulta ERROR', t1, e.message); }
     } else {
