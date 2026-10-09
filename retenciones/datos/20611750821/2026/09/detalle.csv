@@ -1,0 +1,2 @@
+empresa_ruc,tipo,periodo,comprobante,fecha_retencion,ruc_agente,ruc_proveedor,proveedor,doc_tipo,doc_numero,doc_fecha,doc_moneda,doc_importe_total,pago_numero,pago_fecha,pago_importe,tipo_cambio,importe_retenido,importe_pagado_neto
+20611750821,Recibido,202609,E001-38561,09/09/2026,20138122256,20611750821,GRUPO FIVA E.I.R.L.,Factura,E001-33,20/08/2026,PEN,1750.00,1,09/09/2026,1750.00,1.00,52.5,1697.5
