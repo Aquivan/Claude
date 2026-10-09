@@ -1,0 +1,2 @@
+empresa_ruc,tipo,periodo,fecha_emision,comprobante,serie,numero,ruc_agente,agente,ruc_proveedor,proveedor,regimen,tasa,importe_retenido,importe_pagado,moneda,estado,facturas,correo_receptor,pdf,xml,observacion
+20447623669,Recibido,202606,30/06/2026,E001-39,E001,39,20609309793,BKF CORPORACION E.I.R.L.,20447623669,PROCESOS ALIMENTARIOS M&D EIRL,Tasa 3%,3,9622.60,311130.88,PEN,EMITIDO,4,dsm.corporacion@gmail.com,20447623669/2026/06/pdf/20609309793-E001-39.pdf,20447623669/2026/06/xml/20609309793-E001-39.xml,
