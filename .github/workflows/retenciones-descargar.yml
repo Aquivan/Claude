@@ -77,6 +77,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Preparar lector de PDF
+        run: command -v pdftotext >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils)
+
       - name: Descargar CRE emitidos y recibidos
         env:
           SUNAT_RUC: ${{ secrets.SUNAT_RUC }}

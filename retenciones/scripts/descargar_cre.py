@@ -33,6 +33,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -301,6 +302,77 @@ def mapear_detalle(fila):
     return out
 
 
+# ------------------------------------------------------------------- PDF
+
+def _monto(t):
+    """'S/ 64200.00' -> ('PEN', '64200.00');  '$ 1545.63' -> ('USD', ...);  'null 0.00' -> ('', '')"""
+    t = (t or "").strip()
+    if t.lower().startswith("null"):
+        return "", ""
+    moneda = "USD" if t.startswith(("$", "US$", "USD")) else ("PEN" if t.startswith("S/") else "")
+    m = re.search(r"-?[\d,]+(?:\.\d+)?", t)
+    return moneda, (m.group(0).replace(",", "") if m else "")
+
+
+def leer_pdf(ruta):
+    """Lee el PDF oficial del CRE (cuando SUNAT no entrega un XML válido). Devuelve (cabecera, [facturas])."""
+    try:
+        txt = subprocess.run(["pdftotext", "-layout", ruta, "-"], capture_output=True, text=True, timeout=60).stdout
+    except Exception:
+        return {}, []
+    if not txt.strip():
+        return {}, []
+    cab = {}
+    m = re.search(r"Se[ñn]or\(es\):\s+(.+)", txt)
+    if m:
+        cab["receptor"] = m.group(1).strip()
+    m = re.search(r"Identificaci[óo]n:\s+\S*?-?(\d{8,11})", txt)
+    if m:
+        cab["ruc_receptor"] = m.group(1)
+    m = re.search(r"R[ée]gimen retenci[óo]n:+\s+(.+)", txt)
+    if m:
+        cab["regimen"] = m.group(1).strip().title()
+        t = re.search(r"(\d+(?:\.\d+)?)\s*%", m.group(1))
+        if t:
+            cab["tasa"] = t.group(1)
+    lineas = txt.splitlines()
+    for i, l in enumerate(lineas):
+        if re.search(r"RUC:\s*\d{11}", l):
+            for sig in lineas[i + 1:i + 4]:
+                nombre = re.split(r"\s{2,}", sig.strip())[0] if sig.strip() else ""
+                if nombre and not re.search(r"COMPROBANTE", nombre):
+                    cab["emisor"] = nombre
+                    break
+            break
+    m = re.search(r"Importes totales\s+([\d,.]+)\s+([\d,.]+)", txt)
+    if m:
+        cab["importe_retenido"], cab["importe_pagado"] = m.group(1).replace(",", ""), m.group(2).replace(",", "")
+    facturas = []
+    for l in lineas:
+        tk = re.split(r"\s{2,}", l.strip())
+        if len(tk) < 10 or not re.match(r"\d{2}/\d{2}/\d{4}$", tk[3]):
+            continue
+        mon_doc, total = _monto(tk[4])
+        _, pagado = _monto(tk[6])
+        retenido = tk[8].replace(",", "")
+        sin_pago = not pagado and float(retenido or 0) == 0
+        facturas.append({
+            # Las filas sin pago ni retención son notas de crédito aplicadas (así figuran en el XML).
+            "doc_tipo": "Nota de crédito" if sin_pago else tk[0].strip().capitalize(),
+            "doc_numero": f"{tk[1]}-{tk[2]}", "doc_fecha": tk[3], "doc_moneda": mon_doc,
+            "doc_importe_total": total, "pago_numero": "" if sin_pago else tk[5], "pago_fecha": "",
+            "pago_importe": pagado, "tipo_cambio": "", "importe_retenido": "" if sin_pago else retenido,
+            "fecha_retencion": "", "importe_pagado_neto": "" if sin_pago else tk[9].replace(",", ""),
+        })
+    if facturas:
+        cab["moneda"] = "PEN"
+    return cab, facturas
+
+
+def xml_valido(contenido):
+    return bool(contenido) and b"Retention" in contenido[:3000] and b"<error_message>" not in contenido[:500]
+
+
 # ------------------------------------------------------------------ XML UBL
 
 def _hijos(e, nombre):
@@ -456,12 +528,21 @@ def main():
                 }
                 ruta_pdf = os.path.join(carpeta, "pdf", base + ".pdf")
                 ruta_xml = os.path.join(carpeta, "xml", base + ".xml")
+                if os.path.exists(ruta_xml):  # XML guardado antes que en realidad era un mensaje de error
+                    with open(ruta_xml, "rb") as fh:
+                        if not xml_valido(fh.read()):
+                            os.remove(ruta_xml)
                 if token:
                     id_api = f"{emisor}-20-{serie}-{numero}-{'1' if tipo == 'emitido' else '2'}"
                     for ruta, accion in [(ruta_xml, "02"), (ruta_pdf, "01")]:
                         if os.path.exists(ruta):
                             continue
                         contenido = bajar_archivo(sol, token, id_api, accion)
+                        if contenido and accion == "02" and not xml_valido(contenido):
+                            print(f"    SUNAT devolvió un XML con error para {base} (se usará el PDF)")
+                            contenido = None
+                        if contenido and accion == "01" and not contenido.startswith(b"%PDF"):
+                            contenido = None
                         if contenido:
                             os.makedirs(os.path.dirname(ruta), exist_ok=True)
                             with open(ruta, "wb") as fh:
@@ -486,6 +567,18 @@ def main():
                             fila["observacion"] = cab["observacion"]
                     except Exception as e:
                         print(f"    XML ilegible {base}: {str(e)[:100]}")
+                if not facturas and not os.path.exists(ruta_xml) and os.path.exists(ruta_pdf):
+                    cab, facturas = leer_pdf(ruta_pdf)
+                    yo_agente = tipo == "emitido"
+                    fila["agente"] = fila.get("agente") or (cab.get("emisor", ""))
+                    fila["proveedor"] = fila.get("proveedor") or cab.get("receptor", "")
+                    for k in ["tasa", "importe_pagado", "moneda"]:
+                        if cab.get(k) and not fila.get(k):
+                            fila[k] = cab[k]
+                    if cab.get("regimen") and not fila.get("regimen"):
+                        fila["regimen"] = cab["regimen"]
+                    if facturas:
+                        fila["observacion"] = ((fila["observacion"] + " ") if fila["observacion"] else "") + "(datos leídos del PDF: SUNAT no entregó el XML)"
                 if not facturas and not os.path.exists(ruta_xml):
                     try:
                         filas_html, _ = detalle_html(sol, cre, a.diagnostico and not ya_mostro[0])
@@ -504,6 +597,10 @@ def main():
                            "comprobante": fila["comprobante"], "ruc_agente": emisor,
                            "ruc_proveedor": receptor, "proveedor": fila.get("proveedor", "")}
                     det.update(f)
+                    if det.get("importe_retenido") and not det.get("fecha_retencion"):
+                        # En el PDF la fecha de retención y de pago es la fecha del comprobante.
+                        det["fecha_retencion"] = det.get("pago_fecha") or fila["fecha_emision"]
+                        det["pago_fecha"] = det.get("pago_fecha") or fila["fecha_emision"]
                     detalles.append(det)
             time.sleep(1)
 
