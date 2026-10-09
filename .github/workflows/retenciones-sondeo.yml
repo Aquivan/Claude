@@ -1,0 +1,94 @@
+# SONDEO (solo lectura) para el proyecto "Retenciones · Grupo" (carpeta retenciones/).
+# Entra a SOL de UNA empresa y solo MUESTRA que opciones de comprobantes de
+# retencion ofrece SUNAT (menu, formularios de consulta y parametros de la
+# API de consultas). No descarga ni guarda nada. Nunca imprime claves ni tokens.
+
+name: Retenciones - sondeo SUNAT (solo lectura)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa (su Environment con claves SOL)"
+        required: true
+
+jobs:
+  sondeo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.ruc }}
+    steps:
+      - name: Sondeo
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+        run: |
+          set -e
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+          CID="4f3b88b3-d9d6-402a-b85d-6a0bc857746a"
+          SEC="https://api-seguridad.sunat.gob.pe/v1/clientessol/$CID/oauth2"
+          ORIG="https://e-menu.sunat.gob.pe/cl-ti-itmenu/AutenticaMenuInternet.htm"
+          MENU="https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm"
+          STATE='rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAADdAADZXhlcHQABnBhcmFtc3QASyomKiYvY2wtdGktaXRtZW51L01lbnVJbnRlcm5ldC5odG0mYjY0ZDI2YThiNWFmMDkxOTIzYjIzYjY0MDdhMWMxZGI0MWU3MzNhNnQABGV4ZWNweA=='
+          JAR=jar.txt
+          curl -sS -c "$JAR" -b "$JAR" --max-time 20 -A "$UA" \
+            "$SEC/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl=$ORIG&state=$STATE" -o /dev/null
+          curl -sS -c "$JAR" -b "$JAR" --max-time 25 -A "$UA" -L \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "tipo=2" --data-urlencode "dni=" \
+            --data-urlencode "custom_ruc=$SUNAT_RUC" --data-urlencode "j_username=$SUNAT_USUARIO" \
+            --data-urlencode "j_password=$SUNAT_CLAVE" --data-urlencode "captcha=" \
+            --data-urlencode "originalUrl=$ORIG" --data-urlencode "state=$STATE" \
+            "$SEC/j_security_check" -o login.html
+          grep -q "Men" login.html || { echo "!! LOGIN FALLIDO"; exit 1; }
+          echo "Login OK."
+          set +e
+          curl -sS -A "$UA" -c "$JAR" -b "$JAR" --data "action=prevApp" "$MENU" -o prev.html
+          curl -sS -A "$UA" -c "$JAR" -b "$JAR" "$MENU" -o menu.html
+
+          echo "================ 1) MENU SOL: opciones con 'retenci' ================"
+          python3 - <<'PY'
+          import re, glob, html
+          vistos = set()
+          for f in ['login.html', 'prev.html', 'menu.html']:
+              t = open(f, encoding='utf-8', errors='ignore').read()
+              for m in re.finditer(r'.{0,220}[Rr]etenci.{0,220}', t):
+                  s = re.sub(r'\s+', ' ', html.unescape(m.group(0)))
+                  if s not in vistos:
+                      vistos.add(s); print('-', s[:440])
+          print('(total coincidencias:', len(vistos), ')')
+          # Codigos de menu tipo 11.x.x.x.x cerca de la palabra
+          for f in ['login.html', 'prev.html', 'menu.html']:
+              t = open(f, encoding='utf-8', errors='ignore').read()
+              for m in re.finditer(r'(\d+(?:\.\d+){3,5})[^\n]{0,160}[Rr]etenci', t):
+                  print('CODIGO', m.group(1), '->', re.sub(r'\s+', ' ', m.group(0))[:200])
+          PY
+
+          echo "================ 2) CONSULTA CLASICA CPE (formulario) ================"
+          curl -sS -A "$UA" -c "$JAR" -b "$JAR" -L "$MENU?action=execute&code=11.9.5.1.1" -o cpegem.html
+          python3 - <<'PY'
+          import re, html
+          t = open('cpegem.html', encoding='utf-8', errors='ignore').read()
+          for sel in re.finditer(r'<select[^>]*name="?([\w]+)"?[^>]*>(.*?)</select>', t, re.S | re.I):
+              ops = re.findall(r'<option[^>]*value="?([^">]*)"?[^>]*>(.*?)</option>', sel.group(2), re.S | re.I)
+              print('SELECT', sel.group(1), ':', '; '.join(v + '=' + re.sub(r'\s+', ' ', html.unescape(x)).strip() for v, x in ops))
+          for m in re.finditer(r'.{0,160}[Rr]etenci.{0,160}', t):
+              print('-', re.sub(r'\s+', ' ', m.group(0))[:320])
+          print('(tamano', len(t), ')')
+          PY
+
+          echo "================ 3) API de consultas (e-factura): parametros ================"
+          EXEC_LOC=$(curl -sS -A "$UA" -c "$JAR" -b "$JAR" -D - -o /dev/null \
+            "$MENU?action=execute&code=11.38.1.1.1" | grep -i "^location:" | sed 's/[Ll]ocation: //' | tr -d '\r')
+          TOKEN=$(echo "$EXEC_LOC" | grep -oE 'token=[^&]*' | cut -d= -f2)
+          echo "token obtenido: $([ -n "$TOKEN" ] && echo si || echo no)"
+          B="https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe"
+          for p in parametros comprobantes/parametros parametros/tipocomprobante parametros/comprobantes; do
+            code=$(curl -sS -o resp.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" \
+              -H "Accept: application/json, text/plain, */*" -H "Origin: https://e-factura.sunat.gob.pe" \
+              -H "Referer: https://e-factura.sunat.gob.pe/" -A "$UA" "$B/$p")
+            echo "--- GET $p -> HTTP $code"
+            head -c 2500 resp.json; echo
+          done
+          rm -f "$JAR" *.html resp.json
