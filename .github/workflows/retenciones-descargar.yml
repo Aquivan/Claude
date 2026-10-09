@@ -100,6 +100,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          [ -d retenciones/datos ] || { echo "Sin comprobantes para guardar."; exit 0; }
           git add retenciones/datos
           git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
           git commit -m "Retenciones CRE ${{ matrix.ruc }} ${{ inputs.periodo || 'automatico' }}-${{ inputs.hasta || 'actual' }} [skip ci]"
