@@ -23,6 +23,7 @@ on:
       script_id:
         description: "ID del proyecto Apps Script de la hoja Vouchers"
         required: true
+        default: "1D9dcCYU-Nqw7bgjFYPcTSUTcyrVE25AK03_zx4ZTUknId-lUieAV6J1G"
 
 concurrency:
   group: asistente-vouchers

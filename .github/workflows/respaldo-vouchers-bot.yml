@@ -1,0 +1,73 @@
+# Respaldo del codigo que corre HOY en la hoja "Sistema de Vouchers"
+# (bot de Telegram + Asistente IA). Solo LEE el proyecto de Apps Script
+# (clasp pull) y guarda una copia en vouchers_bot_respaldo/. No sube nada
+# a la hoja. Corre a mano y cada lunes; solo hace commit si algo cambio.
+
+name: Respaldo codigo hoja Vouchers
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 12 * * 1'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: respaldo-vouchers-bot
+  cancel-in-progress: false
+
+jobs:
+  respaldo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SCRIPT_ID: 1D9dcCYU-Nqw7bgjFYPcTSUTcyrVE25AK03_zx4ZTUknId-lUieAV6J1G
+    steps:
+      - name: Descargar el repo
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar clasp
+        run: npm install -g @google/clasp@3.3.0
+
+      - name: Escribir credenciales de clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then echo "::error::Falta el secret CLASPRC_JSON"; exit 1; fi
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+
+      - name: Copiar el codigo actual de la hoja (solo lectura)
+        run: |
+          mkdir -p /tmp/hoja
+          printf '{"scriptId":"%s","rootDir":"/tmp/hoja"}' "$SCRIPT_ID" > /tmp/hoja/.clasp.json
+          (cd /tmp/hoja && clasp pull)
+          rm -f /tmp/hoja/.clasp.json
+          # Reemplazar el respaldo anterior, conservando el README.
+          find vouchers_bot_respaldo -mindepth 1 ! -name 'README.md' -exec rm -rf {} +
+          cp -r /tmp/hoja/. vouchers_bot_respaldo/
+          ls -R vouchers_bot_respaldo
+
+      - name: Guardar en GitHub si cambio algo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add vouchers_bot_respaldo
+          if git diff --cached --quiet; then echo "Sin cambios en el codigo de la hoja."; exit 0; fi
+          git commit -m "Respaldo codigo hoja Vouchers $(date -u +'%Y-%m-%d %H:%M UTC')"
+          for i in 1 2 3 4; do
+            if git push; then exit 0; fi
+            git pull --rebase && continue
+            sleep $((i*5))
+          done
+          exit 1
+
+      - name: Limpiar credenciales
+        if: always()
+        run: rm -rf "$HOME/.clasprc.json" /tmp/hoja
