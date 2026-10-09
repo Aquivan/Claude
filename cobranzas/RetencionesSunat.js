@@ -112,8 +112,8 @@ var ORIGEN_RETENCION_REASIGNADA_ = '🔁 Retención reasignada';
 var ENC_REASIGNAR_ = ['Comprobante de retención (ej. E001-123)', 'RUC agente (quien retuvo; opcional)',
   'Factura original (ej. 01_FN01-19)', 'Pasar a factura(s) (ej. 01_FN01-25 o 01_FN01-25,26)',
   'Monto S/ (vacío = toda la retención; o ponga el Exceso sugerido para que la factura quede en cero)', 'Observación', 'Resultado (lo llena el sistema)'];
-var ENC_SUGERIDAS_ = ['Empresa', 'Tipo', 'Factura con N/C', 'RUC contraparte', 'Total', 'N/C', 'Retención SUNAT',
-  'Exceso (saldo a favor)', 'Comprobante(s) de retención', 'RUC agente'];
+var ENC_SUGERIDAS_ = ['Empresa', 'Tipo', 'Factura', 'RUC contraparte', 'Moneda', 'Total', 'N/C', 'Base (Total − N/C)',
+  'Retención correcta (3%)', 'Retención aplicada', 'Exceso a reasignar', 'Comprobante(s) de retención', 'RUC agente', 'Saldo actual'];
 
 function hojaReasignar_(ss) {
   var sh = ss.getSheetByName(HOJA_REASIGNAR_);
@@ -203,33 +203,47 @@ function aplicarReasignaciones_(ss, ret) {
   }
 }
 
-/** A la derecha de 🔁 Reasignar retenciones: facturas con N/C que quedaron con saldo a favor por una retención de SUNAT. */
+/**
+ * A la derecha de 🔁 Reasignar retenciones: facturas cuya retención es mayor al
+ * 3% de su base (Total − N/C + N/D). Pasa cuando la factura se anuló toda o en
+ * parte con nota de crédito después de retenerla. El exceso se puede reasignar.
+ */
 function escribirSugeridasReasignar_(ss, res, cfg) {
   var sh = hojaReasignar_(ss);
   var c0 = 9;
   sh.getRange(1, c0, Math.max(sh.getMaxRows(), 4), ENC_SUGERIDAS_.length).clearContent();
-  sh.getRange(1, c0).setValue('💡 SUGERIDAS: retención de SUNAT sobre factura con N/C que quedó a favor').setFontWeight('bold').setFontSize(12);
-  sh.getRange(2, c0).setValue('Copie el caso a la izquierda y escriba a qué factura pasar el exceso. Se actualiza solo.').setFontColor(COLOR.TEXTO_SUAVE);
+  sh.getRange(1, c0).setValue('💡 SUGERIDAS: facturas con retención mayor al 3% de (Total − N/C)').setFontWeight('bold').setFontSize(12);
+  sh.getRange(2, c0).setValue('Copie el caso a la izquierda: comprobante de retención, factura, a qué factura pasarlo y el monto ' +
+    '(el "Exceso a reasignar", o una parte). Se actualiza solo.').setFontColor(COLOR.TEXTO_SUAVE);
   sh.getRange(3, c0, 1, ENC_SUGERIDAS_.length).setValues([ENC_SUGERIDAS_]).setFontWeight('bold')
     .setFontColor(COLOR.BLANCO).setBackground('#7C3AED').setWrap(true).setVerticalAlignment('middle');
   var filas = [];
   res.docs.forEach(function (d) {
-    if (d.tipo === '07' || d.tipo === '08' || !(d.nc > 0) || !(d.saldo < -0.10)) return;
+    if (d.tipo === '07' || d.tipo === '08') return;
     var movsRet = d.movs.filter(function (m) { return m.origen === ORIGEN_RETENCION_SUNAT_; });
     if (!movsRet.length) return;
     var retSunat = movsRet.reduce(function (s, m) { return s + m.monto; }, 0);
-    var cres = movsRet.map(function (m) { return String(m.operacion).replace(/^CRE /, ''); });
+    var base = Math.max(0, d.total + d.nd - d.nc);
+    var debida = redondear2_(base * TASA_RETENCION_);
+    var exceso = redondear2_(Math.min(d.retencion - debida, retSunat));
+    if (exceso <= 0.05) return;
     var esCobrar = cfg.grupo.indexOf(d.emisorRuc) !== -1;
     var empresaRuc = esCobrar ? d.emisorRuc : d.receptorRuc;
+    var cres = movsRet.map(function (m) { return String(m.operacion).replace(/^CRE /, ''); })
+      .filter(function (x, k, a) { return a.indexOf(x) === k; });
     filas.push([nombreEmpresa_(cfg, empresaRuc, ''), esCobrar ? 'Por cobrar' : 'Por pagar', etiquetaDoc_(d),
-      esCobrar ? d.receptorRuc : d.emisorRuc, d.total, d.nc, Math.round(retSunat * 100) / 100,
-      Math.round(Math.min(-d.saldo, retSunat) * 100) / 100, cres.join(', '), d.receptorRuc]);
+      esCobrar ? d.receptorRuc : d.emisorRuc, d.moneda, d.total, d.nc - d.nd, redondear2_(base), debida,
+      redondear2_(d.retencion), exceso, cres.join(', '), d.receptorRuc, redondear2_(d.saldo)]);
   });
+  filas.sort(function (a, b) { return b[10] - a[10]; });
   if (filas.length) {
     sh.getRange(4, c0, filas.length, ENC_SUGERIDAS_.length).setValues(filas);
-    sh.getRange(4, c0 + 4, filas.length, 4).setNumberFormat('#,##0.00');
+    sh.getRange(4, c0 + 5, filas.length, 6).setNumberFormat('#,##0.00');
+    sh.getRange(4, c0 + 13, filas.length, 1).setNumberFormat('#,##0.00');
+    sh.getRange(4, c0 + 10, filas.length, 1).setFontWeight('bold').setFontColor('#7C3AED');
   } else {
-    sh.getRange(4, c0).setValue('Sin casos por ahora ✓');
+    sh.getRange(4, c0).setValue('Sin casos por ahora ✓ (todas las retenciones cuadran con el 3%)');
   }
-  [150, 90, 120, 110, 100, 100, 110, 120, 160, 110].forEach(function (w, i) { sh.setColumnWidth(c0 + i, w); });
+  [130, 85, 115, 105, 60, 95, 95, 105, 100, 100, 105, 150, 105, 95].forEach(function (w, i) { sh.setColumnWidth(c0 + i, w); });
+  return filas.length;
 }

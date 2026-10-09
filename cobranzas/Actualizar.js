@@ -16,7 +16,7 @@ function actualizacionAutomatica() {
 
 // Subir este numero cuando cambie la forma de calcular o escribir, para que la
 // siguiente actualizacion automatica rehaga todo aunque los datos no cambien.
-var VERSION_CALCULO_ = '7';
+var VERSION_CALCULO_ = '8';
 
 function huellaExterna_(ss, cfg, liqs) {
   var partes = ['v' + VERSION_CALCULO_, Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd')]; // cambia de dia: recalcular vencidos
@@ -68,6 +68,8 @@ function actualizarTodoInterno_(forzar) {
 
     var t0 = Date.now();
     bitacora_(ss, 'Inicio', t0, forzar ? 'manual' : 'automática');
+    var avisosRespaldo = [];
+    try { avisosRespaldo = respaldarDatosManuales_(ss, 'automático', false); } catch (e) { bitacora_(ss, 'Respaldo ERROR', t0, e.message); }
     var decisiones = leerYGuardarDecisiones_(ss);
     var docs = leerDocumentosSire_(cfg, liqs).filter(function (d) {
       var t = normTipo_(d.tipo);
@@ -91,6 +93,7 @@ function actualizarTodoInterno_(forzar) {
     });
 
     ret.avisos.forEach(function (a) { res.errores.push(a); });
+    avisosRespaldo.forEach(function (a) { res.errores.unshift(a); });
     bitacora_(ss, 'Lectura y cruce', t0, docs.length + ' docs SIRE, ' + vch.pagos.length + ' vouchers, ' + manual.length + ' manuales, ' + ret.pagos.length + ' retenciones SUNAT');
 
     var hoy = new Date();
@@ -103,6 +106,7 @@ function actualizarTodoInterno_(forzar) {
     escribirOtrosPagos_(ss, res, cfg); bitacora_(ss, 'Otros pagos', t1, res.sinFactura.length + ' pagos sin factura'); t1 = Date.now();
     escribirNoAplicados_(ss, res, cfg); t1 = Date.now();
     try { escribirSugeridasReasignar_(ss, res, cfg); } catch (e) { bitacora_(ss, 'Reasignar ERROR', t1, e.message); }
+    try { protegerDatosManuales_(ss, cfg.confirmarManual); } catch (e) { bitacora_(ss, 'Protección ERROR', t1, e.message); }
     if (Date.now() - t0 < 300000) {
       try { renderConsulta_(ss); bitacora_(ss, 'Consulta', t1, ''); } catch (e) { bitacora_(ss, 'Consulta ERROR', t1, e.message); }
     } else {
