@@ -156,23 +156,52 @@ function leerVouchers_(cfg) {
   return res;
 }
 
+// Opciones de la columna Modalidad del registro manual.
+var MODALIDADES_MANUAL_ = ['Cobro / pago en efectivo', 'Pago (transferencia, cheque u otro)', 'Compensación / cruce de cuentas',
+  'Retención (no está en SUNAT)', 'Detracción', 'Otro descuento'];
+
+function modalidadManual_(texto) {
+  var t = normHeader_(texto);
+  if (/efectivo/.test(t)) return { modalidad: MODALIDAD.PAGO, banco: 'EFECTIVO' };
+  if (/^pago|cheque|transferencia/.test(t)) return { modalidad: MODALIDAD.PAGO };
+  if (/retenc/.test(t)) return { modalidad: MODALIDAD.RETENCION };
+  if (/detracc/.test(t)) return { modalidad: MODALIDAD.DETRACCION };
+  if (/compensac|cruce/.test(t)) return { modalidad: MODALIDAD.OTRO, nota: 'Compensación' };
+  if (/otro/.test(t)) return { modalidad: MODALIDAD.OTRO };
+  return { modalidad: MODALIDAD.RETENCION };
+}
+
+/** Mantiene al día la lista de modalidades y la nota de ayuda del registro manual. */
+function asegurarRegistroManual_(sh) {
+  sh.getRange('B2:B2000').setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList(MODALIDADES_MANUAL_.concat(['Pago', 'Retención'])).setAllowInvalid(false).build());
+  sh.getRange('L1').setValue('ℹ️ Aquí registras lo que NO viene en vouchers ni en SUNAT: cobros o pagos en EFECTIVO, ' +
+    'compensaciones (cruce de cuentas), detracciones, otros descuentos o una retención que no figure en SUNAT. ' +
+    'En "Documento(s)" escribe la factura, ej. 01_E001-123 (o varias: 01_E001-123,124). ' +
+    'Las retenciones de SUNAT ya llegan solas desde la hoja "Retenciones · Grupo": no las repitas aquí.')
+    .setWrap(true).setFontColor(COLOR.TEXTO_SUAVE).setVerticalAlignment('top');
+  sh.setColumnWidth(2, 230);
+}
+
 /** Lee la hoja ✍️ Registro manual como pagos/descuentos manuales. */
 function leerRegistroManual_(ss) {
   var sh = ss.getSheetByName(HOJA.MANUAL);
-  if (!sh || sh.getLastRow() < 2) return [];
+  if (!sh) return [];
+  asegurarRegistroManual_(sh);
+  if (sh.getLastRow() < 2) return [];
   var datos = sh.getRange(2, 1, sh.getLastRow() - 1, 10).getValues();
-  var mapa = { 'retencion': MODALIDAD.RETENCION, 'detraccion': MODALIDAD.DETRACCION, 'pago': MODALIDAD.PAGO, 'otro descuento': MODALIDAD.OTRO };
   var res = [];
   datos.forEach(function (r, i) {
     var monto = aNumero_(r[5]);
     if (!monto || !r[4]) return;
     var fecha = aFecha_(r[0]);
+    var m = modalidadManual_(r[1]);
     res.push({
       id: ['MANUAL', i + 2, fmtFechaClave_(fecha), monto.toFixed(2), String(r[4])].join('|'),
       fecha: fecha, monto: monto, moneda: String(r[6] || 'PEN').toUpperCase(),
       pagadorRuc: aRuc_(r[2]), beneficiarioRuc: aRuc_(r[3]), refs: String(r[4]),
-      operacion: String(r[7] || ''), banco: String(r[8] || ''),
-      modalidad: mapa[normHeader_(r[1])] || MODALIDAD.RETENCION, esManual: true,
+      operacion: String(r[7] || '') || (m.nota || ''), banco: String(r[8] || '') || (m.banco || ''),
+      modalidad: m.modalidad, esManual: true,
       fuente: HOJA.MANUAL + '!' + (i + 2),
     });
   });

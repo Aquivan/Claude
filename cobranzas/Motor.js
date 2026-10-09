@@ -302,10 +302,10 @@ function ejecutarCruce_(entrada) {
       var d = buscarDocPorRef(ref, p);
       var txt = ref.tipo + '_' + ref.serie + '-' + ref.numero;
       if (d === 'AMBIGUO') errores.push({ tipo: 'Referencia ambigua', pagoId: p.id, detalle: txt + ' existe para varios emisores; falta el RUC del beneficiario', fuente: p.fuente });
-      else if (!d) errores.push({ tipo: 'Referencia no existe', pagoId: p.id, detalle: txt + (p.beneficiarioRuc ? ' no existe en SIRE para el RUC ' + p.beneficiarioRuc : ' no existe en SIRE'), fuente: p.fuente });
+      else if (!d) errores.push({ tipo: p.origen ? 'Retención sin factura' : 'Referencia no existe', pagoId: p.id, detalle: (p.origen ? p.operacion + ': ' : '') + txt + (p.beneficiarioRuc ? ' no existe en SIRE para el RUC ' + p.beneficiarioRuc : ' no existe en SIRE') + (p.origen ? ' (puede ser de un año que no se lee: ⚙️ Config → Años SIRE a leer)' : ''), fuente: p.fuente });
       else if (lista.indexOf(d) === -1) lista.push(d);
     });
-    if (lista.length) encolar(p, lista, p.esManual ? ORIGEN.MANUAL : ORIGEN.REFERENCIADO);
+    if (lista.length) encolar(p, lista, p.origen || (p.esManual ? ORIGEN.MANUAL : ORIGEN.REFERENCIADO));
   });
   pagos.forEach(function (p) {
     if (p.aplicado || !dec[p.id] || dec[p.id].estado !== 'OK') return;

@@ -44,6 +44,7 @@ var PARAMETROS_ = [
   [9, 'Ventana de días para sugerencias', 120, 'Distancia máxima entre fecha de pago y de factura'],
   [10, 'Controlar documentos emitidos desde', '', 'dd/mm/aaaa. Vacío = todo lo que hay en SIRE. Úsalo para no ver como deuda lo antiguo que ya se pagó sin voucher'],
   [11, 'Tipos de comprobante a controlar', '01', '01 = Factura, 03 = Boleta, 14 = Servicios públicos, 02 = Recibo por honorarios… separados por coma. Las N/C y N/D siempre se aplican'],
+  [12, 'ID Sheet de Retenciones', '1YpgrLWya8jPIhxurz0wvRuAf4A-Ts6K79NZhkBk6zpw', 'Hoja "Retenciones · Grupo" (comprobantes de retención de SUNAT). Sus retenciones se descuentan solas de cada factura. Vacío = no usar'],
 ];
 
 function onOpen() {
@@ -55,6 +56,7 @@ function onOpen() {
       .addItem('🔵 Estricto (+ exactos por monto)', 'menuModoEstricto')
       .addItem('🟡 Inteligente (+ sugerencias)', 'menuModoInteligente'))
     .addItem('🖼 Abrir visor de vouchers', 'abrirVisorVoucher')
+    .addItem('✍️ Registrar cobro/pago manual (efectivo, compensación…)', 'menuNuevoRegistroManual')
     .addSeparator()
     .addItem('⚙️ Instalar / reparar', 'menuInstalar')
     .addToUi();
@@ -68,6 +70,22 @@ function menuActualizarAhora() {
   ss.toast('Leyendo SIRE y vouchers…', '💼 Cobranzas', 30);
   var r = actualizarTodo_(true);
   ss.toast(r, '💼 Cobranzas', 8);
+}
+
+/** Lleva a ✍️ Registro manual, en la primera fila libre, con la fecha de hoy. */
+function menuNuevoRegistroManual() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(HOJA.MANUAL);
+  if (!sh) { SpreadsheetApp.getUi().alert('Falta la hoja ' + HOJA.MANUAL + '. Use ⚙️ Instalar / reparar.'); return; }
+  asegurarRegistroManual_(sh);
+  var fila = Math.max(sh.getLastRow(), 1) + 1;
+  sh.getRange(fila, 1).setValue(new Date());
+  sh.getRange(fila, 2).setValue('Cobro / pago en efectivo');
+  sh.getRange(fila, 7).setValue('PEN');
+  ss.setActiveSheet(sh);
+  sh.setActiveRange(sh.getRange(fila, 3));
+  ss.toast('Complete: RUC de quien paga, RUC del emisor de la factura, Documento(s) (ej. 01_E001-123) y Monto. ' +
+    'Cambie la Modalidad si no es efectivo. Luego 💼 Cobranzas → 🔄 Actualizar ahora.', '✍️ Registro manual', 15);
 }
 
 function menuModoReferenciados() { cambiarModoYActualizar_('SOLO REFERENCIADOS'); }
@@ -161,16 +179,14 @@ function crearRegistroManual_(ss) {
     'Monto', 'Moneda', 'N° operación / comprobante', 'Banco', 'Observación'];
   escribirTabla_(sh, 1, 1, enc, []);
   sh.setFrozenRows(1);
-  sh.getRange('B2:B2000').setDataValidation(SpreadsheetApp.newDataValidation()
-    .requireValueInList(['Retención', 'Detracción', 'Pago', 'Otro descuento']).build());
+
   sh.getRange('G2:G2000').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['PEN', 'USD']).build());
   sh.getRange('C2:D2000').setNumberFormat('@');
   sh.getRange('A2:A2000').setNumberFormat('dd/mm/yyyy');
   sh.getRange('F2:F2000').setNumberFormat('#,##0.00');
   [100, 120, 120, 150, 220, 110, 70, 170, 100, 260].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   sh.setRowHeight(1, 42);
-  sh.getRange('L1').setValue('ℹ️ Aquí registras retenciones, detracciones u otros descuentos (y pagos sin voucher). Cuando tengas la descarga automática de retenciones, escribirá en estas mismas columnas.')
-    .setWrap(true).setFontColor(COLOR.TEXTO_SUAVE);
+  asegurarRegistroManual_(sh);
   sh.setColumnWidth(12, 320);
 }
 
@@ -188,7 +204,11 @@ function crearTablaCategorias_(sh) {
 function leerConfig_(ss) {
   var sh = ss.getSheetByName(HOJA.CONFIG);
   if (!sh) throw new Error('Falta la hoja ' + HOJA.CONFIG + '. Usa 💼 Cobranzas → ⚙️ Instalar / reparar.');
-  var v = sh.getRange('B3:B11').getValues().map(function (r) { return r[0]; });
+  // Parámetros agregados después de instalar (ej. ID de Retenciones): se escriben si faltan.
+  PARAMETROS_.forEach(function (p) {
+    if (!sh.getRange(p[0], 1).getValue()) sh.getRange(p[0], 1, 1, 3).setValues([[p[1], p[2], p[3]]]);
+  });
+  var v = sh.getRange('B3:B12').getValues().map(function (r) { return r[0]; });
   var anioActual = new Date().getFullYear();
   var anios = String(v[2] || '').split(/[,; ]+/).map(function (x) { return parseInt(x, 10); }).filter(Boolean);
   if (!anios.length) anios = [anioActual - 1, anioActual];
@@ -208,6 +228,7 @@ function leerConfig_(ss) {
     ventana: Number(v[6]) || 120,
     desde: aFecha_(v[7]),
     tipos: String(v[8] || '01').split(/[,; ]+/).filter(Boolean).map(normTipo_),
+    idRetenciones: String(v[9] || '').trim(),
     grupo: emp.map(function (r) { return aRuc_(r[0]); }),
     nombreEmpresa: {}, aliasEmpresa: {}, aliasNombre: {}, diasPorRuc: {},
   };
