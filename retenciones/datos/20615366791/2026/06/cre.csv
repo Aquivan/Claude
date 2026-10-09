@@ -1,0 +1,2 @@
+empresa_ruc,tipo,periodo,fecha_emision,comprobante,serie,numero,ruc_agente,agente,ruc_proveedor,proveedor,regimen,tasa,importe_retenido,importe_pagado,moneda,estado,facturas,correo_receptor,pdf,xml,observacion
+20615366791,Recibido,202606,10/06/2026,E001-169,E001,169,20447969531,CORPORACION GRANIX E.I.R.L.,20615366791,CORPORACION EMPRESARIAL JENILE E.I.R.L.,Tasa 3%,3,8589.00,277711.00,PEN,EMITIDO,1,CORPORACION.JENILE@GMAIL.COM,20615366791/2026/06/pdf/20447969531-E001-169.pdf,20615366791/2026/06/xml/20447969531-E001-169.xml,

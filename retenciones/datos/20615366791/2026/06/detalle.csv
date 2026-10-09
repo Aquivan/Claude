@@ -1,0 +1,2 @@
+empresa_ruc,tipo,periodo,comprobante,fecha_retencion,ruc_agente,ruc_proveedor,proveedor,doc_tipo,doc_numero,doc_fecha,doc_moneda,doc_importe_total,pago_numero,pago_fecha,pago_importe,tipo_cambio,importe_retenido,importe_pagado_neto
+20615366791,Recibido,202606,E001-169,10/06/2026,20447969531,20615366791,CORPORACION EMPRESARIAL JENILE E.I.R.L.,Factura,F001-73,03/06/2026,PEN,286300.00,1,10/06/2026,286300.00,1.00,8589,277711
