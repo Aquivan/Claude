@@ -9,6 +9,7 @@ var CONSULTA_ = { EMPRESA: 'B4', VER: 'D4', CONTRA: 'F4', MOSTRAR: 'J4', FILA_EN
 var TIPO_DOC_ = { '01': 'Factura', '03': 'Boleta', '07': 'Nota de crédito', '08': 'Nota de débito', '02': 'Recibo honorarios', '12': 'Ticket', '14': 'Servicio público' };
 
 function onEdit(e) {
+  try { CIA_alEditar_(e); } catch (err0) { /* pestaña 🤝 Conciliar con IA: no afecta a Consulta */ }
   try {
     var sh = e.range.getSheet();
     if (sh.getName() !== HOJA.CONSULTA) return;
