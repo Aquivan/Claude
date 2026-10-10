@@ -87,6 +87,7 @@ function IMP_procesar_(ss, archivos, empresaRuc, guardarCopia) {
     res.cuenta[IMP_EST_.LLENO] + ' sin nada nuevo · ' + res.cuenta[IMP_EST_.DUDA] + ' por revisar · ' + res.cuenta[IMP_EST_.NO] +
     ' no están en Vouchers' + (res.cuenta[IMP_EST_.INFO] ? ' · ' + res.cuenta[IMP_EST_.INFO] + ' retenciones/N/C (abajo, como referencia)' : '');
   sh.getRange('B4').setValue(resumen + (avisos.length ? '\n⚠️ ' + avisos.join('\n⚠️ ') : ''));
+  IMP_estado_(sh, 'Listo: revise la tabla, marque ✔ y use 🤝 Conciliar con IA → ✅ Completar vouchers marcados.');
   ss.setActiveSheet(sh);
   return resumen + (avisos.length ? '\n\n⚠️ ' + avisos.join('\n⚠️ ') : '') +
     '\n\nRevise la pestaña 🤝 Importar y use 🤝 Conciliar con IA → ✅ Completar vouchers marcados.';
@@ -349,7 +350,7 @@ var IMP_COLS_ = {
   cod: /^cod(igo)? ?sunat|^cod sunat|^codigo sunat/,
   op: /^(n|nro|num|numero|no)? ?op(e|er|eracion)?( |$)|operacion|^n op|^op$/,
   fecha: /^fecha/,
-  monto: /^(monto|importe|pagado|pago|abono)/,
+  monto: /^(t |total |imp )?(monto|importe|pagado|pago|abono)/,
   modalidad: /^(modalidad|concepto|tipo de pago|tipo de mov|movimiento)/,
   razon: /^(razon social|razon|proveedor|beneficiario|cliente|nombre)/,
   ruc: /^ruc/,
@@ -372,6 +373,8 @@ function IMP_mapear_(enc) {
       }
     });
   });
+  // "Razón social" manda sobre "Proveedor (Beneficiario)" (en el análisis suele ser la columna completa)
+  enc.forEach(function (h, i) { if (/^razon/.test(normHeader_(h))) m.razon = i; });
   return m;
 }
 
