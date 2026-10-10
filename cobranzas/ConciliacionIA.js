@@ -27,6 +27,9 @@ function CIA_agregarMenu_() {
     .addItem('📋 Abrir pestaña y cargar proveedores/clientes', 'CIA_menuAbrir')
     .addItem('▶ Analizar la selección', 'CIA_menuAnalizar')
     .addItem('✅ Aplicar lo aceptado', 'CIA_menuAplicar')
+    .addItem('🧹 Borrar propuestas', 'CIA_menuBorrar')
+    .addSeparator()
+    .addItem('📄 Listar facturas y vouchers de la selección', 'CIA_menuListar')
     .addSeparator()
     .addItem('🔑 Guardar clave de IA (de esta pestaña)', 'CIA_menuGuardarClave')
     .addItem('🧪 Probar conexión con la IA', 'CIA_menuProbar')
@@ -101,7 +104,7 @@ function CIA_hoja_(ss) {
   sh.getRange('B7').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['Solo vouchers sin aplicar', 'Todos los vouchers']).build());
   sh.getRange('B8').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['NO', 'SI']).build());
   sh.getRange('B4').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(CIA_TIPOS_).build());
-  sh.getRange('D3:K8').merge().setValue(
+  sh.getRange('D3:K8').merge().setValue(CIA_AYUDA_ ||
     'Cómo usarlo:\n1) Elija empresa, Ver y el proveedor/cliente (la lista muestra sus facturas pendientes).\n' +
     '2) Menú 💼 Cobranzas → 🤝 Conciliar con IA → ▶ Analizar.\n' +
     'Modo de análisis (fila 10): "Todo con IA" hace que la IA revise TODOS los vouchers con la lista completa de proveedores/clientes (más lento y usa más consultas).\n' +
@@ -122,7 +125,16 @@ function CIA_hoja_(ss) {
 }
 
 /** Fila 10: modo de análisis (se agrega sola si la pestaña es de antes). */
+var CIA_AYUDA_ = 'Cómo usarlo (todo desde el menú 🤝 Conciliar con IA):\n' +
+  '1) Elija empresa, Ver y el proveedor/cliente (la lista sale de las facturas SIRE con saldo).\n' +
+  '2) ▶ Analizar la selección. Modo (fila 10): "Todo con IA" = la IA revisa todos los vouchers con la lista completa de proveedores.\n' +
+  '3) Revise cada propuesta: ✔ Aceptar (puede corregir "Factura(s) propuesta(s)", ej. 01_F001-123,124) o ✖ Rechazar.\n' +
+  '4) ✅ Aplicar lo aceptado: queda como pago confirmado y el RUC detectado se recuerda. 🧹 Borrar propuestas limpia esta tabla.\n' +
+  '📄 Listar facturas y vouchers: arma las pestañas 🤝 Facturas y 🤝 Vouchers de la selección.\n' +
+  'IA (fila 11) y su clave (menú → 🔑) son propias de esta pestaña. Sin clave, igual propone los casos evidentes.';
+
 function CIA_asegurarModo_(sh) {
+  if (String(sh.getRange('D3').getValue()) !== CIA_AYUDA_) sh.getRange('D3').setValue(CIA_AYUDA_);
   if (!String(sh.getRange('A10').getValue()).trim()) {
     sh.getRange('A10').setValue('Modo de análisis').setFontWeight('bold');
     sh.getRange('B10').setValue(CIA_MODOS_[0]).setBackground('#FFF8E1')
@@ -378,7 +390,7 @@ function CIA_preguntarIA_(ia, grupoVouchers, docs, contra) {
         d.retencion.toFixed(2) + ' | ' + d.detraccion.toFixed(2) + ' | ' + d.pagado.toFixed(2) + ' | ' + d.saldo.toFixed(2) + ' | ' + d.moneda;
     }).join('\n'),
   ].join('\n');
-  var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: CIA_SISTEMA_, texto: texto, maxTokens: 4000 });
+  var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: CIA_SISTEMA_, texto: texto, maxTokens: 8000 });
   var res = {};
   (Array.isArray(r.asignaciones) ? r.asignaciones : []).forEach(function (a) {
     var k = parseInt(String(a.voucher || '').replace(/\D/g, ''), 10) - 1;
@@ -417,7 +429,7 @@ function CIA_iaRucs_(ia, vouchers, directorio, porCobrar) {
         (p.beneficiarioNombre || '') + ' | ' + (p.descripcion || '');
     }).join('\n'),
   ].join('\n');
-  var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: CIA_SISTEMA_RUC_, texto: texto, maxTokens: 4000 });
+  var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: CIA_SISTEMA_RUC_, texto: texto, maxTokens: 8000 });
   var validos = {};
   directorio.forEach(function (d) { validos[d.ruc] = true; });
   var res = {};
@@ -722,4 +734,138 @@ function CIA_escribirRucVoucher_(ssV, fuente, ruc) {
   if (String(celda.getValue()).trim() !== '') return 'RUC ya estaba';
   celda.setNumberFormat('@').setValue(ruc);
   return 'RUC escrito';
+}
+
+/* ------------------------------------------------------- borrar todo */
+
+function CIA_menuBorrar() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = CIA_hoja_(ss);
+  var ui = SpreadsheetApp.getUi();
+  var n = Math.max(0, sh.getLastRow() - CIA_F_ENC_);
+  if (!n) { ui.alert('No hay propuestas que borrar.'); return; }
+  var r = ui.alert('🧹 Borrar propuestas', 'Se borrarán las ' + n + ' filas de propuestas de esta pestaña.\n\n' +
+    'Lo que ya aplicó (✅) sigue aplicado en Cobranzas. Puede volver a ▶ Analizar cuando quiera.', ui.ButtonSet.YES_NO);
+  if (r !== ui.Button.YES) return;
+  if (sh.getFilter()) sh.getFilter().remove();
+  var rg = sh.getRange(CIA_F_ENC_ + 1, 1, n, CIA_ENC_.length);
+  rg.clearContent(); rg.clearDataValidations(); rg.setBackground(null);
+  CIA_estado_(sh, 'Propuestas borradas ' + Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm'));
+}
+
+/* ----------------------------------- listar facturas y vouchers */
+
+var CIA_HOJA_FACT_ = '🤝 Facturas';
+var CIA_HOJA_VOUCH_ = '🤝 Vouchers';
+var CIA_ENC_FACT_ = ['Empresa', 'Proveedor / cliente', 'RUC', 'Documento', 'Emisión', 'Vence', 'Moneda', 'Total', 'N/C',
+  'Retención', 'Detracción', 'Pagado', 'Saldo', 'Estado', 'Vouchers aplicados (operación · monto)'];
+var CIA_ENC_VOUCH_ = ['Empresa', 'Fecha depósito', 'N° operación', 'Banco', 'Moneda', 'Monto', 'Beneficiario (col. F)',
+  'Descripción', 'RUC detectado', 'Proveedor / cliente', 'Cómo se detectó', 'Situación', 'Aplicado a (documento · monto)', 'Voucher (fuente)'];
+
+/** Movimientos: por documento (clave) y por voucher (ID pago). */
+function CIA_leerMovs_(ss) {
+  var res = { porDoc: {}, porPago: {} };
+  var sh = ss.getSheetByName(HOJA.MOVS);
+  if (!sh || sh.getLastRow() < 2) return res;
+  var v = sh.getDataRange().getValues();
+  var col = indiceColumnas_(v[0]);
+  var c = { clave: col('Clave'), id: col('ID pago'), doc: col('Documento'), monto: col('Monto aplicado'), op: col('N° operación'),
+    mod: col('Modalidad'), origen: col('Origen') };
+  for (var i = 1; i < v.length; i++) {
+    var r = v[i];
+    var monto = aNumero_(r[c.monto]);
+    var mod = String(r[c.mod] || '');
+    if (r[c.clave]) (res.porDoc[r[c.clave]] = res.porDoc[r[c.clave]] || []).push((mod && mod !== 'Pago' ? mod + ' ' : '') + String(r[c.op] || '') + ' · ' + monto.toFixed(2));
+    if (r[c.id]) (res.porPago[r[c.id]] = res.porPago[r[c.id]] || []).push(String(r[c.doc] || '') + ' · ' + monto.toFixed(2) + ' (' + String(r[c.origen] || '') + ')');
+  }
+  return res;
+}
+
+function CIA_menuListar() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ss.toast('Armando las listas de facturas y vouchers…', '🤝 Conciliar con IA', 60);
+  var msg;
+  try { msg = CIA_listar_(ss); } catch (e) { msg = '❌ ' + e.message; }
+  CIA_estado_(CIA_hoja_(ss), msg);
+  ss.toast(msg, '🤝 Conciliar con IA', 12);
+}
+
+function CIA_listar_(ss) {
+  var sh = CIA_hoja_(ss);
+  var cfg = leerConfig_(ss);
+  var par = CIA_leerParam_(sh, cfg);
+  var docs = CIA_leerDocs_(ss, cfg, par);
+  var nombres = {};
+  docs.forEach(function (d) { if (d.contraRuc && d.contra) nombres[d.contraRuc] = d.contra; });
+  var movs = CIA_leerMovs_(ss);
+
+  // Facturas (todas las del lado elegido; si hay proveedor elegido, solo las suyas)
+  var facts = docs.filter(function (d) { return !par.contraRuc || d.contraRuc === par.contraRuc; })
+    .sort(function (a, b) { return a.empresa.localeCompare(b.empresa) || a.contra.localeCompare(b.contra) || (a.emision || 0) - (b.emision || 0); });
+  var filasF = facts.map(function (d) {
+    return [d.empresa, nombres[d.contraRuc] || d.contra, d.contraRuc, d.doc, d.emision || '', d.vence || '', d.moneda, d.total, d.nc,
+      d.retencion, d.detraccion, d.pagado, d.saldo, d.estado, (movs.porDoc[d.clave] || []).join(' | ')];
+  });
+
+  // Vouchers del lado elegido
+  var nombreEmp = {};
+  cfg.grupo.forEach(function (r) { nombreEmp[r] = IA_tokens_(normNombre_(cfg.nombreEmpresa[r])); });
+  var filasV = [], aplicados = 0, sinAplicar = 0, montoSin = 0;
+  leerVouchers_(cfg).pagos.forEach(function (p) {
+    var emp = '';
+    if (par.porCobrar) {
+      emp = p.beneficiarioRuc && cfg.grupo.indexOf(p.beneficiarioRuc) !== -1 ? p.beneficiarioRuc : '';
+      if (!emp) cfg.grupo.forEach(function (r) { if (!emp && IA_similitud_(IA_tokens_(normNombre_(p.beneficiarioNombre)), nombreEmp[r]) >= 0.8) emp = r; });
+    } else {
+      emp = p.pagadorRuc && cfg.grupo.indexOf(p.pagadorRuc) !== -1 ? p.pagadorRuc : '';
+    }
+    if (!emp || (par.empresaRuc && emp !== par.empresaRuc)) return;
+    if (par.desde && p.fecha && p.fecha < par.desde) return;
+    var det = CIA_detectarRuc_(p, par, cfg, nombres);
+    var ruc = det.ruc || (det.candidatos[0] ? det.candidatos[0].ruc : '');
+    if (par.contraRuc && ruc !== par.contraRuc && !det.candidatos.some(function (c) { return c.ruc === par.contraRuc; })) return;
+    var aplic = movs.porPago[p.id] || [];
+    if (aplic.length) aplicados++; else { sinAplicar++; montoSin += p.monto; }
+    filasV.push([cfg.nombreEmpresa[emp] || emp, p.fecha || '', p.operacion, p.banco, p.moneda, p.monto, p.beneficiarioNombre, p.descripcion,
+      ruc, nombres[ruc] || '', det.ruc ? det.como : (ruc ? 'dudoso (' + Math.round(det.candidatos[0].score * 100) + '%)' : det.como),
+      aplic.length ? '✅ Aplicado' : '⚪ Sin aplicar', aplic.join(' | '), p.fuente]);
+  });
+  filasV.sort(function (a, b) { return String(a[0]).localeCompare(String(b[0])) || (a[1] || 0) - (b[1] || 0); });
+
+  var sel = (par.empresaRuc ? cfg.nombreEmpresa[par.empresaRuc] : 'Todas las empresas') + ' · ' + (par.porCobrar ? 'Por cobrar' : 'Por pagar') +
+    ' · ' + (par.contraRuc ? (nombres[par.contraRuc] || par.contraRuc) : 'todos los ' + (par.porCobrar ? 'clientes' : 'proveedores'));
+  var saldo = facts.reduce(function (s, d) { return s + d.saldo; }, 0);
+  CIA_escribirLista_(ss, CIA_HOJA_FACT_, '🧾 FACTURAS · ' + sel,
+    facts.length + ' facturas · saldo pendiente S/ ' + saldo.toFixed(2) + ' · columna final = vouchers ya aplicados a cada factura',
+    CIA_ENC_FACT_, filasF, { 4: 'dd/mm/yyyy', 5: 'dd/mm/yyyy', 7: '#,##0.00', 8: '#,##0.00', 9: '#,##0.00', 10: '#,##0.00', 11: '#,##0.00', 12: '#,##0.00' },
+    [110, 230, 100, 110, 85, 85, 60, 95, 85, 85, 85, 95, 95, 120, 320]);
+  CIA_escribirLista_(ss, CIA_HOJA_VOUCH_, '💳 VOUCHERS · ' + sel,
+    filasV.length + ' vouchers · ' + aplicados + ' aplicados · ' + sinAplicar + ' sin aplicar (S/ ' + montoSin.toFixed(2) + ')',
+    CIA_ENC_VOUCH_, filasV, { 1: 'dd/mm/yyyy', 2: '@', 5: '#,##0.00', 8: '@' },
+    [110, 85, 100, 70, 60, 95, 220, 200, 100, 220, 170, 100, 300, 110]);
+  return 'Listas listas: ' + facts.length + ' facturas en ' + CIA_HOJA_FACT_ + ' y ' + filasV.length + ' vouchers en ' + CIA_HOJA_VOUCH_ +
+    ' (' + sinAplicar + ' sin aplicar).';
+}
+
+function CIA_escribirLista_(ss, nombre, titulo, nota, enc, filas, formatos, anchos) {
+  var sh = ss.getSheetByName(nombre);
+  if (!sh) {
+    sh = ss.insertSheet(nombre);
+    var base = ss.getSheetByName(CIA_HOJA_);
+    if (base) { ss.setActiveSheet(sh); ss.moveActiveSheet(base.getIndex() + (nombre === CIA_HOJA_FACT_ ? 1 : 2)); }
+  }
+  if (sh.getFilter()) sh.getFilter().remove();
+  sh.clear();
+  sh.getRange(1, 1).setValue(titulo).setFontSize(13).setFontWeight('bold').setFontColor(COLOR.OSCURO);
+  sh.getRange(2, 1).setValue(nota).setFontColor(COLOR.TEXTO_SUAVE);
+  sh.getRange(3, 1, 1, enc.length).setValues([enc]).setFontWeight('bold').setFontColor(COLOR.BLANCO)
+    .setBackground(COLOR.AZUL).setWrap(true).setVerticalAlignment('middle');
+  sh.setFrozenRows(3);
+  if (filas.length) {
+    Object.keys(formatos).forEach(function (k) { sh.getRange(4, +k + 1, filas.length, 1).setNumberFormat(formatos[k]); });
+    sh.getRange(4, 1, filas.length, enc.length).setValues(filas).setFontSize(9);
+  }
+  sh.getRange(3, 1, filas.length + 1, enc.length).createFilter();
+  anchos.forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+  ss.setActiveSheet(sh);
 }

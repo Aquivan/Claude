@@ -107,7 +107,21 @@ function IA_extraerJson_(texto) {
   var s = String(texto || '').replace(/```(json)?/gi, '');
   var i = s.indexOf('{'), j = s.lastIndexOf('}');
   if (i === -1 || j <= i) throw new Error('La IA no devolvió JSON: ' + s.substring(0, 120));
-  return JSON.parse(s.substring(i, j + 1));
+  try {
+    return JSON.parse(s.substring(i, j + 1));
+  } catch (e) {
+    // A veces la IA agrega texto u otro bloque después: tomar solo el primer objeto completo.
+    var nivel = 0, enTexto = false, escape = false;
+    for (var k = i; k < s.length; k++) {
+      var c = s.charAt(k);
+      if (enTexto) {
+        if (escape) escape = false; else if (c === '\\') escape = true; else if (c === '"') enTexto = false;
+      } else if (c === '"') enTexto = true;
+      else if (c === '{') nivel++;
+      else if (c === '}' && --nivel === 0) return JSON.parse(s.substring(i, k + 1));
+    }
+    throw e;
+  }
 }
 
 /** RUC peruano valido (digito verificador) o DNI de 8 digitos. */
