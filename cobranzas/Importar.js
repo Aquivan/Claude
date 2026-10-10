@@ -210,9 +210,33 @@ function IMP_xlsxFilas_(blob) {
 
 /* ------------------------------------------------------------ hoja */
 
+var IMP_MODOS_FACT_ = ['No tocar (solo celdas vacías)', 'Agregar las facturas que faltan'];
+
+/** Fila 6: qué hacer si el voucher ya tiene alguna factura (se agrega sola si la pestaña es de antes). */
+function IMP_asegurarParam_(sh) {
+  if (String(sh.getRange('A6').getValue()) === 'Si el voucher ya tiene factura(s)') return sh;
+  sh.getRange('A6').setValue('Si el voucher ya tiene factura(s)').setFontWeight('bold');
+  sh.getRange('B6').setValue(IMP_MODOS_FACT_[1]).setBackground('#FFF8E1')
+    .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(IMP_MODOS_FACT_).build());
+  sh.getRange('C6:L6').merge().setValue('"Agregar" suma en Tipo y Nº Doc. las facturas del archivo que el voucher aún no tiene ' +
+    '(ej. tenía 01_FQQ1-3570 → queda 01_FQQ1-3570,01_FQQ1-3571,…). Nunca borra lo que ya estaba y se puede deshacer.')
+    .setFontSize(9).setFontColor(COLOR.TEXTO_SUAVE).setWrap(true);
+  return sh;
+}
+
+function IMP_agregarFact_(sh) { return String(sh.getRange('B6').getValue()).indexOf('Agregar') === 0; }
+
+/** Facturas del archivo que el voucher aún no tiene. */
+function IMP_faltanDocs_(actual, nuevo) {
+  var tiene = {};
+  parsearReferencias_(actual).refs.forEach(function (r) { tiene[r.tipo + '_' + r.serie + '-' + r.numero] = true; });
+  return parsearReferencias_(nuevo).refs.map(function (r) { return r.tipo + '_' + r.serie + '-' + r.numero; })
+    .filter(function (k, i, a) { return !tiene[k] && a.indexOf(k) === i; });
+}
+
 function IMP_hoja_(ss) {
   var sh = ss.getSheetByName(IMP_HOJA_);
-  if (sh && sh.getRange('A1').getValue()) return sh;
+  if (sh && sh.getRange('A1').getValue()) return IMP_asegurarParam_(sh);
   sh = sh || ss.insertSheet(IMP_HOJA_);
   sh.getRange('A1:L1').merge().setValue('📥  IMPORTAR MI ANÁLISIS · completar datos que faltan en Vouchers').setFontSize(15)
     .setFontWeight('bold').setFontColor('#F8FAFC').setBackground(COLOR.OSCURO);
@@ -221,7 +245,7 @@ function IMP_hoja_(ss) {
   sh.getRange('B3:L3').merge().setValue(
     '1) Menú 🤝 Conciliar con IA → 📥 Subir Excel, foto o PDF (elija la empresa: GRANIX, BKF…).  ' +
     '2) Revise abajo: ✅ se encontró el voucher, 🟠 hay duda (elija en "Voucher elegido ✏️", ej. Originales!120), ❌ no está en Vouchers.  ' +
-    '3) Marque ✔ y use ✅ Completar vouchers marcados: SOLO llena celdas vacías (ID Beneficiario, Tipo y Nº Doc., Empresa, ID Usuario). ' +
+    '3) Marque ✔ y use ✅ Completar vouchers marcados: SOLO llena celdas vacías (ID Beneficiario, Tipo y Nº Doc., Empresa, ID Usuario); si el voucher ya tiene alguna factura, agrega las que faltan según la fila 6. ' +
     'Se puede deshacer. Los archivos subidos se borran solos a los ' + IMP_DIAS_ + ' días.')
     .setWrap(true).setFontSize(9).setFontColor(COLOR.TEXTO_SUAVE).setBackground('#F8FAFC').setVerticalAlignment('top');
   sh.setRowHeight(3, 62);
@@ -230,6 +254,7 @@ function IMP_hoja_(ss) {
   sh.getRange(IMP_F_ENC_, 1, 1, IMP_ENC_.length).setValues([IMP_ENC_]).setFontWeight('bold')
     .setFontColor(COLOR.BLANCO).setBackground(COLOR.AZUL).setWrap(true).setVerticalAlignment('middle');
   sh.setFrozenRows(IMP_F_ENC_);
+  IMP_asegurarParam_(sh);
   [80, 150, 90, 85, 95, 180, 100, 150, 80, 150, 90, 180, 220, 200, 260, 130, 160, 200].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   return sh;
 }
@@ -286,8 +311,10 @@ function IMP_opNorm_(s) {
 }
 /** Uno o varios N° en una celda: "OP-663 / 664" → ["663","664"]. */
 function IMP_ops_(s) {
-  var m = String(s == null ? '' : s).match(/\d+/g) || [];
-  return m.map(function (x) { return x.replace(/^0+/, ''); }).filter(function (x) { return x; });
+  // Solo se separa por "/", ",", ";", "&" o " y "; dentro de cada parte se juntan los dígitos
+  // ("050.001.0091" = un solo N° → "500010091", igual que en Vouchers).
+  return String(s == null ? '' : s).split(/\s*(?:[\/,;&]|\by\b)\s*/i).map(IMP_opNorm_)
+    .filter(function (x, i, a) { return x && a.indexOf(x) === i; });
 }
 
 /** "20610668241-1-E001-502" → {ruc, tipo:'01', serie:'E001', numero:502, codigo:'01_E001-502'} */
@@ -486,6 +513,7 @@ function IMP_cruzar_(ss, cfg, filas, empresaRuc) {
   var movs = CIA_leerMovs_(ss);
   var tabla = [];
   var empTexto = {};
+  var agregar = IMP_agregarFact_(IMP_hoja_(ss));
   function empresaDe(f) {
     var ruc = empresaRuc || (f.empresa ? cfg.aliasEmpresa[normHeader_(f.empresa)] || '' : '');
     if (!ruc) return { ruc: '', texto: '' };
@@ -532,11 +560,17 @@ function IMP_cruzar_(ss, cfg, filas, empresaRuc) {
     g.monto = Math.round(g.monto * 100) / 100;
     var rucs = Object.keys(g.rucs);
     var e = empresaDe({ empresa: g.empresa });
-    var dudas = [], estado, objetivos = [];
+    var dudas = [], estado, objetivos = [], sugeridos = [];
     if (rucs.length > 1) dudas.push('El archivo trae varios RUC para esta OP: ' + rucs.join(', '));
     var montoOk = function (x) { return Math.abs(x.monto - g.monto) <= tol; };
     var mismo = function (x) { return x.opN + '|' + x.monto.toFixed(2) + '|' + fmtFechaClave_(x.fecha); };
-    var distintos = function (lista) { var s = {}; lista.forEach(function (x) { s[mismo(x)] = true; }); return Object.keys(s).length; };
+    // Cuántos vouchers distintos hay: el mismo voucher puede estar en Originales y en Fotos
+    // (a veces con 1-2 días de diferencia en la fecha); se cuenta por pestaña.
+    var distintos = function (lista) {
+      var porTab = {};
+      lista.forEach(function (x) { (porTab[x.tab] = porTab[x.tab] || {})[mismo(x)] = true; });
+      return Math.max.apply(null, [0].concat(Object.keys(porTab).map(function (t) { return Object.keys(porTab[t]).length; })));
+    };
 
     if (g.ops.length === 1) {
       var cands = vs.porOp[g.ops[0]] || [];
@@ -546,7 +580,12 @@ function IMP_cruzar_(ss, cfg, filas, empresaRuc) {
       else if (cands.length) {
         estado = IMP_EST_.DUDA;
         var fOk = cands.filter(function (x) { return cerca(x.fecha, g.fecha, 5); });
-        dudas.push((fOk.length ? 'Mismo N° de operación pero otro monto: ' : 'Mismo N° de operación pero otra fecha/monto: ') + (fOk.length ? fOk : cands).slice(0, 6).map(IMP_desc_).join(' | '));
+        var base = fOk.length ? fOk : cands;
+        dudas.push((fOk.length ? 'Mismo N° de operación pero otro monto: ' : 'Mismo N° de operación pero otra fecha/monto: ') + base.slice(0, 6).map(IMP_desc_).join(' | '));
+        if (fOk.length && distintos(fOk) === 1) {
+          sugeridos = fOk;
+          dudas.push('➡️ Ya quedó en "Voucher elegido ✏️": si es ese voucher, solo marque ✔ (la diferencia de monto puede ser retención, otra factura, etc.).');
+        }
       }
     } else if (g.ops.length > 1) {
       var porOp = g.ops.map(function (op) { return (vs.porOp[op] || []).filter(function (x) { return cerca(x.fecha, g.fecha, 5); }); });
@@ -588,7 +627,20 @@ function IMP_cruzar_(ss, cfg, filas, empresaRuc) {
     }
 
     var ruc = rucs.length === 1 ? rucs[0] : '';
-    var plan = objetivos.length ? IMP_plan_(vs.cols, objetivos, { ruc: ruc, docs: g.docs.join(','), empTexto: e.texto, empRuc: e.ruc }) : { llenar: [], distinto: [], sinCol: [] };
+    // Si el voucher ya dice que es de OTRA empresa del grupo, no se toca solo: queda para revisar
+    if (e.ruc) {
+      var otra = objetivos.concat(sugeridos).filter(function (x) {
+        var r = aRuc_(x.idUsuario) || (x.empresa ? cfg.aliasEmpresa[normHeader_(x.empresa)] || '' : '');
+        return r && r !== e.ruc;
+      });
+      if (otra.length) {
+        dudas.push('El voucher ' + otra.map(function (x) { return x.tab + '!' + x.fila + ' es de ' + (x.empresa || x.idUsuario); }).join(', ') +
+          ', no de ' + e.texto + ': no se completa solo (si igual corresponde, escríbalo en "Voucher elegido ✏️").');
+        objetivos = []; sugeridos = []; estado = IMP_EST_.DUDA;
+      }
+    }
+    var destino = objetivos.length ? objetivos : sugeridos;
+    var plan = destino.length ? IMP_plan_(vs.cols, destino, { ruc: ruc, docs: g.docs.join(','), empTexto: e.texto, empRuc: e.ruc }, agregar) : { llenar: [], distinto: [], sinCol: [] };
     dudas = dudas.concat(plan.sinCol);
     if (objetivos.length) {
       estado = plan.llenar.length ? IMP_EST_.OK : IMP_EST_.LLENO;
@@ -599,7 +651,8 @@ function IMP_cruzar_(ss, cfg, filas, empresaRuc) {
     cuenta[estado]++;
     tabla.push([estado === IMP_EST_.OK, estado, g.opTxt, g.fecha || '', g.monto, g.razon, ruc, g.docs.join(','), e.texto,
       objetivos.map(function (x) { return x.tab + '!' + x.fila; }).join(', '), objetivos.length ? objetivos[0].monto : '',
-      objetivos.length ? objetivos[0].benef : '', plan.llenar.join(' · '), plan.distinto.join(' · '), dudas.join('\n'), '',
+      objetivos.length ? objetivos[0].benef : '', plan.llenar.join(' · '), plan.distinto.join(' · '), dudas.join('\n'),
+      sugeridos.map(function (x) { return x.tab + '!' + x.fila; }).join(', '),
       g.origen0 + ' · ' + g.origen.join(', '), '']);
   });
   // Orden: primero lo que necesita su atención
@@ -609,7 +662,7 @@ function IMP_cruzar_(ss, cfg, filas, empresaRuc) {
 }
 
 /** Qué se escribiría en cada voucher (solo celdas vacías) y qué ya tenía otro dato. */
-function IMP_plan_(cols, objetivos, d) {
+function IMP_plan_(cols, objetivos, d, agregar) {
   var llenar = {}, distinto = {}, sinCol = {};
   objetivos.forEach(function (x) {
     var c = cols[x.tab];
@@ -620,7 +673,9 @@ function IMP_plan_(cols, objetivos, d) {
       else if (!igual(actual, nuevo)) distinto[x.tab + '!' + x.fila + ' ' + nombre + ' tenía "' + actual + '"'] = true;
     };
     revisar('idBenef', 'ID Beneficiario', x.idBenef, d.ruc, function (a, b) { return aRuc_(a) === b; });
-    revisar('refs', 'Tipo y Nº Doc.', x.refs, d.docs, IMP_mismosDocs_);
+    var faltan = agregar && x.refs && d.docs && c.refs >= 0 ? IMP_faltanDocs_(x.refs, d.docs) : [];
+    if (faltan.length) llenar['Agregar a Tipo y Nº Doc. (tenía ' + x.refs + '): ' + faltan.join(',')] = true;
+    else revisar('refs', 'Tipo y Nº Doc.', x.refs, d.docs, IMP_mismosDocs_);
     revisar('empresa', 'Empresa', x.empresa, d.empTexto, function (a, b) { return normHeader_(a) === normHeader_(b); });
     revisar('idUsuario', 'ID Usuario', x.idUsuario, d.empRuc, function (a, b) { return aRuc_(a) === b; });
   });
@@ -669,6 +724,7 @@ function IMP_aplicar_(ss, sh) {
   vs.lista.forEach(function (x) { porPos[x.tab + '!' + x.fila] = x; });
   var lote = 'L' + Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd-HHmmss');
   var log = [], hechos = 0, celdas = 0, avisos = 0;
+  var agregar = IMP_agregarFact_(sh);
   filas.forEach(function (t) {
     var v = t.v, celda = sh.getRange(t.fila, IMP_C_['Resultado'] + 1);
     var elegido = String(v[IMP_C_['Voucher elegido ✏️']] || '').trim();
@@ -694,11 +750,21 @@ function IMP_aplicar_(ss, sh) {
         if (String(r.getValue()).trim()) return;  // releer: solo celdas vacías
         if (texto) r.setNumberFormat('@');
         r.setValue(nuevo);
-        log.push([lote, new Date(), d.tab, d.fila, c[campo] + 1, nombre, nuevo, x.op]);
+        log.push([lote, new Date(), d.tab, d.fila, c[campo] + 1, nombre, nuevo, x.op, '']);
         escritos.push(nombre); celdas++;
       };
       poner('idBenef', 'ID Beneficiario', x.idBenef, ruc, true);
-      poner('refs', 'Tipo y Nº Doc.', x.refs, docs, false);
+      if (agregar && x.refs && docs && c.refs >= 0) {
+        // El voucher ya tiene factura(s): agregar las del archivo que faltan (sin borrar nada)
+        var rr = shV.getRange(d.fila, c.refs + 1), antes = String(rr.getValue()).trim();
+        var faltan = IMP_faltanDocs_(antes, docs);
+        if (antes && faltan.length) {
+          var nuevoTxt = antes + ',' + faltan.join(',');
+          rr.setValue(nuevoTxt);
+          log.push([lote, new Date(), d.tab, d.fila, c.refs + 1, 'Tipo y Nº Doc.', nuevoTxt, x.op, antes]);
+          escritos.push('facturas agregadas'); celdas++;
+        }
+      } else poner('refs', 'Tipo y Nº Doc.', x.refs, docs, false);
       poner('empresa', 'Empresa', x.empresa, empTxt, false);
       poner('idUsuario', 'ID Usuario', x.idUsuario, empRuc, true);
     });
@@ -710,10 +776,11 @@ function IMP_aplicar_(ss, sh) {
   });
   if (log.length) {
     var shL = IMP_hojaLog_(ss);
-    shL.getRange(shL.getLastRow() + 1, 1, log.length, 8).setValues(log);
+    shL.getRange(1, 9).setValue('Valor anterior').setFontWeight('bold');
+    shL.getRange(shL.getLastRow() + 1, 1, log.length, 9).setValues(log);
   }
   var r = celdas ? actualizarTodo_(true) : '';
-  return hechos + ' vouchers completados (' + celdas + ' celdas, solo vacías)' + (avisos ? ' · ' + avisos + ' con aviso (ver Resultado)' : '') +
+  return hechos + ' vouchers completados (' + celdas + ' celdas: vacías o facturas agregadas)' + (avisos ? ' · ' + avisos + ' con aviso (ver Resultado)' : '') +
     (celdas ? ' · Se puede deshacer: 🤝 Conciliar con IA → ↩️ Deshacer última importación' : '') + (r ? ' · ' + r : '');
 }
 
@@ -721,7 +788,7 @@ function IMP_hojaLog_(ss) {
   var sh = ss.getSheetByName(IMP_LOG_);
   if (sh) return sh;
   sh = ss.insertSheet(IMP_LOG_);
-  sh.getRange(1, 1, 1, 8).setValues([['Lote', 'Fecha', 'Pestaña', 'Fila', 'Columna', 'Campo', 'Valor escrito', 'N° OP']]).setFontWeight('bold');
+  sh.getRange(1, 1, 1, 9).setValues([['Lote', 'Fecha', 'Pestaña', 'Fila', 'Columna', 'Campo', 'Valor escrito', 'N° OP', 'Valor anterior']]).setFontWeight('bold');
   sh.hideSheet();
   return sh;
 }
@@ -731,10 +798,10 @@ function IMP_menuDeshacer() {
   var ui = SpreadsheetApp.getUi();
   var shL = ss.getSheetByName(IMP_LOG_);
   if (!shL || shL.getLastRow() < 2) { ui.alert('No hay importaciones aplicadas para deshacer.'); return; }
-  var v = shL.getRange(2, 1, shL.getLastRow() - 1, 8).getValues();
+  var v = shL.getRange(2, 1, shL.getLastRow() - 1, 9).getValues();
   var lote = v[v.length - 1][0];
   var del = v.map(function (r, i) { return { r: r, fila: i + 2 }; }).filter(function (x) { return x.r[0] === lote; });
-  var ok = ui.alert('↩️ Deshacer importación', 'Se borrarán las ' + del.length + ' celdas que se completaron en Vouchers el ' +
+  var ok = ui.alert('↩️ Deshacer importación', 'Se quitarán los ' + del.length + ' datos que se completaron o agregaron en Vouchers el ' +
     Utilities.formatDate(new Date(del[0].r[1]), 'America/Lima', 'dd/MM/yyyy HH:mm') + '.\n\n' +
     'Solo se borra si la celda sigue con el mismo dato (si alguien la cambió después, se deja).', ui.ButtonSet.YES_NO);
   if (ok !== ui.Button.YES) return;
@@ -745,11 +812,13 @@ function IMP_menuDeshacer() {
     var shV = ssV.getSheetByName(x.r[2]);
     if (!shV) { dejadas++; return; }
     var c = shV.getRange(x.r[3], x.r[4]);
-    if (String(c.getValue()).trim() === String(x.r[6]).trim()) { c.clearContent(); borradas++; } else dejadas++;
+    if (String(c.getValue()).trim() !== String(x.r[6]).trim()) { dejadas++; return; }
+    if (String(x.r[8]).trim()) c.setValue(x.r[8]); else c.clearContent();  // vuelve a lo que tenía antes
+    borradas++;
   });
   for (var i = del.length - 1; i >= 0; i--) shL.deleteRow(del[i].fila);
   var r = borradas ? actualizarTodo_(true) : '';
-  var msg = '↩️ Deshecho: ' + borradas + ' celdas borradas' + (dejadas ? ', ' + dejadas + ' se dejaron porque ya tenían otro dato' : '') + (r ? ' · ' + r : '');
+  var msg = '↩️ Deshecho: ' + borradas + ' datos vueltos a como estaban' + (dejadas ? ', ' + dejadas + ' se dejaron porque ya tenían otro dato' : '') + (r ? ' · ' + r : '');
   IMP_estado_(IMP_hoja_(ss), msg);
   ss.toast(msg, '📥 Importar', 12);
 }
