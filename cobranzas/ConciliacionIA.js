@@ -201,6 +201,12 @@ function CIA_pagosAplicados_(ss) {
 function CIA_actualizarLista_(ss, sh, cfg) {
   sh = sh || CIA_hoja_(ss);
   cfg = cfg || leerConfig_(ss);
+  CIA_asegurarModo_(sh);
+  // Listas fijas (se vuelven a poner por si se borraron)
+  sh.getRange('B4').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(CIA_TIPOS_).build());
+  sh.getRange('B7').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['Solo vouchers sin aplicar', 'Todos los vouchers']).build());
+  sh.getRange('B8').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['NO', 'SI']).build());
+  if (!String(sh.getRange('B4').getValue())) sh.getRange('B4').setValue(CIA_TIPOS_[0]);
   var emp = [CIA_TODAS_].concat(cfg.grupo.map(function (r) { return cfg.nombreEmpresa[r] + ' · ' + r; }));
   sh.getRange('B3').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(emp).build());
   var par = CIA_leerParam_(sh, cfg);
@@ -604,6 +610,7 @@ function CIA_escribir_(ss, sh, filas, cfg) {
   var quedan = CIA_leerTabla_(sh).filter(function (t) { return !nuevasIds[t.id]; }).map(function (t) { return t.v; });
   var todas = filas.concat(quedan);
   var n0 = sh.getLastRow() - CIA_F_ENC_;
+  if (sh.getFilter()) sh.getFilter().remove();
   if (n0 > 0) {
     var r0 = sh.getRange(CIA_F_ENC_ + 1, 1, n0, CIA_ENC_.length);
     r0.clearContent(); r0.clearDataValidations(); r0.setBackground(null);
@@ -611,6 +618,9 @@ function CIA_escribir_(ss, sh, filas, cfg) {
   if (!todas.length) return;
   var n = todas.length, f0 = CIA_F_ENC_ + 1;
   sh.getRange(f0, 1, n, CIA_ENC_.length).setValues(todas).setFontSize(9).setVerticalAlignment('middle');
+  // Filtro en la cabecera de propuestas (para filtrar por empresa, proveedor, estado…)
+  if (sh.getFilter()) sh.getFilter().remove();
+  sh.getRange(CIA_F_ENC_, 1, n + 1, CIA_ENC_.length).createFilter();
   sh.getRange(f0, 1, n, 2).insertCheckboxes();
   todas.forEach(function (f, i) {
     if (f[0] === true) sh.getRange(f0 + i, 1).setValue(true);

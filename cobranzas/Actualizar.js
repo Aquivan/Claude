@@ -16,7 +16,7 @@ function actualizacionAutomatica() {
 
 // Subir este numero cuando cambie la forma de calcular o escribir, para que la
 // siguiente actualizacion automatica rehaga todo aunque los datos no cambien.
-var VERSION_CALCULO_ = '8';
+var VERSION_CALCULO_ = '9';
 
 function huellaExterna_(ss, cfg, liqs) {
   var partes = ['v' + VERSION_CALCULO_, Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd')]; // cambia de dia: recalcular vencidos
@@ -106,7 +106,11 @@ function actualizarTodoInterno_(forzar) {
     escribirOtrosPagos_(ss, res, cfg); bitacora_(ss, 'Otros pagos', t1, res.sinFactura.length + ' pagos sin factura'); t1 = Date.now();
     escribirNoAplicados_(ss, res, cfg); t1 = Date.now();
     try { escribirSugeridasReasignar_(ss, res, cfg); } catch (e) { bitacora_(ss, 'Reasignar ERROR', t1, e.message); }
-    try { if (!ss.getSheetByName(CIA_HOJA_)) { CIA_hoja_(ss); CIA_actualizarLista_(ss, null, cfg); } } catch (e) { bitacora_(ss, 'Conciliar IA ERROR', t1, e.message); }
+    // 🤝 Conciliar con IA: crear/completar su pestaña y refrescar sus listas (si falla, se ve en su celda Estado).
+    try { CIA_actualizarLista_(ss, null, cfg); } catch (e) {
+      bitacora_(ss, 'Conciliar IA ERROR', t1, e.message);
+      try { CIA_hoja_(ss).getRange('B9').setValue('❌ ' + e.message); } catch (e2) { /* nada */ }
+    }
     try { protegerDatosManuales_(ss, cfg.confirmarManual); } catch (e) { bitacora_(ss, 'Protección ERROR', t1, e.message); }
     if (Date.now() - t0 < 300000) {
       try { renderConsulta_(ss); bitacora_(ss, 'Consulta', t1, ''); } catch (e) { bitacora_(ss, 'Consulta ERROR', t1, e.message); }
