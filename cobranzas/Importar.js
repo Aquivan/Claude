@@ -81,9 +81,10 @@ function IMP_procesar_(ss, archivos, empresaRuc, guardarCopia) {
   });
   var res = IMP_cruzar_(ss, cfg, filas, empresaRuc);
   IMP_escribir_(sh, res.tabla);
+  IMP_escribirReferencias_(ss, res.referencias, lote);
   var resumen = '📥 ' + lote + ' · ' + filas.length + ' filas leídas · ' + res.cuenta[IMP_EST_.OK] + ' encontrados para completar · ' +
     res.cuenta[IMP_EST_.LLENO] + ' sin nada nuevo · ' + res.cuenta[IMP_EST_.DUDA] + ' por revisar · ' + res.cuenta[IMP_EST_.NO] +
-    ' no están en Vouchers' + (res.cuenta[IMP_EST_.INFO] ? ' · ' + res.cuenta[IMP_EST_.INFO] + ' retenciones/N/C (informativo)' : '');
+    ' no están en Vouchers' + (res.cuenta[IMP_EST_.INFO] ? ' · ' + res.cuenta[IMP_EST_.INFO] + ' retenciones/N/C → reporte en ' + IMP_HOJA_REF_ : '');
   sh.getRange('B4').setValue(resumen + (avisos.length ? '\n⚠️ ' + avisos.join('\n⚠️ ') : ''));
   ss.setActiveSheet(sh);
   return resumen + (avisos.length ? '\n\n⚠️ ' + avisos.join('\n⚠️ ') : '') +
@@ -208,6 +209,39 @@ function IMP_xlsxFilas_(blob) {
   return { hoja: hoja.nombre, filas: filas };
 }
 
+/* ------------------------------------- reporte de retenciones y N/C */
+
+var IMP_HOJA_REF_ = '🤝 Importar · Ret. y N/C';
+var IMP_ENC_REF_ = ['Resultado', 'Tipo', 'N° comprobante', 'Fecha', 'Monto', 'Proveedor (archivo)', 'RUC', 'Factura afectada', 'Empresa',
+  'Qué tiene Cobranzas (SUNAT/SIRE)', 'Origen (archivo · fila)'];
+
+/** Retenciones, N/C y demás filas de referencia del archivo: solo reporte (no se escribe en Vouchers). */
+function IMP_escribirReferencias_(ss, filas, lote) {
+  var sh = ss.getSheetByName(IMP_HOJA_REF_);
+  if (!sh && !filas.length) return;
+  sh = sh || ss.insertSheet(IMP_HOJA_REF_);
+  if (sh.getFilter()) sh.getFilter().remove();
+  sh.clear();
+  var falta = filas.filter(function (r) { return r[0].indexOf('⚠️') === 0; }).length;
+  sh.getRange(1, 1).setValue('📑 RETENCIONES Y N/C DEL ARCHIVO · solo informativo').setFontSize(13).setFontWeight('bold').setFontColor(COLOR.OSCURO);
+  sh.getRange(2, 1).setValue('Importación ' + (lote || '') + ' · ' + filas.length + ' filas · ' + falta + ' con ⚠️ (no están en Cobranzas). ' +
+    'No se escribe nada en Vouchers: compárelo con 🔁 Reasignar retenciones o anótelo en ✍️ Registro manual si corresponde.').setFontColor(COLOR.TEXTO_SUAVE);
+  sh.getRange(3, 1, 1, IMP_ENC_REF_.length).setValues([IMP_ENC_REF_]).setFontWeight('bold').setFontColor(COLOR.BLANCO)
+    .setBackground(COLOR.AZUL).setWrap(true).setVerticalAlignment('middle');
+  sh.setFrozenRows(3);
+  if (filas.length) {
+    sh.getRange(4, 1, filas.length, IMP_ENC_REF_.length).setValues(filas).setFontSize(9).setWrap(true).setVerticalAlignment('middle');
+    sh.getRange(4, 4, filas.length, 1).setNumberFormat('dd/mm/yyyy');
+    sh.getRange(4, 5, filas.length, 1).setNumberFormat('#,##0.00');
+    sh.getRange(4, 7, filas.length, 1).setNumberFormat('@');
+    sh.getRange(4, 1, filas.length, 1).setBackgrounds(filas.map(function (r) {
+      return [r[0].indexOf('✔') === 0 ? '#DCFCE7' : r[0].indexOf('⚠️') === 0 ? '#FEE2E2' : '#F1F5F9'];
+    }));
+  }
+  sh.getRange(3, 1, filas.length + 1, IMP_ENC_REF_.length).createFilter();
+  [150, 160, 100, 85, 95, 220, 100, 140, 80, 380, 180].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+}
+
 /* ------------------------------------------------------------ hoja */
 
 var IMP_MODOS_FACT_ = ['No tocar (solo celdas vacías)', 'Agregar las facturas que faltan'];
@@ -326,11 +360,21 @@ function IMP_codSunat_(s) {
 }
 
 function IMP_modalidad_(s) {
-  var t = normHeader_(s);
+  var t = normHeader_(s).replace(/\//g, '');  // "N/C" → "nc"
+  if (/^(nc|ncr|n cred)/.test(t)) return 'NC';
+  if (/^(nd|nota de debito)/.test(t)) return 'ND';
   if (/reten/.test(t)) return 'RETENCION';
   if (/detrac/.test(t)) return 'DETRACCION';
   if (/(^|\s)(n ?c|nota de credito|nota credito)(\s|$)|credito/.test(t)) return 'NC';
   return 'PAGO';
+}
+
+/** Un N° como "FC01-288" o "E001-69" es un comprobante (N/C, retención…), no una operación bancaria. */
+function IMP_esComprobante_(s) { return /^\s*[A-Z][A-Z0-9]{3}\s*-\s*\d+\s*$/i.test(String(s == null ? '' : s)); }
+
+function IMP_modalidadFila_(modalidad, opTxt) {
+  var m = IMP_modalidad_(modalidad);
+  return m === 'PAGO' && IMP_esComprobante_(opTxt) ? 'REF' : m;
 }
 
 var IMP_COLS_ = {
@@ -389,7 +433,7 @@ function IMP_leerTabla_(filas, origen, sh) {
     if (cod) docs.push(cod.codigo);
     else if (c.doc != null) parsearReferencias_(String(val('doc') || '')).refs.forEach(function (x) { docs.push(x.tipo + '_' + x.serie + '-' + x.numero); });
     res.push({
-      origen: origen + ' · fila ' + (j + 1), modalidad: IMP_modalidad_(val('modalidad')),
+      origen: origen + ' · fila ' + (j + 1), modalidad: IMP_modalidadFila_(val('modalidad'), opTxt),
       fecha: IMP_fecha_(val('fecha')), opTxt: opTxt, ops: IMP_ops_(opTxt), monto: Math.abs(monto),
       ruc: cod ? cod.ruc : aRuc_(val('ruc')), razon: String(val('razon') || '').trim(), docs: docs, cod: cod,
       banco: String(val('banco') || '').trim(), moneda: String(val('moneda') || '').trim(), empresa: String(val('empresa') || '').trim(),
@@ -506,12 +550,12 @@ function IMP_desc_(x) {
 
 function IMP_cruzar_(ss, cfg, filas, empresaRuc) {
   var cuenta = {}; Object.keys(IMP_EST_).forEach(function (k) { cuenta[IMP_EST_[k]] = 0; });
-  if (!filas.length) return { tabla: [], cuenta: cuenta };
+  if (!filas.length) return { tabla: [], cuenta: cuenta, referencias: [] };
   if (!cfg.idVouchers) throw new Error('Falta el ID de la hoja de Vouchers en ⚙️ Config.');
   var vs = IMP_leerVouchers_(SpreadsheetApp.openById(cfg.idVouchers), cfg);
   var tol = Math.max(0.05, cfg.tolerancia || 0);
   var movs = CIA_leerMovs_(ss);
-  var tabla = [];
+  var tabla = [], referencias = [];
   var empTexto = {};
   var agregar = IMP_agregarFact_(IMP_hoja_(ss));
   function empresaDe(f) {
@@ -522,19 +566,28 @@ function IMP_cruzar_(ss, cfg, filas, empresaRuc) {
   }
   function cerca(a, b, dias) { return !a || !b || Math.abs(a.getTime() - b.getTime()) <= dias * 86400000; }
 
-  // 1) Retenciones y N/C: solo informativo
-  filas.filter(function (f) { return f.modalidad === 'RETENCION' || f.modalidad === 'NC' || f.modalidad === 'DETRACCION'; }).forEach(function (f) {
+  // 1) Retenciones, N/C, N/D, detracciones y filas cuyo "N° OP" es un comprobante: solo de referencia
+  var NOMBRE_REF = { RETENCION: 'Retención', NC: 'N/C (nota de crédito)', ND: 'N/D', DETRACCION: 'Detracción', REF: 'Referencia (comprobante, no es OP)' };
+  filas.filter(function (f) { return NOMBRE_REF[f.modalidad]; }).forEach(function (f) {
     var nota = '';
     if (f.cod) {
       var k = claveDoc_(f.cod.ruc, f.cod.tipo, f.cod.serie, f.cod.numero);
       var m = movs.porDoc[k] || [];
       var ret = m.filter(function (t) { return /reten/i.test(t); });
-      if (f.modalidad === 'RETENCION') nota = ret.length ? 'Cobranzas ya tiene la retención: ' + ret.join('; ') : 'Cobranzas NO tiene retención para esa factura (revise 🔁 Reasignar retenciones o ✍️ Registro manual).';
+      var num = String(f.opTxt || '').toUpperCase().replace(/\s+/g, '');
+      var mismo = IMP_esComprobante_(num) ? m.filter(function (t) { return t.toUpperCase().replace(/\s+/g, '').indexOf(num.replace(/-0*/, '-')) >= 0 || t.toUpperCase().indexOf(num) >= 0; }) : [];
+      if (f.modalidad === 'RETENCION') nota = ret.length ? '✔ Cobranzas ya tiene la retención: ' + ret.join('; ') : 'Cobranzas NO tiene retención para esa factura (revise 🔁 Reasignar retenciones o ✍️ Registro manual).';
+      else if (f.modalidad === 'NC') nota = (mismo.length ? '✔ Cobranzas ya tiene la N/C ' + num + ' aplicada a ' + f.docs.join(',') + ': ' + mismo.join('; ')
+        : (m.filter(function (t) { return /N\/C/i.test(t); }).length ? 'Cobranzas tiene N/C para ' + f.docs.join(',') + ': ' + m.filter(function (t) { return /N\/C/i.test(t); }).join('; ')
+          : 'Cobranzas aún no tiene la N/C ' + num + ' en ' + f.docs.join(',') + ' (SIRE la toma cuando la N/C cita esa factura).'));
+      else if (mismo.length) nota = '✔ Cobranzas ya tiene ' + num + ' en ' + f.docs.join(',') + ': ' + mismo.join('; ');
       else nota = m.length ? 'Movimientos de esa factura en Cobranzas: ' + m.join('; ') : 'Sin movimientos en Cobranzas para ese documento.';
     } else nota = 'Sin COD_SUNAT: no se pudo comparar.';
     var e = empresaDe(f);
-    tabla.push([false, IMP_EST_.INFO + ' · ' + (f.modalidad === 'RETENCION' ? 'Retención' : f.modalidad === 'NC' ? 'N/C' : 'Detracción'),
-      f.opTxt, f.fecha || '', f.monto, f.razon, f.ruc, f.docs.join(','), e.texto, '', '', '', 'No se escribe en Vouchers', '', nota, '', f.origen, '']);
+    var res = nota.indexOf('✔') === 0 ? '✔ Ya está en Cobranzas' : /^Sin COD_SUNAT/.test(nota) ? '❔ No se pudo comparar'
+      : /NO tiene|aún no tiene|Sin movimientos/.test(nota) ? '⚠️ Falta en Cobranzas' : 'ℹ️ Ver detalle';
+    referencias.push([res, NOMBRE_REF[f.modalidad], f.opTxt, f.fecha || '', f.monto, f.razon, f.ruc, f.docs.join(','), e.texto,
+      nota.replace(/^✔ /, ''), f.origen]);
     cuenta[IMP_EST_.INFO]++;
   });
 
@@ -658,7 +711,9 @@ function IMP_cruzar_(ss, cfg, filas, empresaRuc) {
   // Orden: primero lo que necesita su atención
   var orden = function (e) { e = String(e); return e.indexOf('🟠') === 0 ? 0 : e.indexOf('❌') === 0 ? 1 : e.indexOf('✅') === 0 ? 2 : e.indexOf('ℹ️') === 0 ? 3 : 4; };
   tabla.sort(function (a, b) { return orden(a[1]) - orden(b[1]); });
-  return { tabla: tabla, cuenta: cuenta };
+  var ordenR = function (r) { return r.indexOf('⚠️') === 0 ? 0 : r.indexOf('❔') === 0 ? 1 : r.indexOf('ℹ️') === 0 ? 2 : 3; };
+  referencias.sort(function (a, b) { return ordenR(a[0]) - ordenR(b[0]); });
+  return { tabla: tabla, cuenta: cuenta, referencias: referencias };
 }
 
 /** Qué se escribiría en cada voucher (solo celdas vacías) y qué ya tenía otro dato. */
@@ -833,6 +888,7 @@ function IMP_menuBorrar() {
   if (r !== ui.Button.YES) return;
   var sh = IMP_hoja_(ss);
   IMP_escribir_(sh, []);
+  IMP_escribirReferencias_(ss, [], '');
   sh.getRange('B4').setValue('');
   var n = IMP_limpiarTemporales_(false, 0);
   IMP_estado_(sh, 'Importación borrada ' + Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' · ' + n + ' archivos temporales a la papelera');
