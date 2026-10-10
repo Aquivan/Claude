@@ -25,6 +25,7 @@ var CIA_TODAS_ = '(Todas)';
 var CIA_TODAS_CONTRA_ = '⭐ Todas las que tengan vouchers por conciliar';
 var CIA_TIPOS_ = ['Por pagar (proveedores)', 'Por cobrar (clientes)'];
 var CIA_F_ENC_ = 12;
+var CIA_MODOS_ = ['Normal: reglas + IA solo en lo dudoso', 'Todo con IA: la IA revisa todos (proveedor y facturas)'];
 var CIA_ENC_ = ['✔ Aceptar', '✖ Rechazar', 'Empresa', 'Contraparte', 'RUC contraparte', 'Fecha depósito', 'N° operación', 'Banco',
   'Moneda', 'Monto', 'Beneficiario (voucher, col. F)', 'Descripción', 'RUC detectado', 'Cómo se detectó',
   'Factura(s) propuesta(s) ✏️', 'Saldo de esas facturas', 'Diferencia', 'Tipo', 'Confianza', 'Motivo', 'Estado',
@@ -57,6 +58,7 @@ function CIA_hoja_(ss) {
   sh.getRange('D3:K8').merge().setValue(
     'Cómo usarlo:\n1) Elija empresa, Ver y el proveedor/cliente (la lista muestra sus facturas pendientes).\n' +
     '2) Menú 💼 Cobranzas → 🤝 Conciliar con IA → ▶ Analizar.\n' +
+    'Modo de análisis (fila 10): "Todo con IA" hace que la IA revise TODOS los vouchers con la lista completa de proveedores/clientes (más lento y usa más consultas).\n' +
     '3) Revise cada propuesta: marque ✔ Aceptar (puede corregir "Factura(s) propuesta(s)", ej. 01_F001-123,124) o ✖ Rechazar.\n' +
     '4) Menú → ✅ Aplicar lo aceptado. Queda como pago confirmado y el RUC detectado se recuerda para los próximos vouchers.\n' +
     'La IA se elige en la pestaña 🧠 Asistente IA. Sin clave de IA, igual propone los casos evidentes.')
@@ -73,7 +75,16 @@ function CIA_hoja_(ss) {
   return sh;
 }
 
+/** Fila 10: modo de análisis (se agrega sola si la pestaña es de antes). */
+function CIA_asegurarModo_(sh) {
+  if (String(sh.getRange('A10').getValue()).trim()) return;
+  sh.getRange('A10').setValue('Modo de análisis').setFontWeight('bold');
+  sh.getRange('B10').setValue(CIA_MODOS_[0]).setBackground('#FFF8E1')
+    .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(CIA_MODOS_).build());
+}
+
 function CIA_leerParam_(sh, cfg) {
+  CIA_asegurarModo_(sh);
   var v = sh.getRange(3, 2, 6, 1).getValues().map(function (r) { return r[0]; });
   var empTxt = String(v[0] || '').trim();
   var empresaRuc = '';
@@ -84,6 +95,7 @@ function CIA_leerParam_(sh, cfg) {
     empresaRuc: empresaRuc, porCobrar: /cobrar/i.test(String(v[1])),
     contraRuc: contra && contra !== CIA_TODAS_CONTRA_ && mRuc ? mRuc[1] : '',
     desde: aFecha_(v[3]), todos: /todos/i.test(String(v[4])), escribirVouchers: /^SI/i.test(String(v[5]).trim()),
+    todoIA: /^todo/i.test(String(sh.getRange('B10').getValue()).trim()),
   };
 }
 
@@ -324,6 +336,41 @@ function CIA_preguntarIA_(ia, grupoVouchers, docs, contra) {
   return res;
 }
 
+var CIA_SISTEMA_RUC_ = [
+  'Eres contador en Perú. Identifica a qué contraparte (RUC) corresponde cada voucher bancario según el nombre del beneficiario',
+  'y la descripción. Los nombres pueden estar mal escritos (letras de más, de menos o cambiadas), abreviados, sin forma societaria,',
+  'con el nombre comercial en vez de la razón social, o con palabras pegadas. Elige SOLO RUC de la lista que te doy.',
+  'Si ninguno corresponde (planilla, AFP, impuestos, comisiones, transferencias entre cuentas propias, etc.) deja ruc vacío.',
+  'Ayúdate con el monto: si el monto calza con facturas pendientes de una contraparte, es más probable.',
+  'Responde SOLO JSON: {"vouchers":[{"v":"V1","ruc":"","confianza":0,"motivo":""}]}',
+  '"confianza" 0-100; "motivo" máximo 15 palabras.',
+].join('\n');
+
+/** Modo "Todo con IA": la IA decide la contraparte de cada voucher con la lista completa. */
+function CIA_iaRucs_(ia, vouchers, directorio, porCobrar) {
+  var texto = [
+    (porCobrar ? 'CLIENTES' : 'PROVEEDORES') + ' (RUC | razón social | facturas pendientes | saldo pendiente):',
+    directorio.map(function (d) { return d.ruc + ' | ' + d.nombre + ' | ' + d.n + ' | ' + Math.round(d.saldo); }).join('\n'),
+    '',
+    'VOUCHERS (id | fecha | monto | moneda | beneficiario | descripción):',
+    vouchers.map(function (p, k) {
+      return 'V' + (k + 1) + ' | ' + IA_fmtFecha_(p.fecha) + ' | ' + p.monto.toFixed(2) + ' | ' + p.moneda + ' | ' +
+        (p.beneficiarioNombre || '') + ' | ' + (p.descripcion || '');
+    }).join('\n'),
+  ].join('\n');
+  var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, sistema: CIA_SISTEMA_RUC_, texto: texto, maxTokens: 4000 });
+  var validos = {};
+  directorio.forEach(function (d) { validos[d.ruc] = true; });
+  var res = {};
+  (Array.isArray(r.vouchers) ? r.vouchers : []).forEach(function (a) {
+    var k = parseInt(String(a.v || '').replace(/\D/g, ''), 10) - 1;
+    if (!(k >= 0 && k < vouchers.length)) return;
+    var ruc = aRuc_(a.ruc);
+    res[k] = { ruc: validos[ruc] ? ruc : '', confianza: Math.max(0, Math.min(100, parseInt(a.confianza, 10) || 0)), motivo: String(a.motivo || '').slice(0, 120) };
+  });
+  return res;
+}
+
 /* ------------------------------------------------------------ analizar */
 
 function CIA_menuAbrir() {
@@ -377,10 +424,44 @@ function CIA_analizar_(ss) {
     return !par.empresaRuc || p._empresa === par.empresaRuc;
   });
 
+  // Modo "Todo con IA": primero la IA elige la contraparte de TODOS los vouchers
+  var detIA = {}, consultas = 0, errores = 0, ultimoError = '';
+  if (par.todoIA && hayIA) {
+    var porEmp = {};
+    vouchers.forEach(function (p) { (porEmp[p._empresa] = porEmp[p._empresa] || []).push(p); });
+    Object.keys(porEmp).forEach(function (empRuc) {
+      var dir = {};
+      docs.forEach(function (d) {
+        if (d.empresaRuc !== empRuc || !d.contraRuc) return;
+        var x = dir[d.contraRuc] = dir[d.contraRuc] || { ruc: d.contraRuc, nombre: nombres[d.contraRuc] || d.contra || '(sin nombre)', n: 0, saldo: 0 };
+        if (d.saldo > 0.5) { x.n++; x.saldo += d.saldo; }
+      });
+      var directorio = Object.keys(dir).map(function (r) { return dir[r]; })
+        .sort(function (a, b) { return b.saldo - a.saldo || b.n - a.n; }).slice(0, 400);
+      var lista = porEmp[empRuc];
+      for (var i0 = 0; i0 < lista.length && Date.now() - t0 < CIA_LIMITE_MS_ / 2; i0 += 50) {
+        var trozo = lista.slice(i0, i0 + 50);
+        if (consultas > 0) Utilities.sleep(IA_PROVEEDORES_[ia.proveedor].pausa);
+        consultas++;
+        try {
+          var r = CIA_iaRucs_(ia, trozo, directorio, par.porCobrar);
+          trozo.forEach(function (p, k) { if (r[k]) detIA[p.id] = r[k]; });
+        } catch (e) { errores++; ultimoError = e.message; }
+      }
+    });
+  }
+
   // Agrupar por contraparte detectada
   var grupos = {}, sinContra = 0;
   vouchers.forEach(function (p) {
     var det = CIA_detectarRuc_(p, par, cfg, nombres);
+    var ai = detIA[p.id];
+    if (ai) {
+      var regla = det.ruc;
+      det = ai.ruc
+        ? { ruc: ai.ruc, como: 'IA ' + ai.confianza + '%: ' + ai.motivo + (regla && regla !== ai.ruc ? ' (la regla decía ' + regla + ')' : ''), candidatos: [] }
+        : (regla ? { ruc: regla, como: det.como + ' (la IA no lo reconoció)', candidatos: [] } : { ruc: '', como: 'IA: ' + (ai.motivo || 'sin contraparte'), candidatos: [] });
+    }
     var ruc = det.ruc;
     if (!ruc && det.candidatos.length) ruc = det.candidatos[0].ruc;  // la IA confirma
     if (!ruc) { sinContra++; return; }
@@ -391,7 +472,7 @@ function CIA_analizar_(ss) {
   });
 
   var claves = Object.keys(grupos).sort(function (a, b) { return grupos[b].length - grupos[a].length; });
-  var filas = [], consultas = 0, errores = 0, ultimoError = '', hechos = 0;
+  var filas = [], hechos = 0;
   for (var g = 0; g < claves.length; g++) {
     if (Date.now() - t0 > CIA_LIMITE_MS_) break;
     var empRuc = claves[g].split('|')[0], contraRuc = claves[g].split('|')[1];
@@ -431,7 +512,7 @@ function CIA_analizar_(ss) {
   return Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' · ' + filas.length + ' propuestas de ' + hechos + ' proveedor(es)/cliente(s)' +
     (faltan > 0 ? ' · faltan ' + faltan + ': vuelva a ▶ Analizar' : '') +
     (sinContra ? ' · ' + sinContra + ' vouchers sin proveedor reconocible' : '') +
-    (hayIA ? ' · IA: ' + ia.proveedor + ' (' + consultas + ' consultas)' : ' · sin clave de IA (menú 🧠 Asistente IA → 🔑)') +
+    (hayIA ? ' · IA: ' + ia.proveedor + ' (' + consultas + ' consultas' + (par.todoIA ? ', modo Todo con IA' : '') + ')' : ' · sin clave de IA (menú 🧠 Asistente IA → 🔑)') +
     (errores ? ' · ' + errores + ' errores de IA: ' + ultimoError.slice(0, 120) : '');
 }
 
