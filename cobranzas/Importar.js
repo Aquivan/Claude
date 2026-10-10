@@ -81,10 +81,11 @@ function IMP_procesar_(ss, archivos, empresaRuc, guardarCopia) {
   });
   var res = IMP_cruzar_(ss, cfg, filas, empresaRuc);
   IMP_escribir_(sh, res.tabla);
-  IMP_escribirReferencias_(ss, res.referencias, lote);
+  var vieja = ss.getSheetByName('🤝 Importar · Ret. y N/C');  // ya no se usa: todo va en 🤝 Importar
+  if (vieja) ss.deleteSheet(vieja);
   var resumen = '📥 ' + lote + ' · ' + filas.length + ' filas leídas · ' + res.cuenta[IMP_EST_.OK] + ' encontrados para completar · ' +
     res.cuenta[IMP_EST_.LLENO] + ' sin nada nuevo · ' + res.cuenta[IMP_EST_.DUDA] + ' por revisar · ' + res.cuenta[IMP_EST_.NO] +
-    ' no están en Vouchers' + (res.cuenta[IMP_EST_.INFO] ? ' · ' + res.cuenta[IMP_EST_.INFO] + ' retenciones/N/C → reporte en ' + IMP_HOJA_REF_ : '');
+    ' no están en Vouchers' + (res.cuenta[IMP_EST_.INFO] ? ' · ' + res.cuenta[IMP_EST_.INFO] + ' retenciones/N/C (abajo, como referencia)' : '');
   sh.getRange('B4').setValue(resumen + (avisos.length ? '\n⚠️ ' + avisos.join('\n⚠️ ') : ''));
   ss.setActiveSheet(sh);
   return resumen + (avisos.length ? '\n\n⚠️ ' + avisos.join('\n⚠️ ') : '') +
@@ -209,39 +210,6 @@ function IMP_xlsxFilas_(blob) {
   return { hoja: hoja.nombre, filas: filas };
 }
 
-/* ------------------------------------- reporte de retenciones y N/C */
-
-var IMP_HOJA_REF_ = '🤝 Importar · Ret. y N/C';
-var IMP_ENC_REF_ = ['Resultado', 'Tipo', 'N° comprobante', 'Fecha', 'Monto', 'Proveedor (archivo)', 'RUC', 'Factura afectada', 'Empresa',
-  'Qué tiene Cobranzas (SUNAT/SIRE)', 'Origen (archivo · fila)'];
-
-/** Retenciones, N/C y demás filas de referencia del archivo: solo reporte (no se escribe en Vouchers). */
-function IMP_escribirReferencias_(ss, filas, lote) {
-  var sh = ss.getSheetByName(IMP_HOJA_REF_);
-  if (!sh && !filas.length) return;
-  sh = sh || ss.insertSheet(IMP_HOJA_REF_);
-  if (sh.getFilter()) sh.getFilter().remove();
-  sh.clear();
-  var falta = filas.filter(function (r) { return r[0].indexOf('⚠️') === 0; }).length;
-  sh.getRange(1, 1).setValue('📑 RETENCIONES Y N/C DEL ARCHIVO · solo informativo').setFontSize(13).setFontWeight('bold').setFontColor(COLOR.OSCURO);
-  sh.getRange(2, 1).setValue('Importación ' + (lote || '') + ' · ' + filas.length + ' filas · ' + falta + ' con ⚠️ (no están en Cobranzas). ' +
-    'No se escribe nada en Vouchers: compárelo con 🔁 Reasignar retenciones o anótelo en ✍️ Registro manual si corresponde.').setFontColor(COLOR.TEXTO_SUAVE);
-  sh.getRange(3, 1, 1, IMP_ENC_REF_.length).setValues([IMP_ENC_REF_]).setFontWeight('bold').setFontColor(COLOR.BLANCO)
-    .setBackground(COLOR.AZUL).setWrap(true).setVerticalAlignment('middle');
-  sh.setFrozenRows(3);
-  if (filas.length) {
-    sh.getRange(4, 1, filas.length, IMP_ENC_REF_.length).setValues(filas).setFontSize(9).setWrap(true).setVerticalAlignment('middle');
-    sh.getRange(4, 4, filas.length, 1).setNumberFormat('dd/mm/yyyy');
-    sh.getRange(4, 5, filas.length, 1).setNumberFormat('#,##0.00');
-    sh.getRange(4, 7, filas.length, 1).setNumberFormat('@');
-    sh.getRange(4, 1, filas.length, 1).setBackgrounds(filas.map(function (r) {
-      return [r[0].indexOf('✔') === 0 ? '#DCFCE7' : r[0].indexOf('⚠️') === 0 ? '#FEE2E2' : '#F1F5F9'];
-    }));
-  }
-  sh.getRange(3, 1, filas.length + 1, IMP_ENC_REF_.length).createFilter();
-  [150, 160, 100, 85, 95, 220, 100, 140, 80, 380, 180].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
-}
-
 /* ------------------------------------------------------------ hoja */
 
 var IMP_MODOS_FACT_ = ['No tocar (solo celdas vacías)', 'Agregar las facturas que faltan'];
@@ -322,7 +290,7 @@ function IMP_pintar_(sh, estados, f0) {
   var fondos = estados.map(function (e) {
     e = String(e);
     return [e.indexOf('✅') === 0 ? '#DCFCE7' : e.indexOf('🟠') === 0 ? '#FFEDD5' : e.indexOf('❌') === 0 ? '#FEE2E2' :
-      e.indexOf('✔') === 0 ? '#F1F5F9' : e.indexOf('ℹ️') === 0 ? '#EFF6FF' : null];
+      e.indexOf('✔') === 0 ? '#F1F5F9' : e.indexOf('ℹ️') === 0 ? (e.indexOf('⚠️') > 0 ? '#FEE2E2' : e.indexOf('✔') > 0 ? '#DCFCE7' : '#EFF6FF') : null];
   });
   if (fondos.length) sh.getRange(f0, IMP_C_['Estado'] + 1, fondos.length, 1).setBackgrounds(fondos);
 }
@@ -550,7 +518,7 @@ function IMP_desc_(x) {
 
 function IMP_cruzar_(ss, cfg, filas, empresaRuc) {
   var cuenta = {}; Object.keys(IMP_EST_).forEach(function (k) { cuenta[IMP_EST_[k]] = 0; });
-  if (!filas.length) return { tabla: [], cuenta: cuenta, referencias: [] };
+  if (!filas.length) return { tabla: [], cuenta: cuenta };
   if (!cfg.idVouchers) throw new Error('Falta el ID de la hoja de Vouchers en ⚙️ Config.');
   var vs = IMP_leerVouchers_(SpreadsheetApp.openById(cfg.idVouchers), cfg);
   var tol = Math.max(0.05, cfg.tolerancia || 0);
@@ -586,8 +554,8 @@ function IMP_cruzar_(ss, cfg, filas, empresaRuc) {
     var e = empresaDe(f);
     var res = nota.indexOf('✔') === 0 ? '✔ Ya está en Cobranzas' : /^Sin COD_SUNAT/.test(nota) ? '❔ No se pudo comparar'
       : /NO tiene|aún no tiene|Sin movimientos/.test(nota) ? '⚠️ Falta en Cobranzas' : 'ℹ️ Ver detalle';
-    referencias.push([res, NOMBRE_REF[f.modalidad], f.opTxt, f.fecha || '', f.monto, f.razon, f.ruc, f.docs.join(','), e.texto,
-      nota.replace(/^✔ /, ''), f.origen]);
+    referencias.push([false, IMP_EST_.INFO + ' · ' + NOMBRE_REF[f.modalidad] + ' · ' + res, f.opTxt, f.fecha || '', f.monto, f.razon, f.ruc,
+      f.docs.join(','), e.texto, '', '', '', 'No se escribe en Vouchers (solo referencia)', '', nota.replace(/^✔ /, ''), '', f.origen, '']);
     cuenta[IMP_EST_.INFO]++;
   });
 
@@ -711,9 +679,10 @@ function IMP_cruzar_(ss, cfg, filas, empresaRuc) {
   // Orden: primero lo que necesita su atención
   var orden = function (e) { e = String(e); return e.indexOf('🟠') === 0 ? 0 : e.indexOf('❌') === 0 ? 1 : e.indexOf('✅') === 0 ? 2 : e.indexOf('ℹ️') === 0 ? 3 : 4; };
   tabla.sort(function (a, b) { return orden(a[1]) - orden(b[1]); });
-  var ordenR = function (r) { return r.indexOf('⚠️') === 0 ? 0 : r.indexOf('❔') === 0 ? 1 : r.indexOf('ℹ️') === 0 ? 2 : 3; };
-  referencias.sort(function (a, b) { return ordenR(a[0]) - ordenR(b[0]); });
-  return { tabla: tabla, cuenta: cuenta, referencias: referencias };
+  // Abajo, en la misma pestaña: retenciones, N/C y referencias (primero las que faltan en Cobranzas)
+  var ordenR = function (r) { r = String(r[1]); return r.indexOf('⚠️') >= 0 ? 0 : r.indexOf('❔') >= 0 ? 1 : r.indexOf('Ver detalle') >= 0 ? 2 : 3; };
+  referencias.sort(function (a, b) { return ordenR(a) - ordenR(b); });
+  return { tabla: tabla.concat(referencias), cuenta: cuenta };
 }
 
 /** Qué se escribiría en cada voucher (solo celdas vacías) y qué ya tenía otro dato. */
@@ -888,7 +857,6 @@ function IMP_menuBorrar() {
   if (r !== ui.Button.YES) return;
   var sh = IMP_hoja_(ss);
   IMP_escribir_(sh, []);
-  IMP_escribirReferencias_(ss, [], '');
   sh.getRange('B4').setValue('');
   var n = IMP_limpiarTemporales_(false, 0);
   IMP_estado_(sh, 'Importación borrada ' + Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' · ' + n + ' archivos temporales a la papelera');
