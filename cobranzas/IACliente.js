@@ -48,7 +48,7 @@ function IA_guardarClave_(proveedor, clave) {
 function IA_llamar_(opts) {
   var prov = IA_PROVEEDORES_[opts.proveedor];
   if (!prov) throw new Error('Proveedor de IA desconocido: ' + opts.proveedor);
-  var clave = IA_clave_(opts.proveedor);
+  var clave = opts.clave || IA_clave_(opts.proveedor);
   if (!clave) throw new Error('Falta la clave de ' + opts.proveedor + ' (menú 🧠 Asistente IA → 🔑 Guardar clave de IA)');
   var modelo = String(opts.modelo || '').trim() || prov.modelo;
   var json = opts.json !== false;

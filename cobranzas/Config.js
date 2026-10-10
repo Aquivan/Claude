@@ -59,10 +59,7 @@ function onOpen() {
     .addItem('🖼 Abrir visor de vouchers', 'abrirVisorVoucher')
     .addItem('✍️ Registrar cobro/pago manual (efectivo, compensación…)', 'menuNuevoRegistroManual')
     .addItem('🔁 Reasignar una retención a otra factura', 'menuReasignarRetencion')
-    .addSubMenu(ui.createMenu('🤝 Conciliar con IA (por proveedor/cliente)')
-      .addItem('📋 Abrir y cargar proveedores/clientes', 'CIA_menuAbrir')
-      .addItem('▶ Analizar la selección', 'CIA_menuAnalizar')
-      .addItem('✅ Aplicar lo aceptado', 'CIA_menuAplicar'))
+
     .addSubMenu(ui.createMenu('♻️ Respaldos de datos manuales')
       .addItem('💾 Guardar respaldo ahora', 'menuRespaldarAhora')
       .addItem('♻️ Restaurar un respaldo', 'menuRestaurarRespaldo'))
@@ -72,6 +69,8 @@ function onOpen() {
   // Menu del Asistente IA (modulo aparte, ver AsistenteIA.js). Si fallara,
   // no afecta al menu de Cobranzas.
   try { IA_agregarMenu_(); } catch (e) { Logger.log('Menu Asistente IA: ' + e.message); }
+  // Menú propio de 🤝 Conciliar con IA (módulo aparte, ver ConciliacionIA.js).
+  try { CIA_agregarMenu_(); } catch (e) { Logger.log('Menu Conciliar con IA: ' + e.message); }
 }
 
 function menuActualizarAhora() {

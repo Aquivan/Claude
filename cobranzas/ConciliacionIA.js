@@ -16,9 +16,55 @@
  *      que un ✔ de ✅ Conciliar), el RUC detectado se guarda como alias en
  *      ⚙️ Config y, si lo activa, se escribe también en la hoja de Vouchers
  *      (solo en celdas vacías).
- * Las funciones de IA (IA_llamar_, IA_similitud_…) están en IACliente.js y el
- * proveedor/modelo se elige en la pestaña 🧠 Asistente IA.
+ * Es un módulo APARTE: tiene su propio menú (🤝 Conciliar con IA), su propia
+ * pestaña, su propia elección de IA (fila 11) y su propia clave (se guarda con
+ * su menú, separada de la del 🧠 Asistente IA). Solo reutiliza las funciones
+ * comunes de IACliente.js (llamar a la IA, comparar nombres).
  */
+
+function CIA_agregarMenu_() {
+  SpreadsheetApp.getUi().createMenu('🤝 Conciliar con IA')
+    .addItem('📋 Abrir pestaña y cargar proveedores/clientes', 'CIA_menuAbrir')
+    .addItem('▶ Analizar la selección', 'CIA_menuAnalizar')
+    .addItem('✅ Aplicar lo aceptado', 'CIA_menuAplicar')
+    .addSeparator()
+    .addItem('🔑 Guardar clave de IA (de esta pestaña)', 'CIA_menuGuardarClave')
+    .addItem('🧪 Probar conexión con la IA', 'CIA_menuProbar')
+    .addToUi();
+}
+
+/** IA elegida en la fila 11 de esta pestaña y su clave propia. */
+function CIA_ia_(sh) {
+  var prov = String(sh.getRange('B11').getValue() || '').trim();
+  if (!IA_PROVEEDORES_[prov]) prov = 'Gemini (Google)';
+  var clave = PropertiesService.getScriptProperties().getProperty('CIA_KEY_' + prov.replace(/[^A-Za-z]/g, '').toUpperCase()) || '';
+  return { proveedor: prov, modelo: '', clave: clave };
+}
+
+function CIA_menuGuardarClave() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ia = CIA_ia_(CIA_hoja_(ss));
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt('🔑 Clave de ' + ia.proveedor + ' para 🤝 Conciliar con IA',
+    'Pegue la clave (API key). Se guarda oculta y SOLO la usa esta pestaña (el 🧠 Asistente IA tiene la suya aparte).', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var k = String(r.getResponseText() || '').trim();
+  if (!k) { ui.alert('No se guardó: la clave estaba vacía.'); return; }
+  PropertiesService.getScriptProperties().setProperty('CIA_KEY_' + ia.proveedor.replace(/[^A-Za-z]/g, '').toUpperCase(), k);
+  ui.alert('Clave de ' + ia.proveedor + ' guardada para 🤝 Conciliar con IA.');
+}
+
+function CIA_menuProbar() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ia = CIA_ia_(CIA_hoja_(ss));
+  var ui = SpreadsheetApp.getUi();
+  if (!ia.clave) { ui.alert('Falta la clave: menú 🤝 Conciliar con IA → 🔑 Guardar clave de IA.'); return; }
+  try {
+    var t0 = Date.now();
+    var r = IA_llamar_({ proveedor: ia.proveedor, clave: ia.clave, maxTokens: 200, sistema: 'Responde solo JSON.', texto: 'Responde exactamente {"ok": true}' });
+    ui.alert('✅ ' + ia.proveedor + ' respondió en ' + Math.round((Date.now() - t0) / 100) / 10 + ' s: ' + JSON.stringify(r));
+  } catch (e) { ui.alert('❌ ' + e.message); }
+}
 
 var CIA_HOJA_ = '🤝 Conciliar con IA';
 var CIA_TODAS_ = '(Todas)';
@@ -61,9 +107,9 @@ function CIA_hoja_(ss) {
     'Modo de análisis (fila 10): "Todo con IA" hace que la IA revise TODOS los vouchers con la lista completa de proveedores/clientes (más lento y usa más consultas).\n' +
     '3) Revise cada propuesta: marque ✔ Aceptar (puede corregir "Factura(s) propuesta(s)", ej. 01_F001-123,124) o ✖ Rechazar.\n' +
     '4) Menú → ✅ Aplicar lo aceptado. Queda como pago confirmado y el RUC detectado se recuerda para los próximos vouchers.\n' +
-    'La IA se elige en la pestaña 🧠 Asistente IA. Sin clave de IA, igual propone los casos evidentes.')
+    'La IA se elige aquí (fila 11) y su clave con el menú 🤝 Conciliar con IA → 🔑 (aparte del 🧠 Asistente IA). Sin clave, igual propone los casos evidentes.')
     .setWrap(true).setVerticalAlignment('top').setFontSize(9).setFontColor(COLOR.TEXTO_SUAVE).setBackground('#F8FAFC');
-  sh.getRange(CIA_F_ENC_ - 1, 1).setValue('PROPUESTAS').setFontWeight('bold').setFontSize(12);
+  sh.getRange(CIA_F_ENC_ - 1, 3).setValue('PROPUESTAS').setFontWeight('bold').setFontSize(12);
   sh.getRange(CIA_F_ENC_, 1, 1, CIA_ENC_.length).setValues([CIA_ENC_]).setFontWeight('bold')
     .setFontColor(COLOR.BLANCO).setBackground(COLOR.AZUL).setWrap(true).setVerticalAlignment('middle');
   sh.setFrozenRows(CIA_F_ENC_);
@@ -77,10 +123,17 @@ function CIA_hoja_(ss) {
 
 /** Fila 10: modo de análisis (se agrega sola si la pestaña es de antes). */
 function CIA_asegurarModo_(sh) {
-  if (String(sh.getRange('A10').getValue()).trim()) return;
-  sh.getRange('A10').setValue('Modo de análisis').setFontWeight('bold');
-  sh.getRange('B10').setValue(CIA_MODOS_[0]).setBackground('#FFF8E1')
-    .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(CIA_MODOS_).build());
+  if (!String(sh.getRange('A10').getValue()).trim()) {
+    sh.getRange('A10').setValue('Modo de análisis').setFontWeight('bold');
+    sh.getRange('B10').setValue(CIA_MODOS_[0]).setBackground('#FFF8E1')
+      .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(CIA_MODOS_).build());
+  }
+  if (String(sh.getRange('A11').getValue()).trim() !== 'IA a usar') {
+    if (String(sh.getRange('A11').getValue()).trim() === 'PROPUESTAS') sh.getRange('C11').setValue('PROPUESTAS').setFontWeight('bold').setFontSize(12);
+    sh.getRange('A11').setValue('IA a usar').setFontWeight('bold').setFontSize(10);
+    sh.getRange('B11').setValue('Gemini (Google)').setBackground('#FFF8E1')
+      .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(IA_nombresProveedores_()).build());
+  }
 }
 
 function CIA_leerParam_(sh, cfg) {
@@ -319,7 +372,7 @@ function CIA_preguntarIA_(ia, grupoVouchers, docs, contra) {
         d.retencion.toFixed(2) + ' | ' + d.detraccion.toFixed(2) + ' | ' + d.pagado.toFixed(2) + ' | ' + d.saldo.toFixed(2) + ' | ' + d.moneda;
     }).join('\n'),
   ].join('\n');
-  var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, sistema: CIA_SISTEMA_, texto: texto, maxTokens: 4000 });
+  var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: CIA_SISTEMA_, texto: texto, maxTokens: 4000 });
   var res = {};
   (Array.isArray(r.asignaciones) ? r.asignaciones : []).forEach(function (a) {
     var k = parseInt(String(a.voucher || '').replace(/\D/g, ''), 10) - 1;
@@ -358,7 +411,7 @@ function CIA_iaRucs_(ia, vouchers, directorio, porCobrar) {
         (p.beneficiarioNombre || '') + ' | ' + (p.descripcion || '');
     }).join('\n'),
   ].join('\n');
-  var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, sistema: CIA_SISTEMA_RUC_, texto: texto, maxTokens: 4000 });
+  var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: CIA_SISTEMA_RUC_, texto: texto, maxTokens: 4000 });
   var validos = {};
   directorio.forEach(function (d) { validos[d.ruc] = true; });
   var res = {};
@@ -395,8 +448,9 @@ function CIA_analizar_(ss) {
   var sh = CIA_hoja_(ss);
   var cfg = leerConfig_(ss);
   var par = CIA_leerParam_(sh, cfg);
-  var ia = IA_leerParam_(IA_hoja_(ss));
-  var hayIA = !!IA_clave_(ia.proveedor);
+  CIA_asegurarModo_(sh);
+  var ia = CIA_ia_(sh);
+  var hayIA = !!ia.clave;
   var docs = CIA_leerDocs_(ss, cfg, par);
   var nombres = {};
   docs.forEach(function (d) { if (d.contraRuc && d.contra) nombres[d.contraRuc] = d.contra; });
@@ -512,7 +566,7 @@ function CIA_analizar_(ss) {
   return Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' · ' + filas.length + ' propuestas de ' + hechos + ' proveedor(es)/cliente(s)' +
     (faltan > 0 ? ' · faltan ' + faltan + ': vuelva a ▶ Analizar' : '') +
     (sinContra ? ' · ' + sinContra + ' vouchers sin proveedor reconocible' : '') +
-    (hayIA ? ' · IA: ' + ia.proveedor + ' (' + consultas + ' consultas' + (par.todoIA ? ', modo Todo con IA' : '') + ')' : ' · sin clave de IA (menú 🧠 Asistente IA → 🔑)') +
+    (hayIA ? ' · IA: ' + ia.proveedor + ' (' + consultas + ' consultas' + (par.todoIA ? ', modo Todo con IA' : '') + ')' : ' · sin clave de IA (menú 🤝 Conciliar con IA → 🔑)') +
     (errores ? ' · ' + errores + ' errores de IA: ' + ultimoError.slice(0, 120) : '');
 }
 

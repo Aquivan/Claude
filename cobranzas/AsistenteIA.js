@@ -46,10 +46,7 @@ function IA_agregarMenu_() {
     .addItem('✅ Pasar marcados ✔ al voucher', 'IA_menuPasar')
     .addItem('📰 Resumen IA de cobranzas', 'IA_menuResumen')
     .addSeparator()
-    .addItem('🤝 Conciliar con IA: abrir pestaña', 'CIA_menuAbrir')
-    .addItem('▶ Conciliar con IA: analizar', 'CIA_menuAnalizar')
-    .addItem('✅ Conciliar con IA: aplicar lo aceptado', 'CIA_menuAplicar')
-    .addSeparator()
+
     .addItem('🔑 Guardar clave de IA', 'IA_menuGuardarClave')
     .addItem('🧪 Probar conexión con la IA', 'IA_menuProbar')
     .addSeparator()
