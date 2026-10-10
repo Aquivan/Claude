@@ -32,6 +32,7 @@ function CIA_agregarMenu_() {
     .addItem('📄 Listar facturas y vouchers de la selección', 'CIA_menuListar')
     .addSeparator()
     .addItem('📥 Subir mi análisis (Excel, foto o PDF)', 'IMP_menuSubir')
+    .addItem('📂 Importar desde la carpeta de Drive', 'IMP_menuDesdeCarpeta')
     .addItem('✅ Completar vouchers marcados (importación)', 'IMP_menuAplicar')
     .addItem('↩️ Deshacer última importación', 'IMP_menuDeshacer')
     .addItem('🧹 Borrar importación y archivos subidos', 'IMP_menuBorrar')

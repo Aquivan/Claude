@@ -54,17 +54,24 @@ function IMP_datosDialogo() {
  */
 function IMP_subir(datos) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  return IMP_procesar_(ss, datos.archivos || [], String(datos.empresaRuc || ''), true);
+}
+
+/** Lee los archivos, los cruza con Vouchers y arma la pestaña 🤝 Importar. */
+function IMP_procesar_(ss, archivos, empresaRuc, guardarCopia) {
   var cfg = leerConfig_(ss);
   var sh = IMP_hoja_(ss);
   IMP_limpiarTemporales_(true);
-  var carpeta = IMP_carpeta_(ss);
+  var carpeta = guardarCopia ? IMP_carpeta_(ss) : null;
   var lote = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HH:mm');
   var filas = [], avisos = [];
-  (datos.archivos || []).forEach(function (a) {
-    try {
-      var blob = Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'application/octet-stream', lote.replace(':', '') + ' - ' + a.nombre);
-      carpeta.createFile(blob);
-    } catch (e) { avisos.push(a.nombre + ': no se pudo guardar la copia temporal (' + e.message + ')'); }
+  archivos.forEach(function (a) {
+    if (carpeta) {
+      try {
+        var blob = Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'application/octet-stream', lote.replace(':', '') + ' - ' + a.nombre);
+        carpeta.createFile(blob);
+      } catch (e) { avisos.push(a.nombre + ': no se pudo guardar la copia temporal (' + e.message + ')'); }
+    }
     try {
       var leidas = a.filas ? IMP_leerTabla_(a.filas, a.nombre + (a.hoja ? ' · ' + a.hoja : ''), sh)
         : IMP_leerConIA_(sh, a);
@@ -72,7 +79,7 @@ function IMP_subir(datos) {
       if (!leidas.length) avisos.push(a.nombre + ': no se encontraron filas con N° de operación o monto.');
     } catch (e) { avisos.push(a.nombre + ': ' + e.message); }
   });
-  var res = IMP_cruzar_(ss, cfg, filas, String(datos.empresaRuc || ''));
+  var res = IMP_cruzar_(ss, cfg, filas, empresaRuc);
   IMP_escribir_(sh, res.tabla);
   var resumen = '📥 ' + lote + ' · ' + filas.length + ' filas leídas · ' + res.cuenta[IMP_EST_.OK] + ' encontrados para completar · ' +
     res.cuenta[IMP_EST_.LLENO] + ' sin nada nuevo · ' + res.cuenta[IMP_EST_.DUDA] + ' por revisar · ' + res.cuenta[IMP_EST_.NO] +
@@ -81,6 +88,124 @@ function IMP_subir(datos) {
   ss.setActiveSheet(sh);
   return resumen + (avisos.length ? '\n\n⚠️ ' + avisos.join('\n⚠️ ') : '') +
     '\n\nRevise la pestaña 🤝 Importar y use 🤝 Conciliar con IA → ✅ Completar vouchers marcados.';
+}
+
+/* ------------------------------- importar desde la carpeta de Drive */
+
+/**
+ * Alternativa a la ventana de subida (que falla con "PERMISSION_DENIED" cuando
+ * el navegador tiene varias cuentas de Google abiertas): usted copia el Excel,
+ * la foto o el PDF a la carpeta temporal en Drive y este menú los lee de ahí.
+ */
+function IMP_menuDesdeCarpeta() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ui = SpreadsheetApp.getUi();
+  var cfg = leerConfig_(ss);
+  var carpeta = IMP_carpeta_(ss);
+  var it = carpeta.getFiles(), lista = [];
+  while (it.hasNext()) {
+    var f = it.next();
+    if (/\.(xlsx|csv)$|^image\/|pdf|spreadsheet|csv/i.test(f.getName() + ' ' + f.getMimeType())) lista.push(f);
+  }
+  var url = 'https://drive.google.com/drive/folders/' + carpeta.getId();
+  if (!lista.length) {
+    ui.alert('📂 La carpeta está vacía', 'Copie su Excel (.xlsx o .csv), foto o PDF a esta carpeta de Drive y vuelva a usar este menú:\n\n' +
+      carpeta.getName() + '\n' + url + '\n\n(Está en la misma carpeta que esta hoja. Lo que deje ahí se borra solo a los ' + IMP_DIAS_ + ' días.)', ui.ButtonSet.OK);
+    return;
+  }
+  lista.sort(function (a, b) { return b.getLastUpdated().getTime() - a.getLastUpdated().getTime(); });
+  var txt = lista.slice(0, 20).map(function (f, i) { return (i + 1) + ') ' + f.getName(); }).join('\n');
+  var r1 = ui.prompt('📂 Importar desde la carpeta', 'Archivos en la carpeta temporal:\n\n' + txt +
+    '\n\nEscriba los números a importar (ej. 1 o 1,3) o deje vacío para el 1:', ui.ButtonSet.OK_CANCEL);
+  if (r1.getSelectedButton() !== ui.Button.OK) return;
+  var nums = (String(r1.getResponseText()).match(/\d+/g) || ['1']).map(Number).filter(function (n) { return n >= 1 && n <= Math.min(lista.length, 20); });
+  if (!nums.length) { ui.alert('Número no válido.'); return; }
+  var emps = cfg.grupo.map(function (r, i) { return (i + 1) + ') ' + (cfg.nombreEmpresa[r] || r) + ' · ' + r; }).join('\n');
+  var r2 = ui.prompt('🏢 Empresa del grupo', 'Qué empresa pagó o cobró:\n\n' + emps + '\n\nEscriba el número (vacío = según la columna Empresa del archivo):', ui.ButtonSet.OK_CANCEL);
+  if (r2.getSelectedButton() !== ui.Button.OK) return;
+  var k = parseInt(r2.getResponseText(), 10);
+  var empresaRuc = k >= 1 && k <= cfg.grupo.length ? cfg.grupo[k - 1] : '';
+  var archivos = [], avisos = [];
+  nums.forEach(function (n) {
+    var f = lista[n - 1], blob = f.getBlob(), nombre = f.getName(), mime = f.getMimeType();
+    try {
+      if (mime === MimeType.GOOGLE_SHEETS) {
+        var sss = SpreadsheetApp.openById(f.getId());
+        var hs = sss.getSheets().filter(function (h) { return /pago/i.test(h.getName()); })[0] || sss.getSheets()[0];
+        archivos.push({ nombre: nombre, hoja: hs.getName(), filas: hs.getDataRange().getValues() });
+      } else if (/\.xlsx$/i.test(nombre) || /openxmlformats-officedocument\.spreadsheetml/.test(mime)) {
+        var x = IMP_xlsxFilas_(blob);
+        archivos.push({ nombre: nombre, hoja: x.hoja, filas: x.filas });
+      } else if (/\.csv$/i.test(nombre) || /csv/.test(mime)) {
+        archivos.push({ nombre: nombre, filas: Utilities.parseCsv(blob.getDataAsString()) });
+      } else {
+        archivos.push({ nombre: nombre, mime: mime, base64: Utilities.base64Encode(blob.getBytes()) });
+      }
+    } catch (e) { avisos.push(nombre + ': ' + e.message); }
+  });
+  ss.toast('Leyendo ' + archivos.length + ' archivo(s) y buscando en Originales y Fotos…', '📥 Importar', 60);
+  var msg;
+  try { msg = IMP_procesar_(ss, archivos, empresaRuc, false); } catch (e) { msg = '❌ ' + e.message; }
+  if (avisos.length) msg += '\n\n⚠️ ' + avisos.join('\n⚠️ ');
+  IMP_estado_(IMP_hoja_(ss), msg.split('\n')[0]);
+  ui.alert('📥 Importar', msg, ui.ButtonSet.OK);
+}
+
+/**
+ * Lee un .xlsx sin servicios extra (es un zip de XML): la pestaña que diga
+ * "PAGO" o la primera. Devuelve {hoja, filas}.
+ */
+function IMP_xlsxFilas_(blob) {
+  blob.setContentType('application/zip');
+  var partes = {};
+  Utilities.unzip(blob).forEach(function (b) { partes[b.getName()] = b; });
+  var leer = function (n) { return partes[n] ? XmlService.parse(partes[n].getDataAsString('UTF-8')).getRootElement() : null; };
+  var hijos = function (el, nombre) { return el.getChildren().filter(function (c) { return c.getName() === nombre; }); };
+  var texto = function (el) {  // texto de <si>/<is>: <t> directo o varios <r><t>
+    var t = hijos(el, 't');
+    if (t.length) return t[0].getText();
+    return hijos(el, 'r').map(function (r) { var tt = hijos(r, 't'); return tt.length ? tt[0].getText() : ''; }).join('');
+  };
+  var comunes = [];
+  var sst = leer('xl/sharedStrings.xml');
+  if (sst) comunes = hijos(sst, 'si').map(texto);
+  // Pestañas y su archivo
+  var wb = leer('xl/workbook.xml'), rels = leer('xl/_rels/workbook.xml.rels');
+  var destino = {};
+  hijos(rels, 'Relationship').forEach(function (r) { destino[r.getAttribute('Id').getValue()] = r.getAttribute('Target').getValue(); });
+  var hojas = [];
+  hijos(wb, 'sheets').forEach(function (ss) {
+    hijos(ss, 'sheet').forEach(function (h) {
+      var rid = h.getAttributes().filter(function (a) { return a.getName() === 'id'; })[0];
+      var t = rid ? destino[rid.getValue()] : '';
+      if (t) hojas.push({ nombre: h.getAttribute('name').getValue(), ruta: 'xl/' + t.replace(/^\/?xl\//, '').replace(/^\//, '') });
+    });
+  });
+  if (!hojas.length) throw new Error('El Excel no tiene pestañas legibles.');
+  var hoja = hojas.filter(function (h) { return /pago/i.test(h.nombre); })[0] || hojas[0];
+  var raiz = leer(hoja.ruta);
+  if (!raiz) throw new Error('No se pudo leer la pestaña ' + hoja.nombre + '.');
+  var col = function (ref) { var m = ref.match(/^([A-Z]+)/), n = 0; for (var i = 0; i < m[1].length; i++) n = n * 26 + m[1].charCodeAt(i) - 64; return n - 1; };
+  var filas = [];
+  hijos(raiz, 'sheetData').forEach(function (sd) {
+    hijos(sd, 'row').forEach(function (row) {
+      var r = parseInt(row.getAttribute('r').getValue(), 10) - 1;
+      var fila = filas[r] = [];
+      hijos(row, 'c').forEach(function (c) {
+        var ref = c.getAttribute('r'), j = ref ? col(ref.getValue()) : fila.length;
+        var tipo = c.getAttribute('t') ? c.getAttribute('t').getValue() : 'n';
+        var v = hijos(c, 'v'), val = v.length ? v[0].getText() : '';
+        if (tipo === 's') val = comunes[parseInt(val, 10)] || '';
+        else if (tipo === 'inlineStr') { var is = hijos(c, 'is'); val = is.length ? texto(is[0]) : ''; }
+        else if (tipo === 'n' && val !== '') val = Number(val);
+        else if (tipo === 'b') val = val === '1';
+        while (fila.length < j) fila.push('');
+        fila[j] = val;
+      });
+    });
+  });
+  for (var i = 0; i < filas.length; i++) if (!filas[i]) filas[i] = [];
+  return { hoja: hoja.nombre, filas: filas };
 }
 
 /* ------------------------------------------------------------ hoja */
@@ -144,6 +269,15 @@ function IMP_pintar_(sh, estados, f0) {
 }
 
 /* --------------------------------------------- leer Excel / CSV */
+
+/** Fecha de una celda: texto, Date o número de serie de Excel (ej. 46091). */
+function IMP_fecha_(v) {
+  if (typeof v === 'number' && v > 20000 && v < 80000) {
+    var d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
+  return aFecha_(v);
+}
 
 /** Normaliza un N° de operación: "OP-000663" → "663". */
 function IMP_opNorm_(s) {
@@ -229,7 +363,7 @@ function IMP_leerTabla_(filas, origen, sh) {
     else if (c.doc != null) parsearReferencias_(String(val('doc') || '')).refs.forEach(function (x) { docs.push(x.tipo + '_' + x.serie + '-' + x.numero); });
     res.push({
       origen: origen + ' · fila ' + (j + 1), modalidad: IMP_modalidad_(val('modalidad')),
-      fecha: aFecha_(val('fecha')), opTxt: opTxt, ops: IMP_ops_(opTxt), monto: Math.abs(monto),
+      fecha: IMP_fecha_(val('fecha')), opTxt: opTxt, ops: IMP_ops_(opTxt), monto: Math.abs(monto),
       ruc: cod ? cod.ruc : aRuc_(val('ruc')), razon: String(val('razon') || '').trim(), docs: docs, cod: cod,
       banco: String(val('banco') || '').trim(), moneda: String(val('moneda') || '').trim(), empresa: String(val('empresa') || '').trim(),
     });

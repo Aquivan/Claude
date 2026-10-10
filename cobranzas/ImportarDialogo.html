@@ -40,7 +40,7 @@ google.script.run.withSuccessHandler(function (d) {
   s.innerHTML = '<option value="">(según la columna Empresa del archivo)</option>' +
     d.empresas.map(function (e) { return '<option value="' + e.ruc + '">' + e.nombre + ' · ' + e.ruc + '</option>'; }).join('');
   tieneClave = d.tieneClave;
-}).withFailureHandler(function (e) { mensaje('❌ ' + e.message, true); }).IMP_datosDialogo();
+}).withFailureHandler(function (e) { mensaje(explicar(e), true); }).IMP_datosDialogo();
 
 document.getElementById('archivos').addEventListener('change', function (ev) {
   leidos = [];
@@ -118,9 +118,21 @@ function enviar() {
   google.script.run.withSuccessHandler(function (t) {
     mensaje(t + '\n\nPuede cerrar esta ventana.');
   }).withFailureHandler(function (e) {
-    mensaje('❌ ' + e.message, true);
+    mensaje(explicar(e), true);
     document.getElementById('btn').disabled = false;
   }).IMP_subir({ empresaRuc: document.getElementById('empresa').value, archivos: archivos });
+}
+
+function explicar(e) {
+  var t = String(e && e.message || e);
+  if (/PERMISSION_DENIED|almacenamiento|storage/i.test(t)) {
+    return '❌ Google bloqueó esta ventana porque en este navegador hay VARIAS cuentas de Google abiertas ' +
+      '(error conocido de Google con las ventanas de Apps Script).\n\nSoluciones:\n' +
+      '1) Abra la hoja en una ventana de incógnito (Ctrl+Shift+N) entrando solo con su cuenta, o\n' +
+      '2) Cierre esta ventana y use 🤝 Conciliar con IA → 📂 Importar desde la carpeta de Drive ' +
+      '(copia el archivo a la carpeta temporal y lo lee desde ahí; no usa esta ventana).';
+  }
+  return '❌ ' + t;
 }
 
 function mensaje(t, err) {
