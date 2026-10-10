@@ -31,6 +31,11 @@ function CIA_agregarMenu_() {
     .addSeparator()
     .addItem('📄 Listar facturas y vouchers de la selección', 'CIA_menuListar')
     .addSeparator()
+    .addItem('📥 Subir mi análisis (Excel, foto o PDF)', 'IMP_menuSubir')
+    .addItem('✅ Completar vouchers marcados (importación)', 'IMP_menuAplicar')
+    .addItem('↩️ Deshacer última importación', 'IMP_menuDeshacer')
+    .addItem('🧹 Borrar importación y archivos subidos', 'IMP_menuBorrar')
+    .addSeparator()
     .addItem('🔑 Guardar clave de IA (de esta pestaña)', 'CIA_menuGuardarClave')
     .addItem('🧪 Probar conexión con la IA', 'CIA_menuProbar')
     .addToUi();

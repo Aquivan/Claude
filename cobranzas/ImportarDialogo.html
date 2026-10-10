@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #1E293B; margin: 12px; }
+  label { font-weight: bold; display: block; margin: 12px 0 4px; }
+  select, input[type=file] { width: 100%; padding: 6px; box-sizing: border-box; }
+  .nota { font-size: 11px; color: #64748B; margin-top: 4px; }
+  .arch { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 6px 8px; margin-top: 6px; }
+  .arch select { width: auto; padding: 2px; margin-left: 6px; }
+  button { margin-top: 16px; padding: 9px 18px; background: #1D4ED8; color: #fff; border: 0; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  button:disabled { background: #94A3B8; cursor: default; }
+  #msg { margin-top: 12px; white-space: pre-wrap; font-size: 12px; }
+  .err { color: #B91C1C; }
+</style>
+</head>
+<body>
+  <label>Empresa del grupo (la que pagó o cobró)</label>
+  <select id="empresa"><option value="">Cargando…</option></select>
+  <div class="nota">Se completa en Vouchers la columna Empresa (y el RUC en ID Usuario) solo si está vacía.</div>
+
+  <label>Archivos (Excel, CSV, foto o PDF; puede elegir varios)</label>
+  <input type="file" id="archivos" multiple accept=".xlsx,.xls,.csv,image/*,application/pdf">
+  <div class="nota">Excel: elija la pestaña (por ejemplo PAGOS). Fotos y PDF los lee la IA de 🤝 Conciliar con IA.
+    Lo subido se guarda en una carpeta temporal y se borra solo a los 7 días.</div>
+  <div id="lista"></div>
+
+  <button id="btn" onclick="enviar()" disabled>📥 Subir y analizar</button>
+  <div id="msg"></div>
+
+<script>
+var leidos = [];  // {nombre, mime, base64, libro?}
+var tieneClave = false;
+
+google.script.run.withSuccessHandler(function (d) {
+  var s = document.getElementById('empresa');
+  s.innerHTML = '<option value="">(según la columna Empresa del archivo)</option>' +
+    d.empresas.map(function (e) { return '<option value="' + e.ruc + '">' + e.nombre + ' · ' + e.ruc + '</option>'; }).join('');
+  tieneClave = d.tieneClave;
+}).withFailureHandler(function (e) { mensaje('❌ ' + e.message, true); }).IMP_datosDialogo();
+
+document.getElementById('archivos').addEventListener('change', function (ev) {
+  leidos = [];
+  document.getElementById('lista').innerHTML = '';
+  var archivos = Array.prototype.slice.call(ev.target.files);
+  var pendientes = archivos.length;
+  if (!pendientes) { document.getElementById('btn').disabled = true; return; }
+  archivos.forEach(function (f, idx) {
+    var r = new FileReader();
+    r.onload = function () {
+      var bytes = new Uint8Array(r.result), bin = '';
+      for (var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      var item = { nombre: f.name, mime: f.type || mimeDe(f.name), base64: btoa(bin) };
+      var div = document.createElement('div');
+      div.className = 'arch';
+      div.textContent = '📄 ' + f.name;
+      if (/\.(xlsx|xls|csv)$/i.test(f.name)) {
+        try {
+          item.libro = XLSX.read(bytes, { type: 'array', cellDates: true });
+          var sel = document.createElement('select');
+          item.libro.SheetNames.forEach(function (n) {
+            var o = document.createElement('option'); o.value = n; o.textContent = n;
+            if (/pago/i.test(n)) o.selected = true;
+            sel.appendChild(o);
+          });
+          item.select = sel;
+          div.appendChild(document.createTextNode('  · pestaña:'));
+          div.appendChild(sel);
+        } catch (e) { div.innerHTML += ' <span class="err">no se pudo leer: ' + e.message + '</span>'; }
+      } else if (!tieneClave) {
+        div.innerHTML += ' <span class="err">· falta la clave de IA (🤝 Conciliar con IA → 🔑) para leer fotos/PDF</span>';
+      }
+      document.getElementById('lista').appendChild(div);
+      leidos[idx] = item;
+      if (--pendientes === 0) document.getElementById('btn').disabled = false;
+    };
+    r.readAsArrayBuffer(f);
+  });
+});
+
+function mimeDe(n) {
+  if (/\.pdf$/i.test(n)) return 'application/pdf';
+  if (/\.csv$/i.test(n)) return 'text/csv';
+  if (/\.xlsx$/i.test(n)) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (/\.xls$/i.test(n)) return 'application/vnd.ms-excel';
+  if (/\.png$/i.test(n)) return 'image/png';
+  return 'image/jpeg';
+}
+
+function dd(d) {
+  // Fecha a dd/mm/aaaa (al leer Excel las fechas llegan como Date)
+  var p = function (n) { return (n < 10 ? '0' : '') + n; };
+  return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear();
+}
+
+function enviar() {
+  var archivos = leidos.filter(Boolean).map(function (it) {
+    var a = { nombre: it.nombre, mime: it.mime, base64: it.base64 };
+    if (it.libro) {
+      var hoja = it.select ? it.select.value : it.libro.SheetNames[0];
+      var filas = XLSX.utils.sheet_to_json(it.libro.Sheets[hoja], { header: 1, raw: true, defval: '' });
+      a.hoja = hoja;
+      a.filas = filas.map(function (r) {
+        return r.map(function (v) {
+          if (v instanceof Date) return dd(new Date(v.getTime() + 12 * 3600000));
+          return v;
+        });
+      });
+    }
+    return a;
+  });
+  if (!archivos.length) { mensaje('Elija al menos un archivo.', true); return; }
+  document.getElementById('btn').disabled = true;
+  mensaje('⏳ Subiendo y buscando en Originales y Fotos… (con fotos/PDF la IA puede tardar un poco)');
+  google.script.run.withSuccessHandler(function (t) {
+    mensaje(t + '\n\nPuede cerrar esta ventana.');
+  }).withFailureHandler(function (e) {
+    mensaje('❌ ' + e.message, true);
+    document.getElementById('btn').disabled = false;
+  }).IMP_subir({ empresaRuc: document.getElementById('empresa').value, archivos: archivos });
+}
+
+function mensaje(t, err) {
+  var m = document.getElementById('msg');
+  m.textContent = t;
+  m.className = err ? 'err' : '';
+}
+</script>
+</body>
+</html>

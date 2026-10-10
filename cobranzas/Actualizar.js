@@ -12,6 +12,11 @@ function actualizacionAutomatica() {
   } catch (e) {
     Logger.log('Error en actualizacion automatica: ' + e.message + '\n' + e.stack);
   }
+  try {
+    IMP_limpiarTemporales_(true);  // archivos subidos en 📥 Importar: a la papelera a los 7 días
+  } catch (e) {
+    Logger.log('Error en actualizacion automatica: ' + e.message + '\n' + e.stack);
+  }
 }
 
 // Subir este numero cuando cambie la forma de calcular o escribir, para que la
