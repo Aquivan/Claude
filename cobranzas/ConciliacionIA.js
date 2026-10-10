@@ -164,6 +164,56 @@ function CIA_alEditar_(e) {
   e.source.toast(n + ' proveedores/clientes con saldo. Elija uno en "Proveedor / cliente" y luego ▶ Analizar.', '🤝 Conciliar con IA', 6);
 }
 
+/* ---------------------------------- parecido de nombres (con errores) */
+
+/** Distancia de edición (letras que sobran, faltan o cambian). */
+function CIA_lev_(a, b) {
+  if (a === b) return 0;
+  var m = a.length, n = b.length, prev = [], cur = [];
+  for (var j = 0; j <= n; j++) prev[j] = j;
+  for (var i = 1; i <= m; i++) {
+    cur = [i];
+    for (j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+function CIA_trigramas_(s) {
+  var t = '  ' + s.replace(/\s+/g, '') + ' ', res = {};
+  for (var i = 0; i < t.length - 2; i++) res[t.substr(i, 3)] = (res[t.substr(i, 3)] || 0) + 1;
+  return res;
+}
+
+/**
+ * Parecido 0–1 entre dos razones sociales, tolerante a errores de escritura:
+ * letras de más o de menos ("ALIFF"), cambiadas ("INDUSTRA IMPERAL"), palabras
+ * pegadas o separadas ("DONVALENTIN" / "DON VALENTIN") y sin forma societaria.
+ */
+function CIA_parecido_(a, b) {
+  var ta = IA_tokens_(normNombre_(a)), tb = IA_tokens_(normNombre_(b));
+  if (!ta.length || !tb.length) return 0;
+  var corta = ta.length <= tb.length ? ta : tb, larga = corta === ta ? tb : ta;
+  var suma = 0;
+  corta.forEach(function (x) {
+    var mejor = 0;
+    larga.forEach(function (y) {
+      var r = 1 - CIA_lev_(x, y) / Math.max(x.length, y.length);
+      if (r > mejor) mejor = r;
+    });
+    if (mejor >= 0.75) suma += mejor;
+  });
+  var porPalabras = suma / corta.length;
+  if (ta[0] && tb[0] && 1 - CIA_lev_(ta[0], tb[0]) / Math.max(ta[0].length, tb[0].length) >= 0.8) porPalabras += 0.1;
+  var A = CIA_trigramas_(ta.join(' ')), B = CIA_trigramas_(tb.join(' ')), inter = 0, na = 0, nb = 0;
+  Object.keys(A).forEach(function (k) { na += A[k]; if (B[k]) inter += Math.min(A[k], B[k]); });
+  Object.keys(B).forEach(function (k) { nb += B[k]; });
+  var porLetras = na + nb ? 2 * inter / (na + nb) : 0;
+  return Math.min(1, Math.max(porPalabras, porLetras));
+}
+
 /* ------------------------------------------------- detección de RUC */
 
 /**
@@ -180,12 +230,11 @@ function CIA_detectarRuc_(p, par, cfg, nombres) {
   var nombre = par.porCobrar ? (p.descripcion || p.beneficiarioNombre) : p.beneficiarioNombre;
   var alias = cfg.aliasNombre[normNombre_(nombre)];
   if (alias) return { ruc: alias, como: 'alias en ⚙️ Config', candidatos: [] };
-  // Se comparan sin la forma societaria (S.A.C., E.I.R.L.…): "ALIF SAC" = "ALIF S.A.C."
-  var tn = IA_tokens_(normNombre_(nombre));
+  // Comparación tolerante a errores de escritura; lo dudoso lo decide la IA con los candidatos.
   var cands = Object.keys(nombres).map(function (ruc) {
-    return { ruc: ruc, nombre: nombres[ruc], score: IA_similitud_(tn, IA_tokens_(normNombre_(nombres[ruc]))) };
-  }).filter(function (c) { return c.score >= 0.5; }).sort(function (a, b) { return b.score - a.score; }).slice(0, 4);
-  if (cands.length && cands[0].score >= 0.8 && (cands.length === 1 || cands[0].score - cands[1].score >= 0.15)) {
+    return { ruc: ruc, nombre: nombres[ruc], score: CIA_parecido_(nombre, nombres[ruc]) };
+  }).filter(function (c) { return c.score >= 0.4; }).sort(function (a, b) { return b.score - a.score; }).slice(0, 5);
+  if (cands.length && cands[0].score >= 0.85 && (cands.length === 1 || cands[0].score - cands[1].score >= 0.12)) {
     return { ruc: cands[0].ruc, como: 'nombre parecido (' + Math.round(cands[0].score * 100) + '%)', candidatos: cands };
   }
   return { ruc: '', como: cands.length ? 'dudoso: lo decide la IA' : 'sin coincidencia', candidatos: cands };
@@ -365,6 +414,9 @@ function CIA_analizar_(ss) {
     }
     lista.forEach(function (x, k) {
       var a = resIA[k];
+      if (a && a.ruc && a.ruc !== contraRuc && !x.det.ruc) {  // la IA dice que es otro proveedor
+        a = { docs: [], tipo: 'otro proveedor', motivo: 'La IA indica que el beneficiario es el RUC ' + a.ruc + ', no ' + contraRuc + '. ' + a.motivo, ruc: a.ruc, confianza: 0 };
+      }
       var prop = a && a.docs.length ? { docs: a.docs, tipo: a.tipo, motivo: '[IA] ' + a.motivo, confianza: a.confianza / 100 }
         : x.regla ? { docs: x.regla.docs, tipo: x.regla.tipo, motivo: '[Regla] ' + x.regla.motivo, confianza: 0.95 }
         : { docs: [], tipo: docsC.length ? 'ninguno' : 'sin facturas pendientes', motivo: a ? '[IA] ' + a.motivo : (docsC.length ? (hayIA ? 'La IA no encontró una explicación' : 'Sin clave de IA: solo se proponen casos evidentes') : 'Este proveedor/cliente no tiene facturas con saldo'), confianza: 0 };
