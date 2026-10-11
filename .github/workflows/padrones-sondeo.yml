@@ -13,9 +13,6 @@ jobs:
       - name: Enlaces y tamanos
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-          for u in descarga/AgentRet/AgenRet_TXT.zip descarga/BueCont/BueCont_TXT.zip descarga/AgenPerc/AgenPerc_TXT.zip descarga/AgentPerc/AgenPerc_TXT.zip descarga/AgenPercComb/AgenPercComb_TXT.zip descarga/AgentRet/AgenRet0.html; do
-            curl -sS -L -A "$UA" --max-time 60 -o f.bin -w "%{http_code} %{content_type} %{size_download} final=%{url_effective} $u\n" "https://www.sunat.gob.pe/$u" || true
-            file f.bin | head -1; (unzip -l f.bin 2>/dev/null | head -5) || true
+          for u in descarga/AgentRet/AgenRet0.html descarga/BueCont/BueCont0.html descarga/AgentRet/AgenPerc0.html descarga/AgentRet/AgenPercVI0.html; do
+            echo "=== $u"; curl -sS -L -A "$UA" --max-time 60 "https://www.sunat.gob.pe/$u" | tr -d '\000' | grep -aoiE '(href|src|action)=["'"'"'][^"'"'"']+["'"'"']|[A-Za-z0-9_/.-]+\.(zip|txt)' | grep -viE "opcSeleccion|\.css|\.gif|\.jpg|\.png" | sort -u | head -30
           done
-          grep -rhoE "padron[0-9]+ *\(\) *\{[^}]{0,300}" <(curl -sS -L -A "$UA" https://www.sunat.gob.pe/padronesnotificaciones/index.html) | head -20 || true
-          curl -sS -L -A "$UA" https://www.sunat.gob.pe/padronesnotificaciones/index.html | grep -oE 'src="[^"]+\.js"' | head
