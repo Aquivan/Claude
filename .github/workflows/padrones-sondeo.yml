@@ -13,6 +13,9 @@ jobs:
       - name: Enlaces y tamanos
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-          for u in descarga/AgentRet/AgenRet0.html descarga/BueCont/BueCont0.html descarga/AgentRet/AgenPerc0.html descarga/AgentRet/AgenPercVI0.html; do
-            echo "=== $u"; curl -sS -L -A "$UA" --max-time 60 "https://www.sunat.gob.pe/$u" | tr -d '\000' | grep -aoiE '(href|src|action)=["'"'"'][^"'"'"']+["'"'"']|[A-Za-z0-9_/.-]+\.(zip|txt)' | grep -viE "opcSeleccion|\.css|\.gif|\.jpg|\.png" | sort -u | head -30
+          for u in descarga/AgentRet/AgenRet_TXT.zip descarga/BueCont/BueCont_TXT.zip descarga/AgentRet/AgenPerc_TXT.zip descarga/AgentRet/AgenPercVI_TXT.zip; do
+            curl -sS -L -A "$UA" --max-time 120 -o f.zip -w "%{http_code} %{content_type} %{size_download} $u\n" "https://www.sunat.gob.pe/$u" || true
+            unzip -l f.zip | head -5 || true
+            unzip -p f.zip | head -3 | iconv -f latin1 -t utf-8 || true
+            echo "lineas: $(unzip -p f.zip | wc -l)"
           done
