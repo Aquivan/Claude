@@ -39,7 +39,7 @@ function leerDocumentosSire_(cfg, liquidaciones) {
         nombrePropio: par[1] === 'V' ? col('Razon Social') : col('Apellidos y Nombres o Razon social'),
         total: col('Total CP'), moneda: col('Moneda'), tc: col('Tipo Cambio', 'Tipo de Cambio'),
         modTipo: col('Tipo CP Modificado'), modSerie: col('Serie CP Modificado'), modNumero: col('Nro CP Modificado'),
-        producto: col('items_descripcion'),
+        producto: col('items_descripcion'), detrac: col('Detraccion'),
       };
       for (var i = 1; i < datos.length; i++) {
         var r = datos[i];
@@ -56,7 +56,7 @@ function leerDocumentosSire_(cfg, liquidaciones) {
           total: aNumero_(r[c.total]), tc: aNumero_(r[c.tc]) || 1,
           modTipo: c.modTipo >= 0 ? r[c.modTipo] : '', modSerie: c.modSerie >= 0 ? r[c.modSerie] : '',
           modNumero: c.modNumero >= 0 ? r[c.modNumero] : '', producto: c.producto >= 0 ? String(r[c.producto] || '') : '',
-          linkPdf: link,
+          linkPdf: link, detraccionSire: c.detrac >= 0 && String(r[c.detrac] || '').trim().toUpperCase() === 'D',
         };
         if (par[1] === 'V') {
           base.emisorRuc = lq.ruc; base.emisorNombre = String(r[c.nombrePropio] || '');

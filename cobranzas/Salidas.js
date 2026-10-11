@@ -6,7 +6,7 @@
 
 var ENC_DOCS_ = ['Empresa', 'Tipo', 'RUC contraparte', 'Contraparte', 'Documento', 'Emisión', 'Vence', 'Moneda',
   'Total', 'N/C', 'Retención', 'Detracción', 'Otros desc.', 'Pagado', 'Saldo', 'Estado', 'Días vencido',
-  'Último pago', 'Producto', 'PDF', 'Clave'];
+  'Último pago', 'Producto', '¿Retener? (IGV 3%)', 'Retención esperada S/', 'PDF', 'Clave'];
 var ENC_MOVS_ = ['Fecha', 'Empresa que paga', 'RUC beneficiario', 'Beneficiario', 'Documento', 'Modalidad',
   'Monto aplicado', 'Moneda', 'N° operación', 'Banco', 'Monto del voucher', 'Origen', 'Nota', 'Fuente', 'Clave', 'ID pago'];
 
@@ -28,6 +28,7 @@ function construirFilasDocumentos_(res, cfg, hoy) {
     d.movs.forEach(function (m) { if (m.modalidad === MODALIDAD.PAGO && m.fecha && (!ultimo || m.fecha > ultimo)) ultimo = m.fecha; });
     var comun = [etiquetaDoc_(d), d.fecha || '', d.vence || '', d.moneda, d.total, d.nc - d.nd, d.retencion, d.detraccion,
       d.otros, d.pagado, d.saldo, est.estado, est.diasVencido || '', ultimo || '', (d.producto || '').slice(0, 200),
+      RTN_textoColumna_(d), d.rtn && d.rtn.aplica ? d.rtn.esperada : '',
       d.linkPdf ? '=HYPERLINK("' + d.linkPdf + '";"📄")' : '', d.clave];
     if (cfg.grupo.indexOf(d.emisorRuc) !== -1) {
       filas.push([nombreEmpresa_(cfg, d.emisorRuc, d.emisorNombre), 'Por cobrar', d.receptorRuc, d.receptorNombre].concat(comun));
@@ -72,8 +73,11 @@ function escribirDocumentos_(ss, filas) {
   }));
   rango.setFontSize(9).setVerticalAlignment('middle');
   sh.getRange(2, 15, n, 1).setFontWeight('bold');
+  var iRet = ENC_DOCS_.indexOf('¿Retener? (IGV 3%)') + 1;
+  sh.getRange(2, iRet + 1, n, 1).setNumberFormat('#,##0.00;-#,##0.00;""');
+  sh.getRange(1, iRet, 1, 2).setBackground('#7C2D12');
   sh.getRange(1, 1, n + 1, ENC_DOCS_.length).createFilter();
-  [110, 80, 95, 230, 105, 78, 78, 50, 95, 80, 80, 80, 70, 95, 95, 130, 60, 78, 260, 40, 10].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+  [110, 80, 95, 230, 105, 78, 78, 50, 95, 80, 80, 80, 70, 95, 95, 130, 60, 78, 260, 170, 90, 40, 10].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   sh.hideColumns(ENC_DOCS_.length);
 }
 
