@@ -13,10 +13,8 @@ jobs:
       - name: Enlaces y tamanos
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-          echo "=== indPadron.js"; curl -sS -L -A "$UA" --max-time 30 https://www.sunat.gob.pe/padronesnotificaciones/js/indPadron.js | head -c 6000; echo
-          echo "=== AgenRet0.html"; curl -sS -L -A "$UA" --max-time 30 https://www.sunat.gob.pe/descarga/AgentRet/AgenRet0.html | grep -oiE '(href|src)="[^"]*"' | sort -u | head -60
-          for d in AgentRet BueCont AgenPerc AgenPercComb AgentPerc; do
-            for f in AgenRet_TXT.zip BueCont_TXT.zip AgenPer_TXT.zip AgenPerc_TXT.zip; do
-              curl -sS -A "$UA" --max-time 20 -o /dev/null -I -w "%{http_code} len=%header{content-length} descarga/$d/$f\n" "https://www.sunat.gob.pe/descarga/$d/$f" | grep -v '^404' || true
-            done
-          done
+          curl -sS -L -A "$UA" --max-time 30 https://www.sunat.gob.pe/padronesnotificaciones/js/indPadron.js -o ind.js || true
+          echo "=== funciones"; grep -n -iE "function |window.open|location|\.zip|\.txt|\.htm" ind.js | grep -v writeln | head -80
+          echo "=== textos"; grep -oiE "onclick=..[a-zA-Z0-9]+\(\);..>|eText.{0,6}>[^<]{0,90}" ind.js | head -0
+          grep -oiE '(onclick=\\"[a-zA-Z0-9]+\(\);\\")|(<\/span> <\/span>[^<]{0,90})' ind.js | head -60
+          echo "=== AgenRet0 scripts"; curl -sS -L -A "$UA" --max-time 30 https://www.sunat.gob.pe/descarga/AgentRet/AgenRet0.html | grep -iE "zip|txt|function|href=\"[^j]" | head -30
