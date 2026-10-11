@@ -1,0 +1,23 @@
+# SONDEO (solo lectura): muestra los enlaces de descarga de los padrones de SUNAT
+# (agentes de retencion, buenos contribuyentes, agentes de percepcion). No guarda nada.
+name: Padrones SUNAT - sondeo (solo lectura)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sondeo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Enlaces y tamanos
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+          for p in https://www.sunat.gob.pe/descargaPRR/mrc137_padron_reducido.html https://www.sunat.gob.pe/descargaPRR/mrc137_padrones.html https://www.sunat.gob.pe/padronesnotificaciones/; do
+            echo "=== $p"; curl -sS -L -A "$UA" --max-time 30 "$p" | grep -oiE 'href="[^"]+"' | head -60 || true
+          done
+          for f in AgenRet_TXT.zip BueCont_TXT.zip AgenPer_TXT.zip AgenPerc_TXT.zip AgenPercComb_TXT.zip padron_reducido_ruc.zip; do
+            for b in https://www.sunat.gob.pe/descargaPRR https://www2.sunat.gob.pe; do
+              curl -sS -A "$UA" --max-time 30 -o /dev/null -I -w "%{http_code} %{content_type} len=%header{content-length} $b/$f\n" "$b/$f" || true
+            done
+          done
