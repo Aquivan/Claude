@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<Invoice xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ccts="urn:oasis:names:specification:ubl:schema:xsd:CoreComponentParameters-2" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" xmlns:qdt="urn:oasis:names:specification:ubl:schema:xsd:QualifiedDatatypes-2" xmlns:stat="urn:oasis:names:specification:ubl:schema:xsd:DocumentStatusCode-1.0" xmlns:udt="urn:un:unece:uncefact:data:draft:UnqualifiedDataTypesSchemaModule:2" xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"><ext:UBLExtensions xmlns=""><ext:UBLExtension><ext:ExtensionContent><Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+<SignedInfo>
+  <CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#WithComments"/>
+  <SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha512"/>
+  <Reference URI="">
+    <Transforms>
+      <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+      <Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#WithComments"/>
+    </Transforms>
+    <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+    <DigestValue>1ejFUfk4PhB9hAN3YdM+pvXsWKE=</DigestValue>
+  </Reference>
+</SignedInfo>
+    <SignatureValue>E9hlCSnsDUNwcfur/IfkIpWwc3vxEsJxSGmXyOaRc/UdYXgnY4z4ZoMfO7DNdW+V9p4dEAaUuCU0ij2fVPRBT1VJXRF9XP9La/9kBaPqSwbK0/V/JEY1WhAyqxP+vsWyRDEk0bKUTIVVG6Hvsp4jwCD/8dIxYPmDbSoDRe5uiEP/EDgjzkmR7YOOorT0sV9Cuw6vlB8kdUvB7DEcWuTM3oLzeX1tOqU8lBHuMZN+wTyLr3SDsCuG+KAGRmYDV2pox20f/sAYlZDDEkm37EVbqrW/hvw3xElg/oHdzT/Bis89h9yhV5FJydQXl4XaLW5f8KF6aFxuNw3JUuQnPdZyDQ==</SignatureValue><KeyInfo><X509Data><X509Certificate>MIIFrjCCBJagAwIBAgIIf9Td7Evg0UswDQYJKoZIhvcNAQELBQAwRjEkMCIGA1UEAwwbTGxhbWEucGUgU0hBMjU2IFN0YW5kYXJkIENBMREwDwYDVQQKDAhMTEFNQS5QRTELMAkGA1UEBhMCUEUwHhcNMjQwODA5MTYxNTM5WhcNMjcwODA5MTYxNTAwWjCCAVQxKzApBgNVBAkMIkFWLiBHQVJDSUxBU08gREUgTEEgVkVHQSBOUk8uIDE0NzIxIjAgBgkqhkiG9w0BCQEWE3JtZXphZ0BzdW5hdC5nb2IucGUxQTA/BgNVBAMMOFNVUEVSSU5ULiBOQUMuIERFIEFEVUFOQVMgWSBERSBBRE1JTklTVFJBQ0lPTiBUUklCVVRBUklBMRwwGgYDVQQLDBNBR0VOVEUgQVVUT01BVElaQURPMS4wLAYDVQQLDCVWYWxpZGFkbyBwb3IgQUJDIElERU5USURBRCBESUdJVEFMIEVSMVQwUgYDVQQKDEtTVVBFUklOVEVOREVOQ0lBIE5BQ0lPTkFMIERFIEFEVUFOQVMgWSBERSBBRE1JTklTVFJBQ0lPTiBUUklCVVRBUklBIC0gU1VOQVQxDTALBgNVBAcMBExJTUExCzAJBgNVBAYTAlBFMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1apapJOwMj9tBpgKAgjRwIloUk+xwvQZxc0s/4yl4mDSrc/F/PKZ3QBmKb43fFwivqPUvsr68fQTfyLKM14B+xXwlbQ/yh3+87sMyulLhOPmtSOU0PE8Rw0PsmGVxf1L0HPAPc3Gvuhq4Z9Dx5ByED6s+VppDmncvctlJ/NrzYZCk9H91OinTTPVZrDtbmqnOYra8PaTRoCI9Fmndeo9Oo7esM7KVX9f53NEd/mNQqzAOrgSXthFuBZN7zOsGxJ4ZGrVzHSlCH/jFLgObEizHrqisgL1cxKj8QvbGLUjNtUuTvR5IY6hwRLCxbliTa84BN10E0jC7hhAnnuEIAFJiwIDAQABo4IBjjCCAYowDAYDVR0TAQH/BAIwADAfBgNVHSMEGDAWgBRdiFut62X7/mii5NlvPVdyou8rmTBnBggrBgEFBQcBAQRbMFkwNQYIKwYBBQUHMAKGKWh0dHA6Ly9jcnQubGxhbWEucGUvbGxhbWFwZXN0YW5kYXJkY2EuY2VyMCAGCCsGAQUFBzABhhRodHRwOi8vb2NzcC5sbGFtYS5wZTAeBgNVHREEFzAVgRNybWV6YWdAc3VuYXQuZ29iLnBlMEYGA1UdIAQ/MD0wOwYNKwYBBAGDl3cAAQADATAqMCgGCCsGAQUFBwIBFhxodHRwczovL2xsYW1hLnBlL3JlcG9zaXRvcnkvMB0GA1UdJQQWMBQGCCsGAQUFBwMCBggrBgEFBQcDBDA6BgNVHR8EMzAxMC+gLaArhilodHRwOi8vY3JsLmxsYW1hLnBlL2xsYW1hcGVzdGFuZGFyZGNhLmNybDAdBgNVHQ4EFgQUuRkPCyM25gAu5se9GraC/UO07X8wDgYDVR0PAQH/BAQDAgbAMA0GCSqGSIb3DQEBCwUAA4IBAQBC8+YM7moZ7bKYCS+VzJ8wzydSboWeNuAs2CfkhI8hRMQr1r5WZg8pDlroCslF/r6SjbkrjuDHcGKJTM2riGEjlOD4CLU9VjOP7Td6CIZyJRLaz63pZYOwE0H0weG/PvYpopDZzJ6AXYzZxwYkJ03/x/vwaCss9ZvmsEn2E1xtGbnMe9MEsg8oF0ul3uRn8Qy5gF37fM7YKuF/r4iBS5uSvBcA5J2FbI/PQls7OgICDyb3W16GeluaT9krY5wQxilJSpGVU++nv5NzmRHkquH3ic2It/KP6MZ9X2tfg6FhpF6JaUz7MSY+J0KnDDcfJlhxgnkgoT5tV3Sr6z5PpQH6</X509Certificate><X509IssuerSerial><X509IssuerName>C=PE, O=LLAMA.PE, CN=Llama.pe SHA256 Standard CA</X509IssuerName><X509SerialNumber>9211231144834552139</X509SerialNumber></X509IssuerSerial></X509Data></KeyInfo><Proposito>Cumple proposito</Proposito><Revocacion>Cumple revocacion</Revocacion><TSL>Cumple tsl</TSL><Expiracion>No ha expirado</Expiracion></Signature></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions>
+    <cbc:ID><![CDATA[E001-24]]></cbc:ID>
+    <cbc:IssueDate>2026-07-06</cbc:IssueDate>
+    <cbc:IssueTime>12:07:51</cbc:IssueTime>
+    <cbc:ExpiryDate/>
+    
+    <cbc:InvoiceTypeCode>01</cbc:InvoiceTypeCode>
+        <cbc:Note><![CDATA[DOS MIL DIEZ CON 00/100 SOLES]]></cbc:Note>
+    <cac:OrderReference>
+        <cbc:ID><![CDATA[E001-24]]></cbc:ID>
+        <cac:DocumentReference>
+            <cbc:ID><![CDATA[0]]></cbc:ID>
+            <cbc:IssueDate>2026-07-06</cbc:IssueDate>
+            <cbc:DocumentTypeCode>0</cbc:DocumentTypeCode>
+            <cbc:DocumentType><![CDATA[-]]></cbc:DocumentType>
+        </cac:DocumentReference>
+    </cac:OrderReference>
+
+	<cac:Signature>			
+		<cbc:ID><![CDATA[0001-0001]]></cbc:ID>		
+		<cac:SignatoryParty>		
+			<cac:PartyName>	
+				<cbc:Name><![CDATA[-]]></cbc:Name>
+			</cac:PartyName>	
+		</cac:SignatoryParty>		
+		<cac:DigitalSignatureAttachment>		
+			<cac:ExternalReference>	
+				<cbc:URI>sunatSign</cbc:URI>
+			</cac:ExternalReference>	
+		</cac:DigitalSignatureAttachment>		
+	</cac:Signature>			
+
+    <cac:AccountingSupplierParty>
+        <cbc:CustomerAssignedAccountID>10722603261</cbc:CustomerAssignedAccountID>
+        <cac:Party>
+            <cac:PartyName>
+                <cbc:Name><![CDATA[AYQUI AGUILAR NOEMI GEOVANNA]]></cbc:Name>
+            </cac:PartyName>
+            <cac:PostalAddress>
+                <cbc:StreetName><![CDATA[MZA. F LOTE. 18 VILLA DEL MAR]]></cbc:StreetName>
+                <cbc:BuildingNumber>ILO</cbc:BuildingNumber>
+                <cbc:CityName><![CDATA[ILO]]></cbc:CityName>
+                <cbc:CountrySubentity><![CDATA[MOQUEGUA]]></cbc:CountrySubentity>
+                <cac:Country>
+        	   		<cbc:IdentificationCode>PE</cbc:IdentificationCode>
+                </cac:Country>
+            </cac:PostalAddress>
+            <cac:Contact>
+                <cbc:Telephone>-</cbc:Telephone>
+            </cac:Contact>
+        </cac:Party>
+    </cac:AccountingSupplierParty>
+
+    <cac:AccountingCustomerParty>
+        <cbc:CustomerAssignedAccountID>20447969531</cbc:CustomerAssignedAccountID>
+        <cbc:AdditionalAccountID>6</cbc:AdditionalAccountID>
+        <cac:Party>
+            <cac:PartyName>
+                <cbc:Name><![CDATA[CORPORACION GRANIX E.I.R.L.]]></cbc:Name>
+            </cac:PartyName>
+            <cac:PostalAddress>
+                <cbc:StreetName><![CDATA[---- POLIGONO INDUSTRIAL APIRA MZA. B LOTE. 1]]></cbc:StreetName>
+                <cbc:BuildingNumber>JULIACA</cbc:BuildingNumber>
+                <cbc:CityName><![CDATA[SAN ROMAN]]></cbc:CityName>
+                <cbc:CountrySubentity><![CDATA[PUNO]]></cbc:CountrySubentity>
+                <cac:Country>
+                    <cbc:IdentificationCode>PE</cbc:IdentificationCode>
+                </cac:Country>
+            </cac:PostalAddress>
+            <cac:Contact>
+                <cbc:Telephone>-</cbc:Telephone>
+            </cac:Contact>
+        </cac:Party>
+    </cac:AccountingCustomerParty>
+
+	<cac:PaymentTerms>
+		<cbc:ID><![CDATA[FormaPago]]></cbc:ID>
+		<cbc:PaymentMeansID>Contado</cbc:PaymentMeansID>
+	</cac:PaymentTerms>
+
+	 <cac:TaxTotal>
+        <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
+        <cac:TaxSubtotal>
+            <cbc:TaxableAmount currencyID="PEN">2010.00</cbc:TaxableAmount>
+            <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
+            <cac:TaxCategory>
+                <cbc:ID><![CDATA[A]]></cbc:ID>
+                <cac:TaxScheme/>
+            </cac:TaxCategory>
+        </cac:TaxSubtotal>
+    </cac:TaxTotal>
+    
+    <cac:LegalMonetaryTotal>
+        <cbc:LineExtensionAmount currencyID="PEN">0.00</cbc:LineExtensionAmount>
+        <cbc:TaxExclusiveAmount currencyID="PEN">0.00</cbc:TaxExclusiveAmount>
+        <cbc:PayableAmount currencyID="PEN">2010.00</cbc:PayableAmount>
+    </cac:LegalMonetaryTotal>
+    
+    <cac:InvoiceLine>
+        <cbc:ID><![CDATA[0001]]></cbc:ID>
+        <cbc:Note><![CDATA[-]]></cbc:Note>
+        <cbc:InvoicedQuantity unitCode="ZZ">0.00</cbc:InvoicedQuantity> 
+        <cbc:LineExtensionAmount currencyID="PEN">0.00</cbc:LineExtensionAmount>
+        <cac:OrderLineReference>
+            <cbc:LineID>1</cbc:LineID>
+        </cac:OrderLineReference>
+	        <cac:TaxTotal>
+	                    <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
+	                    <cac:TaxSubtotal>
+	                        <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>                 
+	                        <cbc:Percent>8.00</cbc:Percent>
+	                        <cac:TaxCategory>
+	                            <cbc:ID><![CDATA[RET 4TA]]></cbc:ID>
+	                            <cbc:Name/>
+	                            <cac:TaxScheme/>
+	                        </cac:TaxCategory>
+	                    </cac:TaxSubtotal>
+	        </cac:TaxTotal>
+	        <cac:Item>
+	            <cbc:Description><![CDATA[envasado de pan]]></cbc:Description>
+	        </cac:Item>
+	        <cac:Price>
+	            <cbc:PriceAmount currencyID="PEN">2010.00</cbc:PriceAmount>
+	        </cac:Price>
+    </cac:InvoiceLine>
+
+</Invoice>
