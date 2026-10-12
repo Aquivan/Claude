@@ -39,23 +39,26 @@ def main():
     sol.pedir(MENU, {"action": "prevApp"})
     _, menu = sol.pedir(MENU)
     print("Menú:", len(menu), "chars")
-    codigos = {}
-    for m in re.finditer(r"[Hh]onorario", menu):
-        trozo = menu[max(0, m.start() - 400):m.start() + 400]
-        for c in re.findall(r"\b(\d{1,2}(?:\.\d{1,2}){2,6})\b", trozo):
-            codigos[c] = 1
-        print("--- menú:", re.sub(r"\s+", " ", html.unescape(trozo))[:800])
-    # Todas las opciones con su nombre (formato del menú: código y texto cercanos)
-    print("\nOPCIONES CON 'Honorario' / 'Recibo':")
-    for m in re.finditer(r'(\d{1,2}(?:\.\d{1,2}){3,6})[^<>{}]{0,200}?(Recibo[^"<]{0,120}|Honorario[^"<]{0,120})', menu):
-        print("  ", m.group(1), "→", texto(m.group(2))[:120])
-    for c in sorted(codigos):
-        if c.count(".") < 3:
-            continue
+    items = []
+    for m in re.finditer(r'\{"name":"([\d.]+)","description":"([^"]*)"([^{}]*)\}', menu):
+        url = (re.search(r'"url":"([^"]*)"', m.group(3)) or [None, ""])[1].replace("\\/", "/")
+        tags = (re.search(r'"tags":"([^"]*)"', m.group(3)) or [None, ""])[1]
+        items.append((m.group(1), m.group(2), url, tags))
+    print("\nOPCIONES de Recibos por Honorarios / 4ta categoría:")
+    elegidas = []
+    for c, d, u, tg in items:
+        txt = (c + " " + d + " " + u + " " + tg).lower()
+        if c.startswith("11.5.") or "honorario" in txt or "rhe" in txt.split() or "cuarta" in txt:
+            print("  ", c, "|", d, "|", u)
+            if u and ("consult" in txt or "reporte" in txt or "recibid" in txt or "usuario" in txt):
+                elegidas.append(c)
+    for c in elegidas[:8]:
         sol.pedir(MENU, {"action": "prevApp"})
         _, t = sol.pedir(f"{MENU}?action=execute&code={c}")
-        if "honorario" in t.lower() or "recibo" in t.lower():
-            mostrar_pagina(c, t, sol.ultima_url)
+        mostrar_pagina(c, t, sol.ultima_url)
+        # funciones JS que llaman al servidor
+        for m in re.finditer(r"(url\s*:\s*['\"][^'\"]+['\"]|action\s*=\s*['\"][^'\"]+['\"]|accion=[A-Za-z0-9_]+)", t):
+            print("  JS:", m.group(0)[:150])
 
 
 if __name__ == "__main__":
