@@ -1,0 +1,183 @@
+# Descarga automatica del MES ANTERIOR (registro SIRE de compras y ventas)
+# ------------------------------------------------------------
+# Todos los dias a la 1:00 AM hora Peru este workflow lee el interruptor
+# sire_mes_anterior.json (raiz del repo). Si esta activo y HOY es uno de sus
+# "dias" (por defecto 3 y 11), dispara "SIRE completo" (sire-cadena-completa)
+# con periodo = mes anterior, para todas las empresas activas. SUNAT entrega
+# la PROPUESTA si el periodo aun no se presento (o la aceptada si ya se
+# presento); la hoja la recibe sola como siempre (Propuesta AAAAMM.zip).
+#
+# Cambiar el interruptor (sin editar codigo):
+#   - Aqui: Actions > "SIRE mes anterior" > Run workflow > accion:
+#       ver | activar | desactivar | cambiar (dias y/o pdf_xml) | descargar-ahora
+#   - Desde la hoja: menu SIRE SUNAT > "📅 Descarga automatica del mes anterior"
+#   - O editando sire_mes_anterior.json a mano en GitHub.
+# Cambiar la HORA: editar el cron de abajo (hora Peru + 5 = hora UTC).
+# ------------------------------------------------------------
+
+name: SIRE mes anterior (automatico)
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 1:00 AM Peru, todos los dias (solo descarga en los "dias" del interruptor)
+  workflow_dispatch:
+    inputs:
+      accion:
+        description: "ver = solo mostrar el estado. activar / desactivar el interruptor. cambiar = cambiar dias y/o PDF. descargar-ahora = bajar YA el mes anterior."
+        required: true
+        default: "ver"
+        type: choice
+        options:
+          - ver
+          - activar
+          - desactivar
+          - cambiar
+          - descargar-ahora
+      dias:
+        description: "Para activar/cambiar: dias del mes separados por coma, del 1 al 28 (ej. 3,11 o solo 11). Vacio = no cambia."
+        required: false
+        default: ""
+      pdf_xml:
+        description: "Para activar/cambiar: ninguno = solo el registro (propuesta). ambos/compra/venta = ademas baja PDF/XML. Vacio = no cambia."
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - ninguno
+          - ambos
+          - compra
+          - venta
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sire-mes-anterior
+  cancel-in-progress: false
+
+jobs:
+  mes_anterior:
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    steps:
+      - name: Checkout (rama principal, donde vive el interruptor)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Leer (o cambiar) el interruptor
+        id: cfg
+        env:
+          ACCION: ${{ inputs.accion || 'programado' }}
+          DIAS: ${{ inputs.dias }}
+          PDF: ${{ inputs.pdf_xml }}
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, re
+          from datetime import datetime, timedelta, timezone
+
+          ruta = 'sire_mes_anterior.json'
+          base = {"activo": False, "dias": [3, 11], "tipo": "ambos", "pdf_xml": "ninguno"}
+          try:
+              cfg = json.load(open(ruta, encoding='utf-8'))
+          except FileNotFoundError:
+              cfg = dict(base)
+          for k, v in base.items():
+              cfg.setdefault(k, v)
+
+          accion = os.environ['ACCION']
+          dias_txt = os.environ.get('DIAS', '').strip()
+          pdf = os.environ.get('PDF', '').strip()
+          antes = json.dumps(cfg, sort_keys=True)
+          if accion == 'activar':
+              cfg['activo'] = True
+          elif accion == 'desactivar':
+              cfg['activo'] = False
+          if accion in ('activar', 'cambiar'):
+              if dias_txt:
+                  dias = sorted({int(x) for x in re.findall(r'\d+', dias_txt)})
+                  if not dias or any(d < 1 or d > 28 for d in dias):
+                      raise SystemExit('ERROR: los dias deben ser numeros del 1 al 28 (ej. 3,11).')
+                  cfg['dias'] = dias
+              if pdf:
+                  cfg['pdf_xml'] = pdf
+          cambio = json.dumps(cfg, sort_keys=True) != antes
+          if cambio:
+              with open(ruta, 'w', encoding='utf-8') as f:
+                  json.dump(cfg, f, ensure_ascii=False, indent=2)
+                  f.write('\n')
+
+          lima = datetime.now(timezone(timedelta(hours=-5)))
+          primero = lima.replace(day=1)
+          periodo = (primero - timedelta(days=1)).strftime('%Y%m')
+          dias = [int(d) for d in cfg['dias']]
+          toca = accion == 'descargar-ahora' or (accion == 'programado' and cfg['activo'] and lima.day in dias)
+
+          estado = 'ACTIVO' if cfg['activo'] else 'DESACTIVADO'
+          resumen = [
+              f"### Descarga automatica del mes anterior: **{estado}**",
+              f"- Dias del mes: {', '.join(str(d) for d in dias)} a la 1:00 AM (hora Peru)",
+              f"- Registros: {cfg['tipo']} · PDF/XML: {cfg['pdf_xml']}",
+              f"- Hoy (Lima): {lima.strftime('%d/%m/%Y')} -> " + (f"se descarga el periodo **{periodo}**" if toca else "hoy no toca descargar"),
+          ]
+          if cambio:
+              resumen.append(f"- Interruptor actualizado por la accion '{accion}'.")
+          print('\n'.join(resumen))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
+              f.write('\n'.join(resumen) + '\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"cambio={'true' if cambio else 'false'}\n")
+              f.write(f"toca={'true' if toca else 'false'}\n")
+              f.write(f"periodo={periodo}\n")
+              f.write(f"tipo={cfg['tipo']}\n")
+              f.write(f"pdf={cfg['pdf_xml']}\n")
+          PYEOF
+
+      - name: Guardar el interruptor en el repo
+        if: steps.cfg.outputs.cambio == 'true'
+        env:
+          RAMA: ${{ github.event.repository.default_branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sire_mes_anterior.json
+          git commit -m "SIRE mes anterior: interruptor actualizado (${{ inputs.accion }}) [skip ci]"
+          for intento in 1 2 3 4; do
+            git push origin "HEAD:$RAMA" && exit 0
+            sleep $((intento * 5))
+            git pull --rebase origin "$RAMA"
+          done
+          echo "::error::No se pudo guardar el interruptor."
+          exit 1
+
+      # La descarga diaria normal (mes actual) tambien corre a la 1:00 AM.
+      # Se espera a que termine para no correr dos descargas a la vez.
+      - name: Esperar a que termine la descarga diaria
+        if: steps.cfg.outputs.toca == 'true' && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sleep 600
+          for i in $(seq 1 34); do
+            ocupado=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow sire-cadena-completa.yml --limit 20 \
+              --json status --jq '[.[] | select(.status != "completed")] | length')
+            if [ "$ocupado" = "0" ]; then echo "Libre, se sigue."; exit 0; fi
+            echo "Hay $ocupado corrida(s) de SIRE en curso, espero 5 min..."
+            sleep 300
+          done
+          echo "Se espero lo maximo; se dispara igual."
+
+      - name: Disparar la descarga del mes anterior
+        if: steps.cfg.outputs.toca == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RAMA: ${{ github.event.repository.default_branch }}
+        run: |
+          gh workflow run sire-cadena-completa.yml --repo "$GITHUB_REPOSITORY" --ref "$RAMA" \
+            -f periodo="${{ steps.cfg.outputs.periodo }}" \
+            -f tipo="${{ steps.cfg.outputs.tipo }}" \
+            -f modo=completo \
+            -f descarga_pdf_xml="${{ steps.cfg.outputs.pdf }}"
+          echo "Disparado: SIRE completo, periodo ${{ steps.cfg.outputs.periodo }} (todas las empresas activas)." | tee -a "$GITHUB_STEP_SUMMARY"

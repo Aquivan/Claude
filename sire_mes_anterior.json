@@ -1,0 +1,7 @@
+{
+  "_ayuda": "Interruptor de la descarga automatica del MES ANTERIOR (registro SIRE: propuesta, o aceptada si ya se presento). La revisa el workflow sire-mes-anterior.yml todos los dias a la 1:00 AM hora Peru y solo descarga si hoy es uno de 'dias'. activo: true/false. dias: dias del mes (1 a 28), ej. [3, 11] o [11]. tipo: ambos/compra/venta. pdf_xml: ninguno (solo el registro) o ambos/compra/venta (ademas baja PDF/XML de cada comprobante). Se puede cambiar aqui a mano, desde GitHub (Actions > SIRE mes anterior > Run workflow) o desde la hoja (menu SIRE SUNAT > Descarga automatica del mes anterior).",
+  "activo": true,
+  "dias": [3, 11],
+  "tipo": "ambos",
+  "pdf_xml": "ninguno"
+}
