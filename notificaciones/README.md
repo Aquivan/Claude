@@ -19,7 +19,8 @@ notificación (opcional), en una hoja de Google Sheets.
 
    Guarda en `notificaciones/datos/<RUC>/notificaciones.csv`, `mensajes.csv` y
    `<AAAA>/<MM>/*.pdf`. Corre solo dos veces al día (~7:07 a. m. y ~4:07 p. m. de
-   Lima) y a mano: empresa (o todas), PDF sí/no, adjuntos de mensajes sí/no.
+   Lima, últimos 3 meses) y a mano: **desde qué mes o fecha** (AAAAMM o dd/mm/aaaa, vacío = todo),
+   empresa (o todas), PDF sí/no, adjuntos de mensajes sí/no.
    Cada notificación queda clasificada: Orden de Pago, Resolución de Ejecución
    Coactiva, Resolución de Conclusión, Carta, Requerimiento, Esquela, etc., con su N°.
 2. **La hoja "Notificaciones · Grupo"** (`notificaciones/apps_script/`, menú 📬 Notificaciones):

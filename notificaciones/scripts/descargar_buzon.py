@@ -21,7 +21,8 @@ buzón (día hábil siguiente), se lea o no. La lista sola NO marca nada.
 Las claves SOL llegan por variables de entorno (SUNAT_RUC, SUNAT_USUARIO,
 SUNAT_CLAVE) y nunca se imprimen.
 
-Uso:  python descargar_buzon.py [--salida notificaciones/datos] [--sin-pdf] [--pdf-mensajes]
+Uso:  python descargar_buzon.py [--desde 202601 | 15/03/2026] [--salida notificaciones/datos] [--sin-pdf] [--pdf-mensajes]
+      --desde: solo lo publicado desde ese mes (AAAAMM) o fecha (dd/mm/aaaa). Vacío = todo.
 """
 import argparse
 import csv
@@ -104,14 +105,22 @@ class Buzon:
         for c, d in re.findall(r"id=['\"]Etiq_(\w+)['\"][^>]*name=['\"]([^'\"]+)['\"]", master):
             self.etiquetas.setdefault(c, arreglar(d))
 
-    def lista(self, tipo):
+    def lista(self, tipo, desde=None):
+        """La lista viene de la más reciente a la más antigua: se corta al pasar la fecha 'desde'."""
         filas, pagina, total = [], 1, 1
         while pagina <= total:
             st, t = self.sol.pedir(f"{VISOR}/listNotiMenPag?tipoMsj={tipo}&codCarpeta=00&codEtiqueta=&page={pagina}"
                                    f"&des_asunto=&codMensaje=&tipoOrden=NADA", headers=self.h)
             d = json.loads(t)
             total = int(d.get("total") or 1)
-            filas += d.get("rows") or []
+            rows = d.get("rows") or []
+            if desde:
+                dentro = [r for r in rows if (fecha_clave(r.get("fecPublica")) or "99999999") >= desde]
+                filas += dentro
+                if len(dentro) < len(rows):
+                    break
+            else:
+                filas += rows
             pagina += 1
             time.sleep(0.5)
         return filas
@@ -131,6 +140,27 @@ class Buzon:
                 return b
             time.sleep(2 * (intento + 1))
         return None
+
+
+def fecha_clave(s):
+    """'05/10/2026 21:34:56' → '20261005'."""
+    m = re.match(r"(\d{2})/(\d{2})/(\d{4})", str(s or ""))
+    return f"{m.group(3)}{m.group(2)}{m.group(1)}" if m else ""
+
+
+def desde_clave(s):
+    """'202601' → '20260101'; '15/03/2026' → '20260315'; vacío → None."""
+    s = (s or "").strip()
+    if not s:
+        return None
+    if re.fullmatch(r"\d{6}", s):
+        return s + "01"
+    m = re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", s)
+    if m:
+        return f"{m.group(3)}{int(m.group(2)):02d}{int(m.group(1)):02d}"
+    if re.fullmatch(r"\d{8}", s):
+        return s
+    raise SystemExit(f"--desde no válido: {s} (use AAAAMM o dd/mm/aaaa)")
 
 
 def nombre_archivo(s):
@@ -158,6 +188,7 @@ def guardar(ruta, filas):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--salida", default="notificaciones/datos")
+    ap.add_argument("--desde", default="", help="AAAAMM o dd/mm/aaaa; vacío = todo")
     ap.add_argument("--sin-pdf", action="store_true", help="no abrir notificaciones ni bajar sus PDF")
     ap.add_argument("--pdf-mensajes", action="store_true", help="bajar también los adjuntos de los MENSAJES")
     a = ap.parse_args()
@@ -168,12 +199,13 @@ def main():
     sol.login(ruc, usuario, clave)
     bz = Buzon(sol, ruc)
     carpeta = os.path.join(a.salida, ruc)
-    print(f"Empresa {ruc}: buzón abierto. PDF de notificaciones: {'no' if a.sin_pdf else 'sí'}")
+    desde = desde_clave(a.desde)
+    print(f"Empresa {ruc}: buzón abierto. Desde: {desde or 'todo'}. PDF de notificaciones: {'no' if a.sin_pdf else 'sí'}")
     for tipo, nombre, con_pdf in [("2", "notificaciones", not a.sin_pdf), ("1", "mensajes", a.pdf_mensajes)]:
         ruta = os.path.join(carpeta, f"{nombre}.csv")
         previo = leer_previo(ruta)
         filas, nuevas, pdfs = [], 0, 0
-        for r in bz.lista(tipo):
+        for r in bz.lista(tipo, desde):
             cod = str(r.get("codMensaje"))
             asunto = arreglar(r.get("desAsunto"))
             fila = {
@@ -208,6 +240,8 @@ def main():
                     print(f"   {cod}: no se pudo bajar el adjunto ({e})")
                 fila["archivos"] = ";".join(guardados)
             filas.append(fila)
+        vistos = {f["codigo"] for f in filas}
+        filas += [r for c, r in previo.items() if c not in vistos and desde and fecha_clave(r.get("fecha_publicacion")) < desde]
         guardar(ruta, filas)
         print(f"  {nombre}: {len(filas)} (nuevas {nuevas})" + (f" · PDF bajados {pdfs}" if con_pdf else ""))
 

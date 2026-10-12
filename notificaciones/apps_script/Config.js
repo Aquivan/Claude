@@ -25,7 +25,7 @@ var NOT_MESES_CARPETA = ['01_Enero', '02_Febrero', '03_Marzo', '04_Abril', '05_M
 var NOT_PARAMETROS = [
   ['Repositorio', 'Aquivan/Claude', 'Dueño/nombre del repositorio de GitHub donde se guardan los datos.'],
   ['Rama', 'claude/python-codes-izve18', 'Rama del repositorio que se lee.'],
-  ['Desde (AAAAMM)', '202501', 'Se muestran las notificaciones publicadas desde este mes (las anteriores quedan guardadas, solo no se listan).'],
+  ['Desde (AAAAMM)', '202501', 'Se muestran en la hoja las notificaciones publicadas desde este mes, y es el valor por defecto al pedir a SUNAT con "desde un mes o fecha".'],
   ['Carpeta de PDF', 'PDF Notificaciones', 'Nombre de la carpeta (junto a esta hoja) donde se ordenan los PDF.'],
   ['Descargar PDF de SUNAT', 'SI', 'SI = al pedir a SUNAT lo nuevo también baja el PDF de cada notificación nueva (SUNAT la marca como leída, igual que al abrirla). NO = solo la lista.'],
   ['Copiar PDF a Drive', 'SI', 'SI = copia a Drive los PDF ya descargados, ordenados por empresa / año / mes. NO = no copia.'],
@@ -40,7 +40,7 @@ function onOpen() {
     .addItem('📁 Solo ordenar PDF en Drive', 'NOT_menuOrdenarPdf')
     .addSeparator()
     .addItem('⬇ Pedir a SUNAT lo nuevo (GitHub)', 'NOT_menuPedirDescarga')
-    .addItem('⬇ Pedir a SUNAT: una empresa o sin PDF…', 'NOT_menuPedirRango')
+    .addItem('⬇ Pedir a SUNAT: desde un mes o fecha, una empresa, con o sin PDF…', 'NOT_menuPedirRango')
     .addSeparator()
     .addItem('⏰ Activar actualización diaria', 'NOT_activarDiario')
     .addItem('⏸ Desactivar actualización diaria', 'NOT_desactivarDiario')

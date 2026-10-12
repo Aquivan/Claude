@@ -16,6 +16,10 @@ on:
         description: "RUC de una empresa, o 'todas' (las activas de empresas.json)"
         required: true
         default: "todas"
+      desde:
+        description: "Desde qué mes (AAAAMM) o fecha (dd/mm/aaaa). Vacío = todo el buzón"
+        required: false
+        default: ""
       pdf:
         description: "Bajar el PDF de cada notificación (la marca como leída en SOL)"
         type: boolean
@@ -75,11 +79,14 @@ jobs:
           SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
           PDF: ${{ inputs.pdf }}
           PDF_MENSAJES: ${{ inputs.pdf_mensajes }}
+          DESDE: ${{ inputs.desde }}
         run: |
+          # Corrida automática: los últimos 3 meses (lo anterior ya quedó guardado).
+          if [ "${{ github.event_name }}" = "schedule" ]; then DESDE=$(TZ=America/Lima date -d "$(TZ=America/Lima date +%Y-%m-01) -2 month" +%Y%m); fi
           extra=""
           if [ "$PDF" = "false" ]; then extra="$extra --sin-pdf"; fi
           if [ "$PDF_MENSAJES" = "true" ]; then extra="$extra --pdf-mensajes"; fi
-          python3 notificaciones/scripts/descargar_buzon.py --salida notificaciones/datos $extra
+          python3 notificaciones/scripts/descargar_buzon.py --salida notificaciones/datos --desde "$DESDE" $extra
 
       - name: Guardar en el repositorio
         if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.guardar) }}
