@@ -36,3 +36,4 @@ Nunca se imprimen claves SOL ni tokens. No toca otros proyectos.
 - `scripts/descargar_rhe.py` — descargador (reusa el inicio de sesión SOL de `retenciones/scripts/descargar_cre.py`).
 - `apps_script/` — Config.js (menú y parámetros), GitHub.js (lectura del repo y pedidos de descarga), Hojas.js (pestañas), Drive.js (PDF a Drive).
 - Despliegue: `.github/workflows/deploy-honorarios.yml` (clasp, igual que Retenciones).
+- Hoja: https://docs.google.com/spreadsheets/d/1-dJiKLIFfcVt5htxp7sewCMfy1ne9WUzD1PWKYuc_wk (carpeta Drive "Honorarios · Grupo").
