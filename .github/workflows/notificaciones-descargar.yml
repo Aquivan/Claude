@@ -1,0 +1,101 @@
+# Proyecto "Notificaciones · Grupo" (carpeta notificaciones/). Descarga del Buzón
+# Electrónico de SUNAT SOL la lista de NOTIFICACIONES y MENSAJES, y los PDF de las
+# notificaciones si se pide, de una empresa o de todas las activas de empresas.json.
+# Solo escribe en notificaciones/datos/. No toca ningún otro proyecto.
+# Nunca imprime claves. Bajar el PDF marca la notificación como "leída" en SOL.
+
+name: Notificaciones - descargar Buzón Electrónico (SUNAT SOL)
+
+on:
+  # Todos los días ~7:07 a. m. y ~4:07 p. m. de Lima, todas las empresas (con PDF de notificaciones).
+  schedule:
+    - cron: '7 12,21 * * *'
+  workflow_dispatch:
+    inputs:
+      empresa:
+        description: "RUC de una empresa, o 'todas' (las activas de empresas.json)"
+        required: true
+        default: "todas"
+      pdf:
+        description: "Bajar el PDF de cada notificación (la marca como leída en SOL)"
+        type: boolean
+        default: true
+      pdf_mensajes:
+        description: "Bajar también los adjuntos de los MENSAJES"
+        type: boolean
+        default: false
+      guardar:
+        description: "Guardar en el repositorio (notificaciones/datos/)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  empresas:
+    runs-on: ubuntu-latest
+    outputs:
+      lista: ${{ steps.e.outputs.lista }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: empresas.json
+          sparse-checkout-cone-mode: false
+      - id: e
+        env:
+          EMPRESA: ${{ inputs.empresa || 'todas' }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          sel = os.environ["EMPRESA"].strip()
+          emp = [e for e in json.load(open("empresas.json"))["empresas"] if e.get("activo")]
+          rucs = [e["ruc"] for e in emp] if sel.lower() == "todas" else [sel]
+          print("lista=" + json.dumps(rucs))
+          PY
+          cat "$GITHUB_OUTPUT"
+
+  descargar:
+    needs: empresas
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        ruc: ${{ fromJson(needs.empresas.outputs.lista) }}
+    environment: ${{ matrix.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Descargar buzón (notificaciones y mensajes)
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          PDF: ${{ inputs.pdf }}
+          PDF_MENSAJES: ${{ inputs.pdf_mensajes }}
+        run: |
+          extra=""
+          if [ "$PDF" = "false" ]; then extra="$extra --sin-pdf"; fi
+          if [ "$PDF_MENSAJES" = "true" ]; then extra="$extra --pdf-mensajes"; fi
+          python3 notificaciones/scripts/descargar_buzon.py --salida notificaciones/datos $extra
+
+      - name: Guardar en el repositorio
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.guardar) }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          [ -d notificaciones/datos ] || { echo "Sin datos para guardar."; exit 0; }
+          git add notificaciones/datos
+          git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
+          git commit -m "Notificaciones buzon ${{ matrix.ruc }} [skip ci]"
+          logrado=0
+          for intento in 1 2 3 4 5; do
+            if git push; then logrado=1; break; fi
+            echo "Push rechazado, reintentando con rebase (intento $intento)..."
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep $((intento * 3))
+          done
+          [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir notificaciones/datos"; exit 1; }
