@@ -1,0 +1,33 @@
+# SONDEO (solo lectura) del proyecto "Honorarios · Grupo" (carpeta honorarios/).
+# Entra a SOL de UNA empresa y muestra las opciones de Recibos por Honorarios
+# (recibidos) y cómo se consultan. No descarga ni guarda nada. Nunca imprime claves.
+name: Honorarios - sondeo SUNAT (solo lectura)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa (su Environment con claves SOL)"
+        required: true
+        default: "20447969531"
+
+permissions:
+  contents: read
+
+jobs:
+  sondeo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            honorarios/scripts
+            retenciones/scripts
+      - name: Sondeo
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+        run: python honorarios/scripts/sondeo.py
