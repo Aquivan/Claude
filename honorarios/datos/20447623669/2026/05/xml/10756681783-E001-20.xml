@@ -1,0 +1,73 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+
+
+<HEAD><TITLE>.:: Pagina de Error ::.</TITLE></HEAD>
+<style>
+BODY {font-style:normal;font-size:10pt;font-family:Verdana,Arial,Helvetica,sans-serif;}
+H1 {font-size:16pt;color:Navy;}
+A {color:Navy;}
+.msg {
+	font-weight : bold;
+	font-size:12pt;
+	color:Black;
+	background-image : url(/a/imagenes/msg/error.gif);
+	background-repeat : no-repeat;
+	background-position : left;
+	padding-left : 50px;
+	height : 50px;
+	padding-top : 10px; 
+}
+.msg2 {
+	font-weight : bold;
+	font-size:12pt;
+	color:Black;
+}
+.error {font-style:bold;font-size:12pt;color:Red;
+  text-indent: 50px;
+	text-align : justify;
+}
+.datos {font-size:10pt;}
+.soluc {font-size:12pt;}
+.cuerpo {
+  border : 1px solid Blue;
+  padding : 10px 10px 10px 10px;
+}
+.form-button {border-color:#69C;border-style:solid;border-width:1px;cursor:hand}
+</style>
+<script language="JavaScript1.2">
+function retornar(){
+   if (history.length>0){
+      document.write("<div align='LEFT'><input class='form-button' type='button' value='Anterior' onclick='history.go(-1)'></div>");
+   }
+}
+</script>
+<BODY  bgcolor="#ffffff">
+
+<div class="cuerpo">
+
+<div align="left" class="msg">La aplicaci&oacute;n ha retornado el siguiente problema :</div>
+<p class="error">Surgieron problemas: </p>
+<HR size="1px">
+<div align="left"  class="msg2">Acci&oacute;n a realizar :</div>
+<div align="left" class="soluc">Se produjo un error al grabar el comprobante o documento. Por favor, volver a intentar.
+
+</div>
+<br>
+<div align="left"  class="msg2">Informaci&oacute;n adicional :</div>
+<div class="datos">
+
+</div>
+<HR size="3px" color="#0000ff">
+<script language=JavaScript src="/a/js/js.js"></script>
+<script language="JavaScript1.2" type="text/javascript">
+retornar();
+</script>
+</div>
+</BODY>
+</HTML><script id="f5_cspm">(function(){var f5_cspm={f5_p:'PDJLJNOEJKHMGMMJOEDNGNBFINACDKIHJHDPALLGHIPNAOBNGCEMDDHBALMJDDMPPPABPHFIAANOOAHJBLLALEMIAAOBPKNHGBMDIOMMLCEKJJAHIFOPCFDMOPPKDLIF',setCharAt:function(str,index,chr){if(index>str.length-1)return str;return str.substr(0,index)+chr+str.substr(index+1);},get_byte:function(str,i){var s=(i/16)|0;i=(i&15);s=s*32;return((str.charCodeAt(i+16+s)-65)<<4)|(str.charCodeAt(i+s)-65);},set_byte:function(str,i,b){var s=(i/16)|0;i=(i&15);s=s*32;str=f5_cspm.setCharAt(str,(i+16+s),String.fromCharCode((b>>4)+65));str=f5_cspm.setCharAt(str,(i+s),String.fromCharCode((b&15)+65));return str;},set_latency:function(str,latency){latency=latency&0xffff;str=f5_cspm.set_byte(str,40,(latency>>8));str=f5_cspm.set_byte(str,41,(latency&0xff));str=f5_cspm.set_byte(str,35,2);return str;},wait_perf_data:function(){try{var wp=window.performance.timing;if(wp.loadEventEnd>0){var res=wp.loadEventEnd-wp.navigationStart;if(res<60001){var cookie_val=f5_cspm.set_latency(f5_cspm.f5_p,res);window.document.cookie='f5avr0355484295aaaaaaaaaaaaaaaa_cspm_='+encodeURIComponent(cookie_val)+';path=/;'+'';}
+return;}}
+catch(err){return;}
+setTimeout(f5_cspm.wait_perf_data,100);return;},go:function(){var chunk=window.document.cookie.split(/\s*;\s*/);for(var i=0;i<chunk.length;++i){var pair=chunk[i].split(/\s*=\s*/);if(pair[0]=='f5_cspm'&&pair[1]=='1234')
+{var d=new Date();d.setTime(d.getTime()-1000);window.document.cookie='f5_cspm=;expires='+d.toUTCString()+';path=/;'+';';setTimeout(f5_cspm.wait_perf_data,100);}}}}
+f5_cspm.go();}());</script>
