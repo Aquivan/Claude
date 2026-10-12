@@ -39,26 +39,33 @@ def main():
     sol.pedir(MENU, {"action": "prevApp"})
     _, menu = sol.pedir(MENU)
     print("Menú:", len(menu), "chars")
-    items = []
-    for m in re.finditer(r'\{"name":"([\d.]+)","description":"([^"]*)"([^{}]*)\}', menu):
-        url = (re.search(r'"url":"([^"]*)"', m.group(3)) or [None, ""])[1].replace("\\/", "/")
-        tags = (re.search(r'"tags":"([^"]*)"', m.group(3)) or [None, ""])[1]
-        items.append((m.group(1), m.group(2), url, tags))
-    print("\nOPCIONES de Recibos por Honorarios / 4ta categoría:")
-    elegidas = []
-    for c, d, u, tg in items:
-        txt = (c + " " + d + " " + u + " " + tg).lower()
-        if c.startswith("11.5.") or "honorario" in txt or "rhe" in txt.split() or "cuarta" in txt:
-            print("  ", c, "|", d, "|", u)
-            if u and ("consult" in txt or "reporte" in txt or "recibid" in txt or "usuario" in txt):
-                elegidas.append(c)
-    for c in elegidas[:8]:
+    import calendar
+    URL = "https://ww1.sunat.gob.pe/ol-ti-itreciboelectronico/cpelec001Alias"
+    for per in ["202609", "202608", "202607", "202606", "202605", "202604", "202603", "202602", "202601"]:
+        a, m = int(per[:4]), int(per[4:])
         sol.pedir(MENU, {"action": "prevApp"})
-        _, t = sol.pedir(f"{MENU}?action=execute&code={c}")
-        mostrar_pagina(c, t, sol.ultima_url)
-        # funciones JS que llaman al servidor
-        for m in re.finditer(r"(url\s*:\s*['\"][^'\"]+['\"]|action\s*=\s*['\"][^'\"]+['\"]|accion=[A-Za-z0-9_]+)", t):
-            print("  JS:", m.group(0)[:150])
+        sol.pedir(f"{MENU}?action=execute&code=11.5.1.1.14")
+        datos = [("accion", "CapturaCriterioConsulatRec1"), ("tipocomprobante", "01;02;03;"), ("ruc_emisor", ""),
+                 ("num_serie", ""), ("num_comprob", ""), ("fec_desde", f"01/{m:02d}/{a}"),
+                 ("fec_hasta", f"{calendar.monthrange(a, m)[1]:02d}/{m:02d}/{a}"),
+                 ("tipocomprobante1", "01"), ("tipocomprobante1", "02"), ("tipocomprobante1", "03"), ("tipoestado", "00")]
+        import urllib.parse
+        st, t = sol.pedir(URL, urllib.parse.urlencode(datos).encode())
+        filas = re.findall(r"<tr[^>]*>(.*?)</tr>", t, re.S | re.I)
+        print(f"\n######## {per}: HTTP {st}, {len(t)} chars, {len(filas)} filas <tr>")
+        print("TEXTO:", texto(t)[:700])
+        for f in filas[:12]:
+            celdas = [texto(c) for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", f, re.S | re.I)]
+            if any(celdas):
+                print("  FILA:", " | ".join(celdas)[:300])
+            for l in re.findall(r"(?:href|onclick)=\"([^\"]+)\"", f)[:3]:
+                print("    LINK:", l[:250])
+        if len(filas) > 6:
+            for m2 in re.finditer(r"function\s+(\w+)\s*\(([^)]*)\)\s*\{(.{0,400})", t, re.S):
+                print("  FUNC:", m2.group(1), "(", m2.group(2), ")", re.sub(r"\s+", " ", m2.group(3))[:400])
+            for f in re.finditer(r"<form[^>]*>.*?</form>", t, re.S | re.I):
+                print("  FORM:", re.sub(r"\s+", " ", re.sub(r'value="[^"]{40,}"', 'value="…"', f.group(0)))[:800])
+            break
 
 
 if __name__ == "__main__":
