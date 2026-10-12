@@ -27,7 +27,7 @@ function actualizacionAutomatica() {
 
 // Subir este numero cuando cambie la forma de calcular o escribir, para que la
 // siguiente actualizacion automatica rehaga todo aunque los datos no cambien.
-var VERSION_CALCULO_ = '11';
+var VERSION_CALCULO_ = '12';
 
 function huellaExterna_(ss, cfg, liqs) {
   var partes = ['v' + VERSION_CALCULO_, Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd')]; // cambia de dia: recalcular vencidos
@@ -126,7 +126,7 @@ function actualizarTodoInterno_(forzar) {
     escribirConciliar_(ss, res, cfg); bitacora_(ss, 'Conciliar', t1, res.sugerencias.length + ' sugerencias, ' + res.errores.length + ' avisos, ' + res.sinCruzar.length + ' sin cruzar'); t1 = Date.now();
     escribirOtrosPagos_(ss, res, cfg); bitacora_(ss, 'Otros pagos', t1, res.sinFactura.length + ' pagos sin factura'); t1 = Date.now();
     escribirNoAplicados_(ss, res, cfg); t1 = Date.now();
-    try { var rr = RTN_escribirHoja_(ss, res, cfg, padron, infoPadron); bitacora_(ss, 'Retenciones', t1, rr.proveedores + ' proveedores, ' + rr.porAtender + ' facturas por atender'); }
+    try { var rr = RTN_escribirHoja_(ss, res, cfg, padron, infoPadron); bitacora_(ss, 'Retenciones', t1, rr.proveedores + ' proveedores, ' + rr.facturas + ' facturas sujetas (' + rr.porAtender + ' por atender), ' + rr.vouchers + ' vouchers'); }
     catch (e) { bitacora_(ss, 'Retenciones ERROR', t1, e.message); }
     t1 = Date.now();
     try { escribirSugeridasReasignar_(ss, res, cfg); } catch (e) { bitacora_(ss, 'Reasignar ERROR', t1, e.message); }
