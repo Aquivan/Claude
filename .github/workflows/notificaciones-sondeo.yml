@@ -1,0 +1,33 @@
+# SONDEO (solo lectura) del proyecto "Notificaciones · Grupo" (carpeta notificaciones/).
+# Muestra cómo SOL carga el Buzón Electrónico. No abre mensajes ni descarga adjuntos.
+# Nunca imprime claves.
+name: Notificaciones - sondeo SUNAT (solo lectura)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa (su Environment con claves SOL)"
+        required: true
+        default: "20447969531"
+
+permissions:
+  contents: read
+
+jobs:
+  sondeo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            notificaciones/scripts
+            retenciones/scripts
+      - name: Sondeo
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+        run: python notificaciones/scripts/sondeo.py
