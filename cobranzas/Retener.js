@@ -201,13 +201,15 @@ function RTN_escribirHoja_(ss, res, cfg, padron, infoPadron) {
     .sort(function (a, b) { return a.emp.localeCompare(b.emp) || a.lado.localeCompare(b.lado) || (b.falta + b.pend) - (a.falta + a.pend); })
     .map(function (s) {
       var vMal = Object.keys(s.vouchers).filter(function (x) { return s.vouchers[x]; }).length;
-      return [s.emp, ladoTxt(s.lado), s.cpNom, s.cpRuc, s.n, s.nOk, r2_(s.esperada), r2_(s.retenida),
-        s.nFalta, r2_(s.falta), s.nPend, r2_(s.pend), vMal];
+      // Los N° van como texto: en la vista compacta comparten columna con importes (formato S/).
+      return [s.emp, ladoTxt(s.lado), s.cpNom, s.cpRuc, RTN_n_(s.n), RTN_n_(s.nOk), r2_(s.esperada), r2_(s.retenida),
+        RTN_n_(s.nFalta), r2_(s.falta), RTN_n_(s.nPend), r2_(s.pend), RTN_n_(vMal)];
     });
   detalle.sort(function (a, b) {
     return String(a[0]).localeCompare(b[0]) || String(a[1]).localeCompare(b[1]) || String(a[2]).localeCompare(b[2]) ||
       (a[5] instanceof Date && b[5] instanceof Date ? a[5] - b[5] : String(a[4]).localeCompare(b[4]));
   });
+  detalle.forEach(function (r) { r[5] = r[5] ? fmt(r[5]) : ''; });  // fechas como texto (misma razón)
   var filasVou = Object.keys(vouchers).map(function (k) { return vouchers[k]; })
     .sort(function (a, b) {
       return a.emp.localeCompare(b.emp) || a.lado.localeCompare(b.lado) || a.cpNom.localeCompare(b.cpNom) ||
@@ -216,7 +218,7 @@ function RTN_escribirHoja_(ss, res, cfg, padron, infoPadron) {
     .map(function (v) {
       var sit = v.mal ? (v.lado === 'pagar' ? '🔴 Se pagó sin retener (todo o parte)' : '🔴 Nos pagaron sin retener (todo o parte)')
         : (v.lado === 'pagar' ? '✅ Retenido' : '✅ El cliente retuvo');
-      return [v.emp, ladoTxt(v.lado), v.cpNom, v.cpRuc, v.fecha, v.op, v.banco, v.moneda, v.monto, v.docs.join(', '),
+      return [v.emp, ladoTxt(v.lado), v.cpNom, v.cpRuc, v.fecha ? fmt(v.fecha) : '', v.op, v.banco, v.moneda, v.monto, v.docs.join(', '),
         r2_(v.esperada), r2_(v.retenida), r2_(v.falta), sit, v.fuente, v.mal ? 'F' : 'R'];
     });
 
@@ -287,82 +289,74 @@ function RTN_escribirHoja_(ss, res, cfg, padron, infoPadron) {
   var rango = function (c0, n) { return D + Lt(c0) + '2:' + Lt(c0 + n - 1); };
   var dinero = '#,##0.00;-#,##0.00;"-"';
 
-  // ---- Resumen filtrado
-  var nRes = Math.max(filasRes.length, 1);
+  // ---- Vista compacta: resumen, facturas y vouchers en UNA sola fórmula (VSTACK),
+  // así cada sección empieza justo debajo de la anterior y no quedan filas vacías al filtrar.
   var fTot = fSel + 2;
   fila = fTot + 2;
   sh.getRange(fila, 1).setValue('1) RESUMEN POR EMPRESA Y PROVEEDOR / CLIENTE (solo facturas sujetas a retención)').setFontWeight('bold');
   sh.getRange(fila + 1, 1, 1, encRes.length).setValues([encRes]).setFontWeight('bold').setFontColor(COLOR.BLANCO)
     .setBackground(COLOR.AZUL).setWrap(true).setVerticalAlignment('middle');
   var r0 = fila + 2;
-  sh.getRange(r0, 1).setFormula('=IFERROR(FILTER(' + rango(cR, encRes.length) + sep + ' ' + cond(cR, 0) + ')' + sep + ' "— sin resultados con estos filtros —")');
-  sh.getRange(r0, 5, nRes, 2).setNumberFormat('0;-0;"-"');
-  sh.getRange(r0, 7, nRes, 2).setNumberFormat(dinero);
-  sh.getRange(r0, 9, nRes, 1).setNumberFormat('0;-0;"-"');
-  sh.getRange(r0, 10, nRes, 1).setNumberFormat(dinero).setFontColor('#B91C1C').setFontWeight('bold');
-  sh.getRange(r0, 11, nRes, 1).setNumberFormat('0;-0;"-"');
-  sh.getRange(r0, 12, nRes, 1).setNumberFormat(dinero);
-  sh.getRange(r0, 13, nRes, 1).setNumberFormat('0;-0;"-"').setFontColor('#B91C1C').setFontWeight('bold');
-  // Totales de lo filtrado (encima del resumen)
-  var col = function (c) { return c + r0 + ':' + c + (r0 + nRes - 1); };
+  var enc = function (c0, n) { return D + Lt(c0) + '1:' + Lt(c0 + n - 1) + '1'; };
+  var bloque = function (c0, n, k, vacio) {
+    return 'IFERROR(FILTER(' + rango(c0, n) + sep + ' ' + cond(c0, k) + ')' + sep + ' "' + vacio + '")';
+  };
+  var partes = [
+    bloque(cR, encRes.length, 0, '— sin resultados con estos filtros —'),
+    '""',
+    '"2) FACTURAS UNA POR UNA (según Ver facturas) · ✅ retenida · 🔴 pagada sin retención · 🟠 incompleta · ⏳ retener al pagar"',
+    enc(cD, encDet.length),
+    bloque(cD, encDet.length, kD, '— sin facturas con estos filtros —'),
+    '""',
+    '"3) VOUCHERS / PAGOS DE ESAS FACTURAS (con Por atender salen solo los que tienen retención faltante)"',
+    enc(cV, encVou.length),
+    bloque(cV, encVou.length, kV, '— sin vouchers con estos filtros —'),
+  ];
+  sh.getRange(r0, 1).setFormula('=ARRAYFORMULA(IFNA(VSTACK(' + partes.join(sep + ' ') + ')' + sep + ' ""))');
+  var nTot = filasRes.length + detalle.length + filasVou.length + 10;
+  var cuerpo = sh.getRange(r0, 1, nTot, 15);
+  cuerpo.setNumberFormat(dinero).setVerticalAlignment('middle');
+  sh.getRange(r0, 5, nTot, 2).setHorizontalAlignment('center');
+  sh.getRange(r0, 9, nTot, 1).setHorizontalAlignment('right');
+  sh.getRange(r0, 11, nTot, 1).setHorizontalAlignment('right');
+
+  // Totales de lo filtrado (salen directo de los datos, no de la vista)
   var tot = ['TOTAL de lo filtrado', '', '', ''];
-  for (var c = 5; c <= encRes.length; c++) tot.push('=SUM(' + col(Lt(c)) + ')');
+  for (var c = 5; c <= encRes.length; c++) {
+    tot.push('=IFERROR(SUM(ARRAYFORMULA(IFERROR(VALUE(FILTER(' + D + Lt(cR + c - 1) + '2:' + Lt(cR + c - 1) + sep + ' ' + cond(cR, 0) + '))' +
+      sep + ' 0)))' + sep + ' 0)');
+  }
   sh.getRange(fTot, 1, 1, encRes.length).setValues([tot]).setFontWeight('bold').setBackground('#EEF3F8');
+  sh.getRange(fTot, 5, 1, 9).setNumberFormat('#,##0;-#,##0;"-"');
   sh.getRange(fTot, 7, 1, 2).setNumberFormat(dinero);
   sh.getRange(fTot, 10).setNumberFormat(dinero).setFontColor('#B91C1C');
   sh.getRange(fTot, 12).setNumberFormat(dinero);
   sh.getRange(fTot, 13).setFontColor('#B91C1C');
 
-  // ---- Facturas una por una
-  fila = r0 + nRes + 2;
-  var nDet = Math.max(detalle.length, 1);
-  var fFac = fila;
-  sh.getRange(fila, 1).setValue('2) FACTURAS UNA POR UNA (según "Ver facturas") · ✅ retenida · 🔴 pagada sin retención · 🟠 incompleta · ⏳ retener al pagar')
-    .setFontWeight('bold');
-  sh.getRange(fila + 1, 1, 1, encDet.length).setValues([encDet]).setFontWeight('bold').setFontColor(COLOR.BLANCO)
-    .setBackground(COLOR.AZUL).setWrap(true).setVerticalAlignment('middle');
-  var d0 = fila + 2;
-  sh.getRange(d0, 1).setFormula('=IFERROR(FILTER(' + rango(cD, encDet.length) + sep + ' ' + cond(cD, kD) + ')' + sep +
-    ' "— sin facturas con estos filtros —")');
-  sh.getRange(d0, 6, nDet, 1).setNumberFormat('dd/mm/yyyy');
-  sh.getRange(d0, 8, nDet, 4).setNumberFormat(dinero);
-  sh.getRange(d0, 11, nDet, 1).setFontColor('#B91C1C').setFontWeight('bold');
-
-  // ---- Vouchers que pagaron esas facturas
-  fila = d0 + nDet + 2;
-  var nVou = Math.max(filasVou.length, 1);
-  var fVou = fila;
-  sh.getRange(fila, 1).setValue('3) VOUCHERS / PAGOS DE ESAS FACTURAS (según "Ver facturas": "Por atender" muestra solo los que tienen retención faltante)')
-    .setFontWeight('bold');
-  sh.getRange(fila + 1, 1, 1, encVou.length).setValues([encVou]).setFontWeight('bold').setFontColor(COLOR.BLANCO)
-    .setBackground(COLOR.AZUL).setWrap(true).setVerticalAlignment('middle');
-  var v0 = fila + 2;
-  sh.getRange(v0, 1).setFormula('=IFERROR(FILTER(' + rango(cV, encVou.length) + sep + ' ' + cond(cV, kV) + ')' + sep +
-    ' "— sin vouchers con estos filtros —")');
-  sh.getRange(v0, 5, nVou, 1).setNumberFormat('dd/mm/yyyy');
-  sh.getRange(v0, 9, nVou, 1).setNumberFormat(dinero);
-  sh.getRange(v0, 11, nVou, 3).setNumberFormat(dinero);
-  sh.getRange(v0, 13, nVou, 1).setFontColor('#B91C1C').setFontWeight('bold');
-
-  // Accesos rápidos a cada sección
+  // Accesos rápidos (buscan dónde empieza cada sección según lo filtrado)
   var gid = sh.getSheetId();
-  sh.getRange(fTot + 1, 1, 1, 3).setValues([[
-    '=HYPERLINK("#gid=' + gid + '&range=A' + fFac + '"' + sep + ' "⬇ Ir a 2) Facturas")',
-    '=HYPERLINK("#gid=' + gid + '&range=A' + fVou + '"' + sep + ' "⬇ Ir a 3) Vouchers")',
-    '']]).setFontColor('#1D4ED8').setFontSize(9);
+  var ir = function (marca, texto) {
+    return '=HYPERLINK("#gid=' + gid + '&range=A"&IFERROR(MATCH("' + marca + '*"' + sep + ' $A$' + r0 + ':$A' + sep + ' 0)+' + (r0 - 1) + sep + ' ' + r0 + ')' +
+      sep + ' "' + texto + '")';
+  };
+  sh.getRange(fTot + 1, 1, 1, 2).setValues([[ir('2)', '⬇ Ir a 2) Facturas'), ir('3)', '⬇ Ir a 3) Vouchers')]])
+    .setFontColor('#1D4ED8').setFontSize(9);
 
-  // Colores de la situación
-  var rDet = sh.getRange(d0, 12, nDet, 1), rVou = sh.getRange(v0, 14, nVou, 1);
-  var regla = function (celda, emoji, n, color, rng) {
-    return SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=LEFT(' + celda + sep + n + ')="' + emoji + '"')
-      .setBackground(color).setRanges([rng]).build();
+  // Formato según el contenido (la vista se mueve al filtrar)
+  var A = '$A' + r0;
+  var cf = function (f) { return SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(f); };
+  var regla = function (celda, emoji, n, color) {
+    return cf('=LEFT(' + celda + sep + n + ')="' + emoji + '"').setBackground(color).setRanges([sh.getRange(r0, celda === '$L' + r0 ? 12 : 14, nTot, 1)]).build();
   };
   sh.setConditionalFormatRules([
-    regla('$L' + d0, '🔴', 2, '#FEE2E2', rDet), regla('$L' + d0, '🟠', 2, '#FFEDD5', rDet),
-    regla('$L' + d0, '⏳', 1, '#FEF9C3', rDet), regla('$L' + d0, '✅', 1, '#DCFCE7', rDet),
-    regla('$N' + v0, '🔴', 2, '#FEE2E2', rVou), regla('$N' + v0, '✅', 1, '#DCFCE7', rVou),
+    cf('=' + A + '="Empresa"').setBackground(COLOR.AZUL).setFontColor(COLOR.BLANCO).setBold(true).setRanges([cuerpo]).build(),
+    cf('=OR(LEFT(' + A + sep + '2)="2)"' + sep + ' LEFT(' + A + sep + '2)="3)")').setBackground('#E2E8F0').setBold(true).setRanges([cuerpo]).build(),
+    cf('=LEFT(' + A + sep + '1)="—"').setFontColor(COLOR.TEXTO_SUAVE).setItalic(true).setRanges([cuerpo]).build(),
+    regla('$L' + r0, '🔴', 2, '#FEE2E2'), regla('$L' + r0, '🟠', 2, '#FFEDD5'),
+    regla('$L' + r0, '⏳', 1, '#FEF9C3'), regla('$L' + r0, '✅', 1, '#DCFCE7'),
+    regla('$N' + r0, '🔴', 2, '#FEE2E2'), regla('$N' + r0, '✅', 1, '#DCFCE7'),
   ]);
-  sh.getRange(1, 1, Math.max(sh.getLastRow(), v0 + nVou), 15).setFontSize(9);
+  sh.getRange(1, 1, Math.max(sh.getLastRow(), r0 + nTot), 15).setFontSize(9);
   sh.getRange('A1').setFontSize(15);
   [150, 120, 230, 150, 150, 95, 95, 95, 110, 150, 110, 170, 260, 200, 260].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   sh.setFrozenRows(1);
@@ -392,5 +386,8 @@ function RTN_alEditar_(e) {
     props.setProperty('rtn_filtros', JSON.stringify(v));
   } catch (err) { /* nada */ }
 }
+
+/** N° como texto ('-' si es cero). */
+function RTN_n_(n) { return n ? String(n) : '-'; }
 
 function r2_(n) { return Math.round(n * 100) / 100; }
