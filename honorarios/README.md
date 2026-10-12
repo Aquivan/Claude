@@ -1,0 +1,38 @@
+# Honorarios · Grupo
+
+Recibos por Honorarios Electrónicos **RECIBIDOS** (lo que personas independientes
+emitieron a las empresas del grupo), bajados directamente de SUNAT SOL, para todas
+las empresas activas de `empresas.json` (las mismas de SIRE).
+
+## Cómo funciona
+
+1. **GitHub Actions** (`.github/workflows/honorarios-descargar.yml`) entra a SOL de
+   cada empresa (claves en su Environment = RUC) y usa la opción de SUNAT
+   *11.5.1.1.14 "Consulta de RHE recibidos"* (solo lectura), mes por mes:
+   - el listado completo del mes (fecha, recibo, estado, emisor, descripción,
+     renta bruta, retención de 4ta, neto, pendiente de pago), y
+   - **opcional**: el PDF y el XML oficial de cada recibo.
+
+   Guarda en `honorarios/datos/<RUC>/<AAAA>/<MM>/rhe.csv`, `pdf/` y `xml/`.
+   Corre solo todos los días (~6:22 a. m. de Lima, mes anterior y actual, con PDF)
+   y a mano con: empresa (o todas), mes inicial y final, **PDF sí/no**, guardar.
+2. **La hoja "Honorarios · Grupo"** (`honorarios/apps_script/`, menú 🧑‍💼 Honorarios)
+   lee esos archivos y arma:
+   - **Panel**: por empresa (recibos, renta bruta, retención de 4ta, neto,
+     pendiente, revertidos, alertas, PDF) y por mes (renta bruta y retención
+     de 4ta para PLAME / 0621).
+   - **Recibos**: un renglón por recibo, con enlace al PDF en Drive; revertidos en
+     rojo y en naranja los mayores a S/ 1,500 sin retención (¿suspensión de 4ta?).
+   - **Por emisor**: cuánto se pagó a cada persona por empresa.
+   - Copia los PDF a Drive: `PDF Honorarios/<RUC - Empresa>/<AAAA>/<NN_Mes>/E001-28 - NOMBRE.pdf`.
+   - ⚙️ Config: desde qué mes, **Descargar PDF de SUNAT (SI/NO)**, **Copiar PDF a Drive (SI/NO)**.
+   - Menú: ⬇ Pedir a SUNAT lo nuevo, o ⬇ un rango de meses / una empresa **con o sin PDF**.
+
+El token de GitHub va solo en Propiedades del script (menú 🔑), nunca en celdas.
+Nunca se imprimen claves SOL ni tokens. No toca otros proyectos.
+
+## Archivos
+
+- `scripts/descargar_rhe.py` — descargador (reusa el inicio de sesión SOL de `retenciones/scripts/descargar_cre.py`).
+- `apps_script/` — Config.js (menú y parámetros), GitHub.js (lectura del repo y pedidos de descarga), Hojas.js (pestañas), Drive.js (PDF a Drive).
+- Despliegue: `.github/workflows/deploy-honorarios.yml` (clasp, igual que Retenciones).

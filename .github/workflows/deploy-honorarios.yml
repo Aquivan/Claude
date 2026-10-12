@@ -1,0 +1,114 @@
+# Despliegue de la hoja "Honorarios · Grupo" (carpeta honorarios/apps_script/)
+# ------------------------------------------------------------
+# Mismo mecanismo que deploy-appsscript.yml (usa el secret CLASPRC_JSON).
+#   - crear-proyecto : crea el proyecto Apps Script ligado a la Sheet (una sola vez)
+#                      y muestra en el log el .clasp.json para guardarlo en el repo.
+#   - comparar       : muestra diferencias entre el codigo de la Sheet y el repo.
+#   - subir          : sube honorarios/apps_script/ a la Sheet.
+# Al hacer push con cambios en honorarios/apps_script/ se sube solo (si ya existe su .clasp.json).
+# ------------------------------------------------------------
+
+name: Desplegar Honorarios (hoja)
+
+on:
+  push:
+    branches:
+      - claude/python-codes-izve18
+      - claude/tender-wozniak-vnf3iq
+    paths:
+      - 'honorarios/apps_script/**'
+  workflow_dispatch:
+    inputs:
+      accion:
+        description: "crear-proyecto (una vez), comparar o subir"
+        required: true
+        default: "comparar"
+        type: choice
+        options:
+          - comparar
+          - subir
+          - crear-proyecto
+      sheet_id:
+        description: "Solo para crear-proyecto: ID de la Google Sheet"
+        required: false
+        default: ""
+
+concurrency:
+  group: appsscript-honorarios-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: honorarios/apps_script
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar clasp
+        run: npm install -g @google/clasp@3.3.0
+
+      - name: Escribir credenciales de clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then echo "::error::Falta el secret CLASPRC_JSON"; exit 1; fi
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+          clasp show-authorized-user
+
+      - name: Crear proyecto ligado a la Sheet
+        if: github.event_name == 'workflow_dispatch' && inputs.accion == 'crear-proyecto'
+        env:
+          SHEET_ID: ${{ inputs.sheet_id }}
+        run: |
+          if [ -f .clasp.json ]; then echo "::error::Ya existe honorarios/apps_script/.clasp.json; no se crea otro proyecto."; exit 1; fi
+          if [ -z "$SHEET_ID" ]; then echo "::error::Falta sheet_id"; exit 1; fi
+          # Se crea fuera del repo: dentro, clasp encuentra el .clasp.json de la raiz y no crea nada.
+          mkdir -p /tmp/nuevo && cd /tmp/nuevo
+          clasp create-script --type sheets --title "Honorarios Grupo" --parentId "$SHEET_ID" --rootDir .
+          test -f .clasp.json || { echo "::error::clasp no creo el proyecto"; exit 1; }
+          SID=$(python3 -c "import json;print(json.load(open('.clasp.json'))['scriptId'])")
+          cd "$GITHUB_WORKSPACE/honorarios/apps_script"
+          printf '{"scriptId":"%s","rootDir":".","parentId":["%s"]}' "$SID" "$SHEET_ID" > .clasp.json
+          echo "======== guardar en el repo como honorarios/apps_script/.clasp.json ========"
+          cat .clasp.json; echo
+          clasp push --force
+          echo "Codigo subido."
+
+      - name: Comparar codigo de la Sheet vs repo
+        if: hashFiles('honorarios/apps_script/.clasp.json') != '' && !(github.event_name == 'workflow_dispatch' && inputs.accion == 'crear-proyecto')
+        run: |
+          SID=$(python3 -c "import json;print(json.load(open('.clasp.json'))['scriptId'])")
+          mkdir -p /tmp/actual
+          printf '{"scriptId":"%s","rootDir":"/tmp/actual"}' "$SID" > /tmp/actual/.clasp.json
+          (cd /tmp/actual && clasp pull) || echo "(proyecto vacio o sin acceso)"
+          echo "================ RESUMEN Sheet vs repo ================"
+          for f in *.js *.html appsscript.json; do
+            r="/tmp/actual/$f"; [ -f "$r" ] || r="/tmp/actual/${f%.js}.gs"
+            if [ -f "$r" ]; then
+              if diff -q --strip-trailing-cr "$r" "$f" >/dev/null; then echo "IGUAL      $f"; else echo "DIFERENTE  $f ($(diff --strip-trailing-cr "$r" "$f" | grep -c '^[<>]' || true) lineas)"; fi
+            else echo "NUEVO      $f"; fi
+          done
+          for r in /tmp/actual/*.js /tmp/actual/*.gs /tmp/actual/*.html; do
+            [ -f "$r" ] || continue; n=$(basename "$r"); b="${n%.*}"
+            ls "$b".* >/dev/null 2>&1 || echo "SOLO EN LA SHEET (se borraria al subir): $n"
+          done
+
+      - name: Subir el codigo a Apps Script
+        if: hashFiles('honorarios/apps_script/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir')
+        run: |
+          clasp push --force
+          echo "Codigo subido a la Sheet."
+
+      - name: Limpiar credenciales
+        if: always()
+        run: rm -rf "$HOME/.clasprc.json" /tmp/actual
