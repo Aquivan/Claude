@@ -153,6 +153,29 @@ jobs:
           clasp push --force
           echo "Codigo subido a la Sheet."
 
+      # La Web App (doPost de Webhook.js, la que GitHub llama al terminar cada
+      # descarga) corre una VERSION fija del codigo, no el ultimo subido. Si no
+      # se actualiza, lo que llega por GitHub sigue usando el codigo viejo (por
+      # ejemplo, un Panel de Control sin el Resumen IGV e IR). Aqui se pasa cada
+      # despliegue con version a una version nueva; la URL /exec no cambia.
+      # (Apps Script guarda hasta 200 versiones por proyecto.)
+      - name: Actualizar la Web App a la version nueva
+        if: github.event_name == 'push' || inputs.accion == 'subir'
+        run: |
+          clasp list-deployments --json > /tmp/despliegues.json
+          ids=$(python3 -c 'import json;print(" ".join(d["deploymentId"] for d in json.load(open("/tmp/despliegues.json")) if d.get("versionNumber")))')
+          rm -f /tmp/despliegues.json
+          if [ -z "$ids" ]; then
+            echo "No hay Web App desplegada con version; nada que actualizar."
+            exit 0
+          fi
+          n=0
+          for id in $ids; do
+            n=$((n+1))
+            clasp create-deployment -i "$id" -d "Automatico ${GITHUB_SHA::7}" > /dev/null
+            echo "Web App $n actualizada a la version nueva (misma URL)."
+          done
+
       - name: Limpiar credenciales
         if: always()
         run: rm -rf "$HOME/.clasprc.json" /tmp/actual

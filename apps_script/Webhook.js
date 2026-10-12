@@ -24,11 +24,10 @@
  *      Repository secrets:
  *        - SHEET_WEBHOOK_URL = la URL del paso 3
  *        - SHEET_WEBHOOK_SECRET = el mismo secreto del paso 2
- *   5. IMPORTANTE, y facil de olvidar: cada vez que edites CUALQUIER archivo
- *      .gs de este proyecto despues de haber desplegado, tenes que volver a
- *      Deploy > Manage deployments > editar (icono de lapiz) > "New version"
- *      > Deploy -- guardar el archivo NO alcanza, la Web App desplegada
- *      sigue corriendo el codigo VIEJO hasta que hagas esto.
+ *   5. La Web App corre una VERSION fija del codigo. El workflow
+ *      deploy-appsscript.yml ya la pasa sola a la version nueva cada vez que
+ *      sube el codigo (misma URL). Solo si editas a mano en el editor hay que
+ *      hacer Deploy > Manage deployments > lapiz > "New version" > Deploy.
  */
 
 /** Punto de entrada que Google llama cuando GitHub hace el POST. No se llama
