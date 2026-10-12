@@ -25,20 +25,9 @@ jobs:
           sparse-checkout: |
             notificaciones/scripts
             retenciones/scripts
-      - name: Instalar navegador
-        run: |
-          pip install playwright==1.47.0
-          python -m playwright install --with-deps chromium
       - name: Sondeo con navegador (no abre mensajes)
         env:
           SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
           SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
           SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
-        run: python notificaciones/scripts/ver_buzon.py pantallas
-      - name: Subir fotos
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: buzon-${{ inputs.ruc }}
-          path: pantallas/
-          retention-days: 3
+        run: python notificaciones/scripts/sondeo.py
