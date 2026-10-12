@@ -44,3 +44,4 @@ haga esto: las direcciones se obtuvieron observando la página oficial del buzó
 - `scripts/sondeo.py` — sondeo de solo lectura (lista, no abre mensajes).
 - `apps_script/` — Config.js, GitHub.js, Hojas.js, Drive.js.
 - Despliegue: `.github/workflows/deploy-notificaciones.yml` (clasp).
+- Hoja: https://docs.google.com/spreadsheets/d/1gV56deyMd-11O_fpB7cBVKKoUu0nF9lyvHMGlIKbNOs (carpeta Drive "Notificaciones · Grupo").
