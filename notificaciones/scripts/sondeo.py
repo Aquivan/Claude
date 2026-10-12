@@ -19,27 +19,35 @@ def main():
     sol.pedir(MENU, {"action": "prevApp"})
     _, menu = sol.pedir(MENU)
     print("Menú:", len(menu), "chars")
-    vistos = set()
-    for pal in ["buzon", "Buzon", "Buzón", "mensaje", "Mensaje", "notifica", "Notifica"]:
-        for m in list(re.finditer(pal, menu))[:6]:
-            trozo = re.sub(r"\s+", " ", menu[max(0, m.start() - 250):m.start() + 350])
-            k = trozo[:80]
-            if k in vistos:
-                continue
-            vistos.add(k)
-            print(f"--- '{pal}':", trozo)
-    print("\nACCIONES del menú (action=...):", sorted(set(re.findall(r"action=([A-Za-z]+)", menu))))
-    print("URLs con buzon/mensaje/noti:", sorted(set(u for u in re.findall(r"""["']([^"'\s]{6,200})["']""", menu)
-                                                    if re.search(r"buz|mensaj|notif|visor", u, re.I)))[:40])
-    for f in re.finditer(r"function\s+(\w*(?:[Bb]uz|[Mm]ensaj|[Nn]otif|[Vv]isor)\w*)\s*\(([^)]*)\)\s*\{(.{0,600})", menu, re.S):
-        print("FUNC:", f.group(1), "(", f.group(2), ")", re.sub(r"\s+", " ", f.group(3))[:600])
-    # scripts externos del menú
-    for src in sorted(set(re.findall(r'<script[^>]+src="([^"]+)"', menu)))[:30]:
-        print("SCRIPT:", src)
-    # probar acciones típicas de lista de mensajes (solo lectura)
-    for acc in ["listarMensajes", "getMensajes", "listaMensajes", "consultarMensajes", "mensajes"]:
-        st, t = sol.pedir(f"{MENU}?action={acc}", {"pagina": "1"}, intentos=1)
-        print(f"\n### {acc}: HTTP {st}, {len(t)} chars:", texto(t)[:300])
+    sol.pedir(MENU, {"action": "prevApp"})
+    st, t = sol.pedir(f"{MENU}?action=buzon")
+    print("\n### action=buzon: HTTP", st, "URL final:", sol.ultima_url.split("?")[0], len(t), "chars")
+    print("TITULO:", texto((re.search(r"<title>(.*?)</title>", t, re.S | re.I) or [None, ""])[1])[:120])
+    print("TEXTO:", texto(t)[:800])
+    for x in sorted(set(re.findall(r"""(?:src|href|action|url)\s*[:=]\s*["']([^"'\s]{4,250})["']""", t))):
+        print("  REF:", x[:250])
+    for f in re.finditer(r"(?:\$\.ajax|\$\.post|\$\.get|fetch|XMLHttpRequest|\.load)\s*\((.{0,400})", t, re.S):
+        print("  AJAX:", re.sub(r"\s+", " ", f.group(1))[:400])
+    # seguir iframes / scripts propios del buzón
+    base = re.match(r"(https://[^/]+)", sol.ultima_url).group(1)
+    for src in sorted(set(re.findall(r"""<(?:iframe|frame|script)[^>]+src=["']([^"']+)["']""", t, re.I)))[:15]:
+        if src.startswith("//"):
+            src = "https:" + src
+        elif src.startswith("/"):
+            src = base + src
+        elif not src.startswith("http"):
+            src = sol.ultima_url.rsplit("/", 1)[0] + "/" + src
+        if re.search(r"jquery|bootstrap|moment|monitor247|html5shiv|respond", src, re.I):
+            continue
+        st2, t2 = sol.pedir(src, intentos=1)
+        print(f"\n### {src.split('?')[0]}: HTTP {st2}, {len(t2)} chars")
+        for x in sorted(set(re.findall(r"""["'](/[a-z][^"'\s]{6,200}|[a-zA-Z]+\.(?:htm|do|json)[^"'\s]{0,120})["']""", t2)))[:60]:
+            print("   URL:", x)
+        for f in re.finditer(r"(?:\$\.ajax|\$\.post|\$\.get|\.load|url\s*:)\s*\(?(.{0,300})", t2, re.S):
+            print("   AJAX:", re.sub(r"\s+", " ", f.group(1))[:300])
+        for f in re.finditer(r"function\s+(\w+)\s*\(", t2):
+            pass
+        print("   FUNCIONES:", sorted(set(re.findall(r"function\s+(\w+)\s*\(", t2)))[:80])
 
 
 if __name__ == "__main__":
