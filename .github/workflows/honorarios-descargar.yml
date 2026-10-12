@@ -1,0 +1,107 @@
+# Proyecto "Honorarios · Grupo" (carpeta honorarios/). Descarga de SUNAT SOL los
+# Recibos por Honorarios Electrónicos RECIBIDOS (y sus N/C), con su PDF y XML si se
+# pide, de una empresa o de todas las empresas activas de empresas.json (las mismas
+# de SIRE). Solo escribe en honorarios/datos/. Si un mes falla, igual se guarda
+# lo que sí se bajó. No toca ningún otro proyecto. Nunca imprime claves.
+
+name: Honorarios - descargar RHE recibidos (SUNAT SOL)
+
+on:
+  # Todos los días ~6:22 a. m. de Lima: mes anterior y mes actual de todas las empresas (con PDF).
+  schedule:
+    - cron: '22 11 * * *'
+  workflow_dispatch:
+    inputs:
+      empresa:
+        description: "RUC de una empresa, o 'todas' (las activas de empresas.json)"
+        required: true
+        default: "todas"
+      periodo:
+        description: "Primer mes AAAAMM"
+        required: true
+        default: "202601"
+      hasta:
+        description: "Último mes AAAAMM (vacío = mes actual)"
+        required: false
+        default: ""
+      pdf:
+        description: "Bajar también el PDF (y XML) de cada recibo"
+        type: boolean
+        default: true
+      guardar:
+        description: "Guardar en el repositorio (honorarios/datos/)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  empresas:
+    runs-on: ubuntu-latest
+    outputs:
+      lista: ${{ steps.e.outputs.lista }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: empresas.json
+          sparse-checkout-cone-mode: false
+      - id: e
+        env:
+          EMPRESA: ${{ inputs.empresa || 'todas' }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          sel = os.environ["EMPRESA"].strip()
+          emp = [e for e in json.load(open("empresas.json"))["empresas"] if e.get("activo")]
+          rucs = [e["ruc"] for e in emp] if sel.lower() == "todas" else [sel]
+          print("lista=" + json.dumps(rucs))
+          PY
+          cat "$GITHUB_OUTPUT"
+
+  descargar:
+    needs: empresas
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        ruc: ${{ fromJson(needs.empresas.outputs.lista) }}
+    environment: ${{ matrix.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Descargar recibos por honorarios recibidos
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          PERIODO: ${{ inputs.periodo }}
+          HASTA: ${{ inputs.hasta }}
+          PDF: ${{ inputs.pdf }}
+        run: |
+          extra=""
+          if [ "$PDF" = "false" ]; then extra="--sin-pdf"; fi
+          # Corrida automática (sin datos de entrada): desde el mes anterior.
+          if [ -z "$PERIODO" ]; then PERIODO=$(TZ=America/Lima date -d "$(TZ=America/Lima date +%Y-%m-01) -1 month" +%Y%m); fi
+          python3 honorarios/scripts/descargar_rhe.py --periodo "$PERIODO" --hasta "$HASTA" --salida honorarios/datos $extra
+
+      - name: Guardar en el repositorio
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.guardar) }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          [ -d honorarios/datos ] || { echo "Sin recibos para guardar."; exit 0; }
+          git add honorarios/datos
+          git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
+          git commit -m "Honorarios RHE ${{ matrix.ruc }} ${{ inputs.periodo || 'automatico' }}-${{ inputs.hasta || 'actual' }} [skip ci]"
+          logrado=0
+          for intento in 1 2 3 4 5; do
+            if git push; then logrado=1; break; fi
+            echo "Push rechazado, reintentando con rebase (intento $intento)..."
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep $((intento * 3))
+          done
+          [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir honorarios/datos"; exit 1; }
