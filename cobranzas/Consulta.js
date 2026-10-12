@@ -10,6 +10,7 @@ var TIPO_DOC_ = { '01': 'Factura', '03': 'Boleta', '07': 'Nota de crédito', '08
 
 function onEdit(e) {
   try { CIA_alEditar_(e); } catch (err0) { /* pestaña 🤝 Conciliar con IA: no afecta a Consulta */ }
+  try { RTN_alEditar_(e); } catch (err1) { /* filtros de 🧾 Retenciones */ }
   try {
     var sh = e.range.getSheet();
     if (sh.getName() !== HOJA.CONSULTA) return;
