@@ -1,0 +1,2 @@
+empresa_ruc,periodo,fecha_emision,tipo,comprobante,serie,numero,estado,emisor_tipo_doc,emisor_ruc,emisor,tipo_renta,gratuito,descripcion,observacion,moneda,renta_bruta,retencion_renta,renta_neta,pendiente_pago,pdf,xml
+20615366791,202610,06/10/2026,RH,E001-68,E001,68,NO ANULADO,RUC,10453566671,APAZA QUISPE IVAN,A,NO,SERVICIO DE ASESORÍA CONTABLE,,SOLES,750.00,0.00,750.00,0.00,20615366791/2026/10/pdf/10453566671-E001-68.pdf,20615366791/2026/10/xml/10453566671-E001-68.xml
