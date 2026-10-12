@@ -39,33 +39,35 @@ def main():
     sol.pedir(MENU, {"action": "prevApp"})
     _, menu = sol.pedir(MENU)
     print("Menú:", len(menu), "chars")
-    import calendar
+    import urllib.parse
     URL = "https://ww1.sunat.gob.pe/ol-ti-itreciboelectronico/cpelec001Alias"
-    for per in ["202609", "202608", "202607", "202606", "202605", "202604", "202603", "202602", "202601"]:
-        a, m = int(per[:4]), int(per[4:])
-        sol.pedir(MENU, {"action": "prevApp"})
-        sol.pedir(f"{MENU}?action=execute&code=11.5.1.1.14")
-        datos = [("accion", "CapturaCriterioConsulatRec1"), ("tipocomprobante", "01;02;03;"), ("ruc_emisor", ""),
-                 ("num_serie", ""), ("num_comprob", ""), ("fec_desde", f"01/{m:02d}/{a}"),
-                 ("fec_hasta", f"{calendar.monthrange(a, m)[1]:02d}/{m:02d}/{a}"),
-                 ("tipocomprobante1", "01"), ("tipocomprobante1", "02"), ("tipocomprobante1", "03"), ("tipoestado", "00")]
-        import urllib.parse
-        st, t = sol.pedir(URL, urllib.parse.urlencode(datos).encode())
-        filas = re.findall(r"<tr[^>]*>(.*?)</tr>", t, re.S | re.I)
-        print(f"\n######## {per}: HTTP {st}, {len(t)} chars, {len(filas)} filas <tr>")
-        print("TEXTO:", texto(t)[:700])
-        for f in filas[:12]:
-            celdas = [texto(c) for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", f, re.S | re.I)]
-            if any(celdas):
-                print("  FILA:", " | ".join(celdas)[:300])
-            for l in re.findall(r"(?:href|onclick)=\"([^\"]+)\"", f)[:3]:
-                print("    LINK:", l[:250])
-        if len(filas) > 6:
-            for m2 in re.finditer(r"function\s+(\w+)\s*\(([^)]*)\)\s*\{(.{0,400})", t, re.S):
-                print("  FUNC:", m2.group(1), "(", m2.group(2), ")", re.sub(r"\s+", " ", m2.group(3))[:400])
-            for f in re.finditer(r"<form[^>]*>.*?</form>", t, re.S | re.I):
-                print("  FORM:", re.sub(r"\s+", " ", re.sub(r'value="[^"]{40,}"', 'value="…"', f.group(0)))[:800])
-            break
+    sol.pedir(MENU, {"action": "prevApp"})
+    sol.pedir(f"{MENU}?action=execute&code=11.5.1.1.14")
+    datos = [("accion", "CapturaCriterioConsulatRec1"), ("tipocomprobante", "01;02;03;"), ("ruc_emisor", ""),
+             ("num_serie", ""), ("num_comprob", ""), ("fec_desde", "01/09/2026"), ("fec_hasta", "30/09/2026"),
+             ("tipocomprobante1", "01"), ("tipocomprobante1", "02"), ("tipocomprobante1", "03"), ("tipoestado", "00")]
+    st, t = sol.pedir(URL, urllib.parse.urlencode(datos).encode())
+    print("Búsqueda:", st, len(t))
+    # A) Descargar el listado completo
+    st, b = sol.pedir(URL, {"accion": "descargaConsultaReceptor"}, binario=True)
+    print("\n#### A) descargaConsultaReceptor: HTTP", st, len(b), "bytes; inicio:", b[:8])
+    try:
+        import zipfile, io
+        z = zipfile.ZipFile(io.BytesIO(b)); print("ZIP:", z.namelist()); b = z.read(z.namelist()[0])
+    except Exception:
+        pass
+    print(b[:2500].decode("latin-1"))
+    # B) Detalle de un recibo
+    st, d = sol.pedir(URL, {"posirecibo": "1", "accion": "CapturaCriterioConsultaRec2"}, binario=True)
+    d = d.decode("latin-1")
+    print("\n#### B) detalle: HTTP", st, len(d))
+    print("TEXTO:", texto(d)[:1500])
+    for f in re.finditer(r"<form[^>]*>.*?</form>", d, re.S | re.I):
+        print("  FORM:", re.sub(r"\s+", " ", re.sub(r'value="[^"]{60,}"', 'value="…"', f.group(0)))[:600])
+    for m2 in re.finditer(r"function\s+(\w+)\s*\(([^)]*)\)\s*\{(.{0,300})", d, re.S):
+        print("  FUNC:", m2.group(1), "(", m2.group(2), ")", re.sub(r"\s+", " ", m2.group(3))[:300])
+    for l in re.findall(r"(?:href|onclick|src)=[\"']([^\"']+)[\"']", d)[:30]:
+        print("  LINK:", l[:200])
 
 
 if __name__ == "__main__":
