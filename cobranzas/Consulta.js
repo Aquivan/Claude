@@ -211,6 +211,8 @@ function renderConsulta_(ss) {
     sh.getRange(fila, 2).setValue('Ninguno: todos los vouchers de esta selección están aplicados a facturas.').setFontColor(COLOR.TEXTO_SUAVE).setFontSize(9);
     fila++;
   }
+  // ---- Todos los vouchers de esta selección (aplicados o no), para compararlos con el Sistema de Vouchers ----
+  fila = escribirTodosLosVouchers_(sh, fila + 1, todos, movsPorClave, cd, cm, noAp, cn);
   sh.getRange(fila + 1, 2, 1, 12).merge().setValue('Origen de cada pago: 🟢 Referenciado en voucher = la factura está escrita en "Tipo y Nº Doc." · ' +
     '🔵 Exacto · sin ref. = el sistema lo cruzó solo por monto (no está escrita en el voucher) · 🟡 Confirmado con ✔ = sugerencia que aprobaste · ' +
     '✍️ Manual = Registro manual · 📄 N/C SIRE = nota de crédito').setFontSize(8).setFontColor(COLOR.TEXTO_SUAVE).setWrap(true);
@@ -224,4 +226,67 @@ function origenConsulta_(o) {
   if (o === ORIGEN.EXACTO) return '🔵 Exacto · sin ref.';
   if (o === ORIGEN.CONFIRMADO) return '🟡 Confirmado con ✔';
   return o;
+}
+
+/**
+ * Lista en la Consulta TODOS los vouchers de la selección: los aplicados a
+ * facturas (de Movimientos) y los que no se aplicaron o sobraron (No aplicados).
+ * Un voucher = una fila (se junta por su fuente, ej. "Originales!1827").
+ * Devuelve la fila siguiente libre.
+ */
+function escribirTodosLosVouchers_(sh, fila, todos, movsPorClave, cd, cm, noAp, cn) {
+  var vou = {}, orden = [];
+  var tomar = function (clave, base) {
+    if (!vou[clave]) { vou[clave] = base; orden.push(clave); }
+    return vou[clave];
+  };
+  todos.forEach(function (f) {
+    (movsPorClave[f[cd('Clave')]] || []).forEach(function (m) {
+      if (m[cm('Modalidad')] !== MODALIDAD.PAGO) return;
+      var clave = String(m[cm('Fuente')] || m[cm('ID pago')] || '');
+      if (!clave) return;
+      var v = tomar(clave, { fecha: m[cm('Fecha')], op: String(m[cm('N° operación')] || ''), banco: m[cm('Banco')], monto: m[cm('Monto del voucher')],
+        aplicado: 0, sinAplicar: 0, moneda: m[cm('Moneda')], docs: [], fuente: m[cm('Fuente')], situacion: '' });
+      v.aplicado += Number(m[cm('Monto aplicado')]) || 0;
+      var doc = String(f[cd('Documento')]);
+      if (v.docs.indexOf(doc) < 0) v.docs.push(doc);
+    });
+  });
+  noAp.forEach(function (r) {
+    var clave = String(r[cn('Fuente')] || '');
+    if (!clave) return;
+    var v = tomar(clave, { fecha: r[cn('Fecha')], op: String(r[cn('Operación')] || ''), banco: r[cn('Banco')], monto: r[cn('Monto voucher')],
+      aplicado: 0, sinAplicar: 0, moneda: r[cn('Moneda')], docs: [], fuente: r[cn('Fuente')], situacion: '' });
+    v.sinAplicar += Number(r[cn('Sin aplicar')]) || 0;
+    v.situacion = String(r[cn('Situación')] || '');
+  });
+  var lista = orden.map(function (k) { return vou[k]; })
+    .sort(function (a, b) { return (b.fecha instanceof Date ? b.fecha : 0) - (a.fecha instanceof Date ? a.fecha : 0); });
+  var total = lista.reduce(function (t, v) { return t + (Number(v.monto) || 0); }, 0);
+  var fmt = function (n) { return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  sh.getRange(fila, 2, 1, 12).merge().setValue('📒 TODOS LOS VOUCHERS DE ESTA SELECCIÓN (' + lista.length + ')' +
+    (lista.length ? ' · total vouchers: ' + fmt(total) : '') + ' · aplicados y sin aplicar, para cuadrar con el Sistema de Vouchers')
+    .setFontWeight('bold').setFontSize(10).setFontColor('#1E3A8A').setBackground('#DBEAFE');
+  fila++;
+  if (!lista.length) {
+    sh.getRange(fila, 2).setValue('Ningún voucher para esta selección.').setFontColor(COLOR.TEXTO_SUAVE).setFontSize(9);
+    return fila + 1;
+  }
+  var filas = lista.slice(0, 500).map(function (v) {
+    var estado = !v.aplicado ? '❌ Sin aplicar' : v.sinAplicar > 0.05 ? '🟠 Aplicado en parte' : '✅ Aplicado';
+    var porQue = v.sinAplicar > 0.05 ? v.situacion : '';
+    return [v.fecha || '', v.op, v.banco, v.monto, v.aplicado ? r2_(v.aplicado) : '', v.sinAplicar ? r2_(v.sinAplicar) : '', v.moneda,
+      v.docs.join(', '), estado, porQue, v.fuente];
+  });
+  escribirTabla_(sh, fila, 2, ['Fecha', 'Operación', 'Banco', 'Monto voucher', 'Aplicado a facturas', 'Sin aplicar', 'Moneda',
+    'Facturas a las que se aplicó', 'Estado', 'Por qué sobra', 'Fuente'], filas);
+  var n = filas.length;
+  sh.getRange(fila + 1, 2, n, 11).setFontSize(9).setVerticalAlignment('middle');
+  sh.getRange(fila + 1, 2, n, 1).setNumberFormat('dd/mm/yyyy');
+  sh.getRange(fila + 1, 3, n, 1).setNumberFormat('@');
+  sh.getRange(fila + 1, 5, n, 3).setNumberFormat('#,##0.00;-#,##0.00;"-"');
+  sh.getRange(fila + 1, 10, n, 1).setBackgrounds(filas.map(function (r) {
+    return [/^✅/.test(r[8]) ? '#DCFCE7' : /^🟠/.test(r[8]) ? '#FFEDD5' : '#FEE2E2'];
+  }));
+  return fila + n + 1;
 }
