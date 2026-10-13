@@ -1,4 +1,6 @@
 empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,etiqueta,leido,urgente,destacado,remitente,dependencia,adjuntos,archivos
+20609309793,Mensaje,1094193535,13/10/2026 02:32:33,13/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,
+20609309793,Mensaje,1094073293,13/10/2026 00:25:38,13/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,1,
 20609309793,Mensaje,1092299433,09/10/2026 07:37:54,09/10/2026,Comunicación de GRE - Remitente EG07-40 emitida por RUC N° 20615074897,Otro,20615074897,,NO,,,SUNAT,0023,0,
 20609309793,Mensaje,1092192934,09/10/2026 02:28:23,09/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,
 20609309793,Mensaje,1092055435,08/10/2026 20:14:56,08/10/2026,REPORTE DE TUS RETENCIONES IGV,Otro,,,NO,,,SUNAT,0023,1,
@@ -48,7 +50,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20609309793,Mensaje,1075824193,15/09/2026 00:21:35,15/09/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,1,
 20609309793,Mensaje,1075566591,14/09/2026 16:52:06,14/09/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,1,
 20609309793,Mensaje,1075446678,14/09/2026 13:10:49,14/09/2026,Comunicación de GRE - Remitente EG07-135 emitida por RUC N° 20605062670,Otro,20605062670,,NO,,,SUNAT,0023,0,
-20609309793,Mensaje,1074566018,13/09/2026 01:51:30,13/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,
 20609309793,Mensaje,1073716539,10/09/2026 17:33:04,10/09/2026,Comunicación de GRE - Remitente EG07-35 emitida por RUC N° 20615074897,Otro,20615074897,,NO,,,SUNAT,0023,0,
 20609309793,Mensaje,1073066189,09/09/2026 12:59:50,09/09/2026,Comunicación de GRE - Remitente EG07-5503 emitida por RUC N° 20516497379,Otro,20516497379,,NO,,,SUNAT,0023,0,
 20609309793,Mensaje,1071590857,04/09/2026 16:08:54,04/09/2026,Baja de Guía de Remisión Remitente - Electrónica EG07 - 4599,Otro,,,NO,,,SUNAT,0023,0,
