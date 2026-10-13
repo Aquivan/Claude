@@ -122,6 +122,13 @@ function escribirComprasCompleto_(ss, versiones, compras, ruc) {
   var base = versiones.enc;
   var NUM = /^(bi |igv|valor|isc|icbper|otros|total|tipo de cambio|imb|porcpart)/;
   var esNum = base.map(function (h) { return NUM.test(normalizarEncabezado_(h)); });
+  // Fechas como fecha real (no texto): si van como texto "01/06/2026", Sheets
+  // puede leerlas al reves (mes/dia) y ya no ordenan bien.
+  var esFecha = base.map(function (h) { return normalizarEncabezado_(h).indexOf('fecha') !== -1; });
+  var aFechaReal = function (v) {
+    var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(v).trim());
+    return m ? new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])) : v;
+  };
 
   // Links PDF/XML que ya tiene Detalle Compras (misma factura).
   var links = {};
@@ -147,9 +154,11 @@ function escribirComprasCompleto_(ss, versiones, compras, ruc) {
       var j = x.enc === base ? i : buscarIndiceColumna_(x.enc, h);
       var v = j >= 0 && j < x.fila.length ? x.fila[j] : '';
       if (esNum[i] && v !== '' && !isNaN(Number(v))) return Number(v);
+      if (esFecha[i] && v !== '') return aFechaReal(v);
       return v;
     });
-    var fecha = iFecha >= 0 ? String(fila[iFecha]) : '';
+    var jF = iFecha >= 0 ? (x.enc === base ? iFecha : buscarIndiceColumna_(x.enc, base[iFecha])) : -1;
+    var fecha = jF >= 0 ? String(x.fila[jF] || '').trim() : '';
     var lk = links[k] || ['', ''];
     var anotarHasta = '';
     if (!x.anotada) {
@@ -175,8 +184,12 @@ function escribirComprasCompleto_(ss, versiones, compras, ruc) {
   sheet.getRange(1, 1, 1, nc).setValues([enc]).setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#305496');
   sheet.getRange(1, nc - 3, 1, 4).setBackground('#7C2D12');
   sheet.setFrozenRows(1);
+  sheet.getRange(2, nc - 1, n, 2).setNumberFormat('@');  // "Propuestas en que aparecio" y "Anotar hasta" quedan como texto
   sheet.getRange(2, 1, n, nc).setValues(filas);
-  base.forEach(function (h, i) { if (esNum[i]) sheet.getRange(2, i + 1, n, 1).setNumberFormat('#,##0.00'); });
+  base.forEach(function (h, i) {
+    if (esNum[i]) sheet.getRange(2, i + 1, n, 1).setNumberFormat('#,##0.00');
+    if (esFecha[i]) sheet.getRange(2, i + 1, n, 1).setNumberFormat('dd/mm/yyyy');
+  });
   var colEstado = nc - 3;
   sheet.getRange(1, 1, n + 1, nc).createFilter();
   try { colorearNotasCredito_(sheet, enc, n); } catch (eNc) {}

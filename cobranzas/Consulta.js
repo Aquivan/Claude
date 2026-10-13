@@ -5,7 +5,8 @@
  * Lee de 📋 Documentos y 💳 Movimientos (no vuelve a leer SIRE ni vouchers).
  */
 
-var CONSULTA_ = { EMPRESA: 'B4', VER: 'D4', CONTRA: 'F4', MOSTRAR: 'J4', FILA_ENC: 9, LISTA_COL: 26 };
+var CONSULTA_ = { EMPRESA: 'B4', VER: 'D4', CONTRA: 'F4', MOSTRAR: 'J4', ORDEN: 'L4', FILA_ENC: 9, LISTA_COL: 26 };
+var ORDEN_CONSULTA_ = ['Fecha (antigua → reciente)', 'Fecha (reciente → antigua)', 'N° de documento'];
 var TIPO_DOC_ = { '01': 'Factura', '03': 'Boleta', '07': 'Nota de crédito', '08': 'Nota de débito', '02': 'Recibo honorarios', '12': 'Ticket', '14': 'Servicio público' };
 
 function onEdit(e) {
@@ -15,7 +16,7 @@ function onEdit(e) {
     var sh = e.range.getSheet();
     if (sh.getName() !== HOJA.CONSULTA) return;
     var a1 = e.range.getA1Notation();
-    if ([CONSULTA_.EMPRESA, CONSULTA_.VER, CONSULTA_.CONTRA, CONSULTA_.MOSTRAR].indexOf(a1) === -1) return;
+    if ([CONSULTA_.EMPRESA, CONSULTA_.VER, CONSULTA_.CONTRA, CONSULTA_.MOSTRAR, CONSULTA_.ORDEN].indexOf(a1) === -1) return;
     if (a1 === CONSULTA_.EMPRESA || a1 === CONSULTA_.VER) sh.getRange(CONSULTA_.CONTRA).setValue('(Todas)');
     renderConsulta_(e.source);
   } catch (err) {
@@ -72,6 +73,14 @@ function renderConsulta_(ss) {
   var ver = sh.getRange(CONSULTA_.VER).getValue() || 'Por pagar';
   var contra = String(sh.getRange(CONSULTA_.CONTRA).getValue() || '(Todas)');
   var mostrar = sh.getRange(CONSULTA_.MOSTRAR).getValue() || 'Con saldo';
+  // Selector "Ordenar por" (se crea si la hoja es de antes)
+  if (sh.getRange('L3').getValue() !== 'Ordenar por') {
+    sh.getRange('L3').setValue('Ordenar por').setFontSize(8).setFontWeight('bold').setFontColor(COLOR.TEXTO_SUAVE);
+    sh.getRange(CONSULTA_.ORDEN).setValue(ORDEN_CONSULTA_[0]).setBackground('#FEF9C3').setFontWeight('bold')
+      .setBorder(true, true, true, true, false, false, '#EAB308', SpreadsheetApp.BorderStyle.SOLID);
+  }
+  sh.getRange(CONSULTA_.ORDEN).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(ORDEN_CONSULTA_).build());
+  var orden = sh.getRange(CONSULTA_.ORDEN).getValue() || ORDEN_CONSULTA_[0];
   sh.getRange(CONSULTA_.MOSTRAR).setDataValidation(SpreadsheetApp.newDataValidation()
     .requireValueInList(['Con saldo', 'Con nota de crédito', 'Todo']).build());
 
@@ -101,7 +110,21 @@ function renderConsulta_(ss) {
     if (mostrar === 'Con nota de crédito') return conNc(f);
     return true;
   }
-  var docs = todos.filter(seMuestra).sort(function (a, b) { return String(a[iCp]).localeCompare(b[iCp]) || ((a[cd('Emisión')] || 0) - (b[cd('Emisión')] || 0)); });
+  var iEmi = cd('Emisión'), iDoc = cd('Documento');
+  var fechaN = function (f) { var v = f[iEmi]; return v instanceof Date ? v.getTime() : 0; };
+  var numDoc = function (f) {  // "01_E001-1246" -> serie "E001", numero 1246
+    var m = String(f[iDoc] || '').match(/^(\d+)_([^-]+)-(\d+)$/);
+    return m ? { t: m[1], s: m[2], n: Number(m[3]) } : { t: '', s: String(f[iDoc] || ''), n: 0 };
+  };
+  var porOrden = function (a, b) {
+    if (orden === ORDEN_CONSULTA_[2]) {
+      var x = numDoc(a), y = numDoc(b);
+      return x.t.localeCompare(y.t) || x.s.localeCompare(y.s) || (x.n - y.n) || (fechaN(a) - fechaN(b));
+    }
+    var d = fechaN(a) - fechaN(b);
+    return (orden === ORDEN_CONSULTA_[1] ? -d : d) || (numDoc(a).n - numDoc(b).n);
+  };
+  var docs = todos.filter(seMuestra).sort(function (a, b) { return String(a[iCp]).localeCompare(b[iCp]) || porOrden(a, b); });
 
   var movsPorClave = {};
   var mClave = cm('Clave');
