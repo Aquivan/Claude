@@ -125,18 +125,33 @@ function menuLimpiarValoresManualesLiquidacion() {
 function menuGenerarLiquidacion() {
   var ui = SpreadsheetApp.getUi();
 
-  var cfg, ruc;
+  var cfg, empresas;
   try {
     cfg = cargarConfigGitHub_();
-    ruc = elegirRucEmpresa_(cfg);
+    empresas = listarEmpresasGitHub_(cfg, false);
   } catch (e) {
     ui.alert('Error de configuracion', e.message, ui.ButtonSet.OK);
     return;
   }
-  if (!ruc) return; // cancelado
+  if (!empresas.length) { ui.alert('empresas.json no tiene ninguna empresa.'); return; }
+
+  var lista = empresas.map(function (e) {
+    return e.ruc + ' - ' + e.nombre + (e.activo ? '' : ' (inactiva)');
+  }).join('\n');
+  var r1 = ui.prompt('Planilla de liquidacion IGV',
+    'Empresas:\n' + lista + '\n\n' +
+    'Escribe el RUC para generar SOLO esa empresa,\n' +
+    'o deja en BLANCO para generar TODAS las empresas activas:',
+    ui.ButtonSet.OK_CANCEL);
+  if (r1.getSelectedButton() !== ui.Button.OK) return;
+  var ruc = r1.getResponseText().trim();
+  if (ruc && !empresas.some(function (e) { return e.ruc === ruc; })) {
+    ui.alert('Ese RUC no esta en empresas.json.');
+    return;
+  }
 
   var resp = ui.prompt('Planilla de liquidacion IGV',
-    'Anio a procesar para ' + ruc + ' (ej: 2026).\n\n' +
+    'Anio a procesar para ' + (ruc || 'TODAS las empresas activas') + ' (ej: 2026).\n\n' +
     'Se leeran los periodos que YA hayas IMPORTADO a Drive de ese anio\n' +
     '(menus "4/5/6. Importar resultados"). Si un mes no esta importado,\n' +
     'sale en cero.',
@@ -146,15 +161,77 @@ function menuGenerarLiquidacion() {
   var anio = parseInt(resp.getResponseText().trim(), 10);
   if (!anio || anio < 2000 || anio > 2100) { ui.alert('Anio invalido.'); return; }
 
-  try {
-    var url = construirLiquidacion_(ruc, anio);
-    ui.alert('Planilla generada',
-      'Listo. Se creo/actualizo la planilla de liquidacion ' + anio + '.\n\n' + url +
-      '\n\nRevisa la hoja "Parametros" para ajustar prorrata y saldo inicial.',
+  if (ruc) {
+    try {
+      var url = construirLiquidacion_(ruc, anio);
+      ui.alert('Planilla generada',
+        'Listo. Se creo/actualizo la planilla de liquidacion ' + anio + '.\n\n' + url +
+        '\n\nRevisa la hoja "Parametros" para ajustar prorrata y saldo inicial.',
+        ui.ButtonSet.OK);
+    } catch (e) {
+      Logger.log('ERROR construyendo liquidacion: ' + e.message + '\n' + e.stack);
+      ui.alert('Error', e.message, ui.ButtonSet.OK);
+    }
+    return;
+  }
+
+  // TODAS las empresas activas, una tras otra. Si no alcanza el tiempo de
+  // Google (6 min), sigue sola en segundo plano.
+  var cola = { anio: anio, rucs: empresas.filter(function (e) { return e.activo; }).map(function (e) { return e.ruc; }),
+    listas: [], errores: [] };
+  var termino = procesarColaLiquidaciones_(cola);
+  if (termino) {
+    ui.alert('Planillas generadas',
+      'Listo: ' + cola.listas.length + ' liquidacion(es) ' + anio + ' actualizadas.' +
+      (cola.errores.length ? '\n\nCon error:\n' + cola.errores.join('\n') : ''),
       ui.ButtonSet.OK);
-  } catch (e) {
-    Logger.log('ERROR construyendo liquidacion: ' + e.message + '\n' + e.stack);
-    ui.alert('Error', e.message, ui.ButtonSet.OK);
+  } else {
+    ui.alert('Sigue en segundo plano',
+      'Ya se actualizaron ' + cola.listas.length + ' liquidacion(es). Faltan ' + cola.rucs.length +
+      ' y se seguiran generando solas en 1 minuto (no hace falta tener la hoja abierta).\n\n' +
+      'Al terminar queda el resumen en la pestaña "Registro".',
+      ui.ButtonSet.OK);
+  }
+}
+
+var LIMITE_COLA_LIQ_MS_ = 4.5 * 60 * 1000;
+
+/**
+ * Genera las liquidaciones de cola.rucs (se van sacando de la lista). Si se
+ * acerca al limite de 6 minutos de Google, guarda lo que falta y programa la
+ * continuacion. Devuelve true si termino todo.
+ */
+function procesarColaLiquidaciones_(cola) {
+  var inicio = Date.now();
+  while (cola.rucs.length) {
+    if (Date.now() - inicio > LIMITE_COLA_LIQ_MS_) {
+      PropertiesService.getScriptProperties().setProperty('COLA_LIQUIDACIONES', JSON.stringify(cola));
+      ScriptApp.newTrigger('continuarColaLiquidaciones').timeBased().after(60 * 1000).create();
+      return false;
+    }
+    var ruc = cola.rucs.shift();
+    try {
+      construirLiquidacion_(ruc, cola.anio);
+      cola.listas.push(ruc);
+    } catch (e) {
+      cola.errores.push(ruc + ': ' + e.message);
+    }
+  }
+  PropertiesService.getScriptProperties().deleteProperty('COLA_LIQUIDACIONES');
+  return true;
+}
+
+/** Continuacion en segundo plano de "generar TODAS las liquidaciones". */
+function continuarColaLiquidaciones() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'continuarColaLiquidaciones') ScriptApp.deleteTrigger(t);
+  });
+  var txt = PropertiesService.getScriptProperties().getProperty('COLA_LIQUIDACIONES');
+  if (!txt) return;
+  var cola = JSON.parse(txt);
+  if (procesarColaLiquidaciones_(cola)) {
+    registrarEnBitacora_('Liquidaciones IGV ' + cola.anio + ' de todas las empresas: ' + cola.listas.length +
+      ' actualizadas (' + cola.listas.join(', ') + ').' + (cola.errores.length ? ' Con error: ' + cola.errores.join(' | ') : ''));
   }
 }
 

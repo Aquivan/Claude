@@ -31,7 +31,7 @@ function onOpen() {
     .addSeparator()
     .addItem('7. Ver estado de la ultima ejecucion en GitHub', 'menuVerEstadoGitHub')
     .addSeparator()
-    .addItem('8. Generar/Actualizar planilla de liquidacion IGV...', 'menuGenerarLiquidacion')
+    .addItem('8. Generar/Actualizar liquidacion IGV (una empresa o TODAS)...', 'menuGenerarLiquidacion')
     .addItem('Activar/Desactivar liquidacion automatica al importar', 'menuToggleLiquidacionAuto')
     .addItem('Vaciar valores manuales de una liquidacion (Percep/Retenc/Coef/Ajustes)',
       'menuLimpiarValoresManualesLiquidacion')
