@@ -130,9 +130,10 @@ function ejecutarCruce_(entrada) {
     var ex = docs[k];
     if (ex) {
       // Mismo documento visto desde la otra empresa del grupo: completar datos.
-      ['producto', 'linkPdf', 'vence', 'emisorNombre', 'receptorNombre', 'car'].forEach(function (c) {
+      ['producto', 'linkPdf', 'vence', 'emisorNombre', 'receptorNombre', 'car', 'estadoSire'].forEach(function (c) {
         if (!ex[c] && d[c]) ex[c] = d[c];
       });
+      if (d.estadoSire && /^✅/.test(d.estadoSire)) ex.estadoSire = d.estadoSire;  // si en algun año quedo anotada, manda eso
       return;
     }
     var doc = {};

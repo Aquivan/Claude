@@ -7,6 +7,22 @@
  *  - Registro manual y decisiones (✔/✖) de esta misma hoja.
  */
 
+var HOJA_COMPRAS_COMPLETO_SIRE_ = 'Compras SIRE completo';
+
+/**
+ * Registro de compras SIRE de la factura (del lado del comprador):
+ *   ✅ Aceptada · 🟡 No anotada (quedo fuera de la aceptada) · 🔵 Propuesta (mes aun sin aceptada).
+ * Acepta el "Estado SIRE" de "Compras SIRE completo" o la "Fuente SIRE" de Detalle Compras.
+ */
+function textoRegistroSire_(v) {
+  var t = String(v == null ? '' : v).trim();
+  if (!t) return '';
+  if (/^✅|^aceptada/i.test(t)) return '✅ Aceptada';
+  if (/^🟡/.test(t)) return '🟡 No anotada';
+  if (/^🔵|^propuesta/i.test(t)) return '🔵 Propuesta';
+  return t;
+}
+
 /** Busca en Drive las liquidaciones de las empresas del grupo y años configurados. */
 function buscarLiquidaciones_(cfg) {
   var res = [];
@@ -25,7 +41,10 @@ function leerDocumentosSire_(cfg, liquidaciones) {
   var docs = [];
   liquidaciones.forEach(function (lq) {
     var ss = SpreadsheetApp.openById(lq.id);
-    [['Detalle Ventas', 'V'], ['Detalle Compras', 'C']].forEach(function (par) {
+    // Compras: primero "Compras SIRE completo" (todas las facturas: aceptadas y
+    // propuestas, sin duplicar, con su Estado SIRE); luego "Detalle Compras",
+    // que completa descripcion y PDF (el motor junta la misma factura en una).
+    [['Detalle Ventas', 'V'], [HOJA_COMPRAS_COMPLETO_SIRE_, 'C'], ['Detalle Compras', 'C']].forEach(function (par) {
       var sh = ss.getSheetByName(par[0]);
       if (!sh || sh.getLastRow() < 2) return;
       var datos = sh.getDataRange().getValues();
@@ -40,6 +59,7 @@ function leerDocumentosSire_(cfg, liquidaciones) {
         total: col('Total CP'), moneda: col('Moneda'), tc: col('Tipo Cambio', 'Tipo de Cambio'),
         modTipo: col('Tipo CP Modificado'), modSerie: col('Serie CP Modificado'), modNumero: col('Nro CP Modificado'),
         producto: col('items_descripcion'), detrac: col('Detraccion'),
+        estadoSire: col('Estado SIRE', 'Fuente SIRE'),
       };
       for (var i = 1; i < datos.length; i++) {
         var r = datos[i];
@@ -57,6 +77,7 @@ function leerDocumentosSire_(cfg, liquidaciones) {
           modTipo: c.modTipo >= 0 ? r[c.modTipo] : '', modSerie: c.modSerie >= 0 ? r[c.modSerie] : '',
           modNumero: c.modNumero >= 0 ? r[c.modNumero] : '', producto: c.producto >= 0 ? String(r[c.producto] || '') : '',
           linkPdf: link, detraccionSire: c.detrac >= 0 && String(r[c.detrac] || '').trim().toUpperCase() === 'D',
+          estadoSire: par[1] === 'C' && c.estadoSire >= 0 ? textoRegistroSire_(r[c.estadoSire]) : '',
         };
         if (par[1] === 'V') {
           base.emisorRuc = lq.ruc; base.emisorNombre = String(r[c.nombrePropio] || '');

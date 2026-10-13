@@ -53,7 +53,7 @@ function prepararSelectores_(sh, empresas) {
   sh.getRange(CONSULTA_.MOSTRAR).setValue('Con saldo');
   sh.setRowHeight(4, 26);
   sh.setColumnWidth(1, 16);
-  [190, 80, 210, 95, 105, 80, 105, 105, 140, 80, 210, 110].forEach(function (w, i) { sh.setColumnWidth(i + 2, w); });
+  [190, 80, 210, 165, 105, 80, 105, 105, 140, 80, 210, 110].forEach(function (w, i) { sh.setColumnWidth(i + 2, w); });
   sh.setFrozenRows(CONSULTA_.FILA_ENC);
 }
 
@@ -75,7 +75,7 @@ function renderConsulta_(ss) {
   sh.getRange(CONSULTA_.MOSTRAR).setDataValidation(SpreadsheetApp.newDataValidation()
     .requireValueInList(['Con saldo', 'Con nota de crédito', 'Todo']).build());
 
-  var iRuc = cd('RUC contraparte'), iCp = cd('Contraparte'), iSaldo = cd('Saldo'), iEstado = cd('Estado');
+  var iRuc = cd('RUC contraparte'), iCp = cd('Contraparte'), iSaldo = cd('Saldo'), iEstado = cd('Estado'), iReg = cd('Registro SIRE');
   var base = D.filas.filter(function (f) { return (emp === '(Todas)' || f[0] === emp) && f[1] === ver; });
 
   // Lista de clientes/proveedores (columna oculta Z) para el desplegable
@@ -147,6 +147,8 @@ function renderConsulta_(ss) {
     }
     var doc = String(f[cd('Documento')]);
     var tipoNom = TIPO_DOC_[doc.slice(0, 2)] || 'Documento';
+    var regSire = iReg >= 0 ? String(f[iReg] || '') : '';
+    if (regSire) tipoNom += ' · ' + regSire;
     filas.push([doc, f[cd('Emisión')], f[iCp], tipoNom, '', '', f[cd('Total')], f[iSaldo], f[iEstado], f[cd('Vence')], String(f[cd('Producto')] || '').slice(0, 80), '']);
     fondos.push(COLOR_ESTADO[f[iEstado]] || COLOR.BLANCO); negritas.push(true);
     (movsPorClave[f[cd('Clave')]] || []).sort(function (a, b) { return (a[0] || 0) - (b[0] || 0); }).forEach(function (m) {
