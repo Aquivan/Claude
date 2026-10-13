@@ -840,6 +840,13 @@ jobs:
                 if [ -n "$NOMBRE_ZIP_HIST" ]; then
                   mkdir -p "$DIR_HISTORICO/${{ steps.periodo.outputs.valor }}"
                   cp "$ZIP" "$DIR_HISTORICO/${{ steps.periodo.outputs.valor }}/$NOMBRE_ZIP_HIST"
+                  # Compras: propuesta y aceptada tambien como CSV (la hoja no
+                  # abre bien estos .zip). Los usa la pestaña "Compras SIRE
+                  # completo" de la Liquidacion IGV.
+                  if [ "$T" = "compra" ]; then
+                    python3 scripts/sire_versiones_compras.py "$DIR_HISTORICO/${{ steps.periodo.outputs.valor }}" || \
+                      echo "AVISO: no se pudo convertir propuesta/aceptada de compras a CSV (no afecta la descarga)."
+                  fi
                 fi
               else
                 cp "sire/$RUC/$T"/*.txt "sire/$RUC/extraido_$T/" 2>/dev/null || true

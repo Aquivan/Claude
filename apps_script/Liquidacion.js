@@ -452,8 +452,20 @@ function construirLiquidacion_(ruc, anio) {
       '. Descarga primero con el menu "SIRE SUNAT".');
   }
 
+  // Propuestas y aceptadas de compras (GitHub): columna "Fuente SIRE" en
+  // Detalle Compras y pestaña "Compras SIRE completo". Si falla, la
+  // liquidacion se arma igual que siempre.
+  var versiones = null;
+  try { versiones = juntarVersionesCompras_(cargarConfigGitHub_(), ruc, anio); } catch (eV) {
+    Logger.log('Compras SIRE completo: ' + eV.message);
+  }
+  agregarFuenteSireCompras_(compras, versiones);
+
   escribirDetalle_(ss, 'Detalle Ventas', ventas.filas, ventas.encabezado);
   escribirDetalle_(ss, 'Detalle Compras', compras.filas, compras.encabezado);
+  try { escribirComprasCompleto_(ss, versiones, compras, ruc); } catch (eC) {
+    Logger.log('Compras SIRE completo: ' + eC.message);
+  }
   escribirParametros_(ss);
   escribirTablero_(ss, anio);
   limpiarHojasVacias_(ss);
