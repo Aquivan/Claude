@@ -57,6 +57,33 @@ on:
           - ""
           - "true"
           - "false"
+      mes_anterior:
+        description: "Descarga automatica del MES ANTERIOR (bloque mes_anterior de empresas.json; la corrida programada de la 1 AM lo agrega solo los dias elegidos). Vacio = corrida normal. ver = solo muestra el estado. activar / desactivar / cambiar = cambia el interruptor (no descarga nada). descargar-ahora = baja YA el mes anterior."
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - ver
+          - activar
+          - desactivar
+          - cambiar
+          - descargar-ahora
+      mes_anterior_dias:
+        description: "Solo con mes_anterior = activar/cambiar: dias del mes, del 1 al 28, separados por coma (ej. 3,11 o solo 11). Vacio = no cambia."
+        required: false
+        default: ""
+      mes_anterior_pdf:
+        description: "Solo con mes_anterior = activar/cambiar: ninguno = solo el registro (propuesta). ambos/compra/venta = ademas PDF/XML. Vacio = no cambia."
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - ninguno
+          - ambos
+          - compra
+          - venta
   schedule:
     # ---------------------------------------------------------------------------
     # PROGRAMACIÓN AUTOMÁTICA (HORA PERÚ = UTC - 5)
@@ -98,6 +125,10 @@ jobs:
           RUC_INPUT: ${{ inputs.ruc }}
           PERIODO_INPUT: ${{ inputs.periodo }}
           EXTRAER_ITEMS_INPUT: ${{ inputs.extraer_items_xml }}
+          MES_ACCION: ${{ inputs.mes_anterior }}
+          MES_DIAS: ${{ inputs.mes_anterior_dias }}
+          MES_PDF: ${{ inputs.mes_anterior_pdf }}
+          EVENTO: ${{ github.event_name }}
         run: |
           cat > /tmp/preparar_matriz.py << 'PYEOF'
           # Lee empresas.json (formato {"_ayuda": {...}, "empresas": [...]}) y
@@ -186,11 +217,103 @@ jobs:
                       'es_rango': es_rango,
                   })
 
+          # ---- Descarga automatica del MES ANTERIOR (bloque "mes_anterior" de
+          # empresas.json). La corrida PROGRAMADA (1 AM Peru) agrega, solo los
+          # dias elegidos, el mes anterior de cada empresa activa ANTES del mes
+          # actual. Va como "rango" (es_rango) para no pisar los archivos "mas
+          # recientes" de la empresa: lo del mes anterior queda en su historico.
+          # Con inputs.mes_anterior se ve o cambia el interruptor (sin descargar).
+          import re, sys
+          from datetime import timedelta
+          MES_BASE = {"activo": False, "dias": [3, 11], "tipo": "ambos", "pdf_xml": "ninguno"}
+          mes = dict(MES_BASE)
+          mes.update((data.get('mes_anterior') or {}) if isinstance(data, dict) else {})
+          accion = os.environ.get('MES_ACCION', '').strip()
+          antes = json.dumps(mes, sort_keys=True)
+          if accion == 'activar':
+              mes['activo'] = True
+          elif accion == 'desactivar':
+              mes['activo'] = False
+          if accion in ('activar', 'cambiar'):
+              dias_txt = os.environ.get('MES_DIAS', '').strip()
+              if dias_txt:
+                  dias_n = sorted({int(x) for x in re.findall(r'\d+', dias_txt)})
+                  if not dias_n or any(d < 1 or d > 28 for d in dias_n):
+                      raise SystemExit('ERROR: los dias deben ser numeros del 1 al 28 (ej. 3,11).')
+                  mes['dias'] = dias_n
+              pdf_in = os.environ.get('MES_PDF', '').strip()
+              if pdf_in:
+                  mes['pdf_xml'] = pdf_in
+          if isinstance(data, dict) and json.dumps(mes, sort_keys=True) != antes:
+              data['mes_anterior'] = mes
+              with open('empresas.json', 'w', encoding='utf-8') as f:
+                  f.write(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+
+          lima = datetime.now(timezone(timedelta(hours=-5)))
+          periodo_ant = (lima.replace(day=1) - timedelta(days=1)).strftime('%Y%m')
+          dias = [int(d) for d in mes.get('dias') or []]
+          toca = accion == 'descargar-ahora' or (os.environ.get('EVENTO') == 'schedule' and not accion
+                                                   and mes.get('activo') and lima.day in dias)
+          if accion:
+              tareas = []  # ver / cambiar el interruptor no descarga; descargar-ahora baja solo el mes anterior
+          if toca:
+              previas = []
+              for e in empresas:  # ya filtradas por inputs.ruc, si vino
+                  if not e.get('activo'):
+                      continue
+                  previas.append({
+                      'ruc': e['ruc'],
+                      'nombre': e.get('nombre', ''),
+                      'tipo': mes.get('tipo') or 'ambos',
+                      'periodo': periodo_ant,
+                      'generar_markdown': e.get('generar_markdown', True),
+                      'modalidad_descarga': (e.get('modalidad_descarga') or '').strip(),
+                      'metodo_descarga_pdf': (e.get('metodo_descarga_pdf') or '').strip(),
+                      'descarga_pdf_xml': mes.get('pdf_xml') or 'ninguno',
+                      'subir_pdf_r2': bool(e.get('subir_pdf_r2', False)),
+                      'extraer_items_xml': bool(e.get('extraer_items_xml', False)),
+                      'es_rango': True,
+                  })
+              # el mes anterior primero: asi lo "mas reciente" de cada empresa sigue siendo el mes actual
+              tareas = previas + [t for t in tareas if t['periodo'] != periodo_ant]
+
+          resumen = [
+              f"### Descarga automatica del mes anterior: **{'ACTIVA' if mes.get('activo') else 'DESACTIVADA'}**",
+              f"- Dias del mes: {', '.join(str(d) for d in dias) or '-'} (en la corrida programada de la 1:00 AM hora Peru)",
+              f"- Registros: {mes.get('tipo')} - PDF/XML: {mes.get('pdf_xml')}",
+              f"- Hoy (Lima) {lima.strftime('%d/%m/%Y')}: " + (f"se agrega el periodo **{periodo_ant}**" if toca else "no se agrega el mes anterior"),
+          ]
+          if accion in ('activar', 'desactivar', 'cambiar'):
+              resumen.append(f"- Interruptor actualizado ({accion}). No se descarga nada en esta corrida.")
+          print('\n'.join(resumen), file=sys.stderr)
+          if os.environ.get('GITHUB_STEP_SUMMARY'):
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
+                  f.write('\n'.join(resumen) + '\n')
+
           print(json.dumps(tareas))
           PYEOF
           MATRIZ=$(python3 /tmp/preparar_matriz.py)
           echo "Tareas (empresa x periodo) activas: $MATRIZ"
           echo "matriz=$MATRIZ" >> "$GITHUB_OUTPUT"
+
+      - name: Guardar el interruptor del mes anterior (si se cambio)
+        if: inputs.mes_anterior == 'activar' || inputs.mes_anterior == 'desactivar' || inputs.mes_anterior == 'cambiar'
+        run: |
+          if git diff --quiet -- empresas.json; then
+            echo "El interruptor ya estaba asi; nada que guardar."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add empresas.json
+          git commit -m "SIRE mes anterior: interruptor actualizado (${{ inputs.mes_anterior }}) [skip ci]"
+          for intento in 1 2 3 4; do
+            git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            sleep $((intento * 5))
+            git pull --rebase origin "$GITHUB_REF_NAME"
+          done
+          echo "::error::No se pudo guardar el interruptor en empresas.json."
+          exit 1
 
   sire_y_facturas:
     needs: preparar_empresas
