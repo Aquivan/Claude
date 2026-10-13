@@ -1980,6 +1980,6 @@ jobs:
           curl -sS -L "$SHEET_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{\"secreto\":\"$SHEET_WEBHOOK_SECRET\",\"ruc\":\"$RUC\",\"periodo\":\"${{ steps.periodo.outputs.valor }}\"}" \
-            -o /tmp/webhook_resp.txt -w "HTTP %{http_code}\n"
-          cat /tmp/webhook_resp.txt
+            --max-time 60 -o /tmp/webhook_resp.txt -w "HTTP %{http_code}\n" || echo "AVISO: la hoja no respondio a tiempo (la importacion periodica la toma igual)."
+          cat /tmp/webhook_resp.txt 2>/dev/null || true
 
