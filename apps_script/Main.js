@@ -630,7 +630,9 @@ function dispararEjecucionProgramadaDiaria_() {
     return;
   }
   try {
-    dispararWorkflowGitHub_(cfg, { periodo: '', tipo: 'ambos', modo: 'completo', ruc: '' });
+    // "diario" = la descarga diaria automatica: GitHub agrega el mes anterior los
+    // dias elegidos (empresas.json > mes_anterior) y su cron de respaldo ya no la repite.
+    dispararWorkflowGitHub_(cfg, { periodo: '', tipo: 'ambos', modo: 'completo', ruc: '', mes_anterior: 'diario' });
     Logger.log('Ejecución diaria disparada con éxito a GitHub para todas las empresas.');
   } catch (e) {
     Logger.log('Error disparando ejecución diaria a GitHub: ' + e.message);

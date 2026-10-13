@@ -1,4 +1,7 @@
 name: SIRE completo (API oficial -> facturas -> links, sin tocar el Sheet)
+# Nombre de cada corrida: asi se distingue la diaria (la dispara la hoja a la
+# 1 AM, puntual) del respaldo programado de GitHub (que llega tarde o no llega).
+run-name: ${{ inputs.mes_anterior == 'diario' && 'SIRE diario 1 AM (hoja)' || github.event_name == 'schedule' && 'SIRE diario (respaldo GitHub)' || 'SIRE completo' }}
 
 on:
   workflow_dispatch:
@@ -58,12 +61,13 @@ on:
           - "true"
           - "false"
       mes_anterior:
-        description: "Descarga automatica del MES ANTERIOR (bloque mes_anterior de empresas.json; la corrida programada de la 1 AM lo agrega solo los dias elegidos). Vacio = corrida normal. ver = solo muestra el estado. activar / desactivar / cambiar = cambia el interruptor (no descarga nada). descargar-ahora = baja YA el mes anterior."
+        description: "Descarga automatica del MES ANTERIOR (bloque mes_anterior de empresas.json; la corrida programada de la 1 AM lo agrega solo los dias elegidos). Vacio = corrida normal. diario = la corrida diaria automatica (la usa la hoja a la 1 AM). ver = solo muestra el estado. activar / desactivar / cambiar = cambia el interruptor (no descarga nada). descargar-ahora = baja YA el mes anterior."
         required: false
         default: ""
         type: choice
         options:
           - ""
+          - diario
           - ver
           - activar
           - desactivar
@@ -100,10 +104,16 @@ on:
     # 60 veces en esa hora y GitHub lo bloquea.
     # Última actualización: 2026-08-29 (re-registro forzado del planificador)
     # ---------------------------------------------------------------------------
-    - cron: '0 6 * * *'
+    # RESPALDO: la corrida diaria la dispara la hoja "Descarga Sire completa" a la
+    # 1:00 AM (menu ⏰ Programar ejecucion automatica diaria), que es puntual. El
+    # programador de GitHub se atrasa horas (y a veces se salta dias), por eso
+    # este cron queda solo de respaldo: si la diaria de la hoja ya corrio hoy, no
+    # descarga nada. 09:17 UTC = 4:17 AM Peru (fuera de la hora en punto).
+    - cron: '17 9 * * *'
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   # Lee empresas.json y arma la lista de empresas ACTIVAS para que el job de
@@ -119,6 +129,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: ¿Ya corrio hoy la descarga diaria? (para no repetirla)
+        id: hoy
+        if: github.event_name == 'schedule' || inputs.mes_anterior == 'diario'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          desde=$(date -u -d "$(TZ=America/Lima date +%Y-%m-%d) 05:00" +%Y-%m-%dT%H:%M:%SZ)
+          n=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow sire-cadena-completa.yml --limit 40 \
+                --json databaseId,displayTitle,createdAt,conclusion \
+                --jq "[.[] | select(.databaseId != $GITHUB_RUN_ID and .createdAt >= \"$desde\" and (.conclusion == \"success\" or .conclusion == \"\") and (.displayTitle == \"SIRE diario 1 AM (hoja)\" or .displayTitle == \"SIRE diario (respaldo GitHub)\"))] | length" || echo 0)
+          echo "Corridas diarias de hoy (Lima) antes de esta: ${n:-0}"
+          if [ "${n:-0}" -gt 0 ]; then echo "saltar=true" >> "$GITHUB_OUTPUT"; else echo "saltar=false" >> "$GITHUB_OUTPUT"; fi
+
       - name: Leer empresas.json (solo las activas, expandir rango de periodos)
         id: leer
         env:
@@ -129,6 +152,7 @@ jobs:
           MES_DIAS: ${{ inputs.mes_anterior_dias }}
           MES_PDF: ${{ inputs.mes_anterior_pdf }}
           EVENTO: ${{ github.event_name }}
+          SALTAR_HOY: ${{ steps.hoy.outputs.saltar }}
         run: |
           cat > /tmp/preparar_matriz.py << 'PYEOF'
           # Lee empresas.json (formato {"_ayuda": {...}, "empresas": [...]}) y
@@ -252,10 +276,13 @@ jobs:
           lima = datetime.now(timezone(timedelta(hours=-5)))
           periodo_ant = (lima.replace(day=1) - timedelta(days=1)).strftime('%Y%m')
           dias = [int(d) for d in mes.get('dias') or []]
-          toca = accion == 'descargar-ahora' or (os.environ.get('EVENTO') == 'schedule' and not accion
-                                                   and mes.get('activo') and lima.day in dias)
-          if accion:
+          diaria = (os.environ.get('EVENTO') == 'schedule' and not accion) or accion == 'diario'
+          saltar_hoy = diaria and os.environ.get('SALTAR_HOY') == 'true'
+          toca = accion == 'descargar-ahora' or (diaria and not saltar_hoy and mes.get('activo') and lima.day in dias)
+          if accion and accion != 'diario':
               tareas = []  # ver / cambiar el interruptor no descarga; descargar-ahora baja solo el mes anterior
+          if saltar_hoy:
+              tareas = []  # la descarga diaria de hoy ya corrio (hoja o respaldo): no se repite
           if toca:
               previas = []
               for e in empresas:  # ya filtradas por inputs.ruc, si vino
@@ -279,12 +306,14 @@ jobs:
 
           resumen = [
               f"### Descarga automatica del mes anterior: **{'ACTIVA' if mes.get('activo') else 'DESACTIVADA'}**",
-              f"- Dias del mes: {', '.join(str(d) for d in dias) or '-'} (en la corrida programada de la 1:00 AM hora Peru)",
+              f"- Dias del mes: {', '.join(str(d) for d in dias) or '-'} (en la descarga diaria de la 1:00 AM hora Peru)",
               f"- Registros: {mes.get('tipo')} - PDF/XML: {mes.get('pdf_xml')}",
               f"- Hoy (Lima) {lima.strftime('%d/%m/%Y')}: " + (f"se agrega el periodo **{periodo_ant}**" if toca else "no se agrega el mes anterior"),
           ]
           if accion in ('activar', 'desactivar', 'cambiar'):
               resumen.append(f"- Interruptor actualizado ({accion}). No se descarga nada en esta corrida.")
+          if saltar_hoy:
+              resumen.append("- La descarga diaria de hoy YA corrio: esta corrida no descarga nada (evita repetir).")
           print('\n'.join(resumen), file=sys.stderr)
           if os.environ.get('GITHUB_STEP_SUMMARY'):
               with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:

@@ -73,6 +73,7 @@ function dispararWorkflowGitHub_(cfg, inputs) {
         tipo: inputs.tipo || 'ambos',
         modo: inputs.modo || 'completo',
         ruc: inputs.ruc || '',
+        mes_anterior: inputs.mes_anterior || '',
       },
     },
   });
