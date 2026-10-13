@@ -266,7 +266,8 @@ function NOT_menuOrdenarPdf() {
   } catch (e) { ui.alert('❌ ' + e.message); }
 }
 
-function NOT_actualizacionAutomatica() {
+/** Importa a la hoja lo que GitHub ya descargo (antes era el disparador diario; ahora lo llama Diario.js). */
+function NOT_importarAhora_() {
   NOT_conCandado_(function () { NOT_actualizarDatos_(); NOT_ordenarPdf_(); });
 }
 

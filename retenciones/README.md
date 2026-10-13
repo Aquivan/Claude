@@ -39,3 +39,14 @@ No comparte código ni hojas con Cobranzas, SIRE ni Vouchers.
 
 Menú **🧾 Retenciones**: actualizar todo, solo datos, solo PDF, pedir a SUNAT lo nuevo, actualización diaria, token de GitHub, probar conexión.
 El token de GitHub se guarda con el menú 🔑 (Propiedades del script), nunca en celdas ni en el repositorio.
+
+## Descarga diaria puntual (y respaldo)
+
+El programador de GitHub (cron) se atrasa horas y a veces se salta días. Por eso
+el disparador diario de la hoja (`*_actualizacionAutomatica`, `Diario.js`) es el
+que **pide** la descarga a GitHub a su hora (workflow_dispatch, arranca en
+segundos), revisa cada 8 minutos y **importa cuando termina**. El cron del
+workflow queda como **respaldo**: las corridas diarias se llaman igual
+("… · diario"), van en fila (`concurrency`) y si una ya corrió, la otra no
+descarga nada.
+

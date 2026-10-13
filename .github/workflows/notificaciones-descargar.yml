@@ -5,11 +5,16 @@
 # Nunca imprime claves. Bajar el PDF marca la notificación como "leída" en SOL.
 
 name: Notificaciones - descargar Buzón Electrónico (SUNAT SOL)
+# La corrida diaria la pide la hoja (puntual); el cron de GitHub es solo respaldo
+# (se atrasa horas o se salta dias). Ambas se llaman igual para no repetirlas.
+run-name: ${{ (github.event_name == 'schedule' || inputs.diario) && 'Notificaciones · diario' || 'Notificaciones - descargar Buzón Electrónico (SUNAT SOL)' }}
 
 on:
   # Todos los días ~7:07 a. m. y ~4:07 p. m. de Lima, todas las empresas (con PDF de notificaciones).
   schedule:
     - cron: '7 12,21 * * *'
+    - cron: '41 16 * * *'   # respaldo (11:41 a. m. Lima)
+    - cron: '41 1 * * *'    # respaldo (8:41 p. m. Lima)
   workflow_dispatch:
     inputs:
       empresa:
@@ -32,9 +37,20 @@ on:
         description: "Guardar en el repositorio (notificaciones/datos/)"
         type: boolean
         default: true
+      diario:
+        description: "Corrida diaria automatica (la pide la hoja a su hora). No hace falta marcarlo a mano."
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+  actions: read
+
+# Las corridas diarias (hoja o respaldo) van en fila, nunca a la vez: la
+# segunda ve que la primera ya termino y no repite la descarga.
+concurrency:
+  group: ${{ (github.event_name == 'schedule' || inputs.diario) && 'notificaciones-diario' || format('notificaciones-descargar-{0}', github.run_id) }}
+  cancel-in-progress: false
 
 jobs:
   empresas:
@@ -46,13 +62,29 @@ jobs:
         with:
           sparse-checkout: empresas.json
           sparse-checkout-cone-mode: false
+      - name: ¿Ya corrio la descarga diaria? (para no repetirla)
+        id: hoy
+        if: github.event_name == 'schedule' || inputs.diario
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          desde=$(date -u -d "5 hours ago" +%Y-%m-%dT%H:%M:%SZ)  # ultimas 5 horas
+          n=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow notificaciones-descargar.yml --limit 30 \
+                --json databaseId,displayTitle,createdAt,conclusion \
+                --jq "[.[] | select(.databaseId != $GITHUB_RUN_ID and .createdAt >= \"$desde\" and (.conclusion == \"success\" or .conclusion == \"\") and .displayTitle == \"Notificaciones · diario\")] | length" || echo 0)
+          echo "Corridas diarias recientes antes de esta: ${n:-0}"
+          if [ "${n:-0}" -gt 0 ]; then echo "saltar=true" >> "$GITHUB_OUTPUT"; else echo "saltar=false" >> "$GITHUB_OUTPUT"; fi
       - id: e
         env:
+          SALTAR: ${{ steps.hoy.outputs.saltar }}
           EMPRESA: ${{ inputs.empresa || 'todas' }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
           sel = os.environ["EMPRESA"].strip()
+          if os.environ.get("SALTAR") == "true":
+              print("lista=[]")  # la descarga diaria ya corrio: no se repite
+              raise SystemExit
           emp = [e for e in json.load(open("empresas.json"))["empresas"] if e.get("activo")]
           rucs = [e["ruc"] for e in emp] if sel.lower() == "todas" else [sel]
           print("lista=" + json.dumps(rucs))
@@ -61,6 +93,7 @@ jobs:
 
   descargar:
     needs: empresas
+    if: needs.empresas.outputs.lista != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -82,14 +115,14 @@ jobs:
           DESDE: ${{ inputs.desde }}
         run: |
           # Corrida automática: los últimos 3 meses (lo anterior ya quedó guardado).
-          if [ "${{ github.event_name }}" = "schedule" ]; then DESDE=$(TZ=America/Lima date -d "$(TZ=America/Lima date +%Y-%m-01) -2 month" +%Y%m); fi
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.diario }}" = "true" ]; then DESDE=$(TZ=America/Lima date -d "$(TZ=America/Lima date +%Y-%m-01) -2 month" +%Y%m); fi
           extra=""
           if [ "$PDF" = "false" ]; then extra="$extra --sin-pdf"; fi
           if [ "$PDF_MENSAJES" = "true" ]; then extra="$extra --pdf-mensajes"; fi
           python3 notificaciones/scripts/descargar_buzon.py --salida notificaciones/datos --desde "$DESDE" $extra
 
       - name: Guardar en el repositorio
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.guardar) }}
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.diario || inputs.guardar) }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

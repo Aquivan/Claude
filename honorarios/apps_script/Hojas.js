@@ -295,8 +295,8 @@ function HON_menuOrdenarPdf() {
   } catch (e) { ui.alert('❌ ' + e.message); }
 }
 
-/** Disparador diario. */
-function HON_actualizacionAutomatica() {
+/** Importa a la hoja lo que GitHub ya descargo (antes era el disparador diario; ahora lo llama Diario.js). */
+function HON_importarAhora_() {
   HON_conCandado_(function () {
     HON_actualizarDatos_();
     HON_ordenarPdf_();

@@ -115,6 +115,12 @@ permissions:
   contents: write
   actions: read
 
+# Las corridas diarias (hoja 1 AM o respaldo) van en fila, nunca a la vez: la
+# segunda ve que la primera ya corrio y no repite la descarga.
+concurrency:
+  group: ${{ (github.event_name == 'schedule' || inputs.mes_anterior == 'diario') && 'sire-diario' || format('sire-{0}', github.run_id) }}
+  cancel-in-progress: false
+
 jobs:
   # Lee empresas.json y arma la lista de empresas ACTIVAS para que el job de
   # abajo corra una vez por empresa (matrix), cada una con sus propias

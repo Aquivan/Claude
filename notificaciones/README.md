@@ -46,3 +46,14 @@ haga esto: las direcciones se obtuvieron observando la página oficial del buzó
 - `apps_script/` — Config.js, GitHub.js, Hojas.js, Drive.js.
 - Despliegue: `.github/workflows/deploy-notificaciones.yml` (clasp).
 - Hoja: https://docs.google.com/spreadsheets/d/1gV56deyMd-11O_fpB7cBVKKoUu0nF9lyvHMGlIKbNOs (carpeta Drive "Notificaciones · Grupo").
+
+## Descarga diaria puntual (y respaldo)
+
+El programador de GitHub (cron) se atrasa horas y a veces se salta días. Por eso
+el disparador diario de la hoja (`*_actualizacionAutomatica`, `Diario.js`) es el
+que **pide** la descarga a GitHub a su hora (workflow_dispatch, arranca en
+segundos), revisa cada 8 minutos y **importa cuando termina**. El cron del
+workflow queda como **respaldo**: las corridas diarias se llaman igual
+("… · diario"), van en fila (`concurrency`) y si una ya corrió, la otra no
+descarga nada.
+

@@ -320,8 +320,8 @@ function RET_menuOrdenarPdf() {
   } catch (e) { ui.alert('❌ ' + e.message); }
 }
 
-/** Disparador diario. */
-function RET_actualizacionAutomatica() {
+/** Importa a la hoja lo que GitHub ya descargo (antes era el disparador diario; ahora lo llama Diario.js). */
+function RET_importarAhora_() {
   RET_conCandado_(function () {
     var d = RET_actualizarDatos_();
     RET_ordenarPdf_(d.cre);

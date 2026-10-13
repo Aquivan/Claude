@@ -37,3 +37,14 @@ Nunca se imprimen claves SOL ni tokens. No toca otros proyectos.
 - `apps_script/` — Config.js (menú y parámetros), GitHub.js (lectura del repo y pedidos de descarga), Hojas.js (pestañas), Drive.js (PDF a Drive).
 - Despliegue: `.github/workflows/deploy-honorarios.yml` (clasp, igual que Retenciones).
 - Hoja: https://docs.google.com/spreadsheets/d/1-dJiKLIFfcVt5htxp7sewCMfy1ne9WUzD1PWKYuc_wk (carpeta Drive "Honorarios · Grupo").
+
+## Descarga diaria puntual (y respaldo)
+
+El programador de GitHub (cron) se atrasa horas y a veces se salta días. Por eso
+el disparador diario de la hoja (`*_actualizacionAutomatica`, `Diario.js`) es el
+que **pide** la descarga a GitHub a su hora (workflow_dispatch, arranca en
+segundos), revisa cada 8 minutos y **importa cuando termina**. El cron del
+workflow queda como **respaldo**: las corridas diarias se llaman igual
+("… · diario"), van en fila (`concurrency`) y si una ya corrió, la otra no
+descarga nada.
+

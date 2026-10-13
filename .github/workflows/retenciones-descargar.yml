@@ -6,11 +6,15 @@
 # No toca ningun otro proyecto. Nunca imprime claves ni tokens.
 
 name: Retenciones - descargar CRE (SUNAT SOL)
+# La corrida diaria la pide la hoja (puntual); el cron de GitHub es solo respaldo
+# (se atrasa horas o se salta dias). Ambas se llaman igual para no repetirlas.
+run-name: ${{ (github.event_name == 'schedule' || inputs.diario) && 'Retenciones · diario' || 'Retenciones - descargar CRE (SUNAT SOL)' }}
 
 on:
   # Todos los dias ~6:07 a. m. de Lima: mes anterior y mes actual de todas las empresas.
   schedule:
     - cron: '7 11 * * *'
+    - cron: '37 17 * * *'   # respaldo 2 (12:37 p. m. Lima)
   workflow_dispatch:
     inputs:
       empresa:
@@ -37,9 +41,20 @@ on:
         description: "Guardar en el repositorio (retenciones/datos/)"
         type: boolean
         default: true
+      diario:
+        description: "Corrida diaria automatica (la pide la hoja a su hora). No hace falta marcarlo a mano."
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+  actions: read
+
+# Las corridas diarias (hoja o respaldo) van en fila, nunca a la vez: la
+# segunda ve que la primera ya termino y no repite la descarga.
+concurrency:
+  group: ${{ (github.event_name == 'schedule' || inputs.diario) && 'retenciones-diario' || format('retenciones-descargar-{0}', github.run_id) }}
+  cancel-in-progress: false
 
 jobs:
   empresas:
@@ -51,13 +66,29 @@ jobs:
         with:
           sparse-checkout: empresas.json
           sparse-checkout-cone-mode: false
+      - name: ¿Ya corrio la descarga diaria? (para no repetirla)
+        id: hoy
+        if: github.event_name == 'schedule' || inputs.diario
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          desde=$(date -u -d "$(TZ=America/Lima date +%Y-%m-%d) 05:00" +%Y-%m-%dT%H:%M:%SZ)  # desde las 0:00 de hoy (Lima)
+          n=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow retenciones-descargar.yml --limit 30 \
+                --json databaseId,displayTitle,createdAt,conclusion \
+                --jq "[.[] | select(.databaseId != $GITHUB_RUN_ID and .createdAt >= \"$desde\" and (.conclusion == \"success\" or .conclusion == \"\") and .displayTitle == \"Retenciones · diario\")] | length" || echo 0)
+          echo "Corridas diarias recientes antes de esta: ${n:-0}"
+          if [ "${n:-0}" -gt 0 ]; then echo "saltar=true" >> "$GITHUB_OUTPUT"; else echo "saltar=false" >> "$GITHUB_OUTPUT"; fi
       - id: e
         env:
+          SALTAR: ${{ steps.hoy.outputs.saltar }}
           EMPRESA: ${{ inputs.empresa || 'todas' }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
           sel = os.environ["EMPRESA"].strip()
+          if os.environ.get("SALTAR") == "true":
+              print("lista=[]")  # la descarga diaria ya corrio: no se repite
+              raise SystemExit
           emp = [e for e in json.load(open("empresas.json"))["empresas"] if e.get("activo")]
           rucs = [e["ruc"] for e in emp] if sel.lower() == "todas" else [sel]
           print("lista=" + json.dumps(rucs))
@@ -66,6 +97,7 @@ jobs:
 
   descargar:
     needs: empresas
+    if: needs.empresas.outputs.lista != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -99,7 +131,7 @@ jobs:
           python3 retenciones/scripts/descargar_cre.py --periodo "$PERIODO" --hasta "$HASTA" --salida retenciones/datos $extra
 
       - name: Guardar en el repositorio
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.guardar) }}
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.diario || inputs.guardar) }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
