@@ -231,6 +231,28 @@ var ANX_HERR_ = {
     return { columnas: ['ref', 'fecha', 'monto', 'operacion', 'estado', 'coincide_por', 'voucher', 'empresa', 'beneficiario', 'proveedor_ia', 'usado_en', 'fila_AJ'], filas: filas };
   },
 
+  /** Asignar un voucher de una vez: empresa, ID usuario (RUC empresa), ID beneficiario (RUC proveedor) y factura(s). */
+  asignar_voucher: function (c, a) {
+    var emp = AUV_empresaDe_(String(a.empresa || ''), c.cfg) || (c.cfg.grupo.indexOf(aRuc_(a.empresa)) !== -1 ? aRuc_(a.empresa) : '');
+    var prov = aRuc_(a.proveedor_ruc || a.id_beneficiario || a.ruc_proveedor || a.proveedor || '');
+    var facts = a.facturas || a.factura || '';
+    if (Array.isArray(facts)) facts = facts.join(',');
+    var pedidos = [];
+    if (emp) { pedidos.push(['empresa', c.cfg.nombreEmpresa[emp] || emp]); pedidos.push(['id_usuario', emp]); }
+    if (prov) pedidos.push(['id_beneficiario', prov]);
+    if (String(facts).trim()) pedidos.push(['factura', String(facts)]);
+    if (!pedidos.length) throw new Error('indique empresa, proveedor_ruc y/o facturas');
+    var filas = [], errores = [];
+    pedidos.forEach(function (p) {
+      try {
+        var r = ANX_HERR_.proponer_cambio(c, { fila: a.fila, campo: p[0], valor: p[1], motivo: a.motivo || '' });
+        filas = filas.concat(r.filas);
+      } catch (e) { errores.push(p[0] + ': ' + e.message); }
+    });
+    return { columnas: ['id', 'fila', 'columna', 'valor_actual', 'valor_nuevo', 'aviso'], filas: filas,
+      nota: (errores.length ? 'No se pudo: ' + errores.join(' · ') + '. ' : '') + 'Nada se escribe todavía: el usuario lo aprueba con ✅.' };
+  },
+
   proponer_cambio: function (c, a) {
     var fuente = String(a.fila || a.voucher || '').replace(/\s/g, '');
     var m = fuente.match(/^(.+)!(\d+)$/);
@@ -245,7 +267,7 @@ var ANX_HERR_ = {
     var col = ANX_columna_(enc, campo);
     if (col < 0) throw new Error('no encuentro la columna "' + campo + '" en ' + m[1] + '; columnas: ' + enc.filter(String).join(', '));
     var actual = sh.getRange(fila, col + 1).getDisplayValue();
-    var nuevo = String(a.valor == null ? '' : a.valor).trim();
+    var nuevo = ANX_normalizar_(c, String(enc[col]), String(a.valor == null ? '' : a.valor).trim());
     if (!nuevo) throw new Error('falta "valor"');
     c.cambios = c.cambios || [];
     var id = 'C' + (c.cambios.length + 1);
@@ -259,6 +281,27 @@ var ANX_HERR_ = {
       nota: 'Nada se escribe todavía: el usuario lo aprueba con ✅ en el chat o ✔ en 💬 Resultado IA.' };
   },
 };
+
+/**
+ * Deja el valor como lo usa la hoja: Empresa = nombre corto del grupo, ID Usuario /
+ * ID Beneficiario = RUC (11 dígitos), Factura = "01_F001-123" (varias separadas por coma).
+ */
+function ANX_normalizar_(c, encabezado, v) {
+  var h = normHeader_(encabezado);
+  if (/^empresa/.test(h)) { var r = AUV_empresaDe_(v, c.cfg); return r ? (c.cfg.nombreEmpresa[r] || v) : v; }
+  if (/^id usuario/.test(h)) { var e = aRuc_(v) || AUV_empresaDe_(v, c.cfg); return e || v; }
+  if (/^id benef|^ruc/.test(h)) return aRuc_(v) || v;
+  if (/^tipo y n|factura/.test(h)) {
+    return v.split(/[,;\s]+/).filter(Boolean).map(function (t) {
+      t = t.toUpperCase().replace(/^(FACTURA|FACT|FT)[:.\s]*/, '');
+      if (/^\d{2}_/.test(t)) return t;
+      var m = t.match(/^([A-Z]\w{3})-0*(\d+)$/);
+      if (!m) return t;
+      return (/^B/.test(m[1]) ? '03' : /^(07|NC)/.test(m[1]) ? '07' : '01') + '_' + m[1] + '-' + m[2];
+    }).join(',');
+  }
+  return v;
+}
 
 /** Columna de la hoja de vouchers para un campo ("factura", "ID Beneficiario"…). -1 si no está. */
 function ANX_columna_(enc, campo) {

@@ -60,6 +60,10 @@ var ANA_SISTEMA_ = [
   '- proponer_cambio {fila:"Originales!120", campo:"factura"|"id_beneficiario"|"empresa"|"id_usuario"|"por_retener"|"nota"|<encabezado exacto>, valor, motivo}:',
   '  propone escribir un dato que FALTA en la hoja de vouchers (ej. la factura que paga, el RUC del beneficiario). NO se escribe nada: el usuario lo aprueba.',
   '  Facturas como en la hoja: "01_F001-123" (varias separadas por coma). Propón solo lo que esté respaldado por los datos; explica el motivo.',
+  '- asignar_voucher {fila:"Fotos!330", empresa:"M&D", proveedor_ruc:"20602034675", facturas:"01_F002-18500", motivo}: propone de una vez empresa,',
+  '  ID usuario (RUC de la empresa), ID beneficiario (RUC del proveedor) y factura(s) de ese voucher. Úsala para "asigna / completa este voucher".',
+  'MUY IMPORTANTE: si el usuario pide asignar, completar, escribir, registrar, llenar o actualizar datos, DEBES llamar asignar_voucher o proponer_cambio',
+  '(una vez por voucher) ANTES de responder. Nunca lo describas solo en una tabla: si no llamas la herramienta, no aparece el botón ✅ para escribirlo.',
   '- hojas {}: lista las hojas disponibles con sus columnas.   - leer_hoja {libro:"cobranzas"|"vouchers", hoja, buscar, max_filas}',
   'empresa = nombre corto o RUC de la empresa del grupo. contraparte = nombre (aunque esté mal escrito) o RUC. Fechas dd/mm/yyyy.',
   '',
@@ -511,6 +515,15 @@ function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos) {
       });
       continue;
     }
+    // Pidió escribir/asignar y la IA respondió sin proponer nada: se le exige usar la herramienta (una vez).
+    if (r && (r.respuesta || r.tablas) && !apurar && !c.exigido && !(c.cambios && c.cambios.length) &&
+        ANA_pideEscribir_(pregunta)) {
+      c.exigido = true;
+      conv.push('', 'TU RESPUESTA NO SE ACEPTA TODAVÍA: el usuario pidió escribir/asignar en la hoja de vouchers y no usaste asignar_voucher ni proponer_cambio.',
+        'Llámala ahora con la fila del voucher (ej. Fotos!330) y los datos que encontraste (empresa, RUC del proveedor, factura). Si de verdad no hay datos suficientes,',
+        'responde explicando exactamente qué falta.');
+      continue;
+    }
     if (r && (r.respuesta || r.tablas)) final = r;
     else if (apurar) final = { respuesta: String((r && (r.respuesta || r.texto)) || 'La IA no dio una respuesta.'), tablas: [] };
     else conv.push('', 'Responde con el JSON del protocolo ("consultar" o "responder").');
@@ -667,6 +680,12 @@ function ANA_escribir_(ss, pregunta, out, ia) {
   for (var j = 2; j <= Math.max(anchoMax, 12); j++) sh.setColumnWidth(j, 120);
   sh.setFrozenRows(1);
   return tablas;
+}
+
+/** ¿El usuario pide escribir en la hoja? ("asigna", "complétalo", "regístralo"… pero no "¿está registrado?") */
+function ANA_pideEscribir_(t) {
+  var s = String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return /\b(asign(a|e|ar|alo|ala|en|arlo)|complet(a|e|ar|alo|ala|en|arlo)|escrib(e|a|ir|elo|ela|an|irlo)|registr(a|e|ar|alo|ala|en|arlo)|llen(a|e|ar|alo|ala|en)|actualiz(a|ar|alo)|actualice|insert(a|e|ar)|agreg(a|ue|ar|alo)|anot(a|e|ar|alo)|pon(lo|la|er|gan?)|corrig(e|a|ir))\b/.test(s);
 }
 
 /** Errores de la IA explicados en simple (el texto técnico va al final, corto). */
