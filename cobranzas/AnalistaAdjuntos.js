@@ -275,7 +275,7 @@ var ANX_HERR_ = {
       String(actual).trim() === nuevo ? 'ya tiene ese mismo dato: no hace falta' : 'ya tiene «' + actual + '»: solo se cambia si marca "reemplazar"';
     if (String(actual).trim() !== nuevo) {
       c.cambios.push({ id: id, hoja: m[1], fila: fila, col: col + 1, encabezado: String(enc[col]), actual: String(actual), nuevo: nuevo,
-        motivo: String(a.motivo || '').slice(0, 300), aviso: aviso });
+        motivo: String(a.motivo || '').slice(0, 300), aviso: aviso, url: ANX_url_(c.cfg.idVouchers, sh, sh.getRange(fila, col + 1).getA1Notation()) });
     }
     return { columnas: ['id', 'fila', 'columna', 'valor_actual', 'valor_nuevo', 'aviso'], filas: [[String(actual).trim() === nuevo ? '-' : id, fuente, String(enc[col]), actual, nuevo, aviso]],
       nota: 'Nada se escribe todavía: el usuario lo aprueba con ✅ en el chat o ✔ en 💬 Resultado IA.' };
@@ -340,16 +340,25 @@ function ANX_guardarPropuestos_(ss, cambios) {
  * Aplica los cambios aprobados (por ID). Solo celdas vacías, salvo `reemplazar`.
  * Se registra en _ImportLog (el mismo registro de ↩️ Deshacer) y en _Cambios IA.
  */
-function ANX_aplicar_(ss, ids, reemplazar) {
+function ANX_aplicar_(ss, ids, reemplazar) { return ANX_aplicarDet_(ss, ids, reemplazar).mensaje; }
+
+/** Enlace que abre la hoja de vouchers en esa pestaña y celda(s). */
+function ANX_url_(idLibro, sh, a1) {
+  return 'https://docs.google.com/spreadsheets/d/' + idLibro + '/edit#gid=' + sh.getSheetId() + '&range=' + a1;
+}
+
+/** Como ANX_aplicar_, pero devuelve también los enlaces a las filas cambiadas: {mensaje, enlaces:[{fila, rango, url}]}. */
+function ANX_aplicarDet_(ss, ids, reemplazar) {
   var sh = ANX_hojaCambios_(ss);
-  if (sh.getLastRow() < 2 || !ids || !ids.length) return 'No hay cambios para aplicar.';
+  if (sh.getLastRow() < 2 || !ids || !ids.length) return { mensaje: 'No hay cambios para aplicar.', enlaces: [] };
   var v = sh.getRange(2, 1, sh.getLastRow() - 1, ANX_ENC_CAMBIOS_.length).getValues();
   var quiero = {};
   ids.forEach(function (i) { quiero[String(i)] = true; });
   var cfg = leerConfig_(ss);
   var libro = SpreadsheetApp.openById(cfg.idVouchers);
   var lote = 'IA' + Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd-HHmmss');
-  var log = [], hechos = 0, saltados = [];
+  var log = [], hechos = 0, saltados = [], filas = {};
+  var cuando = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm');
   v.forEach(function (r, i) {
     if (!quiero[r[1]] || r[2] !== 'propuesto') return;
     var shV = libro.getSheetByName(r[3]);
@@ -359,6 +368,10 @@ function ANX_aplicar_(ss, ids, reemplazar) {
     if (antes && !reemplazar) { saltados.push(r[3] + '!' + r[4] + ' ' + r[6] + ' ya tiene «' + antes + '»'); sh.getRange(i + 2, 3).setValue('no aplicado: ya tenía dato'); return; }
     if (/^(id |ruc)/i.test(String(r[6])) || /^\d{8,11}$/.test(String(r[8]))) celda.setNumberFormat('@');
     celda.setValue(r[8]);
+    try { celda.setNote('✏️ Escrito por la IA ' + cuando + (r[9] ? ': ' + String(r[9]).slice(0, 250) : '') + (antes ? '\nAntes: ' + antes : '')); } catch (e) { /* sin nota */ }
+    var k = r[3] + '!' + r[4];
+    var f = filas[k] = filas[k] || { hoja: r[3], fila: r[4], min: r[5], max: r[5], sh: shV };
+    f.min = Math.min(f.min, r[5]); f.max = Math.max(f.max, r[5]);
     log.push([lote, new Date(), r[3], r[4], r[5], r[6], r[8], '', antes]);
     sh.getRange(i + 2, 3, 1, 1).setValue('aplicado');
     sh.getRange(i + 2, 12).setValue(lote);
@@ -369,8 +382,16 @@ function ANX_aplicar_(ss, ids, reemplazar) {
     shL.getRange(shL.getLastRow() + 1, 1, log.length, 9).setValues(log);
   }
   var r2 = hechos ? actualizarTodo_(true) : '';
-  return (hechos ? '✅ ' + hechos + ' dato(s) escritos en Vouchers' : 'No se escribió nada') + (saltados.length ? ' · se dejaron ' + saltados.length + ': ' + saltados.slice(0, 5).join('; ') : '') +
-    (hechos ? ' · se puede deshacer (↩️)' : '') + (r2 ? ' · ' + r2 : '');
+  var enlaces = Object.keys(filas).map(function (k) {
+    var f = filas[k];
+    var a1 = f.sh.getRange(f.fila, f.min, 1, f.max - f.min + 1).getA1Notation();
+    return { fila: k, rango: a1, url: ANX_url_(cfg.idVouchers, f.sh, a1) };
+  });
+  return {
+    mensaje: (hechos ? '✅ ' + hechos + ' dato(s) escritos en Vouchers' : 'No se escribió nada') + (saltados.length ? ' · se dejaron ' + saltados.length + ': ' + saltados.slice(0, 5).join('; ') : '') +
+      (hechos ? ' · cada celda escrita lleva una nota "✏️ Escrito por la IA" · se puede deshacer (↩️)' : '') + (r2 ? ' · ' + r2 : ''),
+    enlaces: enlaces,
+  };
 }
 
 /** Deshace el último lote de cambios de la IA (solo si la celda sigue con lo que se escribió). */
@@ -392,6 +413,7 @@ function ANX_deshacer_(ss) {
     var c = shV.getRange(r[3], r[4]);
     if (String(c.getDisplayValue()).trim() !== String(r[6]).trim()) { dejados++; return; }
     if (String(r[8]).trim()) c.setValue(r[8]); else c.clearContent();
+    try { if (/^✏️ Escrito por la IA/.test(String(c.getNote()))) c.setNote(''); } catch (e) { /* sin nota */ }
     vueltos++;
   });
   for (var k = borrar.length - 1; k >= 0; k--) shL.deleteRow(borrar[k]);
@@ -417,8 +439,11 @@ function ANX_menuAplicarMarcados() {
   });
   if (!ids.length) { SpreadsheetApp.getUi().alert('Marque con ✔ los cambios a aplicar en la tabla "✏️ Cambios propuestos" de ' + ANA_HOJA_ + '.'); return; }
   var msg;
-  try { msg = ANX_aplicar_(ss, ids, reemplazar); } catch (e) { msg = '❌ ' + e.message; }
-  ss.toast(msg, '✏️ Cambios de la IA', 15);
+  try {
+    var d = ANX_aplicarDet_(ss, ids, reemplazar);
+    msg = d.mensaje + (d.enlaces.length ? '\n\nPara verlos en la hoja de vouchers (copie el enlace):\n' + d.enlaces.map(function (e) { return e.fila + ' (' + e.rango + '): ' + e.url; }).join('\n') : '');
+  } catch (e) { msg = '❌ ' + e.message; }
+  ss.toast(msg.split('\n')[0], '✏️ Cambios de la IA', 15);
   SpreadsheetApp.getUi().alert('✏️ Cambios de la IA', msg, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 

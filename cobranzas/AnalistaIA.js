@@ -647,13 +647,14 @@ function ANA_escribir_(ss, pregunta, out, ia) {
     sh.getRange(fila, 1, 1, 2).setValues([['Reemplazar si ya tiene dato', false]]).setFontSize(9);
     sh.getRange(fila, 2).insertCheckboxes();
     fila++;
-    var encC = ['✔ Aplicar', 'ID', 'Fila', 'Columna', 'Valor actual', 'Valor nuevo', 'Motivo', 'Aviso'];
+    var encC = ['✔ Aplicar', 'ID', 'Fila', 'Columna', 'Valor actual', 'Valor nuevo', 'Motivo', 'Aviso', 'Ver'];
     sh.getRange(fila, 1, 1, encC.length).setValues([encC]).setFontWeight('bold').setFontColor(COLOR.BLANCO).setBackground('#C2410C');
+    sh.getRange(fila + 1, 5, cambios.length, 2).setNumberFormat('@');   // RUC y facturas como texto (antes de escribirlos)
     sh.getRange(fila + 1, 1, cambios.length, encC.length).setValues(cambios.map(function (x) {
-      return [false, x.id, x.hoja + '!' + x.fila, x.encabezado, x.actual, x.nuevo, x.motivo, x.aviso];
+      return [false, x.id, x.hoja + '!' + x.fila, x.encabezado, String(x.actual), String(x.nuevo), x.motivo, x.aviso,
+        x.url ? '=HYPERLINK("' + x.url + '";"🔗 abrir")' : ''];
     })).setFontSize(9).setWrap(true).setVerticalAlignment('top');
     sh.getRange(fila + 1, 1, cambios.length, 1).insertCheckboxes();
-    sh.getRange(fila + 1, 5, cambios.length, 2).setNumberFormat('@');
     anchoMax = Math.max(anchoMax, encC.length);
     fila += cambios.length + 2;
   }

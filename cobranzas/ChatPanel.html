@@ -159,6 +159,7 @@ function mostrar(r) {
     var c = document.createElement('div'); c.className = 'cambios';
     c.innerHTML = '<b>✏️ La IA propone completar la hoja de vouchers:</b>' + r.cambios.map(function (x) {
       return '<label><input type="checkbox" value="' + esc(x.id) + '" ' + (/vacía/.test(x.aviso) ? 'checked' : '') + '> <b>' + esc(x.fila) + '</b> · ' + esc(x.columna) + ' = <b>' + esc(x.nuevo) + '</b>' +
+        (x.url ? ' <a href="' + esc(x.url) + '" target="_blank" title="Abrir la hoja de vouchers en esa celda">🔗</a>' : '') +
         (x.motivo ? '<br><span class="det">' + esc(x.motivo) + '</span>' : '') + '<br><span class="av">' + esc(x.aviso) + '</span></label>';
     }).join('') + '<label><input type="checkbox" class="reemp"> Reemplazar si la celda ya tiene un dato</label>';
     var ap = document.createElement('button'); ap.className = 'btn'; ap.textContent = '✅ Escribir los marcados';
@@ -166,7 +167,13 @@ function mostrar(r) {
       var ids = Array.prototype.map.call(c.querySelectorAll('input[type=checkbox]:checked:not(.reemp)'), function (i) { return i.value; });
       if (!ids.length) return;
       ap.disabled = true; ap.textContent = '⏳ Escribiendo…';
-      google.script.run.withSuccessHandler(function (x) { ap.textContent = '✔ Listo'; burbuja(formato(x.error || x.mensaje), x.error ? 'err' : 'ia'); })
+      google.script.run.withSuccessHandler(function (x) {
+          ap.textContent = '✔ Listo';
+          var links = (x.enlaces || []).map(function (e) {
+            return '<a class="btn2" style="display:inline-block;text-decoration:none" href="' + esc(e.url) + '" target="_blank">🔗 Ver ' + esc(e.fila) + ' (' + esc(e.rango) + ')</a>';
+          }).join(' ');
+          burbuja(formato(x.error || x.mensaje) + (links ? '<div style="margin-top:6px">' + links + '</div>' : ''), x.error ? 'err' : 'ia');
+        })
         .withFailureHandler(function (e) { ap.disabled = false; ap.textContent = '✅ Escribir los marcados'; burbuja(formato(String(e.message || e)), 'err'); })
         .CHAT_aplicar(ids, c.querySelector('.reemp').checked);
     };

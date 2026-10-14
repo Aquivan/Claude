@@ -63,7 +63,7 @@ function CHAT_enviar(msg) {
           filas: t.filas.slice(0, 25).map(function (f) { return f.map(ANA_fmt_); }) };
       }),
       cambios: (out.c.cambios || []).map(function (x) {
-        return { id: x.id, fila: x.hoja + '!' + x.fila, columna: x.encabezado, actual: x.actual, nuevo: x.nuevo, motivo: x.motivo, aviso: x.aviso };
+        return { id: x.id, fila: x.hoja + '!' + x.fila, columna: x.encabezado, actual: x.actual, nuevo: x.nuevo, motivo: x.motivo, aviso: x.aviso, url: x.url || '' };
       }),
       adjuntos: adjuntos, seg: out.seg,
       detalle: ia.proveedor + (ia.modelo ? ' ' + ia.modelo : '') + ' · ' + out.seg + ' s · revisó: ' + (out.pasos.join(' ; ') || '—'),
@@ -75,7 +75,7 @@ function CHAT_enviar(msg) {
 }
 
 function CHAT_aplicar(ids, reemplazar) {
-  try { return { mensaje: ANX_aplicar_(SpreadsheetApp.getActiveSpreadsheet(), ids || [], !!reemplazar) }; }
+  try { return ANX_aplicarDet_(SpreadsheetApp.getActiveSpreadsheet(), ids || [], !!reemplazar); }
   catch (e) { return { error: '❌ ' + e.message }; }
 }
 
