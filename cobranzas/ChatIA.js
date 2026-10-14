@@ -1,5 +1,5 @@
 /**
- * ChatIA.js — 💬 CHAT CON LA IA (panel a la derecha de la hoja).
+ * ChatIA.js (panel: ChatPanel.html) — 💬 CHAT CON LA IA (panel a la derecha de la hoja).
  *
  * Como conversar con un contador: se escribe lo que se necesita y se pueden
  * ADJUNTAR fotos, PDF, Excel o CSV (también pegar una captura con Ctrl+V). La IA
@@ -14,7 +14,7 @@
  */
 
 function CHAT_menuAbrir() {
-  var html = HtmlService.createHtmlOutputFromFile('ChatIA').setTitle('💬 Chat con la IA');
+  var html = HtmlService.createHtmlOutputFromFile('ChatPanel').setTitle('💬 Chat con la IA');
   SpreadsheetApp.getUi().showSidebar(html);
 }
 
