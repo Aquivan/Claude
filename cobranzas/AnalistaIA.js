@@ -25,7 +25,8 @@ var ANA_MODELO_GEMINI_ = 'gemini-3.6-flash';
 var ANA_ALIAS_ = { contraparte: 'contrapartes', proveedor: 'contrapartes', proveedores: 'contrapartes', clientes: 'contrapartes', cliente: 'contrapartes',
   buscar_contraparte: 'contrapartes', factura: 'facturas', documentos: 'facturas', compras: 'facturas', ventas: 'facturas', pagos: 'aplicaciones',
   aplicacion: 'aplicaciones', movimientos: 'aplicaciones', notas_credito: 'aplicaciones', retenciones: 'aplicaciones', voucher: 'vouchers',
-  verificar: 'verificar_vouchers', verificar_voucher: 'verificar_vouchers', calcular: 'combinar', combinaciones: 'combinar', hoja: 'leer_hoja',
+  verificar: 'verificar_vouchers', verificar_voucher: 'verificar_vouchers', cruzar: 'cruzar_vouchers', buscar_voucher: 'cruzar_vouchers',
+  escribir: 'proponer_cambio', cambiar: 'proponer_cambio', registrar: 'proponer_cambio', adjunto: 'ver_adjunto', archivo: 'abrir_archivo', calcular: 'combinar', combinaciones: 'combinar', hoja: 'leer_hoja',
   listar_hojas: 'hojas' };
 
 var ANA_SISTEMA_ = [
@@ -51,6 +52,14 @@ var ANA_SISTEMA_ = [
   '- verificar_vouchers {filas:["Originales!7",…] o los mismos filtros de vouchers}: abre la IMAGEN o PDF de cada voucher y compara lo escrito en la hoja',
   '  con el comprobante (fecha, monto, moneda, operación, banco, beneficiario) y da alertas (ilegible, rechazado, editado…). SIN LÍMITE: lo que no alcance',
   '  ahora sigue solo en segundo plano (pestaña 🖼 Vouchers verificados). Úsala cuando pidan revisar/verificar si un voucher está bien escrito.',
+  'ARCHIVOS ADJUNTOS (si el usuario subió fotos, PDF, Excel o CSV): ya vienen leídos como A1, A2… (cada documento o fila con sus datos).',
+  '- ver_adjunto {n:1, pregunta}: vuelve a mirar la foto/PDF A<n> con una pregunta concreta (un dato que no se leyó, si parece editado, etc.).',
+  '- abrir_archivo {nombre o enlace}: abre un archivo de Drive (ej. el que el usuario dejó en la carpeta de importaciones) como un adjunto más.',
+  '- cruzar_vouchers {adjunto:"A1", columnas:{"fecha":"…","monto":"…","operacion":"…"}, dias:5} o {pagos:[{"ref":"…","fecha":"dd/mm/yyyy","monto":0,"operacion":""}]}:',
+  '  por cada pago dice si YA ESTÁ registrado en la hoja de vouchers (por N° de operación, o monto y fecha), en qué fila, y si ya está usado en alguna factura.',
+  '- proponer_cambio {fila:"Originales!120", campo:"factura"|"id_beneficiario"|"empresa"|"id_usuario"|"por_retener"|"nota"|<encabezado exacto>, valor, motivo}:',
+  '  propone escribir un dato que FALTA en la hoja de vouchers (ej. la factura que paga, el RUC del beneficiario). NO se escribe nada: el usuario lo aprueba.',
+  '  Facturas como en la hoja: "01_F001-123" (varias separadas por coma). Propón solo lo que esté respaldado por los datos; explica el motivo.',
   '- hojas {}: lista las hojas disponibles con sus columnas.   - leer_hoja {libro:"cobranzas"|"vouchers", hoja, buscar, max_filas}',
   'empresa = nombre corto o RUC de la empresa del grupo. contraparte = nombre (aunque esté mal escrito) o RUC. Fechas dd/mm/yyyy.',
   '',
@@ -64,6 +73,8 @@ var ANA_SISTEMA_ = [
 'Si una consulta da 0 filas NO concluyas que no existe: lee la NOTA que acompaña al resultado (dice dónde SÍ aparece esa contraparte: otra empresa del grupo,',
 'el otro lado, otro nombre parecido, otras fechas) y amplía la búsqueda. En la respuesta di qué no hay y qué SÍ hay, con cifras (ej. "BKF no le compró a ALIF;',
 'ALIF sí le vende a GRANIX: 44 facturas por S/ …") y ofrece la tabla de lo que sí existe. Antes de decir que algo no existe, usa contrapartes {texto} sin empresa.',
+'Con ADJUNTOS: compáralos con los datos (¿el voucher ya está registrado?, ¿en qué fila?, ¿ya se usó y en qué factura?, ¿la factura existe en SIRE?, ¿tiene',
+'N/C, retención, detracción?, ¿qué falta registrar?) y, si falta un dato en la hoja de vouchers, usa proponer_cambio. Responde con una tabla por documento.',
 'Si hay CONVERSACIÓN ANTERIOR, la pregunta puede ser de seguimiento ("¿y con GRANIX?", "ahora solo las vencidas"): úsala para entender a qué se refiere.',
   'Para conciliar: por cada factura con saldo, qué voucher(s) SIN USAR del mismo proveedor y empresa podrían pagarla (monto exacto, suma, neto de retención o detracción,',
   'fecha posterior a la factura); y al final los vouchers que no calzan con nada. Haz las cuentas con la herramienta combinar cuando haya dudas.',
@@ -399,7 +410,7 @@ function ANA_textoRes_(id, herr, r, limite) {
   return L.join('\n');
 }
 
-function ANA_preguntar_(ss, pregunta, ia, previas) {
+function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos) {
   var t0 = Date.now();
   var c = ANA_ctx_(ss);
   c.ia = ia;
@@ -411,6 +422,13 @@ function ANA_preguntar_(ss, pregunta, ia, previas) {
   if (previas && previas.length) {
     conv.push('', 'CONVERSACIÓN ANTERIOR (para preguntas de seguimiento):');
     previas.forEach(function (x) { conv.push('P: ' + x.pregunta, 'R: ' + String(x.respuesta).slice(0, 1500)); });
+  }
+  c.limRes = limRes;
+  if (adjuntos && adjuntos.length) {
+    conv.push('', 'ARCHIVOS ADJUNTOS POR EL USUARIO (ya leídos; cada uno es el resultado A1, A2…):');
+    adjuntos.slice(0, 10).forEach(function (a, k) {
+      try { conv.push(ANX_leer_(c, a, k + 1)); } catch (e) { conv.push('A' + (k + 1) + ' "' + (a.nombre || '') + '": no se pudo leer (' + e.message + ')'); }
+    });
   }
   var pasos = [], consultas = 0, final = null, saturado = 0;
   for (var paso = 0; paso <= ANA_MAX_PASOS_ && !final; paso++) {
@@ -451,9 +469,9 @@ function ANA_preguntar_(ss, pregunta, ia, previas) {
         var res;
         try {
           var hn = normHeader_(h).replace(/\s+/g, '_');
-          h = ANA_HERR_[h] || ANA_HERR2_[h] ? h : ANA_ALIAS_[hn] || hn;
-          var fn = ANA_HERR_[h] || ANA_HERR2_[h];
-          if (!fn) throw new Error('herramienta desconocida "' + q.herramienta + '"; las que hay: ' + Object.keys(ANA_HERR_).concat(Object.keys(ANA_HERR2_)).join(', '));
+          h = ANA_HERR_[h] || ANA_HERR2_[h] || ANX_HERR_[h] ? h : ANA_ALIAS_[hn] || hn;
+          var fn = ANA_HERR_[h] || ANA_HERR2_[h] || ANX_HERR_[h];
+          if (!fn) throw new Error('herramienta desconocida "' + q.herramienta + '"; las que hay: ' + Object.keys(ANA_HERR_).concat(Object.keys(ANA_HERR2_), Object.keys(ANX_HERR_)).join(', '));
           res = fn(c, q.args || {});
           res.filas = res.filas.slice(0, ANA_MAX_FILAS_ * 3);
           if (!res.filas.length && !res.nota) res.nota = ANA_pistaVacio_(c, h, q.args || {});
@@ -577,6 +595,26 @@ function ANA_escribir_(ss, pregunta, out, ia) {
     ' consultas a la IA · datos revisados: ' + (out.pasos.join(' ; ') || 'ninguno')).setFontSize(8).setFontColor(COLOR.TEXTO_SUAVE).setWrap(true);
   var fila = 6, anchoMax = 2;
   var tablas = ANA_tablas_(out.c, out.final.tablas);
+  // ✏️ Cambios propuestos por la IA (se aprueban aquí con ✔ o en el chat)
+  var cambios = out.c.cambios || [];
+  if (cambios.length) {
+    if (!out.c.lotePropuestos) out.c.lotePropuestos = ANX_guardarPropuestos_(ss, cambios);
+    sh.getRange(fila, 1).setValue('✏️ Cambios propuestos en la hoja de vouchers (' + cambios.length + ') · marque ✔ y use 🤝 Conciliar con IA → ✅ Aplicar cambios marcados de la IA')
+      .setFontWeight('bold').setFontSize(11).setFontColor('#9A3412');
+    fila++;
+    sh.getRange(fila, 1, 1, 2).setValues([['Reemplazar si ya tiene dato', false]]).setFontSize(9);
+    sh.getRange(fila, 2).insertCheckboxes();
+    fila++;
+    var encC = ['✔ Aplicar', 'ID', 'Fila', 'Columna', 'Valor actual', 'Valor nuevo', 'Motivo', 'Aviso'];
+    sh.getRange(fila, 1, 1, encC.length).setValues([encC]).setFontWeight('bold').setFontColor(COLOR.BLANCO).setBackground('#C2410C');
+    sh.getRange(fila + 1, 1, cambios.length, encC.length).setValues(cambios.map(function (x) {
+      return [false, x.id, x.hoja + '!' + x.fila, x.encabezado, x.actual, x.nuevo, x.motivo, x.aviso];
+    })).setFontSize(9).setWrap(true).setVerticalAlignment('top');
+    sh.getRange(fila + 1, 1, cambios.length, 1).insertCheckboxes();
+    sh.getRange(fila + 1, 5, cambios.length, 2).setNumberFormat('@');
+    anchoMax = Math.max(anchoMax, encC.length);
+    fila += cambios.length + 2;
+  }
   tablas.forEach(function (t) {
     sh.getRange(fila, 1).setValue('📊 ' + t.titulo + ' (' + t.filas.length + ')').setFontWeight('bold').setFontSize(11);
     fila++;
