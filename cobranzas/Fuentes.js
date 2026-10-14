@@ -125,6 +125,13 @@ function leerVouchers_(cfg) {
       refs: col('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc'), porRetener: col('Por Retener'),
       enviadoPor: col('Enviado por'), usuario: col('Cliente (usuario)', 'Cliente'),
     };
+    // Pestaña sin los encabezados de siempre (pegada sin títulos o con las columnas en otro
+    // orden): se lee A–J reconociendo cada columna por su contenido (o con el mapa que ya
+    // decidió la IA del 🔍 Auditor IA). Antes una pestaña así no aportaba ningún voucher.
+    if (c.monto < 0 || c.fecha < 0) {
+      AUV_leerParaMotor_(sh, nombre, cfg).forEach(agregar);
+      return;
+    }
     // Leer SOLO las columnas de datos, una por una: asi nunca se cargan las
     // columnas con imagenes (que hacen muy lenta la lectura de esa hoja).
     var nFilas = sh.getLastRow() - 1;
@@ -141,8 +148,8 @@ function leerVouchers_(cfg) {
     }
     datos.forEach(function (r, i) {
       var monto = aNumero_(r[c.monto]);
-      var fecha = aFecha_(r[c.fecha]);
       if (!monto) return;
+      var fecha = aFecha_(r[c.fecha]);
       var op = String(r[c.op] == null ? '' : r[c.op]).trim();
       var banco = String(r[c.banco] || '').trim();
       var id = [banco.toUpperCase(), op, fmtFechaClave_(fecha), monto.toFixed(2)].join('|');
@@ -161,23 +168,29 @@ function leerVouchers_(cfg) {
         enviadoPor: c.enviadoPor >= 0 ? String(r[c.enviadoPor] || '').trim() : '',
         usuario: c.usuario >= 0 ? String(r[c.usuario] || '').trim() : '',
       };
-      var clave = op ? [banco.toUpperCase(), op, monto.toFixed(2)].join('|') : id;
-      var previo = (porClave[clave] || []).filter(function (q) {
-        return !q.fecha || !fecha || Math.abs(q.fecha.getTime() - fecha.getTime()) <= 5 * 86400000;
-      })[0];
-      if (previo) {
-        var tomados = [];
-        if (!previo.pagadorRuc && pago.pagadorRuc) { previo.pagadorRuc = pago.pagadorRuc; tomados.push('quién paga'); }
-        if (!previo.beneficiarioRuc && pago.beneficiarioRuc) { previo.beneficiarioRuc = pago.beneficiarioRuc; tomados.push('ID Beneficiario'); }
-        if (!String(previo.refs).trim() && String(pago.refs).trim()) { previo.refs = pago.refs; tomados.push('factura'); }
-        res.duplicados.push({ id: id, fuente: fuente, otra: previo.fuente, tomados: tomados });
-        return;
-      }
-      (porClave[clave] = porClave[clave] || []).push(pago);
-      res.pagos.push(pago);
+      agregar(pago);
     });
   });
   return res;
+
+  /** Cuenta el voucher una sola vez (Originales manda; de la repetida se completa lo que falte). */
+  function agregar(pago) {
+    var op = pago.operacion, banco = pago.banco, monto = pago.monto, fecha = pago.fecha, id = pago.id, fuente = pago.fuente;
+    var clave = op ? [banco.toUpperCase(), op, monto.toFixed(2)].join('|') : id;
+    var previo = (porClave[clave] || []).filter(function (q) {
+      return !q.fecha || !fecha || Math.abs(q.fecha.getTime() - fecha.getTime()) <= 5 * 86400000;
+    })[0];
+    if (previo) {
+      var tomados = [];
+      if (!previo.pagadorRuc && pago.pagadorRuc) { previo.pagadorRuc = pago.pagadorRuc; tomados.push('quién paga'); }
+      if (!previo.beneficiarioRuc && pago.beneficiarioRuc) { previo.beneficiarioRuc = pago.beneficiarioRuc; tomados.push('ID Beneficiario'); }
+      if (!String(previo.refs).trim() && String(pago.refs).trim()) { previo.refs = pago.refs; tomados.push('factura'); }
+      res.duplicados.push({ id: id, fuente: fuente, otra: previo.fuente, tomados: tomados });
+      return;
+    }
+    (porClave[clave] = porClave[clave] || []).push(pago);
+    res.pagos.push(pago);
+  }
 }
 
 // Opciones de la columna Modalidad del registro manual.

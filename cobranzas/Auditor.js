@@ -24,6 +24,14 @@
  *  6. 💬 PREGUNTA A LA IA: cualquier pregunta sobre lo filtrado; la IA
  *     responde con los expedientes, facturas, vouchers y hallazgos.
  *
+ * MOTOR (fila 13):
+ *   🧠 IA pura (por defecto): los vouchers se leen SOLO de las columnas A–J y
+ *      la IA reconoce cada columna por su contenido (no importan los
+ *      encabezados), lee las filas desordenadas, decide proveedor y empresa
+ *      de cada pago, concilia sin cálculos auxiliares y da los hallazgos
+ *      (AuditorVouchersIA.js). Pestaña 🔍 Vouchers leídos para revisar.
+ *   ⚙️ IA + reglas: como antes (reglas fijas + cálculos auxiliares).
+ *
  * Filtros: empresa, proveedor (nombre o RUC), quien registro el voucher,
  * fechas, facturas con saldo o todas, vouchers sin aplicar o todos, y la
  * profundidad (solo lo que falta conciliar o auditar todo).
@@ -42,6 +50,8 @@ var AUD_TODOS_ = '(Todos)';
 var AUD_PROF_ = ['Rápida: solo proveedores con vouchers por conciliar', 'Completa: auditar todos los proveedores filtrados'];
 var AUD_FACT_ = ['Con saldo pendiente', 'Todas'];
 var AUD_VOUCH_ = ['Sin aplicar', 'Todos'];
+var AUD_MOTOR_ = ['🧠 IA pura: vouchers A–J, la IA decide todo', '⚙️ IA + reglas del sistema (cálculos auxiliares)'];
+var AUD_F_MOTOR_ = 13;          // fila del motor de conciliación
 var AUD_F_PREG_ = 15;           // fila de la pregunta
 var AUD_F_RESP_ = 16;           // primera fila de la respuesta (16-24)
 var AUD_F_KPI_ = 26;
@@ -96,14 +106,17 @@ function AUD_menuDetener() {
 
 var AUD_AYUDA_ = 'Cómo usarlo (menú 🤝 Conciliar con IA → 🔍 Auditor IA):\n' +
   '1) Filtre en las celdas amarillas (vacío = todo).\n' +
-  '2) ▶ Auditar con IA: arma el expediente de cada proveedor, aplica las reglas de auditoría y la IA concilia (si son muchos, sigue sola cada minuto).\n' +
-  '3) Revise 🔍 Hallazgos y las propuestas en 🤝 Conciliar con IA: ✔ Aceptar / ✖ Rechazar → ✅ Aplicar lo aceptado.\n' +
+  '2) ▶ Auditar con IA: arma el expediente de cada proveedor y la IA concilia (si son muchos, sigue sola cada minuto).\n' +
+  '   🧠 IA pura (fila ' + AUD_F_MOTOR_ + '): la IA lee los vouchers SOLO en las columnas A–J, reconoce cada columna por su contenido (aunque no tenga encabezado), ' +
+  'interpreta las filas desordenadas, decide a qué proveedor y empresa corresponde cada pago, qué facturas paga y qué hallazgos hay. Vea cómo leyó cada fila en 🔍 Vouchers leídos.\n' +
+  '   ⚙️ IA + reglas: además el sistema calcula combinaciones exactas y aplica reglas fijas de auditoría.\n' +
+  '3) Revise 🔍 Hallazgos y las propuestas en 🤝 Conciliar con IA: ✔ Aceptar / ✖ Rechazar → ✅ Aplicar lo aceptado (nada se aplica solo).\n' +
   '4) 💬 Escriba una pregunta en la fila ' + AUD_F_PREG_ + ' y use 💬 Preguntar a la IA.\n' +
-  'La IA propone y el sistema verifica las sumas (columna Motivo: ✔ cuadra / ⚠️ revisar). Usa la IA y la clave de 🤝 Conciliar con IA.';
+  'En la columna Motivo el sistema solo anota si la suma de la IA cuadra (✔ cuadra / ⚠️ revisar); no cambia lo que la IA decidió. Usa la IA y la clave de 🤝 Conciliar con IA.';
 
 function AUD_hoja_(ss) {
   var sh = ss.getSheetByName(AUD_HOJA_);
-  if (sh && sh.getRange('A1').getValue()) return sh;
+  if (sh && sh.getRange('A1').getValue()) { AUD_asegurarMotor_(sh); return sh; }
   sh = sh || ss.insertSheet(AUD_HOJA_);
   var base = ss.getSheetByName(CIA_HOJA_);
   if (base) { ss.setActiveSheet(sh); ss.moveActiveSheet(base.getIndex() + 1); }
@@ -146,7 +159,19 @@ function AUD_hoja_(ss) {
   sh.setColumnWidth(1, 165); sh.setColumnWidth(2, 120);
   [70, 120, 230, 95, 65, 100, 100, 95, 65, 100, 70, 95, 105, 70, 95, 420, 95].forEach(function (w, i) { if (i > 1) sh.setColumnWidth(i + 1, w); });
   sh.setFrozenRows(2);
+  AUD_asegurarMotor_(sh);
   return sh;
+}
+
+/** Fila 13: motor de conciliación (las hojas creadas antes no la tenían). */
+function AUD_asegurarMotor_(sh) {
+  var c = sh.getRange(AUD_F_MOTOR_, 1, 1, 2);
+  if (String(c.getValues()[0][0] || '') === 'Motor de conciliación') return;
+  c.setValues([['Motor de conciliación', AUD_MOTOR_[0]]]);
+  sh.getRange(AUD_F_MOTOR_, 1).setFontWeight('bold');
+  sh.getRange(AUD_F_MOTOR_, 2).setBackground('#FFF8E1')
+    .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(AUD_MOTOR_).build());
+  sh.getRange('D3').setValue(AUD_AYUDA_);
 }
 
 function AUD_estado_(sh, txt) { sh.getRange('B12').setValue(txt); }
@@ -166,7 +191,7 @@ function AUD_actualizarListas_(ss, sh, cfg, vouchers) {
 function AUD_quien_(p) { return String(p.enviadoPor || p.usuario || '').trim(); }
 
 function AUD_leerParam_(sh, cfg, valores) {
-  var v = valores || sh.getRange(3, 2, 9, 1).getValues().map(function (r) { return r[0]; });
+  var v = valores || sh.getRange(3, 2, AUD_F_MOTOR_ - 2, 1).getValues().map(function (r) { return r[0]; });
   var empTxt = String(v[0] || '').trim();
   var empresaRuc = '';
   if (empTxt && empTxt !== AUD_TODAS_) empresaRuc = aRuc_(empTxt.split('·').pop()) || cfg.aliasEmpresa[normHeader_(empTxt)] || '';
@@ -182,6 +207,7 @@ function AUD_leerParam_(sh, cfg, valores) {
     todosVouchers: /^todos/i.test(String(v[6])),
     completa: /^completa/i.test(String(v[7])),
     modelo: String(v[8] || '').trim(),
+    pura: !/^⚙/.test(String(v[AUD_F_MOTOR_ - 3] || '').trim()),   // vacío = IA pura
   };
 }
 
@@ -259,24 +285,26 @@ function AUD_enFechas_(par, f) {
  * La contraparte de un voucher sin aplicar se reconoce por RUC, alias o nombre
  * parecido (y lo dudoso lo decide la IA con la lista de proveedores).
  */
-function AUD_armar_(ss, cfg, par, ia, contador, ident) {
+function AUD_armar_(ss, cfg, par, ia, contador, ident, deadline) {
   // ident: {idVoucher: {prov, como}} de la primera vuelta (al continuar no se vuelve a preguntar a la IA).
   var docs = AUD_leerDocs_(ss, cfg);
   var movs = AUD_leerMovs_(ss);
-  var lv = leerVouchers_(cfg);
   var nombres = {}, porProv = {};
   docs.forEach(function (d) {
     if (d.provRuc && d.prov) nombres[d.provRuc] = d.prov;
     if (d.provRuc) (porProv[d.provRuc] = porProv[d.provRuc] || []).push(d);
   });
+  // 🧠 IA pura: vouchers leídos de A–J por la IA, con proveedor y empresa decididos por la IA (AuditorVouchersIA.js).
+  var leidos = par.pura ? AUV_preparar_(ss, cfg, par, ia, contador, docs, movs, nombres, deadline || Date.now() + 200000) : null;
+  var lv = leidos || leerVouchers_(cfg);
   var vouchers = lv.pagos.filter(function (p) {
     return p.pagadorRuc && cfg.grupo.indexOf(p.pagadorRuc) !== -1 && p.moneda !== '' &&
       (!par.empresaRuc || p.pagadorRuc === par.empresaRuc) && AUD_enFechas_(par, p.fecha) && (!par.quien || AUD_quien_(p) === par.quien);
   });
 
-  // Contraparte de cada voucher
+  // Contraparte de cada voucher (en IA pura ya la decidió la IA)
   var dudosos = [];
-  vouchers.forEach(function (p) {
+  if (!leidos) vouchers.forEach(function (p) {
     var apl = movs.porPago[p.id];
     if (apl && apl.length && apl[0].provRuc) { p._prov = apl[0].provRuc; p._como = 'ya aplicado'; p._apl = apl; return; }
     if (ident && ident[p.id]) { p._prov = ident[p.id].prov; p._como = ident[p.id].como; return; }
@@ -285,7 +313,7 @@ function AUD_armar_(ss, cfg, par, ia, contador, ident) {
     if (!det.ruc && det.candidatos.length) dudosos.push(p);
   });
   // Lo dudoso: la IA elige el proveedor con la lista completa (por empresa)
-  if (dudosos.length && ia && ia.clave && !ident) {
+  if (!leidos && dudosos.length && ia && ia.clave && !ident) {
     var porEmp = {};
     dudosos.forEach(function (p) { (porEmp[p.pagadorRuc] = porEmp[p.pagadorRuc] || []).push(p); });
     Object.keys(porEmp).forEach(function (emp) {
@@ -350,7 +378,8 @@ function AUD_armar_(ss, cfg, par, ia, contador, ident) {
     e.docs.sort(function (a, b) { return (a.emision || 0) - (b.emision || 0); });
     e.sin.sort(function (a, b) { return (a.fecha || 0) - (b.fecha || 0); });
   });
-  return { exp: exp, sinProv: sinProv, vouchers: vouchers, docs: docs, movs: movs, nombres: nombres, duplicados: lv.duplicados };
+  return { exp: exp, sinProv: sinProv, vouchers: vouchers, docs: docs, movs: movs, nombres: nombres, duplicados: lv.duplicados,
+    leidos: leidos, identPend: leidos ? leidos.identPend : 0 };
 }
 
 /* ============================================ reglas de auditoría (código) */
@@ -529,6 +558,19 @@ var AUD_SISTEMA_ = [
   '"confianza" 0-100. "razon" máx. 35 palabras, con el cálculo (ej. 01_F001-9 1,180.00 − 12% = 1,038.40). "dictamen" máx. 70 palabras, en español.',
 ].join('\n');
 
+/** Instrucciones para la IA: en IA pura no hay cálculos auxiliares, la IA hace las cuentas y lee la fila original. */
+function AUD_sistema_(pura) {
+  if (!pura) return AUD_SISTEMA_;
+  return AUD_SISTEMA_.split('\n').map(function (l) {
+    if (/CÁLCULOS AUXILIARES/.test(l)) {
+      return '- Haz TÚ las cuentas, con cuidado y a 2 decimales: prueba 1 factura, varias (sobre todo seguidas por fecha), netos de retención 3% y de detracción 4/10/12%, ' +
+        'pagos a cuenta y diferencias de pocos soles. Escribe la cuenta en "razon" (ej. 8,454.52 + 10,951.30 = 19,405.82).\n' +
+        '- Cada voucher viene con su FILA ORIGINAL de la hoja (columnas A–J): léela completa (descripción, factura escrita, usuario), no solo el monto.';
+    }
+    return l;
+  }).join('\n');
+}
+
 var AUD_TASAS_DET_ = [0.04, 0.10, 0.12];
 
 /**
@@ -571,7 +613,7 @@ function AUD_pistas_(p, docs) {
     .slice(0, 4).map(function (x) { return x.txt; });
 }
 
-function AUD_texto_(e, sin, docs, cfg) {
+function AUD_texto_(e, sin, docs, pura) {
   var f2 = function (n) { return Number(n || 0).toFixed(2); };
   var L = [];
   L.push('EMPRESA COMPRADORA: ' + e.empresa + ' (RUC ' + e.empRuc + ')');
@@ -586,12 +628,20 @@ function AUD_texto_(e, sin, docs, cfg) {
   });
   if (!docs.length) L.push('(no hay facturas con saldo de este proveedor en esta empresa)');
   L.push('');
-  L.push('VOUCHERS POR CONCILIAR (id | fecha | banco | operación | moneda | monto | beneficiario escrito | descripción | factura escrita | cómo se reconoció el proveedor):');
-  sin.forEach(function (p, k) {
-    L.push(['V' + (k + 1), IA_fmtFecha_(p.fecha), p.banco, p.operacion || 's/n', p.moneda, f2(p.monto), p.beneficiarioNombre || '-',
-      p.descripcion || '-', p.refs || '-', p._como || '-'].join(' | '));
-  });
+  if (pura) {
+    L.push('VOUCHERS POR CONCILIAR (id | leído: fecha, moneda y monto | cómo se reconoció el proveedor | FILA ORIGINAL A–J):');
+    sin.forEach(function (p, k) {
+      L.push(['V' + (k + 1), IA_fmtFecha_(p.fecha) + ' ' + p.moneda + ' ' + f2(p.monto), p._como || '-', p.fuente + ': ' + (p.crudo || '')].join(' | '));
+    });
+  } else {
+    L.push('VOUCHERS POR CONCILIAR (id | fecha | banco | operación | moneda | monto | beneficiario escrito | descripción | factura escrita | cómo se reconoció el proveedor):');
+    sin.forEach(function (p, k) {
+      L.push(['V' + (k + 1), IA_fmtFecha_(p.fecha), p.banco, p.operacion || 's/n', p.moneda, f2(p.monto), p.beneficiarioNombre || '-',
+        p.descripcion || '-', p.refs || '-', p._como || '-'].join(' | '));
+    });
+  }
   var pistas = [];
+  if (!pura) {
   sin.forEach(function (p, k) {
     var ps = AUD_pistas_(p, docs);
     if (ps.length) pistas.push('V' + (k + 1) + ': ' + ps.join(' ; '));
@@ -599,6 +649,7 @@ function AUD_texto_(e, sin, docs, cfg) {
   L.push('');
   L.push('CÁLCULOS AUXILIARES (verificados por el sistema):');
   L.push(pistas.length ? pistas.join('\n') : '(ninguna combinación de 1 a 4 facturas calza exacta: puede ser pago parcial, a cuenta o de otro proveedor)');
+  }
   if (e.apl.length) {
     L.push('');
     L.push('PAGOS YA APLICADOS (para detectar duplicados; NO los vuelvas a asignar) (fecha | operación | monto | aplicado a):');
@@ -673,7 +724,7 @@ function AUD_verificar_(r, sin, docs) {
 }
 
 /** Concilia un expediente con la IA (en tandas si es grande). */
-function AUD_auditarExp_(e, ia, contador) {
+function AUD_auditarExp_(e, ia, contador, pura) {
   var docs = e.docs.filter(function (d) { return d.saldo > 0.5; });
   docs.forEach(function (d) { d.saldoVivo = d.saldo; });
   var out = { props: [], sinFactura: [], hallazgos: [], dictamen: '', semaforo: '' };
@@ -688,8 +739,8 @@ function AUD_auditarExp_(e, ia, contador) {
     if (contador.consultas > 0) Utilities.sleep(IA_PROVEEDORES_[ia.proveedor].pausa);
     contador.consultas++;
     try {
-      var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: AUD_SISTEMA_,
-        texto: AUD_texto_(e, sin, ds), maxTokens: 16000 });
+      var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: AUD_sistema_(pura),
+        texto: AUD_texto_(e, sin, ds, pura), maxTokens: 16000 });
       var v = AUD_verificar_(r, sin, ds);
       out.props = out.props.concat(v.props);
       out.sinFactura = out.sinFactura.concat(v.sinFactura);
@@ -765,8 +816,8 @@ function AUD_guardarRes_(store, clave, x) {
 }
 
 /** Huella del expediente: si no cambió nada desde la última auditoría, no se vuelve a pagar la IA. */
-function AUD_huella_(e) {
-  var s = e.docs.map(function (d) { return d.doc + ':' + d.saldo.toFixed(2); }).join(',') + '|' +
+function AUD_huella_(e, pura) {
+  var s = (pura ? 'IA pura|' : '') + e.docs.map(function (d) { return d.doc + ':' + d.saldo.toFixed(2); }).join(',') + '|' +
     e.sin.map(function (p) { return p.id; }).join(',') + '|' + e.apl.length;
   var b = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, s, Utilities.Charset.UTF_8);
   return Utilities.base64Encode(b);
@@ -802,23 +853,46 @@ function AUD_ia_(ss, par) {
   return ia;
 }
 
-/** ▶ Auditar con IA: arma todo, aplica las reglas y empieza la cola de la IA. */
-function AUD_iniciar_(ss) {
+/** Filtros tal como están en la hoja (se guardan para seguir con los mismos aunque luego cambien las celdas). */
+function AUD_valoresParam_(sh) {
+  return sh.getRange(3, 2, AUD_F_MOTOR_ - 2, 1).getDisplayValues().map(function (r) { return r[0]; });
+}
+
+/**
+ * ▶ Auditar con IA: arma todo, aplica las reglas y empieza la cola de la IA.
+ * En IA pura, si la IA todavía está leyendo e identificando vouchers, guarda lo
+ * hecho y sigue sola cada minuto (fase "ident") antes de conciliar.
+ */
+function AUD_iniciar_(ss, valores, vueltas, contAnt) {
   var t0 = Date.now();
   var sh = AUD_hoja_(ss);
   var cfg = leerConfig_(ss);
-  var par = AUD_leerParam_(sh, cfg);
+  valores = valores || AUD_valoresParam_(sh);
+  var par = AUD_leerParam_(sh, cfg, valores);
   var ia = AUD_ia_(ss, par);
-  var cont = { consultas: 0, errores: 0, ultimoError: '' };
+  var cont = contAnt || { consultas: 0, errores: 0, ultimoError: '' };
   AUD_borrarContinuacion_();
-  var a = AUD_armar_(ss, cfg, par, ia, cont, null);
+  var a = AUD_armar_(ss, cfg, par, ia, cont, null, t0 + 200000);
   AUD_actualizarListas_(ss, sh, cfg, a.vouchers);
+  if (a.identPend) {
+    vueltas = (vueltas || 0) + 1;
+    AUV_escribirHoja_(ss, a, cfg, par);
+    if (vueltas > 25) {
+      AUD_guardarEstado_(ss, null);
+      return '⚠️ La IA no terminó de identificar los vouchers en 25 vueltas (quedan ' + a.identPend + '). Acote con los filtros (empresa o fechas) y vuelva a ▶.';
+    }
+    AUD_guardarEstado_(ss, { fase: 'ident', par: valores, vueltas: vueltas, cont: cont });
+    AUD_programarContinuacion_();
+    return '⏳ La IA está leyendo los vouchers (A–J): ' + a.leidos.identHechos + ' de ' + a.leidos.porIdentificar +
+      ' identificados (sigue sola cada minuto; puede cerrar la hoja; vea 🔍 Vouchers leídos) · IA ' + ia.proveedor + ': ' + cont.consultas + ' consultas' +
+      (cont.errores ? ' · ' + cont.errores + ' errores (' + String(cont.ultimoError).slice(0, 100) + ')' : '');
+  }
   var ident = {};
   a.vouchers.forEach(function (p) { if (p._prov && /^IA |sin confirmar/.test(p._como || '')) ident[p.id] = { prov: p._prov, como: p._como }; });
   var store = AUD_store_(ss);
   // Riesgo de cada expediente: vouchers por conciliar, hallazgos graves y deuda vencida.
   var graves = {};
-  AUD_reglas_(a, cfg).forEach(function (h) { if (h.sev === '🔴 Alta') graves[h.clave] = (graves[h.clave] || 0) + 1; });
+  (par.pura ? [] : AUD_reglas_(a, cfg)).forEach(function (h) { if (h.sev === '🔴 Alta') graves[h.clave] = (graves[h.clave] || 0) + 1; });
   var riesgo = function (k) {
     var m = AUD_metricas_(a.exp[k]);
     return m.ms + (graves[k] || 0) * 50000 + m.venc * 0.2 + (m.ns ? 1e7 : 0);
@@ -828,13 +902,13 @@ function AUD_iniciar_(ss) {
     var e = a.exp[k];
     if (!(e.sin.length || (par.completa && e.docs.length))) return;
     var ant = store.map[k];
-    if (ant && ant.huella === AUD_huella_(e) && ia.clave) { iguales++; return; }
+    if (ant && ant.huella === AUD_huella_(e, par.pura) && ia.clave) { iguales++; return; }
     cola.push(k);
   });
   cola.sort(function (x, y) { return riesgo(y) - riesgo(x); });
   var pendientesDespues = Math.max(0, cola.length - AUD_MAX_IA_);
   if (ia.clave) cola = cola.slice(0, AUD_MAX_IA_);
-  var est = { par: sh.getRange(3, 2, 9, 1).getDisplayValues().map(function (r) { return r[0]; }), cola: cola, total: cola.length,
+  var est = { par: valores, cola: cola, total: cola.length,
     hechos: 0, iguales: iguales, despues: pendientesDespues, cont: cont, ident: ident, inicio: Date.now() };
   AUD_guardarEstado_(ss, est);
   return AUD_procesar_(ss, sh, cfg, par, ia, a, est, store, t0);
@@ -845,13 +919,19 @@ function AUD_continuar() {
   AUD_borrarContinuacion_();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var est = AUD_leerEstado_(ss);
+  if (est && est.fase === 'ident') {   // IA pura: sigue leyendo/identificando vouchers
+    var m;
+    try { m = AUD_iniciar_(ss, est.par, est.vueltas, est.cont); } catch (e) { m = '❌ ' + e.message; }
+    AUD_estado_(AUD_hoja_(ss), m);
+    return;
+  }
   if (!est || !est.cola || !est.cola.length) return;
   var t0 = Date.now();
   var sh = AUD_hoja_(ss);
   var cfg = leerConfig_(ss);
   var par = AUD_leerParam_(sh, cfg, est.par);  // los filtros de cuando se empezó (aunque luego se cambien las celdas)
   var ia = AUD_ia_(ss, par);
-  var a = AUD_armar_(ss, cfg, par, ia, est.cont, est.ident || {});
+  var a = AUD_armar_(ss, cfg, par, ia, est.cont, est.ident || {}, t0 + 90000);
   try {
     var msg = AUD_procesar_(ss, sh, cfg, par, ia, a, est, AUD_store_(ss), t0);
     AUD_estado_(sh, msg);
@@ -866,10 +946,10 @@ function AUD_procesar_(ss, sh, cfg, par, ia, a, est, store, t0) {
     var k = est.cola.shift();
     var e = a.exp[k];
     if (!e) continue;
-    var out = ia.clave ? AUD_auditarExp_(e, ia, est.cont) : AUD_sinIA_(e);
+    var out = ia.clave ? AUD_auditarExp_(e, ia, est.cont, par.pura) : AUD_sinIA_(e);
     filasCIA = filasCIA.concat(AUD_filasPropuestas_(e, out, cfg));
     var sem = out.semaforo || '';
-    AUD_guardarRes_(store, k, { huella: AUD_huella_(e), semaforo: sem, dictamen: out.dictamen, nProp: out.props.length, hallazgos: out.hallazgos });
+    AUD_guardarRes_(store, k, { huella: AUD_huella_(e, par.pura), semaforo: sem, dictamen: out.dictamen, nProp: out.props.length, hallazgos: out.hallazgos });
     est.hechos++;
     if (est.hechos % 5 === 0) AUD_guardarEstado_(ss, est);
   }
@@ -879,10 +959,11 @@ function AUD_procesar_(ss, sh, cfg, par, ia, a, est, store, t0) {
     shC.getRange('B4').setValue(CIA_TIPOS_[0]);  // las propuestas del auditor son "Por pagar"
     CIA_escribir_(ss, shC, filasCIA, cfg);
   }
-  var reglas = AUD_reglas_(a, cfg);
-  AUD_render_(ss, sh, a, reglas, store, cfg);
+  var reglas = par.pura ? [] : AUD_reglas_(a, cfg);
+  AUD_render_(ss, sh, a, reglas, store, cfg, par);
   var c = est.cont;
-  var base = AUD_ahora_() + ' · ' + Object.keys(a.exp).length + ' expedientes · ' + reglas.length + ' hallazgos por reglas';
+  var base = AUD_ahora_() + ' · ' + Object.keys(a.exp).length + ' expedientes · ' +
+    (par.pura ? '🧠 IA pura' + AUD_textoLeidos_(a) : reglas.length + ' hallazgos por reglas');
   var iaTxt = ia.clave ? ' · IA ' + ia.proveedor + (ia.modelo ? ' ' + ia.modelo : '') + ': ' + c.consultas + ' consultas' : ' · sin clave de IA: solo reglas y pagos exactos';
   var errTxt = c.errores ? ' · ' + c.errores + ' errores de IA (' + String(c.ultimoError).slice(0, 100) + ')' : '';
   if (est.cola.length) {
@@ -943,7 +1024,16 @@ function AUD_metricas_(e) {
   return m;
 }
 
-function AUD_render_(ss, sh, a, reglas, store, cfg) {
+/** " · 1,234 vouchers leídos de A–J (5 filas raras leídas por la IA, 3 repetidos)". */
+function AUD_textoLeidos_(a) {
+  var L = a.leidos;
+  if (!L) return '';
+  return ' · ' + L.pagos.length + ' vouchers leídos de A–J' + (L.estad.porIA || L.duplicados.length ?
+    ' (' + [L.estad.porIA ? L.estad.porIA + ' filas desordenadas leídas por la IA' : '', L.duplicados.length ? L.duplicados.length + ' repetidos' : '']
+      .filter(Boolean).join(', ') + ')' : '');
+}
+
+function AUD_render_(ss, sh, a, reglas, store, cfg, par) {
   var hall = AUD_todosHallazgos_(a, reglas, store);
   var cuenta = {};
   hall.forEach(function (h) {
@@ -986,6 +1076,7 @@ function AUD_render_(ss, sh, a, reglas, store, cfg) {
     sh.getRange(AUD_F_ENC_, 1, n + 1, AUD_ENC_.length).createFilter();
   }
   AUD_escribirHallazgos_(ss, hall);
+  if (a.leidos && par) AUV_escribirHoja_(ss, a, cfg, par);
 }
 
 function AUD_escribirHallazgos_(ss, hall) {
@@ -999,7 +1090,7 @@ function AUD_escribirHallazgos_(ss, hall) {
   sh.clear();
   sh.getRange(1, 1, 1, 8).merge().setValue('🔍  HALLAZGOS DE AUDITORÍA · compras y pagos').setFontSize(14).setFontWeight('bold')
     .setFontColor('#F8FAFC').setBackground(COLOR.OSCURO);
-  sh.getRange(2, 1).setValue('Origen "Regla" = cálculo objetivo del sistema · "IA" = análisis de la IA sobre el expediente. Filtre por severidad, tipo, empresa o proveedor.')
+  sh.getRange(2, 1).setValue('Origen "IA" = análisis de la IA sobre el expediente · "Regla" = cálculo objetivo del sistema (solo con el motor ⚙️ IA + reglas). Filtre por severidad, tipo, empresa o proveedor.')
     .setFontSize(9).setFontColor(COLOR.TEXTO_SUAVE);
   sh.getRange(3, 1, 1, AUD_ENC_HALL_.length).setValues([AUD_ENC_HALL_]).setFontWeight('bold').setFontColor(COLOR.BLANCO)
     .setBackground(COLOR.AZUL).setWrap(true).setVerticalAlignment('middle');
@@ -1046,7 +1137,7 @@ function AUD_preguntar_(ss) {
   var est = AUD_leerEstado_(ss);
   var a = AUD_armar_(ss, cfg, par, null, { consultas: 0, errores: 0 }, (est && est.ident) || {});
   var store = AUD_store_(ss);
-  var hall = AUD_todosHallazgos_(a, AUD_reglas_(a, cfg), store);
+  var hall = AUD_todosHallazgos_(a, par.pura ? [] : AUD_reglas_(a, cfg), store);
   var limite = IA_PROVEEDORES_[ia.proveedor].tipo === 'gemini' ? 350000 : 50000;
   var ctx = AUD_contexto_(a, hall, store, par, cfg, pregunta, limite);
   var t0 = Date.now();
@@ -1098,13 +1189,23 @@ function AUD_contexto_(a, hall, store, par, cfg, pregunta, limite) {
       detalle.push([d.doc, IA_fmtFecha_(d.emision), IA_fmtFecha_(d.vence), d.moneda, f2(d.total), f2(d.nc), f2(d.retencion), f2(d.detraccion), f2(d.pagado), f2(d.saldo), d.estado, d.registro].join(' | '));
     });
     detalle.push('Vouchers por conciliar (fecha | operación | banco | moneda | monto | beneficiario | factura escrita):');
-    e.sin.forEach(function (p) { detalle.push([IA_fmtFecha_(p.fecha), p.operacion, p.banco, p.moneda, f2(p.monto), p.beneficiarioNombre, p.refs || '-'].join(' | ')); });
+    e.sin.forEach(function (p) {
+      detalle.push([IA_fmtFecha_(p.fecha), p.operacion, p.banco, p.moneda, f2(p.monto), p.beneficiarioNombre, p.refs || '-'].join(' | ') +
+        (p.crudo ? ' | fila ' + p.fuente + ': ' + p.crudo : ''));
+    });
     detalle.push('Pagos ya aplicados (fecha | operación | monto | aplicado a):');
     e.apl.forEach(function (p) { detalle.push([IA_fmtFecha_(p.fecha), p.operacion, f2(p.monto), (p._apl || []).map(function (m) { return m.doc + ' ' + f2(m.monto); }).join(', ')].join(' | ')); });
   });
   var hl = ['', 'HALLAZGOS (severidad | tipo | empresa | proveedor | detalle | monto | origen):'];
   hall.slice(0, 150).forEach(function (h) { hl.push([h.sev, h.tipo, h.empresa, h.prov, h.detalle, h.monto, h.origen].join(' | ')); });
-  if (a.sinProv.length) hl.push('', 'VOUCHERS SIN PROVEEDOR RECONOCIBLE: ' + a.sinProv.length + ' por S/ ' + f2(a.sinProv.reduce(function (s, p) { return s + p.monto; }, 0)));
+  if (a.sinProv.length) {
+    hl.push('', 'VOUCHERS SIN PROVEEDOR RECONOCIBLE: ' + a.sinProv.length + ' por S/ ' + f2(a.sinProv.reduce(function (s, p) { return s + p.monto; }, 0)) +
+      ' (empresa | fecha | moneda monto | categoría | fila):');
+    a.sinProv.slice(0, 80).forEach(function (p) {
+      hl.push([cfg.nombreEmpresa[p.pagadorRuc] || p.pagadorRuc, IA_fmtFecha_(p.fecha), p.moneda + ' ' + f2(p.monto), p._cat || '-',
+        p.fuente + ': ' + (p.crudo || p.beneficiarioNombre || '')].join(' | '));
+    });
+  }
   // Primero el detalle de lo preguntado, luego hallazgos y el resumen (se recorta lo que no entra)
   var txt = detalle.join('\n') + '\n' + hl.join('\n') + '\n\n' + L.join('\n');
   return txt.length > limite ? txt.slice(0, limite) + '\n…(recortado: hay más datos; use los filtros para acotar)' : txt;
