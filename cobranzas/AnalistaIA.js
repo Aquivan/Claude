@@ -543,18 +543,28 @@ function ANA_tablas_(c, tablas) {
   }).filter(function (t) { return t.columnas.length; });
 }
 
-function ANA_escribir_(ss, pregunta, out, ia) {
+/** Pestaña 💬 Resultado IA con su encabezado (la fila 2 es la celda para escribir la pregunta). */
+function ANA_hojaResultado_(ss, limpiar) {
   var sh = ss.getSheetByName(ANA_HOJA_) || ss.insertSheet(ANA_HOJA_);
-  if (sh.getFilter()) sh.getFilter().remove();
-  sh.clear();
-  sh.getRange(1, 1, 1, 12).merge().setValue('💬  RESULTADO DE LA IA').setFontSize(14).setFontWeight('bold').setFontColor('#F8FAFC').setBackground(COLOR.OSCURO);
-  sh.getRange(2, 1).setValue('Pregunta').setFontWeight('bold');
-  sh.getRange(2, 2, 1, 11).merge().setValue(pregunta).setWrap(true).setBackground('#FFF8E1');
+  if (limpiar) { if (sh.getFilter()) sh.getFilter().remove(); sh.clear(); }
+  if (!limpiar && sh.getRange(1, 1).getValue()) return sh;
+  sh.getRange(1, 1, 1, 12).merge().setValue('💬  RESULTADO DE LA IA  ·  escriba su pregunta en la celda amarilla y use 🤝 Conciliar con IA → 💬 Preguntar a la IA')
+    .setFontSize(12).setFontWeight('bold').setFontColor('#F8FAFC').setBackground(COLOR.OSCURO);
+  sh.getRange(2, 1).setValue('Pregunta ✏️').setFontWeight('bold');
+  sh.getRange(2, 2, 1, 11).merge().setWrap(true).setBackground('#FFF8E1');
   sh.getRange(3, 1).setValue('Respuesta').setFontWeight('bold').setVerticalAlignment('top');
+  sh.getRange(3, 2, 1, 11).merge().setWrap(true).setVerticalAlignment('top').setBackground('#F8FAFC');
+  sh.getRange(4, 1, 1, 12).merge();
+  return sh;
+}
+
+function ANA_escribir_(ss, pregunta, out, ia) {
+  var sh = ANA_hojaResultado_(ss, true);
+  sh.getRange(2, 2).setValue(pregunta);
   var resp = String(out.final.respuesta || '');
-  sh.getRange(3, 2, 1, 11).merge().setValue(resp).setWrap(true).setVerticalAlignment('top').setBackground('#F8FAFC');
+  sh.getRange(3, 2).setValue(resp);
   sh.setRowHeight(3, Math.min(400, 21 + 15 * Math.ceil(resp.length / 150 + (resp.match(/\n/g) || []).length)));
-  sh.getRange(4, 1, 1, 12).merge().setValue('— ' + ia.proveedor + (ia.modelo ? ' ' + ia.modelo : '') + ' · ' + AUD_ahora_() + ' · ' + out.seg + ' s · ' + out.consultas +
+  sh.getRange(4, 1).setValue('— ' + ia.proveedor + (ia.modelo ? ' ' + ia.modelo : '') + ' · ' + AUD_ahora_() + ' · ' + out.seg + ' s · ' + out.consultas +
     ' consultas a la IA · datos revisados: ' + (out.pasos.join(' ; ') || 'ninguno')).setFontSize(8).setFontColor(COLOR.TEXTO_SUAVE).setWrap(true);
   var fila = 6, anchoMax = 2;
   var tablas = ANA_tablas_(out.c, out.final.tablas);
@@ -586,7 +596,13 @@ function ANA_escribir_(ss, pregunta, out, ia) {
 /** 💬 Preguntar a la IA (menú): pregunta de la fila 15 del 🔍 Auditor IA, o en una ventana. */
 function ANA_menuPreguntar_(ss) {
   var sh = AUD_hoja_(ss);
-  var pregunta = String(sh.getRange(AUD_F_PREG_, 2).getValue() || '').trim();
+  // La pregunta se toma de la pestaña donde está el usuario: 💬 Resultado IA (fila 2) o 🔍 Auditor IA
+  // (fila 15). Desde cualquier otra pestaña, o si la celda está vacía, se abre la ventana.
+  var activa = ss.getActiveSheet() ? ss.getActiveSheet().getName() : '';
+  var shR = ss.getSheetByName(ANA_HOJA_);
+  var pregunta = '';
+  if (activa === ANA_HOJA_ && shR) pregunta = String(shR.getRange(2, 2).getValue() || '').trim();
+  else if (activa === AUD_HOJA_) pregunta = String(sh.getRange(AUD_F_PREG_, 2).getValue() || '').trim();
   if (!pregunta) {
     var ui = SpreadsheetApp.getUi();
     var r = ui.prompt('💬 Preguntar a la IA', 'Escriba lo que necesita, como se lo diría a un contador. Ej.:\n' +
@@ -594,8 +610,14 @@ function ANA_menuPreguntar_(ss) {
       '• Concilia GRANIX con SOAL: qué voucher va a cada factura y qué vouchers no están usados.', ui.ButtonSet.OK_CANCEL);
     if (r.getSelectedButton() !== ui.Button.OK || !String(r.getResponseText()).trim()) return 'Sin pregunta.';
     pregunta = String(r.getResponseText()).trim();
-    sh.getRange(AUD_F_PREG_, 2).setValue(pregunta);
   }
+  // La misma pregunta queda en los dos lugares, y se avisa de inmediato que se está trabajando en ELLA.
+  sh.getRange(AUD_F_PREG_, 2).setValue(pregunta);
+  shR = ANA_hojaResultado_(ss);
+  shR.getRange(2, 2).setValue(pregunta);
+  shR.getRange(3, 2).setValue('⏳ La IA está analizando esta pregunta (1 a 4 minutos)…');
+  shR.getRange(4, 1).setValue('');
+  SpreadsheetApp.flush();
   var cfg = leerConfig_(ss);
   var ia = AUD_ia_(ss, AUD_leerParam_(sh, cfg));
   if (!ia.clave) throw new Error('Falta la clave de IA: menú 🤝 Conciliar con IA → 🔑 Guardar clave de IA.');

@@ -93,6 +93,7 @@ function AUD_menuPreguntar() {
   try { msg = ANA_menuPreguntar_(ss); } catch (e) {
     msg = '❌ ' + e.message; console.error(e.stack);
     AUD_hoja_(ss).getRange(AUD_F_RESP_, 2).setValue(msg);
+    if (ss.getSheetByName(ANA_HOJA_)) ss.getSheetByName(ANA_HOJA_).getRange(3, 2).setValue(msg);
   }
   ss.toast(msg, '🔍 Auditor IA', 8);
 }
