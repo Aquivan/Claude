@@ -49,7 +49,9 @@ function CHAT_enviar(msg) {
     var previas = (msg.historial || []).slice(-4).map(function (h) { return { pregunta: h.p, respuesta: h.r }; });
     var out = ANA_preguntar_(ss, texto + (adjuntos.length ? '\n(Archivos de la conversación: ' + adjuntos.map(function (a, i) { return 'A' + (i + 1) + ' ' + a.nombre; }).join(', ') + ')' : ''),
       ia, previas, adjuntos.map(function (a) { return { id: a.id, nombre: a.nombre, mime: a.mime }; }));
-    if (out.c.cambioModelo) out.final.respuesta = String(out.final.respuesta || '') + '\n\n(El modelo más capaz estaba saturado; se respondió con el de siempre.)';
+    if (out.c.erroresAdj && out.c.erroresAdj.length) out.final.respuesta = '⚠️ No se pudo leer: ' + out.c.erroresAdj.join(' · ') +
+      '\nLos archivos siguen en la conversación: escriba "reintenta" en un momento y se vuelven a leer.\n\n' + String(out.final.respuesta || '');
+    if (out.c.cambioModelo || ia.cambioModelo) out.final.respuesta = String(out.final.respuesta || '') + '\n\n(Google tenía un modelo saturado; se usó el otro modelo de Gemini.)';
     var tablas = ANA_escribir_(ss, texto, out, ia);
     var log = ss.getSheetByName(AUD_CHAT_);
     if (!log) { log = ss.insertSheet(AUD_CHAT_); log.getRange(1, 1, 1, 4).setValues([['Fecha', 'Datos revisados', 'Pregunta', 'Respuesta']]); log.hideSheet(); }

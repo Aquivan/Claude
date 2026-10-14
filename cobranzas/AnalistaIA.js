@@ -80,6 +80,41 @@ var ANA_SISTEMA_ = [
   'fecha posterior a la factura); y al final los vouchers que no calzan con nada. Haz las cuentas con la herramienta combinar cuando haya dudas.',
 ].join('\n');
 
+/**
+ * Llama a la IA sin rendirse ante Google saturado (503) o el límite por minuto (429):
+ * prueba el otro modelo de Gemini (el de siempre ↔ el más capaz), y si no, espera y
+ * reintenta (hasta 5 intentos). Si cambia de modelo lo deja anotado en ia.cambioModelo.
+ */
+function IA_llamarSeguro_(ia, opts) {
+  var prov = IA_PROVEEDORES_[ia.proveedor] || {};
+  var gemini = prov.tipo === 'gemini';
+  var sp = PropertiesService.getScriptProperties();
+  var probados = {}, ultimo = null;
+  for (var k = 0; k < 5; k++) {
+    var o = {};
+    for (var x in opts) o[x] = opts[x];
+    o.proveedor = ia.proveedor; o.modelo = ia.modelo; o.clave = ia.clave;
+    try { return IA_llamar_(o); } catch (e) {
+      ultimo = e;
+      var msg = String(e.message || e);
+      if (gemini && ia.modelo === ANA_MODELO_GEMINI_ && /respondió (400|403|404)/.test(msg)) {   // la cuenta no tiene ese modelo
+        sp.setProperty('ANA_SIN_MODELO_FUERTE', ANA_MODELO_GEMINI_);
+        ia.modelo = ''; ia.modeloAuto = false;
+        continue;
+      }
+      if (!/respondió (429|500|502|503|504)/.test(msg)) throw e;
+      probados[ia.modelo || ''] = true;
+      if (gemini) {
+        var otro = !ia.modelo || ia.modelo === prov.modelo ? ANA_MODELO_GEMINI_ : '';
+        var sinFuerte = otro && sp.getProperty('ANA_SIN_MODELO_FUERTE') === ANA_MODELO_GEMINI_;
+        if (!probados[otro] && !sinFuerte) { ia.modelo = otro; ia.modeloAuto = false; ia.cambioModelo = true; continue; }
+      }
+      Utilities.sleep(5000 * (k + 1));
+    }
+  }
+  throw ultimo;
+}
+
 /* ============================================================ datos */
 
 function ANA_ctx_(ss) {
@@ -427,10 +462,13 @@ function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos) {
   if (adjuntos && adjuntos.length) {
     conv.push('', 'ARCHIVOS ADJUNTOS POR EL USUARIO (ya leídos; cada uno es el resultado A1, A2…):');
     adjuntos.slice(0, 10).forEach(function (a, k) {
-      try { conv.push(ANX_leer_(c, a, k + 1)); } catch (e) { conv.push('A' + (k + 1) + ' "' + (a.nombre || '') + '": no se pudo leer (' + e.message + ')'); }
+      try { conv.push(ANX_leer_(c, a, k + 1)); } catch (e) {
+        c.erroresAdj = (c.erroresAdj || []).concat([(a.nombre || 'A' + (k + 1)) + ': ' + ANA_mensajeError_(e)]);
+        conv.push('A' + (k + 1) + ' "' + (a.nombre || '') + '": NO SE PUDO LEER (' + e.message + '). Dile al usuario que ese archivo no se leyó y que lo reenvíe; no inventes su contenido.');
+      }
     });
   }
-  var pasos = [], consultas = 0, final = null, saturado = 0;
+  var pasos = [], consultas = 0, final = null;
   for (var paso = 0; paso <= ANA_MAX_PASOS_ && !final; paso++) {
     var apurar = paso === ANA_MAX_PASOS_ || Date.now() - t0 > ANA_LIMITE_MS_ - 60000;
     if (apurar) conv.push('', 'YA NO HAY MÁS CONSULTAS: responde ahora con "accion":"responder" usando lo que tienes.');
@@ -440,17 +478,8 @@ function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos) {
     consultas++;
     var r;
     try {
-      r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: ANA_SISTEMA_, texto: texto, maxTokens: 16000 });
+      r = IA_llamarSeguro_(ia, { sistema: ANA_SISTEMA_, texto: texto, maxTokens: 16000 });
     } catch (e) {
-      // Google saturado (503) o límite por minuto (429): no rendirse. Si se usaba el modelo más capaz, se pasa
-      // al de siempre (suele tener menos demanda); si no, se espera un poco y se reintenta.
-      if (/respondió (429|500|502|503|504)/.test(e.message) && saturado < 4 && Date.now() - t0 < ANA_LIMITE_MS_ - 40000) {
-        saturado++;
-        if (ia.modeloAuto) { ia.modelo = ''; ia.modeloAuto = false; c.cambioModelo = true; }
-        else Utilities.sleep(6000 * saturado);
-        paso--;
-        continue;
-      }
       if (ia.modeloAuto && /respondió (400|403|404)/.test(e.message)) {   // el modelo más capaz no está en esta cuenta: el de siempre
         ia.modelo = ''; ia.modeloAuto = false; paso--;
         PropertiesService.getScriptProperties().setProperty('ANA_SIN_MODELO_FUERTE', ANA_MODELO_GEMINI_);
@@ -459,7 +488,7 @@ function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos) {
       if (!/JSON/i.test(e.message)) throw e;
       // Respondió sin JSON: se le recuerda el protocolo; en el último intento se acepta su texto como respuesta.
       if (!apurar) { conv.push('', 'Tu última respuesta no fue JSON válido. Responde SOLO con el JSON del protocolo.'); continue; }
-      r = { respuesta: IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: ANA_SISTEMA_, texto: texto, json: false, maxTokens: 8000 }), tablas: [] };
+      r = { respuesta: IA_llamarSeguro_(ia, { sistema: ANA_SISTEMA_, texto: texto, json: false, maxTokens: 8000 }), tablas: [] };
     }
     if (r && r.accion === 'consultar' && Array.isArray(r.consultas) && r.consultas.length && !apurar) {
       conv.push('', 'TÚ PEDISTE: ' + JSON.stringify(r.consultas).slice(0, 2000), 'RESULTADOS:');
@@ -696,7 +725,7 @@ function ANA_menuPreguntar_(ss) {
   var out = ANA_preguntar_(ss, pregunta, ia, previas);
   if (out.c.verEnCola) out.final.respuesta = String(out.final.respuesta || '') + '\n\n🖼 Quedan ' + out.c.verEnCola +
     ' comprobante(s) por verificar: siguen solos cada minuto en la pestaña ' + VER_HOJA_ + '.';
-  if (out.c.cambioModelo) out.final.respuesta = String(out.final.respuesta || '') + '\n\n(El modelo más capaz estaba saturado en Google; esta respuesta se hizo con el modelo de siempre.)';
+  if (out.c.cambioModelo || ia.cambioModelo) out.final.respuesta = String(out.final.respuesta || '') + '\n\n(Google tenía un modelo saturado; se usó el otro modelo de Gemini.)';
   var tablas = ANA_escribir_(ss, pregunta, out, ia);
   var resumen = String(out.final.respuesta || '');
   sh.getRange(AUD_F_RESP_, 2).setValue(resumen.slice(0, 45000) + (tablas.length ? '\n\n📊 ' + tablas.length + ' tabla(s) en la pestaña ' + ANA_HOJA_ + ': ' +

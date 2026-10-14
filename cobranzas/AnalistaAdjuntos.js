@@ -122,7 +122,7 @@ function ANX_leerImagen_(c, x, nombre) {
   var cache = AUV_cache_(c.ss);
   var r = AUV_cacheGet_(cache, 'adj', clave);
   if (!r) {
-    r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: ANX_SISTEMA_ADJ_, maxTokens: 8000,
+    r = IA_llamarSeguro_(ia, { sistema: ANX_SISTEMA_ADJ_, maxTokens: 8000,
       adjunto: { mime: esPdf && prov.pdf ? 'application/pdf' : (blob.getContentType() || 'image/png'), base64: Utilities.base64Encode(bytes) },
       texto: 'ARCHIVO: ' + nombre + '\nExtrae todos los documentos que contiene.' });
     c.consultasExtra = (c.consultasExtra || 0) + 1;
@@ -147,7 +147,7 @@ var ANX_HERR_ = {
     if (!/^image\/|pdf/i.test(adj.fuente.mime)) throw new Error('A' + n + ' no es foto ni PDF: sus filas ya están en el resultado A' + n);
     var prov = IA_PROVEEDORES_[c.ia.proveedor];
     var blob = adj.fuente.blob;
-    var resp = IA_llamar_({ proveedor: c.ia.proveedor, modelo: c.ia.modelo, clave: c.ia.clave, json: false, maxTokens: 3000,
+    var resp = IA_llamarSeguro_(c.ia, { json: false, maxTokens: 3000,
       sistema: 'Eres auditor contable en Perú. Mira el archivo y responde la pregunta con exactitud, en español, citando lo que se ve. No inventes.',
       adjunto: { mime: /pdf/i.test(adj.fuente.mime) && prov.pdf ? 'application/pdf' : blob.getContentType(), base64: Utilities.base64Encode(blob.getBytes()) },
       texto: String(a.pregunta || 'Describe el documento y todos sus datos.') });

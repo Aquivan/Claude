@@ -99,7 +99,7 @@ function VER_uno_(libro, p, ia, cfg) {
   if (!prov.imagen) return VER_con_(base, { resultado: '❌ La IA elegida no lee imágenes (use Gemini u otra con imagen)' });
   var arch = VER_comprobante_(libro, p.fuente, prov);
   if (arch.error) return VER_con_(base, { resultado: '❌ Sin comprobante', comentario: arch.error, archivo: arch.nombre || '' });
-  var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: VER_SISTEMA_, maxTokens: 2000,
+  var r = IA_llamarSeguro_(ia, { sistema: VER_SISTEMA_, maxTokens: 2000,
     adjunto: { mime: arch.mime, base64: arch.base64 },
     texto: 'DATOS EN LA HOJA (' + p.fuente + '): fecha ' + IA_fmtFecha_(p.fecha) + ' · monto ' + p.moneda + ' ' + p.monto.toFixed(2) +
       ' · operación ' + (p.operacion || '-') + ' · banco ' + (p.banco || '-') + ' · beneficiario ' + (p.beneficiarioNombre || '-') +

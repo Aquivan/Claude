@@ -359,7 +359,7 @@ function AUV_mapa_(nombre, disp, cfg, ia, cont, cache) {
   if (ia && ia.clave) {
     try {
       cont.consultas++;
-      var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: AUV_SISTEMA_MAPA_,
+      var r = IA_llamarSeguro_(ia, { sistema: AUV_SISTEMA_MAPA_,
         texto: AUV_textoMapa_(nombre, disp, perf, heur, cfg, idx), maxTokens: 1500 });
       var m = AUV_validarMapa_(r, muestra);
       if (m) {
@@ -405,7 +405,7 @@ function AUV_interpretarFilas_(nombre, raras, mapa, ia, cont, cache, deadline, e
     try {
       if (cont.consultas) Utilities.sleep(IA_PROVEEDORES_[ia.proveedor].pausa);
       cont.consultas++;
-      var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: AUV_SISTEMA_FILAS_, maxTokens: 8000,
+      var r = IA_llamarSeguro_(ia, { sistema: AUV_SISTEMA_FILAS_, maxTokens: 8000,
         texto: 'PESTAÑA: ' + nombre + '\nFILAS:\n' + lote.map(function (x) { return 'fila ' + (x.i + 1) + ': ' + AUV_crudo_(x.r, mapa.columnas); }).join('\n') });
       var porFila = {};
       (Array.isArray(r.filas) ? r.filas : []).forEach(function (f) { porFila[parseInt(f.fila, 10)] = f; });
@@ -645,7 +645,7 @@ function AUV_identificar_(lista, ctx) {
     try {
       if (cont.consultas) Utilities.sleep(IA_PROVEEDORES_[ia.proveedor].pausa);
       cont.consultas++;
-      var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: AUV_SISTEMA_IDENT_, maxTokens: 8000,
+      var r = IA_llamarSeguro_(ia, { sistema: AUV_SISTEMA_IDENT_, maxTokens: 8000,
         texto: cabeza + 'VOUCHERS:\n' + lote.map(function (p, k) {
           return 'V' + (k + 1) + ' | empresa: ' + (p.pagadorRuc ? cfg.nombreEmpresa[p.pagadorRuc] + ' (' + p.pagadorRuc + ')' : '?') +
             ' | leído: ' + IA_fmtFecha_(p.fecha) + ' ' + p.moneda + ' ' + p.monto.toFixed(2) + (p.beneficiarioNombre ? ' · beneficiario: ' + p.beneficiarioNombre : '') +
