@@ -90,7 +90,10 @@ function AUD_menuPreguntar() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ss.toast('La IA está revisando los datos para responder…', '🔍 Auditor IA', 60);
   var msg;
-  try { msg = AUD_preguntar_(ss); } catch (e) { msg = '❌ ' + e.message; }
+  try { msg = ANA_menuPreguntar_(ss); } catch (e) {
+    msg = '❌ ' + e.message; console.error(e.stack);
+    AUD_hoja_(ss).getRange(AUD_F_RESP_, 2).setValue(msg);
+  }
   ss.toast(msg, '🔍 Auditor IA', 8);
 }
 
@@ -111,7 +114,8 @@ var AUD_AYUDA_ = 'Cómo usarlo (menú 🤝 Conciliar con IA → 🔍 Auditor IA)
   'interpreta las filas desordenadas, decide a qué proveedor y empresa corresponde cada pago, qué facturas paga y qué hallazgos hay. Vea cómo leyó cada fila en 🔍 Vouchers leídos.\n' +
   '   ⚙️ IA + reglas: además el sistema calcula combinaciones exactas y aplica reglas fijas de auditoría.\n' +
   '3) Revise 🔍 Hallazgos y las propuestas en 🤝 Conciliar con IA: ✔ Aceptar / ✖ Rechazar → ✅ Aplicar lo aceptado (nada se aplica solo).\n' +
-  '4) 💬 Escriba una pregunta en la fila ' + AUD_F_PREG_ + ' y use 💬 Preguntar a la IA.\n' +
+  '4) 💬 Pregunte lo que quiera en la fila ' + AUD_F_PREG_ + ' (o deje vacío y se abre una ventana) y use 💬 Preguntar a la IA: la IA busca sola facturas, N/C, retenciones, pagos, ' +
+  'vouchers A–J (usados o sin usar) y otras hojas, y arma las tablas en la pestaña 💬 Resultado IA. No usa los filtros de arriba: lo que pida en la pregunta manda.\n' +
   'En la columna Motivo el sistema solo anota si la suma de la IA cuadra (✔ cuadra / ⚠️ revisar); no cambia lo que la IA decidió. Usa la IA y la clave de 🤝 Conciliar con IA.';
 
 function AUD_hoja_(ss) {
@@ -146,7 +150,7 @@ function AUD_hoja_(ss) {
   sh.getRange('D3:Q11').merge().setValue(AUD_AYUDA_).setWrap(true).setVerticalAlignment('top').setFontSize(9)
     .setFontColor(COLOR.TEXTO_SUAVE).setBackground('#F8FAFC');
   sh.getRange(AUD_F_PREG_ - 1, 1).setValue('💬 PREGUNTA A LA IA').setFontWeight('bold').setFontSize(11);
-  sh.getRange(AUD_F_PREG_ - 1, 2).setValue('Ej.: ¿Qué facturas de SOAL a GRANIX siguen sin pagar y qué vouchers no tienen factura? · ¿Hay pagos duplicados este mes?')
+  sh.getRange(AUD_F_PREG_ - 1, 2).setValue(AUD_EJ_PREG_)
     .setFontSize(8).setFontColor(COLOR.TEXTO_SUAVE);
   sh.getRange(AUD_F_PREG_, 1).setValue('Su pregunta').setFontWeight('bold');
   sh.getRange(AUD_F_PREG_, 2, 1, 16).merge().setBackground('#FFF8E1').setWrap(true).setFontSize(10);
@@ -163,8 +167,15 @@ function AUD_hoja_(ss) {
   return sh;
 }
 
-/** Fila 13: motor de conciliación (las hojas creadas antes no la tenían). */
+var AUD_EJ_PREG_ = 'Pregunte libre, ej.: «lista todas las facturas de ALIF a BKF con sus N/C, retenciones y los pagos o vouchers» · ' +
+  '«concilia GRANIX con SOAL: qué voucher va a cada factura y cuáles no están usados» · «¿qué vouchers de setiembre no se usaron?»';
+
+/** Fila 13: motor de conciliación (las hojas creadas antes no la tenían) y textos de ayuda al día. */
 function AUD_asegurarMotor_(sh) {
+  if (String(sh.getRange(AUD_F_PREG_ - 1, 2).getValue()) !== AUD_EJ_PREG_) {
+    sh.getRange(AUD_F_PREG_ - 1, 2).setValue(AUD_EJ_PREG_);
+    sh.getRange('D3').setValue(AUD_AYUDA_);
+  }
   var c = sh.getRange(AUD_F_MOTOR_, 1, 1, 2);
   if (String(c.getValues()[0][0] || '') === 'Motor de conciliación') return;
   c.setValues([['Motor de conciliación', AUD_MOTOR_[0]]]);
@@ -1109,104 +1120,4 @@ function AUD_escribirHallazgos_(ss, hall) {
   }
   sh.getRange(3, 1, Math.max(filas.length, 1) + 1, AUD_ENC_HALL_.length).createFilter();
   [85, 190, 110, 200, 95, 380, 300, 90, 320, 60, 85].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
-}
-
-/* =========================================================== preguntar */
-
-var AUD_SISTEMA_CHAT_ = [
-  'Eres el auditor de cuentas por pagar del grupo de empresas (Perú). Respondes preguntas del gerente o contador',
-  'usando SOLO los datos que te doy: expedientes por empresa y proveedor, facturas, vouchers, pagos aplicados y hallazgos.',
-  'Responde en español, claro y directo, con cifras exactas (S/ y USD), citando facturas (ej. 01_F001-123) y vouchers (fecha, operación, monto).',
-  'Si piden listas, usa viñetas cortas. Si algo no está en los datos, dilo y sugiere cómo verificarlo. No inventes.',
-  'Cuando corresponda, da tu recomendación profesional (qué pagar primero, qué reclamar, qué regularizar con SUNAT).',
-].join('\n');
-
-function AUD_preguntar_(ss) {
-  var sh = AUD_hoja_(ss);
-  var pregunta = String(sh.getRange(AUD_F_PREG_, 2).getValue() || '').trim();
-  if (!pregunta) {
-    SpreadsheetApp.getUi().alert('Escriba su pregunta en la fila ' + AUD_F_PREG_ + ' (celda amarilla) y vuelva a usar 💬 Preguntar a la IA.');
-    return 'Sin pregunta.';
-  }
-  var cfg = leerConfig_(ss);
-  var par = AUD_leerParam_(sh, cfg);
-  var ia = AUD_ia_(ss, par);
-  if (!ia.clave) throw new Error('Falta la clave de IA: menú 🤝 Conciliar con IA → 🔑 Guardar clave de IA.');
-  sh.getRange(AUD_F_RESP_, 2).setValue('⏳ Pensando…');
-  SpreadsheetApp.flush();
-  var est = AUD_leerEstado_(ss);
-  var a = AUD_armar_(ss, cfg, par, null, { consultas: 0, errores: 0 }, (est && est.ident) || {});
-  var store = AUD_store_(ss);
-  var hall = AUD_todosHallazgos_(a, par.pura ? [] : AUD_reglas_(a, cfg), store);
-  var limite = IA_PROVEEDORES_[ia.proveedor].tipo === 'gemini' ? 350000 : 50000;
-  var ctx = AUD_contexto_(a, hall, store, par, cfg, pregunta, limite);
-  var t0 = Date.now();
-  var resp = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: AUD_SISTEMA_CHAT_, json: false, maxTokens: 4000,
-    texto: 'PREGUNTA: ' + pregunta + '\n\nDATOS (filtros: ' + AUD_textoFiltros_(par, cfg) + '):\n' + ctx });
-  var seg = Math.round((Date.now() - t0) / 1000);
-  sh.getRange(AUD_F_RESP_, 2).setValue(resp + '\n\n— ' + ia.proveedor + ' · ' + AUD_ahora_() + ' · ' + seg + ' s');
-  var log = ss.getSheetByName(AUD_CHAT_);
-  if (!log) { log = ss.insertSheet(AUD_CHAT_); log.getRange(1, 1, 1, 4).setValues([['Fecha', 'Filtros', 'Pregunta', 'Respuesta']]); log.hideSheet(); }
-  log.appendRow([new Date(), AUD_textoFiltros_(par, cfg), pregunta, String(resp).slice(0, 45000)]);
-  return 'Respuesta lista (' + seg + ' s).';
-}
-
-function AUD_textoFiltros_(par, cfg) {
-  return [par.empresaRuc ? cfg.nombreEmpresa[par.empresaRuc] : 'todas las empresas', par.prov ? 'proveedor "' + par.prov + '"' : 'todos los proveedores',
-    par.quien ? 'registrado por ' + par.quien : '', par.desde ? 'desde ' + IA_fmtFecha_(par.desde) : '', par.hasta ? 'hasta ' + IA_fmtFecha_(par.hasta) : '',
-    par.todasFacturas ? 'todas las facturas' : 'facturas con saldo', par.todosVouchers ? 'todos los vouchers' : 'vouchers sin aplicar']
-    .filter(Boolean).join(', ');
-}
-
-/** Contexto para la pregunta: resumen de todo + detalle de los proveedores que se mencionan. */
-function AUD_contexto_(a, hall, store, par, cfg, pregunta, limite) {
-  var f2 = function (n) { return Number(n || 0).toFixed(2); };
-  var claves = Object.keys(a.exp);
-  // ¿Qué proveedores menciona la pregunta? (por RUC o por nombre)
-  var tq = IA_tokens_(pregunta);
-  var mencion = claves.filter(function (k) {
-    var e = a.exp[k];
-    if (pregunta.indexOf(e.provRuc) !== -1) return true;
-    var te = IA_tokens_(e.prov);
-    return te.length && tq.some(function (t) { return t.length >= 4 && te.indexOf(t) !== -1; });
-  });
-  if (claves.length <= 3) mencion = claves;
-  var L = [];
-  L.push('RESUMEN POR EXPEDIENTE (empresa | proveedor | RUC | facturas | saldo | vencido>30d | vouchers por conciliar N | S/ | dictamen IA):');
-  claves.map(function (k) { return { k: k, m: AUD_metricas_(a.exp[k]) }; })
-    .sort(function (x, y) { return (y.m.saldo + y.m.ms) - (x.m.saldo + x.m.ms); })
-    .forEach(function (x) {
-      var e = a.exp[x.k], r = store.map[x.k] || {};
-      L.push([e.empresa, e.prov, e.provRuc, x.m.n, f2(x.m.saldo), f2(x.m.venc), x.m.ns, f2(x.m.ms), (r.dictamen || '').slice(0, 160)].join(' | '));
-    });
-  var detalle = [];
-  mencion.slice(0, 4).forEach(function (k) {
-    var e = a.exp[k];
-    detalle.push('');
-    detalle.push('DETALLE · ' + e.empresa + ' ↔ ' + e.prov + ' (RUC ' + e.provRuc + ')' + (e.otras.length ? ' · también debe a: ' + e.otras.map(function (o) { return o.empresa + ' S/ ' + Math.round(o.saldo); }).join(', ') : ''));
-    detalle.push('Facturas (código | emisión | vence | moneda | total | N/C | retención | detracción | pagado | saldo | estado | registro SIRE):');
-    e.docs.forEach(function (d) {
-      detalle.push([d.doc, IA_fmtFecha_(d.emision), IA_fmtFecha_(d.vence), d.moneda, f2(d.total), f2(d.nc), f2(d.retencion), f2(d.detraccion), f2(d.pagado), f2(d.saldo), d.estado, d.registro].join(' | '));
-    });
-    detalle.push('Vouchers por conciliar (fecha | operación | banco | moneda | monto | beneficiario | factura escrita):');
-    e.sin.forEach(function (p) {
-      detalle.push([IA_fmtFecha_(p.fecha), p.operacion, p.banco, p.moneda, f2(p.monto), p.beneficiarioNombre, p.refs || '-'].join(' | ') +
-        (p.crudo ? ' | fila ' + p.fuente + ': ' + p.crudo : ''));
-    });
-    detalle.push('Pagos ya aplicados (fecha | operación | monto | aplicado a):');
-    e.apl.forEach(function (p) { detalle.push([IA_fmtFecha_(p.fecha), p.operacion, f2(p.monto), (p._apl || []).map(function (m) { return m.doc + ' ' + f2(m.monto); }).join(', ')].join(' | ')); });
-  });
-  var hl = ['', 'HALLAZGOS (severidad | tipo | empresa | proveedor | detalle | monto | origen):'];
-  hall.slice(0, 150).forEach(function (h) { hl.push([h.sev, h.tipo, h.empresa, h.prov, h.detalle, h.monto, h.origen].join(' | ')); });
-  if (a.sinProv.length) {
-    hl.push('', 'VOUCHERS SIN PROVEEDOR RECONOCIBLE: ' + a.sinProv.length + ' por S/ ' + f2(a.sinProv.reduce(function (s, p) { return s + p.monto; }, 0)) +
-      ' (empresa | fecha | moneda monto | categoría | fila):');
-    a.sinProv.slice(0, 80).forEach(function (p) {
-      hl.push([cfg.nombreEmpresa[p.pagadorRuc] || p.pagadorRuc, IA_fmtFecha_(p.fecha), p.moneda + ' ' + f2(p.monto), p._cat || '-',
-        p.fuente + ': ' + (p.crudo || p.beneficiarioNombre || '')].join(' | '));
-    });
-  }
-  // Primero el detalle de lo preguntado, luego hallazgos y el resumen (se recorta lo que no entra)
-  var txt = detalle.join('\n') + '\n' + hl.join('\n') + '\n\n' + L.join('\n');
-  return txt.length > limite ? txt.slice(0, limite) + '\n…(recortado: hay más datos; use los filtros para acotar)' : txt;
 }

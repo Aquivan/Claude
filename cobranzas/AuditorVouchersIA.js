@@ -687,6 +687,29 @@ function AUV_identificar_(lista, ctx) {
  */
 function AUV_preparar_(ss, cfg, par, ia, cont, docs, movs, nombres, deadline) {
   var cache = AUV_cache_(ss);
+  var lect = AUV_leerEnlazado_(cfg, ia, cont, cache, deadline, movs);
+  // Por conciliar dentro de los filtros: a quién se pagó
+  var lista = lect.pagos.filter(function (p) {
+    if (p._apl) return false;
+    if (p.pagadorRuc && (cfg.grupo.indexOf(p.pagadorRuc) === -1 || (par.empresaRuc && p.pagadorRuc !== par.empresaRuc))) return false;
+    if (!AUD_enFechas_(par, p.fecha) || (par.quien && AUD_quien_(p) !== par.quien)) return false;
+    if (p.beneficiarioRuc) { p._prov = p.beneficiarioRuc; p._como = 'RUC escrito en la fila'; return false; }
+    var alias = cfg.aliasNombre[normNombre_(p.beneficiarioNombre)];
+    if (alias) { p._prov = alias; p._como = 'alias confirmado en ⚙️ Config'; return false; }
+    return true;
+  });
+  var id = AUV_identificar_(lista, { cfg: cfg, ia: ia, cache: cache, cont: cont, deadline: deadline, docs: docs, nombres: nombres, pagos: lect.pagos });
+  lect.identPend = id.faltan;
+  lect.identHechos = id.hechos;
+  lect.porIdentificar = lista.length;
+  return lect;
+}
+
+/**
+ * Vouchers de A–J enlazados con Cobranzas: cada uno con su ID de pago, la empresa que
+ * paga (si A–J no la dice, la que ya tiene Cobranzas) y, si ya está aplicado, a qué.
+ */
+function AUV_leerEnlazado_(cfg, ia, cont, cache, deadline, movs) {
   var lect = AUV_leer_(cfg, ia, cont, cache, deadline);
   // Enlace con lo que ya lee Cobranzas (misma fila): así el voucher conserva su ID de pago y,
   // si en A–J no figura la empresa que paga, se toma la que ya tiene Cobranzas.
@@ -710,20 +733,6 @@ function AUV_preparar_(ss, cfg, par, ia, cont, docs, movs, nombres, deadline) {
     var apl = movs.porPago[p.id];
     if (apl && apl.length && apl[0].provRuc) { p._apl = apl; p._prov = apl[0].provRuc; p._como = 'ya aplicado'; }
   });
-  // Por conciliar dentro de los filtros: a quién se pagó
-  var lista = lect.pagos.filter(function (p) {
-    if (p._apl) return false;
-    if (p.pagadorRuc && (cfg.grupo.indexOf(p.pagadorRuc) === -1 || (par.empresaRuc && p.pagadorRuc !== par.empresaRuc))) return false;
-    if (!AUD_enFechas_(par, p.fecha) || (par.quien && AUD_quien_(p) !== par.quien)) return false;
-    if (p.beneficiarioRuc) { p._prov = p.beneficiarioRuc; p._como = 'RUC escrito en la fila'; return false; }
-    var alias = cfg.aliasNombre[normNombre_(p.beneficiarioNombre)];
-    if (alias) { p._prov = alias; p._como = 'alias confirmado en ⚙️ Config'; return false; }
-    return true;
-  });
-  var id = AUV_identificar_(lista, { cfg: cfg, ia: ia, cache: cache, cont: cont, deadline: deadline, docs: docs, nombres: nombres, pagos: lect.pagos });
-  lect.identPend = id.faltan;
-  lect.identHechos = id.hechos;
-  lect.porIdentificar = lista.length;
   return lect;
 }
 
