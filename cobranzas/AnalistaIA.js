@@ -19,6 +19,14 @@ var ANA_HOJA_ = '💬 Resultado IA';
 var ANA_MAX_PASOS_ = 9;
 var ANA_LIMITE_MS_ = 285000;
 var ANA_MAX_FILAS_ = 600;            // filas por herramienta
+// Para analizar se usa un modelo más capaz que el "lite" por defecto (si la cuenta no lo tiene, vuelve al de siempre).
+var ANA_MODELO_GEMINI_ = 'gemini-3.6-flash';
+// Nombres parecidos que la IA a veces usa para las herramientas.
+var ANA_ALIAS_ = { contraparte: 'contrapartes', proveedor: 'contrapartes', proveedores: 'contrapartes', clientes: 'contrapartes', cliente: 'contrapartes',
+  buscar_contraparte: 'contrapartes', factura: 'facturas', documentos: 'facturas', compras: 'facturas', ventas: 'facturas', pagos: 'aplicaciones',
+  aplicacion: 'aplicaciones', movimientos: 'aplicaciones', notas_credito: 'aplicaciones', retenciones: 'aplicaciones', voucher: 'vouchers',
+  verificar: 'verificar_vouchers', verificar_voucher: 'verificar_vouchers', calcular: 'combinar', combinaciones: 'combinar', hoja: 'leer_hoja',
+  listar_hojas: 'hojas' };
 
 var ANA_SISTEMA_ = [
   'Eres un analista contable y auditor senior en Perú (cuentas por pagar y por cobrar, SIRE, retenciones IGV 3%, detracciones SPOT, conciliación bancaria)',
@@ -52,7 +60,11 @@ var ANA_SISTEMA_ = [
   '  "respuesta": en español, clara, con cifras exactas (S/ y USD) y tu conclusión profesional (qué falta pagar, qué voucher no se usa, qué regularizar).',
   '  "tablas": cada una {"titulo":"…","columnas":["…"],"filas":[[…]]} armada por ti, o {"titulo":"…","desde_resultado":"R1","columnas":["documento","total",…],"total":true}',
   '  para mostrar tal cual el resultado de una herramienta (más rápido para listas largas; "columnas" elige y ordena; "total": suma las columnas numéricas).',
-  'Reglas: usa las herramientas antes de afirmar algo; si una búsqueda no trae nada, prueba otra forma (otro nombre, RUC, sin fechas). No pidas lo que ya tienes.',
+  'Reglas: usa las herramientas antes de afirmar algo (con su nombre EXACTO). No pidas lo que ya tienes.',
+'Si una consulta da 0 filas NO concluyas que no existe: lee la NOTA que acompaña al resultado (dice dónde SÍ aparece esa contraparte: otra empresa del grupo,',
+'el otro lado, otro nombre parecido, otras fechas) y amplía la búsqueda. En la respuesta di qué no hay y qué SÍ hay, con cifras (ej. "BKF no le compró a ALIF;',
+'ALIF sí le vende a GRANIX: 44 facturas por S/ …") y ofrece la tabla de lo que sí existe. Antes de decir que algo no existe, usa contrapartes {texto} sin empresa.',
+'Si hay CONVERSACIÓN ANTERIOR, la pregunta puede ser de seguimiento ("¿y con GRANIX?", "ahora solo las vencidas"): úsala para entender a qué se refiere.',
   'Para conciliar: por cada factura con saldo, qué voucher(s) SIN USAR del mismo proveedor y empresa podrían pagarla (monto exacto, suma, neto de retención o detracción,',
   'fecha posterior a la factura); y al final los vouchers que no calzan con nada. Haz las cuentas con la herramienta combinar cuando haya dudas.',
 ].join('\n');
@@ -387,7 +399,7 @@ function ANA_textoRes_(id, herr, r, limite) {
   return L.join('\n');
 }
 
-function ANA_preguntar_(ss, pregunta, ia) {
+function ANA_preguntar_(ss, pregunta, ia, previas) {
   var t0 = Date.now();
   var c = ANA_ctx_(ss);
   c.ia = ia;
@@ -396,6 +408,10 @@ function ANA_preguntar_(ss, pregunta, ia) {
   var limRes = gemini ? 60000 : 12000, limTotal = gemini ? 700000 : 60000;
   var conv = ['PREGUNTA: ' + pregunta, '', 'EMPRESAS DEL GRUPO: ' + c.cfg.grupo.map(function (r) { return c.cfg.nombreEmpresa[r] + ' (' + r + ')'; }).join(', '),
     'HOY: ' + IA_fmtFecha_(new Date())];
+  if (previas && previas.length) {
+    conv.push('', 'CONVERSACIÓN ANTERIOR (para preguntas de seguimiento):');
+    previas.forEach(function (x) { conv.push('P: ' + x.pregunta, 'R: ' + String(x.respuesta).slice(0, 1500)); });
+  }
   var pasos = [], consultas = 0, final = null;
   for (var paso = 0; paso <= ANA_MAX_PASOS_ && !final; paso++) {
     var apurar = paso === ANA_MAX_PASOS_ || Date.now() - t0 > ANA_LIMITE_MS_ - 60000;
@@ -408,6 +424,11 @@ function ANA_preguntar_(ss, pregunta, ia) {
     try {
       r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: ANA_SISTEMA_, texto: texto, maxTokens: 16000 });
     } catch (e) {
+      if (ia.modeloAuto && /respondió (400|403|404)/.test(e.message)) {   // el modelo más capaz no está en esta cuenta: el de siempre
+        ia.modelo = ''; ia.modeloAuto = false; paso--;
+        PropertiesService.getScriptProperties().setProperty('ANA_SIN_MODELO_FUERTE', ANA_MODELO_GEMINI_);
+        continue;
+      }
       if (!/JSON/i.test(e.message)) throw e;
       // Respondió sin JSON: se le recuerda el protocolo; en el último intento se acepta su texto como respuesta.
       if (!apurar) { conv.push('', 'Tu última respuesta no fue JSON válido. Responde SOLO con el JSON del protocolo.'); continue; }
@@ -420,10 +441,13 @@ function ANA_preguntar_(ss, pregunta, ia) {
         var h = String(q.herramienta || '');
         var res;
         try {
+          var hn = normHeader_(h).replace(/\s+/g, '_');
+          h = ANA_HERR_[h] || ANA_HERR2_[h] ? h : ANA_ALIAS_[hn] || hn;
           var fn = ANA_HERR_[h] || ANA_HERR2_[h];
-          if (!fn) throw new Error('herramienta desconocida "' + h + '"');
+          if (!fn) throw new Error('herramienta desconocida "' + q.herramienta + '"; las que hay: ' + Object.keys(ANA_HERR_).concat(Object.keys(ANA_HERR2_)).join(', '));
           res = fn(c, q.args || {});
           res.filas = res.filas.slice(0, ANA_MAX_FILAS_ * 3);
+          if (!res.filas.length && !res.nota) res.nota = ANA_pistaVacio_(c, h, q.args || {});
         } catch (e) { res = { columnas: [], filas: [], error: e.message }; }
         c.resultados[id] = res;
         pasos.push(id + ' ' + h + ' ' + JSON.stringify(q.args || {}).slice(0, 150) + ' → ' + res.filas.length + (res.error ? ' ERROR ' + res.error : ''));
@@ -438,6 +462,52 @@ function ANA_preguntar_(ss, pregunta, ia) {
   // Comprobantes que no alcanzaron a verificarse: siguen solos en segundo plano (sin límite de cantidad).
   c.verEnCola = c.verPend && c.verPend.length ? VER_encolar_(ss, c.verPend, ia.modelo) : 0;
   return { final: final || { respuesta: 'La IA no terminó.', tablas: [] }, pasos: pasos, consultas: consultas, seg: Math.round((Date.now() - t0) / 1000), c: c };
+}
+
+/**
+ * Cuando una consulta no trae nada: dónde SÍ aparece esa contraparte (otra empresa, el otro
+ * lado, nombres parecidos, vouchers) para que la IA no concluya "no existe" a la ligera.
+ */
+function ANA_pistaVacio_(c, h, a) {
+  var x = [];
+  var docs = ANA_docs_(c);
+  if (a.contraparte) {
+    var donde = {}, rucs = {};
+    docs.forEach(function (d) {
+      if (!ANA_coincide_(a.contraparte, d.ruc, d.contraparte)) return;
+      rucs[d.ruc] = d.contraparte;
+      var k = d.empresa + ' · ' + d.lado;
+      var e = donde[k] = donde[k] || { n: 0, total: 0, saldo: 0 };
+      e.n++; e.total += d.total; e.saldo += d.saldo > 0 ? d.saldo : 0;
+    });
+    var ks = Object.keys(donde);
+    if (ks.length) {
+      x.push('"' + a.contraparte + '" = ' + Object.keys(rucs).map(function (r) { return r + ' ' + rucs[r]; }).join(', ') +
+        ' · SÍ tiene facturas en: ' + ks.map(function (k) { var e = donde[k]; return k + ' ' + e.n + ' fact. total S/ ' + e.total.toFixed(2) + ' saldo S/ ' + e.saldo.toFixed(2); }).join('; ') + '.');
+    } else {
+      var vistos = {}, parecidos = [];
+      docs.forEach(function (d) {
+        if (vistos[d.ruc] || !d.contraparte) return;
+        vistos[d.ruc] = true;
+        var sc = CIA_parecido_(a.contraparte, d.contraparte);
+        if (sc >= 0.3) parecidos.push({ t: d.ruc + ' ' + d.contraparte, sc: sc });
+      });
+      parecidos.sort(function (p, q) { return q.sc - p.sc; });
+      x.push('Ninguna factura con una contraparte "' + a.contraparte + '"' + (parecidos.length ? '. Nombres parecidos: ' +
+        parecidos.slice(0, 6).map(function (p) { return p.t; }).join('; ') : '') + '.');
+    }
+    var vou = {};
+    ANA_vouchers_(c).pagos.forEach(function (p) {
+      if (!ANA_coincide_(a.contraparte, '', p.beneficiarioNombre) && normHeader_(p.crudo).indexOf(normHeader_(a.contraparte)) === -1) return;
+      var k = ANA_nombreEmp_(c, p.pagadorRuc) || '?';
+      vou[k] = (vou[k] || 0) + 1;
+    });
+    if (Object.keys(vou).length) x.push('Vouchers con ese nombre: ' + Object.keys(vou).map(function (k) { return k + ' ' + vou[k]; }).join(', ') + '.');
+  }
+  if (a.desde || a.hasta) x.push('Hay filtros de fecha (' + (a.desde || '…') + ' a ' + (a.hasta || '…') + '): pruebe sin fechas.');
+  if (a.con_saldo === true) x.push('Pidió solo con saldo: pruebe sin con_saldo para ver también las pagadas.');
+  if (a.estado && h === 'vouchers') x.push('Pidió estado "' + a.estado + '": pruebe estado "todos".');
+  return x.join(' ') || 'Sin resultados con esos filtros: pruebe más amplio.';
 }
 
 /* ============================================================ salida */
@@ -529,9 +599,20 @@ function ANA_menuPreguntar_(ss) {
   var cfg = leerConfig_(ss);
   var ia = AUD_ia_(ss, AUD_leerParam_(sh, cfg));
   if (!ia.clave) throw new Error('Falta la clave de IA: menú 🤝 Conciliar con IA → 🔑 Guardar clave de IA.');
+  if (!ia.modelo && IA_PROVEEDORES_[ia.proveedor].tipo === 'gemini' &&
+      PropertiesService.getScriptProperties().getProperty('ANA_SIN_MODELO_FUERTE') !== ANA_MODELO_GEMINI_) { ia.modelo = ANA_MODELO_GEMINI_; ia.modeloAuto = true; }
+  // Preguntas de la última hora: para que se pueda seguir conversando ("¿y con GRANIX?")
+  var previas = [];
+  var logAnt = ss.getSheetByName(AUD_CHAT_);
+  if (logAnt && logAnt.getLastRow() >= 2) {
+    var n0 = Math.min(3, logAnt.getLastRow() - 1);
+    logAnt.getRange(logAnt.getLastRow() - n0 + 1, 1, n0, 4).getValues().forEach(function (r) {
+      if (r[0] instanceof Date && Date.now() - r[0].getTime() < 3600000 && r[2]) previas.push({ pregunta: r[2], respuesta: r[3] });
+    });
+  }
   sh.getRange(AUD_F_RESP_, 2).setValue('⏳ La IA está revisando los datos (puede tardar 1 a 4 minutos)…');
   SpreadsheetApp.flush();
-  var out = ANA_preguntar_(ss, pregunta, ia);
+  var out = ANA_preguntar_(ss, pregunta, ia, previas);
   if (out.c.verEnCola) out.final.respuesta = String(out.final.respuesta || '') + '\n\n🖼 Quedan ' + out.c.verEnCola +
     ' comprobante(s) por verificar: siguen solos cada minuto en la pestaña ' + VER_HOJA_ + '.';
   var tablas = ANA_escribir_(ss, pregunta, out, ia);
