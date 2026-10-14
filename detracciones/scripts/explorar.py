@@ -106,6 +106,11 @@ def main():
 
         if a.modo == "menu":
             html = pag.content()
+            # Opciones del menú (JSON de la página) del bloque Declaraciones y pagos / Detracciones (12.4) y relacionadas
+            for m in re.finditer(r'\{"name":"(1[23]\.(?:4|10|17)[\d.]*)","description":"([^"]*)"(?:,"invoke":"(\d)")?,"type":"(\w+)"(?:,"url":"([^"]*)")?', html):
+                print("  OPCION", m.group(1), "|", m.group(2), "| tipo", m.group(4), "| invoke", m.group(3), "|", (m.group(5) or "").replace("\\/", "/"))
+            for m in re.finditer(r"ejecuta\('MenuInternet\.htm\?action=(\w+)&amp;code=([\d.]+)',\w+,'([^']*)'", html):
+                print("  ICONO", m.group(2), "|", m.group(1), "|", m.group(3))
             print(f"HTML del menú: {len(html)} caracteres")
             # 1) Elementos del menú cuyo texto habla de detracciones
             items = pag.evaluate("""(patron) => {
@@ -149,7 +154,18 @@ def main():
             for codigo in [c.strip() for c in a.codigos.split(",") if c.strip()]:
                 print(f"\n===== Opción {codigo} =====")
                 registro["activo"] = True
-                pag.goto(f"{MENU}?action=execute&code={codigo}", wait_until="networkidle", timeout=60000)
+                accion = "iconExecute" if codigo.startswith("icon:") else "execute"
+                codigo = codigo.replace("icon:", "")
+                if accion == "iconExecute":   # como el ícono del menú: abre la opción dentro del menú
+                    pag.goto(MENU, wait_until="networkidle", timeout=60000)
+                    try:
+                        pag.evaluate(f"ejecuta('MenuInternet.htm?action=iconExecute&code={codigo}',false,'x','#nivel1_12','{codigo}')")
+                    except Exception as e:
+                        print("  (ejecuta falló)", str(e)[:120])
+                        pag.goto(f"{MENU}?action=iconExecute&code={codigo}", wait_until="networkidle", timeout=60000)
+                    pag.wait_for_load_state("networkidle", timeout=60000)
+                else:
+                    pag.goto(f"{MENU}?action={accion}&code={codigo}", wait_until="networkidle", timeout=60000)
                 pag.wait_for_timeout(5000)
                 foto(f"opcion_{codigo}")
                 for fr in pag.frames:
