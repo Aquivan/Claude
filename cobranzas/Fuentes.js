@@ -123,6 +123,7 @@ function leerVouchers_(cfg) {
       idCliente: col('idCliente'), descripcion: col('Descripcion'), archivo: col('Archivo Original'),
       idUsuario: col('ID Usuario'), empresa: col('Empresa'), idBenef: col('ID Beneficiario'),
       refs: col('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc'), porRetener: col('Por Retener'),
+      enviadoPor: col('Enviado por'), usuario: col('Cliente (usuario)', 'Cliente'),
     };
     // Leer SOLO las columnas de datos, una por una: asi nunca se cargan las
     // columnas con imagenes (que hacen muy lenta la lectura de esa hoja).
@@ -157,6 +158,8 @@ function leerVouchers_(cfg) {
         refs: c.refs >= 0 ? String(r[c.refs] || '') : '',
         banco: banco, operacion: op, modalidad: MODALIDAD.PAGO, fuente: fuente,
         descripcion: c.descripcion >= 0 ? String(r[c.descripcion] || '') : '',
+        enviadoPor: c.enviadoPor >= 0 ? String(r[c.enviadoPor] || '').trim() : '',
+        usuario: c.usuario >= 0 ? String(r[c.usuario] || '').trim() : '',
       };
       var clave = op ? [banco.toUpperCase(), op, monto.toFixed(2)].join('|') : id;
       var previo = (porClave[clave] || []).filter(function (q) {

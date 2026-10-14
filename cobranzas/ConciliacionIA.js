@@ -24,6 +24,11 @@
 
 function CIA_agregarMenu_() {
   SpreadsheetApp.getUi().createMenu('🤝 Conciliar con IA')
+    .addItem('🔍 Auditor IA: abrir (compras y pagos de todas las empresas)', 'AUD_menuAbrir')
+    .addItem('▶ Auditar con IA (según los filtros)', 'AUD_menuAuditar')
+    .addItem('💬 Preguntar a la IA', 'AUD_menuPreguntar')
+    .addItem('⏹ Detener auditoría en curso', 'AUD_menuDetener')
+    .addSeparator()
     .addItem('📋 Abrir pestaña y cargar proveedores/clientes', 'CIA_menuAbrir')
     .addItem('▶ Analizar la selección', 'CIA_menuAnalizar')
     .addItem('✅ Aplicar lo aceptado', 'CIA_menuAplicar')
