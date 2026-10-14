@@ -1,0 +1,65 @@
+# Proyecto "Detracciones · Grupo" (carpeta detracciones/). Recorre SUNAT SOL con un
+# navegador Chrome real, SOLO LEYENDO, para ubicar las opciones de detracciones
+# (SPOT) y anotar en el log qué envía cada pantalla. Las fotos quedan como archivo
+# descargable de esta ejecución (sección "Artifacts", se borran a los 3 días).
+# No guarda nada en el repositorio ni toca otros proyectos. Nunca imprime claves.
+
+name: Detracciones - explorar SUNAT (fotos y pedidos)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa (su Environment con claves SOL)"
+        required: true
+        default: "20447969531"
+      modo:
+        description: "menu = buscar las opciones de detracciones · opcion = abrir códigos"
+        required: true
+        default: "menu"
+        type: choice
+        options: [menu, opcion]
+      codigos:
+        description: "Códigos de opción separados por coma (modo opcion)"
+        required: false
+        default: ""
+      periodo:
+        description: "Mes AAAAMM para probar la búsqueda (modo opcion, opcional)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  explorar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: detracciones/scripts
+
+      - name: Instalar navegador
+        run: |
+          pip install playwright==1.47.0
+          python -m playwright install --with-deps chromium
+
+      - name: Recorrido
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          MODO: ${{ inputs.modo }}
+          CODIGOS: ${{ inputs.codigos }}
+          PERIODO: ${{ inputs.periodo }}
+        run: python detracciones/scripts/explorar.py --modo "$MODO" --codigos "$CODIGOS" --periodo "$PERIODO" --salida pantallas
+
+      - name: Subir fotos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detracciones-${{ inputs.ruc }}-${{ inputs.modo }}
+          path: pantallas/
+          retention-days: 3
