@@ -40,6 +40,9 @@ var ANA_SISTEMA_ = [
   '  (ampliar=true trae además las columnas de la fila fuera de A–J; úsalo solo si lo necesitas).',
   '- combinar {objetivo, montos:[{"id":"01_F001-1","monto":100.5}], max_items:4, tolerancia:1}: calculadora exacta; dice qué combinaciones suman el objetivo',
   '  (exacto, neto de retención 3% y neto de detracción 4/10/12%). Úsala para ver qué facturas paga un voucher o qué vouchers pagan una factura.',
+  '- verificar_vouchers {filas:["Originales!7",…] o los mismos filtros de vouchers}: abre la IMAGEN o PDF de cada voucher y compara lo escrito en la hoja',
+  '  con el comprobante (fecha, monto, moneda, operación, banco, beneficiario) y da alertas (ilegible, rechazado, editado…). SIN LÍMITE: lo que no alcance',
+  '  ahora sigue solo en segundo plano (pestaña 🖼 Vouchers verificados). Úsala cuando pidan revisar/verificar si un voucher está bien escrito.',
   '- hojas {}: lista las hojas disponibles con sus columnas.   - leer_hoja {libro:"cobranzas"|"vouchers", hoja, buscar, max_filas}',
   'empresa = nombre corto o RUC de la empresa del grupo. contraparte = nombre (aunque esté mal escrito) o RUC. Fechas dd/mm/yyyy.',
   '',
@@ -216,30 +219,8 @@ var ANA_HERR_ = {
   },
 
   vouchers: function (c, a) {
-    var L = ANA_vouchers_(c);
-    var emp = ANA_empresa_(c, a.empresa);
     var nom = c.nombres || (ANA_docs_(c), c.nombres);
-    var contraRucs = null;
-    if (a.contraparte) {
-      contraRucs = {};
-      ANA_docs_(c).forEach(function (d) { if (ANA_coincide_(a.contraparte, d.ruc, d.contraparte)) contraRucs[d.ruc] = true; });
-    }
-    var monto = a.monto != null && a.monto !== '' ? aNumero_(a.monto) : null, tol = a.tolerancia != null ? aNumero_(a.tolerancia) : 1;
-    var est = normHeader_(a.estado || 'todos');
-    var sel = L.pagos.filter(function (p) {
-      if (emp && p.pagadorRuc !== emp) return false;
-      if ((a.desde || a.hasta) && !ANA_enFechas_(p.fecha, a.desde, a.hasta)) return false;
-      if (monto != null && Math.abs(p.monto - monto) > tol) return false;
-      if (/sin/.test(est) && p._apl) return false;
-      if (/^usad/.test(est) && !p._apl) return false;
-      if (a.buscar && normHeader_(p.crudo).indexOf(normHeader_(a.buscar)) === -1) return false;
-      if (contraRucs) {
-        var porRuc = p._prov && contraRucs[p._prov];
-        var porNombre = ANA_coincide_(a.contraparte, '', p.beneficiarioNombre) || normHeader_(p.crudo).indexOf(normHeader_(a.contraparte)) !== -1;
-        if (!porRuc && !porNombre) return false;
-      }
-      return true;
-    }).sort(function (x, y) { return (x.fecha || 0) - (y.fecha || 0); });
+    var sel = ANA_filtrarVouchers_(c, a);
     var cols = ['fila', 'fecha', 'empresa', 'banco', 'operacion', 'moneda', 'monto', 'beneficiario', 'proveedor_ia', 'usado_en', 'fila_AJ'];
     var filas = sel.map(function (p) {
       return [p.fuente, p.fecha, ANA_nombreEmp_(c, p.pagadorRuc) || '?', p.banco, p.operacion, p.moneda, p.monto, p.beneficiarioNombre,
@@ -254,6 +235,57 @@ var ANA_HERR_ = {
     return { columnas: cols, filas: filas };
   },
 
+  verificar_vouchers: function (c, a) {
+    var sel = ANA_filtrarVouchers_(c, a);
+    if (!sel.length) return { columnas: [], filas: [], error: 'ningún voucher con esos datos (pruebe con la herramienta vouchers primero)' };
+    var r = VER_verificar_(c.ss, c.cfg, sel, c.ia, c.deadline - 90000);
+    c.verPend = (c.verPend || []).concat(r.pendientes);
+    var cols = ['fila', 'empresa', 'fecha_hoja', 'monto_hoja', 'operacion_hoja', 'beneficiario_hoja', 'resultado', 'diferencias', 'fecha_comprobante',
+      'monto_comprobante', 'operacion_comprobante', 'banco', 'beneficiario_comprobante', 'ordenante', 'alertas', 'comentario'];
+    var filas = r.hechos.map(function (x) {
+      return [x.fuente, x.empresa, x.fecha, x.monto, x.operacion, x.beneficiario, x.resultado, x.diferencias || '', x.fechaC || '', x.montoC == null ? '' : x.montoC,
+        x.operacionC || '', x.bancoC || '', x.beneficiarioC || '', x.ordenante || '', x.alertas || '', x.comentario || ''];
+    });
+    var res = { columnas: cols, filas: filas };
+    if (r.pendientes.length) res.nota = r.pendientes.length + ' voucher(s) más se siguen verificando solos en segundo plano (pestaña ' + VER_HOJA_ + ')';
+    return res;
+  },
+};
+
+/** Vouchers que cumplen los filtros de la IA (o la lista exacta "filas"). */
+function ANA_filtrarVouchers_(c, a) {
+  var L = ANA_vouchers_(c);
+  var emp = ANA_empresa_(c, a.empresa);
+  if (Array.isArray(a.filas) && a.filas.length) {
+    var quiero = {};
+    a.filas.forEach(function (f) { quiero[String(f).replace(/\s/g, '')] = true; });
+    return L.pagos.filter(function (p) { return quiero[p.fuente.replace(/\s/g, '')]; });
+  }
+  var contraRucs = null;
+  if (a.contraparte) {
+    contraRucs = {};
+    ANA_docs_(c).forEach(function (d) { if (ANA_coincide_(a.contraparte, d.ruc, d.contraparte)) contraRucs[d.ruc] = true; });
+  }
+  var monto = a.monto != null && a.monto !== '' ? aNumero_(a.monto) : null, tol = a.tolerancia != null ? aNumero_(a.tolerancia) : 1;
+  var est = normHeader_(a.estado || 'todos');
+  var sel = L.pagos.filter(function (p) {
+    if (emp && p.pagadorRuc !== emp) return false;
+    if ((a.desde || a.hasta) && !ANA_enFechas_(p.fecha, a.desde, a.hasta)) return false;
+    if (monto != null && Math.abs(p.monto - monto) > tol) return false;
+    if (/sin/.test(est) && p._apl) return false;
+    if (/^usad/.test(est) && !p._apl) return false;
+    if (a.buscar && normHeader_(p.crudo).indexOf(normHeader_(a.buscar)) === -1) return false;
+    if (contraRucs) {
+      var porRuc = p._prov && contraRucs[p._prov];
+      var porNombre = ANA_coincide_(a.contraparte, '', p.beneficiarioNombre) || normHeader_(p.crudo).indexOf(normHeader_(a.contraparte)) !== -1;
+      if (!porRuc && !porNombre) return false;
+    }
+    return true;
+  }).sort(function (x, y) { return (x.fecha || 0) - (y.fecha || 0); });
+  return sel;
+}
+
+var ANA_HERR2_ = {
   combinar: function (c, a) {
     var obj = aNumero_(a.objetivo), tol = a.tolerancia != null ? aNumero_(a.tolerancia) : 1;
     var maxN = Math.min(5, Math.max(1, parseInt(a.max_items, 10) || 4));
@@ -358,6 +390,8 @@ function ANA_textoRes_(id, herr, r, limite) {
 function ANA_preguntar_(ss, pregunta, ia) {
   var t0 = Date.now();
   var c = ANA_ctx_(ss);
+  c.ia = ia;
+  c.deadline = t0 + ANA_LIMITE_MS_;
   var gemini = IA_PROVEEDORES_[ia.proveedor].tipo === 'gemini';
   var limRes = gemini ? 60000 : 12000, limTotal = gemini ? 700000 : 60000;
   var conv = ['PREGUNTA: ' + pregunta, '', 'EMPRESAS DEL GRUPO: ' + c.cfg.grupo.map(function (r) { return c.cfg.nombreEmpresa[r] + ' (' + r + ')'; }).join(', '),
@@ -386,13 +420,14 @@ function ANA_preguntar_(ss, pregunta, ia) {
         var h = String(q.herramienta || '');
         var res;
         try {
-          if (!ANA_HERR_[h]) throw new Error('herramienta desconocida "' + h + '"');
-          res = ANA_HERR_[h](c, q.args || {});
+          var fn = ANA_HERR_[h] || ANA_HERR2_[h];
+          if (!fn) throw new Error('herramienta desconocida "' + h + '"');
+          res = fn(c, q.args || {});
           res.filas = res.filas.slice(0, ANA_MAX_FILAS_ * 3);
         } catch (e) { res = { columnas: [], filas: [], error: e.message }; }
         c.resultados[id] = res;
         pasos.push(id + ' ' + h + ' ' + JSON.stringify(q.args || {}).slice(0, 150) + ' → ' + res.filas.length + (res.error ? ' ERROR ' + res.error : ''));
-        conv.push(ANA_textoRes_(id, h, res, limRes));
+        conv.push(ANA_textoRes_(id, h, res, limRes) + (res.nota ? '\nNOTA: ' + res.nota : ''));
       });
       continue;
     }
@@ -400,6 +435,8 @@ function ANA_preguntar_(ss, pregunta, ia) {
     else if (apurar) final = { respuesta: String((r && (r.respuesta || r.texto)) || 'La IA no dio una respuesta.'), tablas: [] };
     else conv.push('', 'Responde con el JSON del protocolo ("consultar" o "responder").');
   }
+  // Comprobantes que no alcanzaron a verificarse: siguen solos en segundo plano (sin límite de cantidad).
+  c.verEnCola = c.verPend && c.verPend.length ? VER_encolar_(ss, c.verPend, ia.modelo) : 0;
   return { final: final || { respuesta: 'La IA no terminó.', tablas: [] }, pasos: pasos, consultas: consultas, seg: Math.round((Date.now() - t0) / 1000), c: c };
 }
 
@@ -495,6 +532,8 @@ function ANA_menuPreguntar_(ss) {
   sh.getRange(AUD_F_RESP_, 2).setValue('⏳ La IA está revisando los datos (puede tardar 1 a 4 minutos)…');
   SpreadsheetApp.flush();
   var out = ANA_preguntar_(ss, pregunta, ia);
+  if (out.c.verEnCola) out.final.respuesta = String(out.final.respuesta || '') + '\n\n🖼 Quedan ' + out.c.verEnCola +
+    ' comprobante(s) por verificar: siguen solos cada minuto en la pestaña ' + VER_HOJA_ + '.';
   var tablas = ANA_escribir_(ss, pregunta, out, ia);
   var resumen = String(out.final.respuesta || '');
   sh.getRange(AUD_F_RESP_, 2).setValue(resumen.slice(0, 45000) + (tablas.length ? '\n\n📊 ' + tablas.length + ' tabla(s) en la pestaña ' + ANA_HOJA_ + ': ' +

@@ -99,6 +99,7 @@ function AUD_menuPreguntar() {
 
 function AUD_menuDetener() {
   AUD_borrarContinuacion_();
+  if (VER_leerCola_(SpreadsheetApp.getActiveSpreadsheet())) VER_detener_(SpreadsheetApp.getActiveSpreadsheet());
   PropertiesService.getScriptProperties().deleteProperty('AUD_ESTADO');
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   AUD_estado_(AUD_hoja_(ss), '⏹ Auditoría detenida ' + AUD_ahora_() + '. Lo ya auditado queda en las tablas.');

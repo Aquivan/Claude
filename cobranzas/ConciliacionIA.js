@@ -27,7 +27,7 @@ function CIA_agregarMenu_() {
     .addItem('🔍 Auditor IA: abrir (compras y pagos de todas las empresas)', 'AUD_menuAbrir')
     .addItem('▶ Auditar con IA (según los filtros)', 'AUD_menuAuditar')
     .addItem('💬 Preguntar a la IA', 'AUD_menuPreguntar')
-    .addItem('⏹ Detener auditoría en curso', 'AUD_menuDetener')
+    .addItem('⏹ Detener auditoría o verificación en curso', 'AUD_menuDetener')
     .addSeparator()
     .addItem('📋 Abrir pestaña y cargar proveedores/clientes', 'CIA_menuAbrir')
     .addItem('▶ Analizar la selección', 'CIA_menuAnalizar')
