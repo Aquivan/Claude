@@ -91,7 +91,7 @@ function AUD_menuPreguntar() {
   ss.toast('La IA está revisando los datos para responder…', '🔍 Auditor IA', 60);
   var msg;
   try { msg = ANA_menuPreguntar_(ss); } catch (e) {
-    msg = '❌ ' + e.message; console.error(e.stack);
+    msg = ANA_mensajeError_(e); console.error(e.stack);
     AUD_hoja_(ss).getRange(AUD_F_RESP_, 2).setValue(msg);
     if (ss.getSheetByName(ANA_HOJA_)) ss.getSheetByName(ANA_HOJA_).getRange(3, 2).setValue(msg);
   }

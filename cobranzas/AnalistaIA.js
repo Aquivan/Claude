@@ -412,7 +412,7 @@ function ANA_preguntar_(ss, pregunta, ia, previas) {
     conv.push('', 'CONVERSACIÓN ANTERIOR (para preguntas de seguimiento):');
     previas.forEach(function (x) { conv.push('P: ' + x.pregunta, 'R: ' + String(x.respuesta).slice(0, 1500)); });
   }
-  var pasos = [], consultas = 0, final = null;
+  var pasos = [], consultas = 0, final = null, saturado = 0;
   for (var paso = 0; paso <= ANA_MAX_PASOS_ && !final; paso++) {
     var apurar = paso === ANA_MAX_PASOS_ || Date.now() - t0 > ANA_LIMITE_MS_ - 60000;
     if (apurar) conv.push('', 'YA NO HAY MÁS CONSULTAS: responde ahora con "accion":"responder" usando lo que tienes.');
@@ -424,6 +424,15 @@ function ANA_preguntar_(ss, pregunta, ia, previas) {
     try {
       r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: ANA_SISTEMA_, texto: texto, maxTokens: 16000 });
     } catch (e) {
+      // Google saturado (503) o límite por minuto (429): no rendirse. Si se usaba el modelo más capaz, se pasa
+      // al de siempre (suele tener menos demanda); si no, se espera un poco y se reintenta.
+      if (/respondió (429|500|502|503|504)/.test(e.message) && saturado < 4 && Date.now() - t0 < ANA_LIMITE_MS_ - 40000) {
+        saturado++;
+        if (ia.modeloAuto) { ia.modelo = ''; ia.modeloAuto = false; c.cambioModelo = true; }
+        else Utilities.sleep(6000 * saturado);
+        paso--;
+        continue;
+      }
       if (ia.modeloAuto && /respondió (400|403|404)/.test(e.message)) {   // el modelo más capaz no está en esta cuenta: el de siempre
         ia.modelo = ''; ia.modeloAuto = false; paso--;
         PropertiesService.getScriptProperties().setProperty('ANA_SIN_MODELO_FUERTE', ANA_MODELO_GEMINI_);
@@ -593,6 +602,18 @@ function ANA_escribir_(ss, pregunta, out, ia) {
   return tablas;
 }
 
+/** Errores de la IA explicados en simple (el texto técnico va al final, corto). */
+function ANA_mensajeError_(e) {
+  var m = String(e && e.message || e);
+  if (/\b(503|UNAVAILABLE|high demand|overloaded)\b/i.test(m)) return '⚠️ Google Gemini está saturado en este momento (error 503 de Google, no de la hoja). ' +
+    'Se reintentó varias veces y también con el modelo de siempre. Vuelva a preguntar en unos minutos, o escriba otro modelo en la celda B11 del 🔍 Auditor IA.';
+  if (/\b429\b|RESOURCE_EXHAUSTED|quota|rate/i.test(m)) return '⚠️ Se llegó al límite de consultas de la clave de IA (error 429). Espere 1–2 minutos y vuelva a preguntar; ' +
+    'si pasa seguido, la clave gratuita se quedó corta para el día.';
+  if (/\b(401|403)\b|API key|PERMISSION/i.test(m)) return '⚠️ La clave de IA no es válida o no tiene permiso (menú 🤝 Conciliar con IA → 🔑 Guardar clave de IA).';
+  if (/Falta la clave/i.test(m)) return '⚠️ ' + m;
+  return '❌ ' + m.slice(0, 300);
+}
+
 /** 💬 Preguntar a la IA (menú): pregunta de la fila 15 del 🔍 Auditor IA, o en una ventana. */
 function ANA_menuPreguntar_(ss) {
   var sh = AUD_hoja_(ss);
@@ -637,6 +658,7 @@ function ANA_menuPreguntar_(ss) {
   var out = ANA_preguntar_(ss, pregunta, ia, previas);
   if (out.c.verEnCola) out.final.respuesta = String(out.final.respuesta || '') + '\n\n🖼 Quedan ' + out.c.verEnCola +
     ' comprobante(s) por verificar: siguen solos cada minuto en la pestaña ' + VER_HOJA_ + '.';
+  if (out.c.cambioModelo) out.final.respuesta = String(out.final.respuesta || '') + '\n\n(El modelo más capaz estaba saturado en Google; esta respuesta se hizo con el modelo de siempre.)';
   var tablas = ANA_escribir_(ss, pregunta, out, ia);
   var resumen = String(out.final.respuesta || '');
   sh.getRange(AUD_F_RESP_, 2).setValue(resumen.slice(0, 45000) + (tablas.length ? '\n\n📊 ' + tablas.length + ' tabla(s) en la pestaña ' + ANA_HOJA_ + ': ' +
