@@ -100,7 +100,7 @@ function NOT_escribirNotificaciones_(datos, cfg) {
   var limite = Date.now() - cfg.diasNueva * 86400000;
   var filas = datos.notif.map(function (r) {
     return [r.empresa, r.empresa_ruc, r.fecha, NOT_surteEfecto_(r.fecha), r.clase, r.documento, r.asunto, r.etiqueta,
-      r.leido, +r.adjuntos || 0, '', r.codigo, r.archivos || ''];
+      r.leido, +r.adjuntos || 0, '', r.codigo, r.archivos || (r.nota_pdf ? '⚠️ ' + r.nota_pdf : '')];
   });
   var nuevas = datos.notif.filter(function (r) { return r.fecha instanceof Date && r.fecha.getTime() >= limite; }).length;
   var coact = datos.notif.filter(NOT_esCoactiva_).length;

@@ -47,7 +47,7 @@ function NOT_archivosEnHoja_() {
   if (!hoja || hoja.getLastRow() < 4) return res;
   var v = hoja.getRange(4, 1, hoja.getLastRow() - 3, NOT_COL.RUTAS).getValues();
   v.forEach(function (f) {
-    String(f[NOT_COL.RUTAS - 1] || '').split(';').filter(Boolean).forEach(function (ruta) {
+    String(f[NOT_COL.RUTAS - 1] || '').split(';').filter(function (x) { return /^\d{11}\//.test(x); }).forEach(function (ruta) {
       res.push({ ruta: ruta, empresa: f[NOT_COL.EMPRESA - 1], ruc: String(f[NOT_COL.RUC - 1]), fecha: f[NOT_COL.FECHA - 1],
         clase: f[NOT_COL.CLASE - 1], doc: f[NOT_COL.DOC - 1] });
     });
@@ -114,9 +114,9 @@ function NOT_ponerEnlacesPdf_(hoja) {
   var mapa = NOT_mapaArchivos_();
   var rutas = hoja.getRange(4, NOT_COL.RUTAS, n, 1).getValues();
   var celdas = rutas.map(function (r) {
-    var lista = String(r[0] || '').split(';').filter(Boolean);
+    var lista = String(r[0] || '').split(';').filter(function (x) { return /^\d{11}\//.test(x); });
     var t = SpreadsheetApp.newRichTextValue();
-    if (!lista.length) return [t.setText('—').build()];
+    if (!lista.length) return [t.setText(/^⚠️/.test(String(r[0])) ? (/vac[ií]o/.test(String(r[0])) ? '⚠️ SUNAT lo entrega vacío' : '⚠️ no se pudo bajar') : '—').build()];
     var partes = lista.map(function (ruta) {
       var nom = ruta.split('/').pop().replace(/^\d+-/, '').replace(/\.[a-z0-9]{2,4}$/i, '');
       return { texto: '📄 ' + (/constancia/i.test(nom) ? 'constancia' : nom.slice(0, 22)), id: mapa[ruta] };

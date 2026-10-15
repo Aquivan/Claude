@@ -38,7 +38,7 @@ from descargar_cre import Sol, MENU  # noqa: E402
 
 VISOR = "https://ww1.sunat.gob.pe/ol-ti-itvisornoti/visor"
 COLS = ["empresa_ruc", "tipo", "codigo", "fecha_publicacion", "fecha_envio", "asunto", "clase", "documento",
-        "etiqueta", "leido", "urgente", "destacado", "remitente", "dependencia", "adjuntos", "archivos"]
+        "etiqueta", "leido", "urgente", "destacado", "remitente", "dependencia", "adjuntos", "archivos", "nota_pdf"]
 CLASES = [
     (r"ejecuci[oó]n coactiva", "Resolución de Ejecución Coactiva"),
     (r"orden(es)? de pago", "Orden de Pago"),
@@ -237,18 +237,21 @@ def main():
                 "destacado": "SI" if r.get("indDesta") else "", "remitente": r.get("codUsremisor") or "",
                 "dependencia": r.get("codDepen") or "", "adjuntos": r.get("cantidadArchAdj") or 0,
                 "archivos": (previo.get(cod) or {}).get("archivos", ""),
+                "nota_pdf": (previo.get(cod) or {}).get("nota_pdf", ""),
             }
             if cod not in previo:
                 nuevas += 1
             if con_pdf and int(fila["adjuntos"] or 0) > 0 and not fila["archivos"]:
                 f = fila["fecha_publicacion"]
                 sub = f"{f[6:10]}/{f[3:5]}" if len(f) >= 10 else "sin_fecha"
-                guardados = []
+                guardados, notas = [], []
                 try:
                     for cod_arch, nom, anexo in bz.adjuntos(cod, tipo):
                         b, ext = bz.bajar(cod_arch, anexo, nom)
                         if not b:
                             print(f"   {cod} ({fila['clase']}): no se pudo bajar '{nom}' ({ext}); se reintenta en la próxima corrida")
+                            notas.append("SUNAT entrega el archivo vacío (0 bytes); se reintenta cada día" if "0 bytes" in ext
+                                         else f"No se pudo bajar ({ext[:80]}); se reintenta cada día")
                             continue
                         rel = f"{ruc}/{sub}/{cod}-{nombre_archivo(nom)}"
                         if not rel.lower().endswith(ext):
@@ -260,6 +263,7 @@ def main():
                 except Exception as e:
                     print(f"   {cod}: no se pudo bajar el adjunto ({e})")
                 fila["archivos"] = ";".join(guardados)
+                fila["nota_pdf"] = "" if guardados else (notas[0] if notas else "SUNAT no listó el adjunto; se reintenta cada día")
             filas.append(fila)
         vistos = {f["codigo"] for f in filas}
         filas += [r for c, r in previo.items() if c not in vistos and desde and fecha_clave(r.get("fecha_publicacion")) < desde]
