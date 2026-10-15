@@ -83,7 +83,7 @@ function RET_pedirDiario_(cfg) {
   var p = RET_api_(cfg, '/actions/workflows/' + RET_WORKFLOW_DIARIO_ + '/dispatches');
   p.method = 'post';
   p.contentType = 'application/json';
-  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: 'todas', periodo: RET_mesesAtras_(1), hasta: '', diario: 'true' } });
+  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: 'todas', periodo: RET_mesesAtras_(1), hasta: '', diario: 'true', archivos: cfg.archivos } });
   var r = UrlFetchApp.fetch(p.url, p);
   if (r.getResponseCode() !== 204) throw new Error('GitHub respondio HTTP ' + r.getResponseCode() +
     ' (el token necesita permiso "Actions: Read and write").');

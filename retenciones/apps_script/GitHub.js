@@ -87,7 +87,7 @@ function RET_menuPedirDescarga() {
     var p = RET_api_(cfg, '/actions/workflows/retenciones-descargar.yml/dispatches');
     p.method = 'post';
     p.contentType = 'application/json';
-    p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: 'todas', periodo: desde, hasta: '' } });
+    p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: 'todas', periodo: desde, hasta: '', archivos: cfg.archivos } });
     var r = UrlFetchApp.fetch(p.url, p);
     if (r.getResponseCode() !== 204) throw new Error('GitHub respondió HTTP ' + r.getResponseCode() +
       ' (el token necesita permiso "Actions: Read and write").');

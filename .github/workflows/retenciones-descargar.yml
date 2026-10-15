@@ -30,9 +30,10 @@ on:
         required: false
         default: ""
       archivos:
-        description: "Bajar tambien PDF y XML de cada comprobante"
-        type: boolean
-        default: true
+        description: "Archivos de cada comprobante: ambos (PDF y XML), pdf, xml o ninguno (solo la lista)"
+        type: choice
+        options: [ambos, pdf, xml, ninguno]
+        default: ambos
       diagnostico:
         description: "Mostrar detalle tecnico en el log (sin claves)"
         type: boolean
@@ -123,7 +124,14 @@ jobs:
           DIAG: ${{ inputs.diagnostico }}
         run: |
           extra=""
-          if [ "$ARCHIVOS" = "false" ]; then extra="$extra --sin-archivos"; fi
+          # ambos | pdf | xml | ninguno (la hoja manda lo que diga su Config; vacío = ambos;
+          # true/false de versiones anteriores = ambos/ninguno)
+          case "$ARCHIVOS" in
+            pdf|xml|ninguno|ambos) ;;
+            false) ARCHIVOS=ninguno ;;
+            *) ARCHIVOS=ambos ;;
+          esac
+          extra="$extra --archivos $ARCHIVOS"
           # Corrida automatica (sin datos de entrada): desde el mes anterior.
           if [ -z "$PERIODO" ]; then PERIODO=$(TZ=America/Lima date -d "$(TZ=America/Lima date +%Y-%m-01) -1 month" +%Y%m); fi
           echo "Meses: $PERIODO a ${HASTA:-actual}"

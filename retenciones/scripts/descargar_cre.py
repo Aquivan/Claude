@@ -493,7 +493,9 @@ def main():
     ap.add_argument("--periodo", required=True, help="AAAAMM (primer mes)")
     ap.add_argument("--hasta", default="", help="AAAAMM último mes (vacío = mes actual)")
     ap.add_argument("--salida", default="retenciones/datos")
-    ap.add_argument("--sin-archivos", action="store_true", help="no bajar PDF/XML")
+    ap.add_argument("--sin-archivos", action="store_true", help="no bajar PDF/XML (igual que --archivos ninguno)")
+    ap.add_argument("--archivos", default="ambos", choices=["ambos", "pdf", "xml", "ninguno"],
+                    help="qué archivos bajar de cada comprobante: ambos (PDF y XML), pdf, xml o ninguno")
     ap.add_argument("--diagnostico", action="store_true", help="más detalle técnico en el log (sin claves)")
     a = ap.parse_args()
     ruc, usuario, clave = (os.environ.get(k, "") for k in ["SUNAT_RUC", "SUNAT_USUARIO", "SUNAT_CLAVE"])
@@ -504,6 +506,10 @@ def main():
     if not lista_periodos or len(lista_periodos) > 24:
         sys.exit("Rango de periodos inválido (máximo 24 meses)")
 
+    archivos = "ninguno" if a.sin_archivos else a.archivos
+    acciones = [(t, c) for t, c in [("xml", "02"), ("pdf", "01")] if archivos in ("ambos", t)]
+    print(f"Archivos a bajar: {archivos}")
+
     sol = Sol()
     sol.login(ruc, usuario, clave)
     print("Login OK")
@@ -513,7 +519,7 @@ def main():
     print("Estados de SUNAT:", estados or "(no se encontraron en la página; se guarda el código)")
 
     token = ""
-    if not a.sin_archivos:
+    if acciones:
         token = sol.token_api()
         print("Token para PDF/XML:", "obtenido" if token else "NO obtenido (se guardará solo la lista)")
         sol.abrir_opcion(CODIGO_MENU_CRE)  # volver a la consulta de retenciones
@@ -575,7 +581,7 @@ def main():
                             os.remove(ruta_xml)
                 if token:
                     id_api = f"{emisor}-20-{serie}-{numero}-{'1' if tipo == 'emitido' else '2'}"
-                    for ruta, accion in [(ruta_xml, "02"), (ruta_pdf, "01")]:
+                    for ruta, accion in [(ruta_xml if t == "xml" else ruta_pdf, c) for t, c in acciones]:
                         if os.path.exists(ruta):
                             if accion == "02":
                                 sin_xml.pop(base, None)
@@ -654,7 +660,7 @@ def main():
                     detalles.append(det)
             time.sleep(1)
 
-        if token:
+        if token and archivos in ("ambos", "xml"):
             guardar_sin_xml(carpeta, sin_xml)
         if saltados_xml:
             print(f"    {periodo}: {saltados_xml} XML que SUNAT no entrega no se volvieron a pedir (se reintentan cada {DIAS_REINTENTO_XML} días; los datos salen del PDF)")

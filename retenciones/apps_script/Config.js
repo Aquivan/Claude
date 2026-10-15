@@ -29,6 +29,7 @@ var RET_PARAMETROS = [
   ['Rama', 'claude/python-codes-izve18', 'Rama del repositorio que se lee.'],
   ['Desde (AAAAMM)', '202601', 'Primer mes que se muestra y que se pide a SUNAT.'],
   ['Carpeta de PDF', 'PDF Retenciones', 'Nombre de la carpeta (junto a esta hoja) donde se ordenan los PDF.'],
+  ['Archivos a descargar de SUNAT', 'PDF y XML', 'Qué se baja de cada comprobante al pedir a SUNAT (a mano o la descarga diaria): PDF y XML, Solo PDF, Solo XML o Ninguno (solo la lista). Con menos archivos la descarga es más rápida; los ya bajados no se borran.'],
   ['Última actualización', '', 'Se llena sola.'],
 ];
 
@@ -53,6 +54,7 @@ function RET_leerConfig_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var hoja = ss.getSheetByName(RET_HOJA.CONFIG);
   if (!hoja) hoja = RET_crearConfig_(ss);
+  else RET_completarConfig_(hoja);
   var valores = hoja.getRange(4, 1, RET_PARAMETROS.length, 2).getDisplayValues();
   var mapa = {};
   valores.forEach(function (f) { mapa[f[0]] = String(f[1] || '').trim(); });
@@ -63,6 +65,7 @@ function RET_leerConfig_() {
     rama: mapa['Rama'] || RET_PARAMETROS[1][1],
     desde: (mapa['Desde (AAAAMM)'] || RET_PARAMETROS[2][1]).replace(/\D/g, ''),
     carpetaPdf: mapa['Carpeta de PDF'] || RET_PARAMETROS[3][1],
+    archivos: RET_codigoArchivos_(mapa['Archivos a descargar de SUNAT']),
     token: PropertiesService.getScriptProperties().getProperty('RET_GITHUB_TOKEN') || '',
   };
 }
@@ -78,9 +81,40 @@ function RET_crearConfig_(ss) {
   hoja.getRange(4, 1, RET_PARAMETROS.length, 1).setFontWeight('bold');
   hoja.getRange(4, 2, RET_PARAMETROS.length, 1).setBackground('#fff8e1').setNumberFormat('@');
   hoja.getRange(4 + RET_PARAMETROS.length - 1, 2).setBackground('#f3f3f3');
+  RET_validarArchivos_(hoja);
   hoja.setColumnWidth(1, 170); hoja.setColumnWidth(2, 260); hoja.setColumnWidth(3, 460);
   hoja.setFrozenRows(3);
   return hoja;
+}
+
+var RET_OPCIONES_ARCHIVOS_ = ['PDF y XML', 'Solo PDF', 'Solo XML', 'Ninguno'];
+
+/** 'PDF y XML' → ambos, 'Solo PDF' → pdf, 'Solo XML' → xml, 'Ninguno' → ninguno (lo que entiende GitHub). */
+function RET_codigoArchivos_(txt) {
+  var t = String(txt || '').toLowerCase();
+  if (/ningun|^no$/.test(t)) return 'ninguno';
+  if (/solo\s*pdf|^pdf$/.test(t)) return 'pdf';
+  if (/solo\s*xml|^xml$/.test(t)) return 'xml';
+  return 'ambos';
+}
+
+function RET_validarArchivos_(hoja) {
+  var fila = 4 + RET_PARAMETROS.map(function (p) { return p[0]; }).indexOf('Archivos a descargar de SUNAT');
+  hoja.getRange(fila, 2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(RET_OPCIONES_ARCHIVOS_).build());
+}
+
+/** Si la pestaña Config es de una versión anterior, le agrega los parámetros nuevos (conserva lo escrito). */
+function RET_completarConfig_(hoja) {
+  var n = RET_PARAMETROS.length;
+  var actuales = hoja.getRange(4, 1, n, 1).getDisplayValues();
+  if (actuales.every(function (f, i) { return f[0] === RET_PARAMETROS[i][0]; })) return;
+  var valores = {};
+  hoja.getRange(4, 1, Math.max(hoja.getLastRow() - 3, 1), 2).getDisplayValues().forEach(function (f) { if (f[0]) valores[f[0]] = f[1]; });
+  hoja.getRange(4, 1, n, 3).setValues(RET_PARAMETROS.map(function (p) { return [p[0], valores[p[0]] !== undefined ? valores[p[0]] : p[1], p[2]]; }));
+  hoja.getRange(4, 1, n, 1).setFontWeight('bold');
+  hoja.getRange(4, 2, n, 1).setBackground('#fff8e1').setNumberFormat('@');
+  hoja.getRange(4 + n - 1, 2).setBackground('#f3f3f3');
+  RET_validarArchivos_(hoja);
 }
 
 function RET_marcarActualizacion_(texto) {
