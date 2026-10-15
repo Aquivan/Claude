@@ -1,4 +1,6 @@
 empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,etiqueta,leido,urgente,destacado,remitente,dependencia,adjuntos,archivos,nota_pdf
+20609309793,Mensaje,1095775924,15/10/2026 02:47:57,15/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,,
+20609309793,Mensaje,1095528400,15/10/2026 00:17:15,15/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,1,,
 20609309793,Mensaje,1095408269,14/10/2026 19:26:43,14/10/2026,Comunicación de GRE - Remitente EG07-207 emitida por RUC N° 20604305773,Otro,20604305773,,NO,,,SUNAT,0023,0,,
 20609309793,Mensaje,1094853712,14/10/2026 02:04:10,14/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,,
 20609309793,Mensaje,1094612874,13/10/2026 17:24:19,13/10/2026,Comunicación de GRE - Remitente EG07-199 emitida por RUC N° 20605062670,Otro,20605062670,,NO,,,SUNAT,0023,0,,
@@ -49,8 +51,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20609309793,Mensaje,1077880227,16/09/2026 17:42:36,16/09/2026,Comunicación de GRE - Remitente EG07-182 emitida por RUC N° 20604305773,Otro,20604305773,,NO,,,SUNAT,0023,0,,
 20609309793,Mensaje,1077873429,16/09/2026 17:36:39,16/09/2026,Comunicación de GRE - Remitente EG07-181 emitida por RUC N° 20604305773,Otro,20604305773,,NO,,,SUNAT,0023,0,,
 20609309793,Mensaje,1077236527,16/09/2026 04:12:29,16/09/2026,Vencimiento del Registro de Compras y Ventas - 202608,Otro,,,NO,,,SUNAT,0023,0,,
-20609309793,Mensaje,1076021419,15/09/2026 02:27:10,15/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,,
-20609309793,Mensaje,1075824193,15/09/2026 00:21:35,15/09/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,1,,
 20609309793,Mensaje,1075446678,14/09/2026 13:10:49,14/09/2026,Comunicación de GRE - Remitente EG07-135 emitida por RUC N° 20605062670,Otro,20605062670,,NO,,,SUNAT,0023,0,,
 20609309793,Mensaje,1073716539,10/09/2026 17:33:04,10/09/2026,Comunicación de GRE - Remitente EG07-35 emitida por RUC N° 20615074897,Otro,20615074897,,NO,,,SUNAT,0023,0,,
 20609309793,Mensaje,1073066189,09/09/2026 12:59:50,09/09/2026,Comunicación de GRE - Remitente EG07-5503 emitida por RUC N° 20516497379,Otro,20516497379,,NO,,,SUNAT,0023,0,,
@@ -69,7 +69,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20609309793,Mensaje,1058458672,18/08/2026 11:42:29,18/08/2026,Baja de Guía de Remisión Remitente - Electrónica EG07 - 537,Otro,,,NO,,,SUNAT,0023,0,,
 20609309793,Mensaje,1043757087,22/07/2026 10:34:54,22/07/2026,Comunicado Creación Expediente Electrónico de Devolución,Devolución,,,NO,,,SUNAT,0023,0,,
 20609309793,Mensaje,1043757043,22/07/2026 10:34:47,22/07/2026,Constancia de Presentación Solicitud de Devolución 1649,Devolución,,,NO,,,SUNAT,0023,1,,
-20609309793,Mensaje,1041464999,17/07/2026 21:27:00,17/07/2026,Comunicación Obligado a la presentación FV 621 período 06-2026,Otro,,,SI,,,9188,,1,,
 20609309793,Mensaje,1025371473,24/06/2026 12:22:35,24/06/2026,Emisión Factura Electronica No. E001-4023,Otro,,,NO,,,SUNAT,,0,,
 20609309793,Mensaje,1009212110,01/06/2026 19:13:00,01/06/2026,Comunicación obligado Declaración Anual FV 710  Periodo 2025,Otro,,,NO,,,9188,,0,,
 20609309793,Mensaje,976465871,16/04/2026 23:05:00,16/04/2026,Cronograma Declaración mensual FV 621  Periodo 03-2026,Otro,,,NO,,,9188,,1,,
