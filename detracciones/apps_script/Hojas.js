@@ -29,7 +29,8 @@ var DET_OPERACIONES = {
 };
 
 var DET_ENC = ['Empresa', 'RUC empresa', 'Rol', 'Fecha de pago', 'Periodo', 'Comprobante', 'Constancia', 'RUC proveedor', 'Proveedor',
-  'Adquiriente', 'Bien o servicio', 'Operación', 'Monto S/', 'Cuenta BN', 'Tipo de cuenta', 'N° pago (NPD)', 'Origen', 'Pago'];
+  'Adquiriente', 'Bien o servicio', 'Operación', 'Monto S/', 'Cuenta BN', 'Tipo de cuenta', 'N° pago (NPD)', 'Origen', 'Pago',
+  'Constancia PDF', 'Ruta constancia'];
 
 /* ------------------------------------------------------------- utilidades */
 
@@ -69,7 +70,10 @@ function DET_mesClave_(f) { return f instanceof Date ? Utilities.formatDate(f, '
 /* ------------------------------------------------------- lectura de datos */
 
 function DET_leerDatos_(cfg) {
-  var rutas = DET_listarArchivos_(cfg).map(function (a) { return a.path; })
+  var todos = DET_listarArchivos_(cfg).map(function (a) { return a.path; });
+  var constancias = {};
+  todos.forEach(function (p) { var m = /^(\d{11})\/\d{4}\/\d{2}\/constancias\/(\d+)\.html$/.exec(p); if (m) constancias[m[1] + '|' + m[2]] = p; });
+  var rutas = todos
     .filter(function (p) {
       var m = /^(\d{11})\/(\d{4})\/(\d{2})\/detracciones\.csv$/.exec(p);
       return m && (m[2] + m[3]) >= (cfg.desde || '000000');
@@ -86,6 +90,7 @@ function DET_leerDatos_(cfg) {
       r.empresa = empresas[r.empresa_ruc] || r.empresa_ruc;
       r.fecha = DET_fecha_(r.fecha_pago);
       r.monto = +r.monto || 0;
+      r.rutaConstancia = constancias[r.empresa_ruc + '|' + r.constancia] || '';
       filas.push(r);
     });
   });
@@ -117,7 +122,8 @@ function DET_escribirDetalle_(datos, cfg) {
   var filas = datos.filas.map(function (r) {
     return [r.empresa, r.empresa_ruc, r.rol === 'VENTA' ? 'Me depositaron (proveedor)' : r.rol === 'COMPRA' ? 'Pagué (adquiriente)' : r.rol,
       r.fecha, r.periodo, DET_comprobante_(r), r.constancia, r.ruc_proveedor, r.proveedor, r.adquiriente, DET_bien_(r.tipo_bien),
-      DET_OPERACIONES[r.tipo_operacion] || r.tipo_operacion, r.monto, r.num_cuenta, r.tipo_cuenta, r.npd, r.origen, r.consulta];
+      DET_OPERACIONES[r.tipo_operacion] || r.tipo_operacion, r.monto, r.num_cuenta, r.tipo_cuenta, r.npd, r.origen, r.consulta,
+      '', r.rutaConstancia];
   });
   var total = datos.filas.reduce(function (s, r) { return s + (r.rol !== 'VENTA' ? r.monto : 0); }, 0);
   hoja.getRange(1, 1).setValue('🏦 Depósitos de detracciones (SPOT) — SUNAT').setFontSize(14).setFontWeight('bold').setFontColor(DET_COLOR.titulo);
@@ -138,10 +144,12 @@ function DET_escribirDetalle_(datos, cfg) {
     }));
   }
   hoja.getRange(3, 1, Math.max(filas.length, 1) + 1, n).createFilter();
-  [180, 100, 150, 90, 70, 140, 95, 100, 240, 200, 200, 160, 95, 100, 110, 115, 85, 80].forEach(function (w, i) { hoja.setColumnWidth(i + 1, w); });
+  [180, 100, 150, 90, 70, 140, 95, 100, 240, 200, 200, 160, 95, 100, 110, 115, 85, 80, 105, 60].forEach(function (w, i) { hoja.setColumnWidth(i + 1, w); });
   hoja.setFrozenColumns(1);
   var sobra = hoja.getMaxColumns() - n;
   if (sobra > 0) hoja.deleteColumns(n + 1, sobra);
+  hoja.hideColumns(n);
+  DET_ponerEnlaces_(hoja);
 }
 
 /** Agrupa filas por una clave: {clave: {n, monto, primero, ultimo, bienes{}, extra}} */
@@ -330,6 +338,8 @@ function DET_ordenarPestanas_() {
     var h = ss.getSheetByName(n);
     if (h) { ss.setActiveSheet(h); ss.moveActiveSheet(i + 1); }
   });
+  var arch = ss.getSheetByName(DET_HOJA.ARCHIVOS);
+  if (arch) arch.hideSheet();
   ['Hoja 1', 'Sheet1', 'Hoja1'].forEach(function (n) {
     var h = ss.getSheetByName(n);
     if (h && h.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(h);
@@ -362,13 +372,29 @@ function DET_conCandado_(fn) {
 function DET_menuActualizar() {
   var ui = SpreadsheetApp.getUi();
   try {
-    var d = DET_conCandado_(DET_actualizarDatos_);
-    var pagado = d.filas.reduce(function (s, r) { return s + (r.rol !== 'VENTA' ? r.monto : 0); }, 0);
-    ui.alert('✅ Hoja actualizada: ' + d.filas.length + ' depósitos de ' + Object.keys(d.empresas).length + ' empresas.\nPagado como adquiriente: S/ ' + pagado.toFixed(2));
+    var r = DET_conCandado_(function () { var d = DET_actualizarDatos_(); return { d: d, c: DET_ordenarConstancias_() }; });
+    var pagado = r.d.filas.reduce(function (s, x) { return s + (x.rol !== 'VENTA' ? x.monto : 0); }, 0);
+    ui.alert('✅ Hoja actualizada: ' + r.d.filas.length + ' depósitos de ' + Object.keys(r.d.empresas).length + ' empresas.\nPagado como adquiriente: S/ ' + pagado.toFixed(2) +
+      (r.c.apagado ? '\n\nCopia de constancias a Drive: desactivada en Config.' : '\n\nConstancias nuevas en Drive: ' + r.c.nuevos +
+        (r.c.pendientes ? '\nFaltan ' + r.c.pendientes + ' (siguen solas en 1 minuto).' : '')));
+  } catch (e) { ui.alert('❌ ' + e.message); }
+}
+
+function DET_menuConstancias() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    var c = DET_conCandado_(DET_ordenarConstancias_);
+    ui.alert(c.apagado ? 'La copia de constancias a Drive está desactivada (Config → Copiar constancias a Drive = NO).' :
+      '📄 Constancias nuevas en Drive: ' + c.nuevos + (c.pendientes ? '\nFaltan ' + c.pendientes + ' (siguen solas en 1 minuto).' : '\nTodas las constancias descargadas están en Drive.'));
   } catch (e) { ui.alert('❌ ' + e.message); }
 }
 
 /** Importa a la hoja lo que GitHub ya descargó (lo llama Diario.js). */
 function DET_importarAhora_() {
-  DET_conCandado_(DET_actualizarDatos_);
+  DET_conCandado_(function () { DET_actualizarDatos_(); DET_ordenarConstancias_(); });
+}
+
+function DET_continuarConstancias() {
+  DET_borrarContinuacion_();
+  DET_conCandado_(DET_ordenarConstancias_);
 }

@@ -82,7 +82,7 @@ function DET_pedirDiario_(cfg) {
   var p = DET_api_(cfg, '/actions/workflows/' + DET_WORKFLOW_DIARIO_ + '/dispatches');
   p.method = 'post';
   p.contentType = 'application/json';
-  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: 'todas', desde: '', diario: 'true' } });
+  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: 'todas', desde: '', diario: 'true', constancias: cfg.bajarConstancias ? 'true' : 'false' } });
   var r = UrlFetchApp.fetch(p.url, p);
   if (r.getResponseCode() !== 204) throw new Error('GitHub respondio HTTP ' + r.getResponseCode() +
     ' (el token necesita permiso "Actions: Read and write").');

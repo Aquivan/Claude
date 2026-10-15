@@ -15,6 +15,7 @@ var DET_HOJA = {
   PROVEEDOR: 'Por proveedor',
   MES: 'Por mes',
   CONFIG: 'Config',
+  ARCHIVOS: '_Archivos',
 };
 
 var DET_MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
@@ -24,12 +25,16 @@ var DET_PARAMETROS = [
   ['Rama', 'claude/python-codes-izve18', 'Rama del repositorio que se lee.'],
   ['Desde (AAAAMM)', '202601', 'Se muestran en la hoja los depósitos pagados desde este mes (fecha de pago).'],
   ['Días para "nuevo"', '7', 'Los depósitos pagados en los últimos N días se resaltan en amarillo.'],
+  ['Descargar constancias de SUNAT', 'SI', 'SI = al pedir a SUNAT (a mano o la descarga diaria) también baja la Constancia de Depósito de cada detracción nueva (~5 KB c/u; las ya bajadas no se repiten). NO = solo la lista.'],
+  ['Copiar constancias a Drive', 'SI', 'SI = convierte a PDF las constancias descargadas y las ordena en Drive por empresa / año / mes, con enlace en la pestaña Detracciones. NO = no copia.'],
+  ['Carpeta de constancias', 'PDF Detracciones', 'Nombre de la carpeta (junto a esta hoja) donde se ordenan los PDF de las constancias.'],
   ['Última actualización', '', 'Se llena sola.'],
 ];
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('🏦 Detracciones')
-    .addItem('🔄 Actualizar hoja (lo ya descargado)', 'DET_menuActualizar')
+    .addItem('🔄 Actualizar todo (datos + constancias en Drive)', 'DET_menuActualizar')
+    .addItem('📄 Solo ordenar constancias en Drive', 'DET_menuConstancias')
     .addSeparator()
     .addItem('⬇ Pedir a SUNAT lo nuevo (últimos 3 meses, GitHub)', 'DET_menuPedirDescarga')
     .addItem('⬇ Pedir a SUNAT: elegir meses y empresa…', 'DET_menuPedirRango')
@@ -47,6 +52,7 @@ function DET_leerConfig_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var hoja = ss.getSheetByName(DET_HOJA.CONFIG);
   if (!hoja) hoja = DET_crearConfig_(ss);
+  else DET_completarConfig_(hoja);
   var valores = hoja.getRange(4, 1, DET_PARAMETROS.length, 2).getDisplayValues();
   var mapa = {};
   valores.forEach(function (f) { mapa[f[0]] = String(f[1] || '').trim(); });
@@ -57,6 +63,9 @@ function DET_leerConfig_() {
     rama: mapa['Rama'] || DET_PARAMETROS[1][1],
     desde: (mapa['Desde (AAAAMM)'] || DET_PARAMETROS[2][1]).replace(/\D/g, ''),
     diasNuevo: parseInt(mapa['Días para "nuevo"'], 10) || 7,
+    bajarConstancias: !/^NO/i.test(mapa['Descargar constancias de SUNAT'] || 'SI'),
+    copiarConstancias: !/^NO/i.test(mapa['Copiar constancias a Drive'] || 'SI'),
+    carpetaPdf: mapa['Carpeta de constancias'] || 'PDF Detracciones',
     token: PropertiesService.getScriptProperties().getProperty('DET_GITHUB_TOKEN') || '',
   };
 }
@@ -71,10 +80,25 @@ function DET_crearConfig_(ss) {
   hoja.getRange(4, 1, DET_PARAMETROS.length, 3).setValues(DET_PARAMETROS);
   hoja.getRange(4, 1, DET_PARAMETROS.length, 1).setFontWeight('bold');
   hoja.getRange(4, 2, DET_PARAMETROS.length, 1).setBackground('#fff8e1').setNumberFormat('@');
+  hoja.getRange(8, 2, 2, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['SI', 'NO']).build());
   hoja.getRange(4 + DET_PARAMETROS.length - 1, 2).setBackground('#f3f3f3');
   hoja.setColumnWidth(1, 170); hoja.setColumnWidth(2, 260); hoja.setColumnWidth(3, 460);
   hoja.setFrozenRows(3);
   return hoja;
+}
+
+/** Si la pestaña Config es de una versión anterior, le agrega los parámetros nuevos (conserva lo escrito). */
+function DET_completarConfig_(hoja) {
+  var n = DET_PARAMETROS.length;
+  var actuales = hoja.getRange(4, 1, n, 2).getDisplayValues();
+  if (actuales.every(function (f, i) { return f[0] === DET_PARAMETROS[i][0]; })) return;
+  var valores = {};
+  hoja.getRange(4, 1, Math.max(hoja.getLastRow() - 3, 1), 2).getDisplayValues().forEach(function (f) { if (f[0]) valores[f[0]] = f[1]; });
+  hoja.getRange(4, 1, n, 3).setValues(DET_PARAMETROS.map(function (p) { return [p[0], valores[p[0]] !== undefined ? valores[p[0]] : p[1], p[2]]; }));
+  hoja.getRange(4, 1, n, 1).setFontWeight('bold');
+  hoja.getRange(4, 2, n, 1).setBackground('#fff8e1').setNumberFormat('@');
+  hoja.getRange(8, 2, 2, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['SI', 'NO']).build());
+  hoja.getRange(4 + n - 1, 2).setBackground('#f3f3f3');
 }
 
 function DET_marcarActualizacion_(texto) {
@@ -101,9 +125,11 @@ function DET_probarConexion() {
   try {
     var cfg = DET_leerConfig_();
     var empresas = DET_listarEmpresas_(cfg);
-    var meses = DET_listarArchivos_(cfg).filter(function (a) { return /\/detracciones\.csv$/.test(a.path); }).length;
+    var archivos = DET_listarArchivos_(cfg);
+    var meses = archivos.filter(function (a) { return /\/detracciones\.csv$/.test(a.path); }).length;
+    var cons = archivos.filter(function (a) { return /\/constancias\/\d+\.html$/.test(a.path); }).length;
     ui.alert('✅ Conexión correcta con ' + cfg.owner + '/' + cfg.repo + ' (' + cfg.rama + ').\n\n' +
-      'Empresas: ' + empresas.length + '\nMeses con datos (todas las empresas): ' + meses);
+      'Empresas: ' + empresas.length + '\nMeses con datos (todas las empresas): ' + meses + '\nConstancias descargadas: ' + cons);
   } catch (e) {
     ui.alert('❌ ' + e.message);
   }
@@ -114,12 +140,12 @@ function DET_probarConexion() {
 function DET_activarDiario() {
   DET_desactivarDiario(true);
   ScriptApp.newTrigger('DET_actualizacionAutomatica').timeBased().everyDays(1).atHour(8).create();
-  SpreadsheetApp.getUi().alert('⏰ Listo: todos los días cerca de las 8 a. m. se piden a SUNAT los depósitos de los últimos 3 meses y la hoja se actualiza sola.');
+  SpreadsheetApp.getUi().alert('⏰ Listo: todos los días cerca de las 8 a. m. se piden a SUNAT los depósitos de los últimos 3 meses (con constancias si Config lo dice) y la hoja se actualiza sola.');
 }
 
 function DET_desactivarDiario(silencioso) {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (['DET_actualizacionAutomatica', 'DET_importarTrasDescarga'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
+    if (['DET_actualizacionAutomatica', 'DET_importarTrasDescarga', 'DET_continuarConstancias'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
   });
   if (silencioso !== true) SpreadsheetApp.getUi().alert('⏸ Actualización diaria desactivada.');
 }

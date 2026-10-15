@@ -67,10 +67,11 @@ function DET_listarEmpresas_(cfg) {
 }
 
 function DET_despachar_(cfg, empresa, desde, hasta) {
+  // constancias: SI/NO según Config (las ya bajadas no se repiten)
   var p = DET_api_(cfg, '/actions/workflows/detracciones-descargar.yml/dispatches');
   p.method = 'post';
   p.contentType = 'application/json';
-  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: empresa, desde: desde || '', hasta: hasta || '' } });
+  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: empresa, desde: desde || '', hasta: hasta || '', constancias: cfg.bajarConstancias ? 'true' : 'false' } });
   var r = UrlFetchApp.fetch(p.url, p);
   if (r.getResponseCode() !== 204) throw new Error('GitHub respondió HTTP ' + r.getResponseCode() + ' (el token necesita permiso "Actions: Read and write").');
 }
@@ -79,8 +80,10 @@ function DET_despachar_(cfg, empresa, desde, hasta) {
 function DET_menuPedirDescarga() {
   var ui = SpreadsheetApp.getUi();
   try {
-    DET_despachar_(DET_leerConfig_(), 'todas', '', '');
-    ui.alert('⬇ Pedido enviado. GitHub está consultando en SUNAT los depósitos de detracciones de los últimos 3 meses de todas las empresas.\n\nTarda unos minutos. Luego use 🔄 Actualizar hoja.');
+    var cfg = DET_leerConfig_();
+    DET_despachar_(cfg, 'todas', '', '');
+    ui.alert('⬇ Pedido enviado. GitHub está consultando en SUNAT los depósitos de detracciones de los últimos 3 meses de todas las empresas' +
+      (cfg.bajarConstancias ? ', con sus constancias.' : ' (sin constancias: Config).') + '\n\nTarda unos minutos. Luego use 🔄 Actualizar todo.');
   } catch (e) {
     ui.alert('❌ ' + e.message);
   }
@@ -107,7 +110,7 @@ function DET_menuPedirRango() {
     var empresa = k >= 1 && k <= empresas.length ? empresas[k - 1].ruc : 'todas';
     DET_despachar_(cfg, empresa, desde, hasta);
     ui.alert('⬇ Pedido enviado: ' + (empresa === 'todas' ? 'todas las empresas' : empresa) + ', de ' + desde + ' a ' + (hasta || 'este mes') +
-      '.\n\nTarda unos minutos (un poco más si son muchos meses). Luego use 🔄 Actualizar hoja.');
+      (cfg.bajarConstancias ? ', con constancias' : ', sin constancias') + '.\n\nTarda unos minutos (un poco más si son muchos meses). Luego use 🔄 Actualizar todo.');
   } catch (e) {
     ui.alert('❌ ' + e.message);
   }

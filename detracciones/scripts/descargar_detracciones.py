@@ -109,8 +109,6 @@ class Consulta:
         if not self.fr:
             raise RuntimeError("No abrió el formulario de Consulta de Pago de Detracciones")
         self.url_vista = False
-        self.cabeceras = {}
-        self.base = re.match(r"https://[^/]+", self.fr.url).group(0)
 
     def consultar(self, ini, fin, cuenta, tipo):
         fr = self.fr
@@ -125,10 +123,6 @@ class Consulta:
                     fr.evaluate("() => { const e = document.querySelector('#periodo'); if (e && !e.disabled) e.value = ''; }")
                     fr.click("#btnConsultar")
                 r = info.value
-                if not self.cabeceras:
-                    self.cabeceras = {k: v for k, v in r.request.all_headers().items()
-                                      if k.lower() not in ("cookie", "host", "content-length", "accept-encoding", "connection")
-                                      and not k.startswith(":")}
                 if not self.url_vista:
                     print("   ruta:", re.sub(r"\d{11}", "<RUC>", r.url.split("?")[0]),
                           "· parámetros:", sorted(k.split("=")[0] for k in r.url.split("?", 1)[-1].split("&") if k))
@@ -145,21 +139,30 @@ class Consulta:
                 time.sleep(3 * (intento + 1))
         raise RuntimeError(f"No se pudo consultar {ini}–{fin} cuenta {cuenta} {tipo}")
 
-    def constancia(self, numero):
-        """Constancia de Depósito oficial (HTML de ~5 KB), la misma que da el botón "Guardar" de SUNAT."""
-        url = f"{self.base}/v1/recaudacion/tributaria/declapago/detracciones/t/descargarconstancia?numeroConstancia={numero}"
-        for intento in range(3):
+    def constancia(self, numero, indice):
+        """Constancia de Depósito oficial (HTML de ~5 KB), igual que una persona: clic en el número
+        de constancia (la página pide obtenerconstancia) y luego el botón "Guardar" (descargarconstancia).
+        Debe llamarse justo después de consultar "Pagos individuales" (indice = posición en esa lista)."""
+        fr, pag = self.fr, self.pag
+        for intento in range(2):
             try:
-                st, txt = self.fr.evaluate("""async ([u, h]) => { const r = await fetch(u, {method: 'POST', headers: h, body: '', credentials: 'include'});
-                    return [r.status, await r.text()]; }""", [url, self.cabeceras])
-                if st == 200 and re.search(r"constancia", txt[:3000], re.I) and str(numero) in txt:
-                    return txt
-                print(f"     constancia {numero}: HTTP {st} ({' '.join(txt[:120].split())})")
+                with pag.expect_response(lambda r: "obtenerconstancia" in r.url, timeout=30000) as inf:
+                    fr.evaluate("([n, i]) => constancia(n, i)", [str(numero), indice])
+                d = inf.value.json()
+                datos = (d.get("resultado") or {}).get("constancia") or {}
+                if str(d.get("cod")) != "200" or str(datos.get("numeroConstancia")) != str(numero):
+                    raise RuntimeError(f"SUNAT no abrió la constancia ({str(d.get('msg') or '')[:80]})")
+                with pag.expect_download(timeout=30000) as dl:
+                    fr.evaluate("() => guardarConstancia()")
+                with open(dl.value.path(), encoding="utf-8", errors="replace") as fh:
+                    html = fh.read()
+                if str(numero) in html:
+                    return html
+                raise RuntimeError("el archivo no trae el número de constancia")
             except Exception as e:
-                print(f"     constancia {numero}: {str(e)[:120]}")
-            time.sleep(2 * (intento + 1))
+                print(f"     constancia {numero}: {str(e)[:150]}")
+                pag.wait_for_timeout(2000 * (intento + 1))
         return None
-
 
 def guardar_csv(ruta, filas):
     os.makedirs(os.path.dirname(ruta), exist_ok=True)
@@ -208,11 +211,26 @@ def main():
                 if fin_d < dt.date(anio, mes, 1):
                     continue
                 ini, fin = f"01/{mes:02d}/{anio}", fin_d.strftime("%d/%m/%Y")
-                filas, masivos = {}, []
+                filas, masivos, nuevas = {}, [], 0
                 try:
                     for cuenta in cuentas:
                         for tipo, nombre in TIPOS.items():
                             res = c.consultar(ini, fin, cuenta, tipo)
+                            if a.constancias and tipo == "pagosIndividuales":
+                                carpeta_c = os.path.join(a.salida, ruc, str(anio), f"{mes:02d}", "constancias")
+                                for k, r in enumerate(res):
+                                    num = str(r.get("num_constancia") or "").strip()
+                                    ruta = os.path.join(carpeta_c, f"{num}.html")
+                                    if not num or os.path.exists(ruta):
+                                        continue
+                                    html = c.constancia(num, k)
+                                    if html:
+                                        os.makedirs(carpeta_c, exist_ok=True)
+                                        with open(ruta, "w", encoding="utf-8") as fh:
+                                            fh.write(html)
+                                        nuevas += 1
+                                    else:
+                                        fallidas.append(num)
                             for r in res:
                                 if r.get("num_constancia"):
                                     f = fila(r, ruc, nombre, cuenta)
@@ -230,21 +248,6 @@ def main():
                 if masivos:
                     with open(os.path.join(carpeta, "masivos.json"), "w", encoding="utf-8") as fh:
                         json.dump(masivos, fh, ensure_ascii=False, indent=1)
-                nuevas = 0
-                if a.constancias:
-                    for f in filas.values():
-                        ruta = os.path.join(carpeta, "constancias", f"{f['constancia']}.html")
-                        if os.path.exists(ruta):
-                            continue
-                        html = c.constancia(f["constancia"])
-                        if html:
-                            os.makedirs(os.path.dirname(ruta), exist_ok=True)
-                            with open(ruta, "w", encoding="utf-8") as fh:
-                                fh.write(html)
-                            nuevas += 1
-                        else:
-                            fallidas.append(f["constancia"])
-                        time.sleep(0.3)
                 monto = sum(float(f["monto"] or 0) for f in filas.values())
                 compras = sum(1 for f in filas.values() if f["rol"] == "COMPRA")
                 print(f"  {anio}-{mes:02d}: {len(filas)} depósitos (como adquiriente {compras}, "
