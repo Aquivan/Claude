@@ -1,0 +1,2 @@
+empresa_ruc,rol,consulta,tipo_cuenta,num_cuenta,fecha_pago,periodo,tipo_comprobante,serie,numero,constancia,ruc_proveedor,proveedor,tipo_doc_adquiriente,doc_adquiriente,adquiriente,tipo_operacion,tipo_bien,monto,npd,origen,num_presentacion,usuario_sol
+20447968216,COMPRA,Individual,Convencional,00721025349,2026-05-07,202605,01,E001,00008544,304223293,20363916008,TRANSPORTES FH S.A.C.,06,20447968216,DSM CORPORACION EMPRESA INDIVIDUAL,01,027,200.0,,WEB SUNAT,7788134919,M21PNKXE

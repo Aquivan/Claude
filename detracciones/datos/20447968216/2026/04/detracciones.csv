@@ -1,0 +1,3 @@
+empresa_ruc,rol,consulta,tipo_cuenta,num_cuenta,fecha_pago,periodo,tipo_comprobante,serie,numero,constancia,ruc_proveedor,proveedor,tipo_doc_adquiriente,doc_adquiriente,adquiriente,tipo_operacion,tipo_bien,monto,npd,origen,num_presentacion,usuario_sol
+20447968216,COMPRA,Individual,Convencional,00151176011,2026-04-15,202604,01,E001,00000876,302717396,20603362943,TRANSPORTES ARO DE CARGA PESADA E.I,06,20447968216,DSM CORPORACION EMPRESA INDIVIDUAL,01,027,60.0,,WEB SUNAT,7765130877,AROPHRAT
+20447968216,COMPRA,Individual,Convencional,00721025349,2026-04-01,202603,01,E001,00008439,301281917,20363916008,TRANSPORTES FH S.A.C.,06,20447968216,DSM CORPORACION EMPRESA INDIVIDUAL,01,027,80.0,,WEB SUNAT,7760808540,M21PNKXE
