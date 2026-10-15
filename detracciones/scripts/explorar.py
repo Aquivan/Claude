@@ -44,6 +44,23 @@ JS_FORMULARIO = """() => [...document.querySelectorAll('input,select,button,a.bt
              (e.innerText || '').trim().slice(0, 50)].join(' | '))"""
 
 
+JS_CLICABLES = """() => [...new Set([...document.querySelectorAll('a,button,li,[role=menuitem],[role=button],mat-list-item,.nav-link,.dropdown-toggle,span.menu,div.card')]
+  .filter(e => e.offsetParent !== null).map(e => (e.innerText || '').trim().replace(/\\s+/g, ' ')).filter(t => t && t.length < 90))]"""
+
+
+def volcar_portal(pag, clave):
+    """Imprime lo que se ve en el portal: texto, opciones clicables y marcos."""
+    for fr in pag.frames:
+        if fr.url in ("about:blank", ""):
+            continue
+        try:
+            txt = re.sub(r"\s+", " ", fr.evaluate("() => document.body ? document.body.innerText : ''"))
+            print(f"  [marco] {fr.url[:200]}\n    texto: {txt[:2500].replace(clave, '***')}")
+            print("    clicables:", fr.evaluate(JS_CLICABLES)[:120])
+        except Exception as e:
+            print("  (marco ilegible)", str(e)[:80])
+
+
 def portal(pag, ruc, usuario, clave, a, foto, registro):
     """Entra como una persona: sunat.gob.pe/sol.html → "MIS DECLARACIONES Y PAGOS" → Ingresar,
     y busca dentro de ese portal las opciones de detracciones (consulta)."""
@@ -63,10 +80,27 @@ def portal(pag, ruc, usuario, clave, a, foto, registro):
     foto("ingreso_portal")
     for sel_r, sel_u, sel_c, sel_b in [("#txtRuc", "#txtUsuario", "#txtContrasena", "#btnAceptar")]:
         pag.fill(sel_r, ruc); pag.fill(sel_u, usuario); pag.fill(sel_c, clave); pag.click(sel_b)
+    registro["activo"] = True               # anotar lo que la aplicación pide al cargar (menú, opciones)
     pag.wait_for_load_state("networkidle", timeout=60000)
-    pag.wait_for_timeout(5000)
+    pag.wait_for_timeout(12000)
     print("Después de ingresar:", pag.url[:200], "|", pag.title())
     foto("portal_dentro")
+    volcar_portal(pag, clave)
+    # Abrir los menús desplegables (la aplicación esconde las opciones hasta hacer clic)
+    for t in pag.evaluate(JS_CLICABLES)[:40]:
+        if re.search(r"salir|cerrar|ayuda|idioma|tutorial|mensaje", t, re.I) or len(t) > 60:
+            continue
+        try:
+            pag.get_by_text(t, exact=True).first.click(timeout=4000)
+            pag.wait_for_timeout(2500)
+            nuevos = pag.evaluate(JS_CLICABLES)
+            print(f"  [abrió '{t}'] →", nuevos[:60])
+            if re.search(PATRON, pag.content(), re.I):
+                print("  *** aparece texto de detracciones después de abrir:", t)
+                foto("menu_" + re.sub(r"\W+", "_", t)[:30])
+                break
+        except Exception as e:
+            print(f"  (no se abrió '{t}':", str(e)[:80], ")")
     html = pag.content()
     for m in re.finditer(PATRON, html, re.I):
         print("  ~", re.sub(r"\s+", " ", html[max(0, m.start() - 250): m.end() + 250]).replace(clave, "***")[:500])
