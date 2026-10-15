@@ -22,7 +22,7 @@ var ANA_MAX_FILAS_ = 600;            // filas por herramienta
 // Para analizar se usa un modelo más capaz que el "lite" por defecto (si la cuenta no lo tiene, vuelve al de siempre).
 var ANA_MODELO_GEMINI_ = 'gemini-3.6-flash';
 // Nombres parecidos que la IA a veces usa para las herramientas.
-var ANA_ALIAS_ = { contraparte: 'contrapartes', proveedor: 'contrapartes', proveedores: 'contrapartes', clientes: 'contrapartes', cliente: 'contrapartes',
+var ANA_ALIAS_ = { detraccion: 'detracciones', spot: 'detracciones', constancias: 'detracciones', constancia: 'detracciones', contraparte: 'contrapartes', proveedor: 'contrapartes', proveedores: 'contrapartes', clientes: 'contrapartes', cliente: 'contrapartes',
   buscar_contraparte: 'contrapartes', factura: 'facturas', documentos: 'facturas', compras: 'facturas', ventas: 'facturas', pagos: 'aplicaciones',
   aplicacion: 'aplicaciones', movimientos: 'aplicaciones', notas_credito: 'aplicaciones', retenciones: 'aplicaciones', voucher: 'vouchers',
   verificar: 'verificar_vouchers', verificar_voucher: 'verificar_vouchers', cruzar: 'cruzar_vouchers', buscar_voucher: 'cruzar_vouchers',
@@ -36,7 +36,7 @@ var ANA_SISTEMA_ = [
   '',
   'DATOS (todo viene de las hojas; nunca inventes):',
   '- facturas: comprobantes de SIRE por empresa del grupo, "Por pagar" (compras) y "Por cobrar" (ventas), con total, N/C, retención, detracción, otros, pagado, saldo y estado.',
-  '- aplicaciones: lo que ya rebaja cada factura: Pago (voucher), Retención (CRE de SUNAT), Detracción, N/C (nota de crédito de SIRE), N/D, Otro.',
+  '- aplicaciones: lo que ya rebaja cada factura: Pago (voucher), Retención (CRE de SUNAT), Detracción (depósito SPOT de SUNAT, referencia "Constancia N°"), N/C (nota de crédito de SIRE), N/D, Otro.',
   '- vouchers: pagos bancarios leídos de la hoja de vouchers, columnas A–J (la fila original va en "fila_AJ"). "usado_en" dice a qué factura ya se aplicó;',
   '  vacío = SIN USAR (no considerado en ninguna factura). "proveedor_ia" es el proveedor que la IA ya reconoció para ese voucher (si lo hay).',
   '- Cualquier otra hoja (herramienta hojas / leer_hoja) si la pregunta necesita algo más.',
@@ -45,6 +45,9 @@ var ANA_SISTEMA_ = [
   '- contrapartes {texto}: busca proveedores/clientes por nombre o RUC; da RUC, nombre y por empresa: facturas, saldo, lado.',
   '- facturas {empresa, contraparte, lado:"Por pagar"|"Por cobrar", desde, hasta, con_saldo:true|false, estado, buscar}',
   '- aplicaciones {empresa, contraparte, documento, modalidad:"Pago"|"Retención"|"Detracción"|"N/C"|"N/D"|"Otro descuento", desde, hasta}',
+  '- detracciones {empresa, contraparte, documento, constancia, desde, hasta, sin_factura:true}: depósitos de detracciones (SPOT) descargados de SUNAT',
+  '  (fecha de pago por el Banco de la Nación, constancia, adquiriente, proveedor, comprobante, periodo, bien, monto, en qué factura se aplicó y enlace al PDF',
+  '  de la constancia). sin_factura=true = depósitos que no se pudieron aplicar a ninguna factura. Úsala para "¿se pagó la detracción de…?", "dame la constancia".',
   '- vouchers {empresa, contraparte, buscar (texto en la fila A–J), desde, hasta, monto, tolerancia, estado:"sin usar"|"usados"|"todos", ampliar:true}',
   '  (ampliar=true trae además las columnas de la fila fuera de A–J; úsalo solo si lo necesitas).',
   '- combinar {objetivo, montos:[{"id":"01_F001-1","monto":100.5}], max_items:4, tolerancia:1}: calculadora exacta; dice qué combinaciones suman el objetivo',
@@ -278,6 +281,27 @@ var ANA_HERR_ = {
     });
     var cols = ['fecha', 'empresa', 'ruc', 'contraparte', 'documento', 'modalidad', 'monto', 'moneda', 'referencia', 'banco', 'monto_voucher', 'origen', 'nota', 'fuente'];
     return { columnas: cols, filas: sel.map(function (m) { return cols.map(function (k) { return m[k]; }); }) };
+  },
+
+  detracciones: function (c, a) {
+    // Depósitos de detracciones de SUNAT (hoja Detracciones · Grupo), aunque no se hayan cruzado con una factura.
+    if (!c._det) c._det = leerDetraccionesSunat_(c.cfg, []).filas;
+    var emp = ANA_empresa_(c, a.empresa);
+    var aplicado = {};
+    ANA_movs_(c).forEach(function (m) { var k = /Constancia (\d+)/.exec(m.referencia || ''); if (k) aplicado[k[1]] = (aplicado[k[1]] ? aplicado[k[1]] + ', ' : '') + m.documento; });
+    var sel = c._det.filter(function (d) {
+      if (emp && d.adquirienteRuc !== emp && d.proveedorRuc !== emp) return false;
+      if (a.contraparte && !ANA_coincide_(a.contraparte, d.proveedorRuc, d.proveedor) && !ANA_coincide_(a.contraparte, d.adquirienteRuc, d.adquiriente)) return false;
+      if (a.documento && normHeader_(d.documento).indexOf(normHeader_(a.documento)) === -1) return false;
+      if (a.constancia && d.constancia.indexOf(String(a.constancia).trim()) === -1) return false;
+      if ((a.desde || a.hasta) && !ANA_enFechas_(d.fecha, a.desde, a.hasta)) return false;
+      if (a.sin_factura === true && aplicado[d.constancia]) return false;
+      return true;
+    });
+    var cols = ['fecha_pago', 'constancia', 'adquiriente_ruc', 'adquiriente', 'proveedor_ruc', 'proveedor', 'documento', 'periodo', 'bien', 'monto', 'aplicada_en', 'pdf'];
+    return { columnas: cols, filas: sel.map(function (d) {
+      return [d.fecha, d.constancia, d.adquirienteRuc, d.adquiriente, d.proveedorRuc, d.proveedor, d.documento, d.periodo, d.bien, d.monto, aplicado[d.constancia] || '', d.pdf];
+    }) };
   },
 
   vouchers: function (c, a) {

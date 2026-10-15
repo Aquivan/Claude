@@ -30,7 +30,7 @@ var DET_OPERACIONES = {
 
 var DET_ENC = ['Empresa', 'RUC empresa', 'Rol', 'Fecha de pago', 'Periodo', 'Comprobante', 'Constancia', 'RUC proveedor', 'Proveedor',
   'Adquiriente', 'Bien o servicio', 'Operación', 'Monto S/', 'Cuenta BN', 'Tipo de cuenta', 'N° pago (NPD)', 'Origen', 'Pago',
-  'Constancia PDF', 'Ruta constancia'];
+  'RUC adquiriente', 'Ref. documento', 'Constancia PDF', 'Ruta constancia'];
 
 /* ------------------------------------------------------------- utilidades */
 
@@ -63,6 +63,12 @@ function DET_comprobante_(r) {
   var tipo = { '01': 'Factura', '03': 'Boleta', '07': 'N. crédito', '08': 'N. débito', '12': 'Ticket', '14': 'Recibo serv. públicos' }[r.tipo_comprobante] || r.tipo_comprobante;
   var num = String(r.numero || '').replace(/^0+(?=\d)/, '');
   return (tipo ? tipo + ' ' : '') + (r.serie ? r.serie + '-' : '') + num;
+}
+
+/** Documento en el formato de Cuentas por Cobrar y Pagar: 01_F002-6757 (lo usa para descontar la detracción de la factura). */
+function DET_ref_(r) {
+  var num = String(r.numero || '').replace(/^0+(?=\d)/, '');
+  return r.serie && num ? (r.tipo_comprobante || '01') + '_' + String(r.serie).toUpperCase() + '-' + num : '';
 }
 
 function DET_mesClave_(f) { return f instanceof Date ? Utilities.formatDate(f, 'America/Lima', 'yyyyMM') : ''; }
@@ -123,7 +129,7 @@ function DET_escribirDetalle_(datos, cfg) {
     return [r.empresa, r.empresa_ruc, r.rol === 'VENTA' ? 'Me depositaron (proveedor)' : r.rol === 'COMPRA' ? 'Pagué (adquiriente)' : r.rol,
       r.fecha, r.periodo, DET_comprobante_(r), r.constancia, r.ruc_proveedor, r.proveedor, r.adquiriente, DET_bien_(r.tipo_bien),
       DET_OPERACIONES[r.tipo_operacion] || r.tipo_operacion, r.monto, r.num_cuenta, r.tipo_cuenta, r.npd, r.origen, r.consulta,
-      '', r.rutaConstancia];
+      r.doc_adquiriente, DET_ref_(r), '', r.rutaConstancia];
   });
   var total = datos.filas.reduce(function (s, r) { return s + (r.rol !== 'VENTA' ? r.monto : 0); }, 0);
   hoja.getRange(1, 1).setValue('🏦 Depósitos de detracciones (SPOT) — SUNAT').setFontSize(14).setFontWeight('bold').setFontColor(DET_COLOR.titulo);
@@ -134,7 +140,7 @@ function DET_escribirDetalle_(datos, cfg) {
   DET_cabecera_(hoja.getRange(3, 1, 1, n).setValues([DET_ENC]));
   hoja.setFrozenRows(3);
   if (filas.length) {
-    [2, 5, 7, 8, 14, 16].forEach(function (c) { hoja.getRange(4, c, filas.length, 1).setNumberFormat('@'); });
+    [2, 5, 7, 8, 14, 16, 19, 20].forEach(function (c) { hoja.getRange(4, c, filas.length, 1).setNumberFormat('@'); });
     hoja.getRange(4, 1, filas.length, n).setValues(filas);
     hoja.getRange(4, 4, filas.length, 1).setNumberFormat('dd/mm/yyyy');
     hoja.getRange(4, 13, filas.length, 1).setNumberFormat('#,##0.00');
@@ -144,7 +150,7 @@ function DET_escribirDetalle_(datos, cfg) {
     }));
   }
   hoja.getRange(3, 1, Math.max(filas.length, 1) + 1, n).createFilter();
-  [180, 100, 150, 90, 70, 140, 95, 100, 240, 200, 200, 160, 95, 100, 110, 115, 85, 80, 105, 60].forEach(function (w, i) { hoja.setColumnWidth(i + 1, w); });
+  [180, 100, 150, 90, 70, 140, 95, 100, 240, 200, 200, 160, 95, 100, 110, 115, 85, 80, 100, 120, 105, 60].forEach(function (w, i) { hoja.setColumnWidth(i + 1, w); });
   hoja.setFrozenColumns(1);
   var sobra = hoja.getMaxColumns() - n;
   if (sobra > 0) hoja.deleteColumns(n + 1, sobra);

@@ -31,6 +31,10 @@ Ojo: la opción antigua del menú SOL (12.4.1.1.2 "Consulta de detracciones") di
 | Subir la hoja | workflow `deploy-detracciones.yml` (solo con cambios en `apps_script/`) |
 | Explorador (para ubicar pantallas nuevas) | `scripts/explorar.py` + workflow `detracciones-explorar.yml` (modos `menu`, `opcion`, `portal`, `plataforma`) |
 
+**Se usa también en Cuentas por Cobrar y Pagar** (`cobranzas/DetraccionesSunat.js`, ⚙️ Config fila 15):
+cada depósito se descuenta solo de su factura (columna *Ref. documento*, ej. `01_F002-6757`, y *RUC adquiriente*)
+y la IA de Cobranzas puede consultarlos (herramienta `detracciones`).
+
 Columna **rol** de cada depósito: `COMPRA` = la empresa es el adquiriente (pagó la
 detracción), `VENTA` = la empresa es el proveedor (un cliente le depositó).
 

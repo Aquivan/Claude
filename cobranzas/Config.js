@@ -46,6 +46,7 @@ var PARAMETROS_ = [
   [11, 'Tipos de comprobante a controlar', '01', '01 = Factura, 03 = Boleta, 14 = Servicios públicos, 02 = Recibo por honorarios… separados por coma. Las N/C y N/D siempre se aplican'],
   [12, 'ID Sheet de Retenciones', '1YpgrLWya8jPIhxurz0wvRuAf4A-Ts6K79NZhkBk6zpw', 'Hoja "Retenciones · Grupo" (comprobantes de retención de SUNAT). Sus retenciones se descuentan solas de cada factura. Vacío = no usar'],
   [13, 'Pedir confirmación al editar datos manuales', 'SI', 'SI = Google pregunta antes de cambiar o borrar una fila ya ingresada en ✍️ Registro manual o 🔁 Reasignar retenciones (agregar filas no pregunta). Hay respaldo automático: menú ♻️'],
+  [15, 'ID Sheet de Detracciones', '1p6c0G7KgIFGb4aWqeSMcRY9QNPxyePCwBg9T2wjXTIU', 'Hoja "Detracciones · Grupo" (depósitos de detracciones de SUNAT). Cada depósito se descuenta solo de su factura (con enlace a la constancia PDF). Vacío = no usar'],
   [14, 'ID Sheet de padrones SUNAT (respaldo)', '1AfYaSDwdaZfOQFXbUtJKr86e4waM-IT6VZVpQOtcMFE', 'Hoja "Agente Retenedor" (pestañas Ag_Retencion, Buenos_Contribuyentes, Ag_Percepcion). Se usa solo si la descarga directa de SUNAT falla. Los padrones quedan guardados en la pestaña oculta _Padrones SUNAT'],
 ];
 
@@ -231,7 +232,7 @@ function leerConfig_(ss) {
   PARAMETROS_.forEach(function (p) {
     if (!sh.getRange(p[0], 1).getValue()) sh.getRange(p[0], 1, 1, 3).setValues([[p[1], p[2], p[3]]]);
   });
-  var v = sh.getRange('B3:B14').getValues().map(function (r) { return r[0]; });
+  var v = sh.getRange('B3:B15').getValues().map(function (r) { return r[0]; });
   var anioActual = new Date().getFullYear();
   var anios = String(v[2] || '').split(/[,; ]+/).map(function (x) { return parseInt(x, 10); }).filter(Boolean);
   if (!anios.length) anios = [anioActual - 1, anioActual];
@@ -254,6 +255,7 @@ function leerConfig_(ss) {
     idRetenciones: String(v[9] || '').trim(),
     confirmarManual: !/^NO/i.test(String(v[10] || 'SI').trim()),
     idPadrones: String(v[11] || '').trim(),
+    idDetracciones: String(v[12] || '').trim(),
     grupo: emp.map(function (r) { return aRuc_(r[0]); }),
     nombreEmpresa: {}, aliasEmpresa: {}, aliasNombre: {}, diasPorRuc: {},
   };

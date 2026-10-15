@@ -27,12 +27,13 @@ function actualizacionAutomatica() {
 
 // Subir este numero cuando cambie la forma de calcular o escribir, para que la
 // siguiente actualizacion automatica rehaga todo aunque los datos no cambien.
-var VERSION_CALCULO_ = '14';
+var VERSION_CALCULO_ = '15';
 
 function huellaExterna_(ss, cfg, liqs) {
   var partes = ['v' + VERSION_CALCULO_, Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd')]; // cambia de dia: recalcular vencidos
   try { partes.push(DriveApp.getFileById(cfg.idVouchers).getLastUpdated().getTime()); } catch (e) { partes.push('sin-vouchers'); }
   liqs.forEach(function (l) { partes.push(l.id + ':' + l.actualizado); });
+  if (cfg.idDetracciones) { try { partes.push('det:' + DriveApp.getFileById(cfg.idDetracciones).getLastUpdated().getTime()); } catch (e) { partes.push('sin-detracciones'); } }
   if (cfg.idRetenciones) { try { partes.push('ret:' + DriveApp.getFileById(cfg.idRetenciones).getLastUpdated().getTime()); } catch (e) { partes.push('sin-retenciones'); } }
   var man = ss.getSheetByName(HOJA.MANUAL);
   if (man && man.getLastRow() > 1) partes.push(hashTexto_(JSON.stringify(man.getRange(2, 1, man.getLastRow() - 1, 10).getDisplayValues())));
@@ -92,9 +93,10 @@ function actualizarTodoInterno_(forzar) {
     var manual = leerRegistroManual_(ss);
     var ret = leerRetencionesSunat_(cfg, manual);
     aplicarReasignaciones_(ss, ret);
+    var det = leerDetraccionesSunat_(cfg, manual);
 
     var res = ejecutarCruce_({
-      docs: docs, pagos: vch.pagos.concat(manual, ret.pagos), decisiones: decisiones,
+      docs: docs, pagos: vch.pagos.concat(manual, ret.pagos, det.pagos), decisiones: decisiones,
       grupo: cfg.grupo, alias: cfg.aliasNombre, categorias: cfg.categorias,
       opciones: { modo: cfg.modo, tolerancia: cfg.tolerancia, diasVentana: cfg.ventana },
     });
@@ -104,8 +106,9 @@ function actualizarTodoInterno_(forzar) {
     });
 
     ret.avisos.forEach(function (a) { res.errores.push(a); });
+    det.avisos.forEach(function (a) { res.errores.push(a); });
     avisosRespaldo.forEach(function (a) { res.errores.unshift(a); });
-    bitacora_(ss, 'Lectura y cruce', t0, docs.length + ' docs SIRE, ' + vch.pagos.length + ' vouchers, ' + manual.length + ' manuales, ' + ret.pagos.length + ' retenciones SUNAT');
+    bitacora_(ss, 'Lectura y cruce', t0, docs.length + ' docs SIRE, ' + vch.pagos.length + ' vouchers, ' + manual.length + ' manuales, ' + ret.pagos.length + ' retenciones SUNAT, ' + det.pagos.length + ' detracciones SUNAT');
 
     // 🧾 Retenciones IGV 3%: qué facturas se deben retener (padrón SUNAT + detracción + S/700)
     var padron = {}, infoPadron = '';
