@@ -99,16 +99,21 @@ class Consulta:
         if not re.search(r'"name":"55\.2\.1\.1\.4"', pag.content()):
             raise RuntimeError("Este usuario SOL no tiene la opción 'Consulta de Pago de Detracciones' (55.2.1.1.4) "
                                "en Mis declaraciones y pagos.")
+        self.reabrir()
+        self.url_vista = False
+
+    def reabrir(self):
+        """Abre (o vuelve a abrir) el formulario de la consulta: después de ver una constancia la
+        página queda en la constancia y el botón Consultar ya no responde."""
+        pag = self.pag
         pag.goto(f"{PLATAFORMA}&exe={OPCION}", wait_until="networkidle", timeout=90000)
         self.fr = None
         for _ in range(40):
             self.fr = next((f for f in pag.frames if "plataformaunica" in f.url and f.locator("#btnConsultar").count()), None)
             if self.fr:
-                break
+                return
             pag.wait_for_timeout(1000)
-        if not self.fr:
-            raise RuntimeError("No abrió el formulario de Consulta de Pago de Detracciones")
-        self.url_vista = False
+        raise RuntimeError("No abrió el formulario de Consulta de Pago de Detracciones")
 
     def consultar(self, ini, fin, cuenta, tipo):
         fr = self.fr
@@ -137,6 +142,11 @@ class Consulta:
             except Exception as e:
                 print(f"   (reintento {intento + 1}: {str(e)[:150]})")
                 time.sleep(3 * (intento + 1))
+                try:
+                    self.reabrir()
+                    fr = self.fr
+                except Exception as e2:
+                    print(f"   (no se pudo reabrir: {str(e2)[:100]})")
         raise RuntimeError(f"No se pudo consultar {ini}–{fin} cuenta {cuenta} {tipo}")
 
     def constancia(self, numero, indice):
@@ -218,6 +228,7 @@ def main():
                             res = c.consultar(ini, fin, cuenta, tipo)
                             if a.constancias and tipo == "pagosIndividuales":
                                 carpeta_c = os.path.join(a.salida, ruc, str(anio), f"{mes:02d}", "constancias")
+                                abierta = False
                                 for k, r in enumerate(res):
                                     num = str(r.get("num_constancia") or "").strip()
                                     ruta = os.path.join(carpeta_c, f"{num}.html")
@@ -231,6 +242,9 @@ def main():
                                         nuevas += 1
                                     else:
                                         fallidas.append(num)
+                                    abierta = True
+                                if abierta:
+                                    c.reabrir()
                             for r in res:
                                 if r.get("num_constancia"):
                                     f = fila(r, ruc, nombre, cuenta)
