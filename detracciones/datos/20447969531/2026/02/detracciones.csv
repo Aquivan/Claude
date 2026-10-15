@@ -1,0 +1,3 @@
+empresa_ruc,rol,consulta,tipo_cuenta,num_cuenta,fecha_pago,periodo,tipo_comprobante,serie,numero,constancia,ruc_proveedor,proveedor,tipo_doc_adquiriente,doc_adquiriente,adquiriente,tipo_operacion,tipo_bien,monto,npd,origen,num_presentacion,usuario_sol
+20447969531,COMPRA,Individual,Convencional,00721372898,2026-02-12,202602,01,E001,00000001,297806057,20613697277,MARICUCHITA EXPRESS E.I.R.L.,06,20447969531,CORPORACION GRANIX E.I.R.L.,01,027,538.0,0001945846107,WEB SUNAT,7742065674,41834603
+20447969531,COMPRA,Individual,Convencional,00072252713,2026-02-10,202602,01,E001,00000061,297682772,20610527338,INGENIERIA Y CERTIFICACIONES INDUST,06,20447969531,CORPORACION GRANIX E.I.R.L.,01,022,291.0,0001945591168,WEB SUNAT,7741090771,ESTURGER
