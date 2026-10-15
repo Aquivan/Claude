@@ -150,19 +150,33 @@ def consultar_detracciones(pag, periodo, foto, clave):
                     vis = fr.evaluate("""() => [...document.querySelectorAll('.modal, [role=dialog], .ui-dialog')].filter(e => e.offsetParent !== null).map(e => e.innerText.replace(/\\s+/g, ' ').slice(0, 1500))""")
                     print("    modal visible:", vis)
                     print("    botones ahora:", [t for t in fr.evaluate(JS_CLICABLES) if re.search(r"imprim|descarg|pdf|cerrar|guardar", t, re.I)])
-                    for t in ["Descargar", "Imprimir", "PDF"]:
-                        b = fr.locator(f".modal:visible >> text={t}")
-                        if b.count():
-                            descargas.clear()
-                            try:
-                                b.first.click(timeout=5000)
-                                pag.wait_for_timeout(6000)
-                                for d in descargas:
-                                    ruta = os.path.join("pantallas", "constancia2_" + d.suggested_filename)
-                                    d.save_as(ruta)
-                                    print(f"    [descarga con '{t}']", d.suggested_filename, os.path.getsize(ruta), "bytes")
-                            except Exception as e:
-                                print(f"    (clic '{t}' falló: {str(e)[:100]})")
+                    print("    botones constancia:", fr.evaluate("""() => [...document.querySelectorAll('button,a,input[type=button]')].filter(e => e.offsetParent !== null && /descarg|imprim|guardar/i.test(e.innerText || e.value || '')).map(e => e.outerHTML.slice(0, 250))"""))
+                    for t in ["Descargar", "Guardar"]:
+                        bs = fr.locator(f"button:visible:has-text('{t}'), a:visible:has-text('{t}'), input[type=button][value*='{t}']:visible")
+                        n = bs.count()
+                        if not n:
+                            continue
+                        descargas.clear()
+                        try:
+                            bs.nth(n - 1).click(timeout=8000)
+                            pag.wait_for_timeout(8000)
+                            for d in descargas:
+                                ruta = os.path.join("pantallas", "constancia2_" + d.suggested_filename)
+                                d.save_as(ruta)
+                                cab = open(ruta, "rb").read(8)
+                                print(f"    [descarga con '{t}']", d.suggested_filename, os.path.getsize(ruta), "bytes", cab)
+                            if not descargas:
+                                print(f"    (clic '{t}': sin descarga)")
+                        except Exception as e:
+                            print(f"    (clic '{t}' falló: {str(e)[:150]})")
+                    # Alternativa: imprimir a PDF la página con la constancia dibujada
+                    try:
+                        ruta = os.path.join("pantallas", "constancia_impresa.pdf")
+                        pag.pdf(path=ruta, format="A4")
+                        print("    [pdf de la página]", os.path.getsize(ruta), "bytes")
+                    except Exception as e:
+                        print("    (pdf de página no:", str(e)[:100], ")")
+                    return
         except Exception as e:
             print("    (no se pudo)", str(e)[:200])
 
