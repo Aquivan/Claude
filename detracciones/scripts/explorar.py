@@ -66,7 +66,12 @@ def portal(pag, ruc, usuario, clave, a, foto, registro):
     y busca dentro de ese portal las opciones de detracciones (consulta)."""
     pag.goto("https://www.sunat.gob.pe/sol.html", wait_until="networkidle", timeout=60000)
     foto("sol_html")
-    enlaces = pag.evaluate("""() => [...document.querySelectorAll('a')].map(a => [(a.innerText||'').trim().slice(0,40), a.href])""")
+    enlaces = pag.evaluate("""() => [...document.querySelectorAll('a')].map(a => [(a.innerText||'').trim().slice(0,40), a.href,
+        ((a.closest('div,section,li,td') || a).innerText || '').replace(/\\s+/g, ' ').slice(0, 160)])""")
+    for t, h, ctx_ in enlaces:
+        if h and "sunat" in h and not h.startswith("javascript"):
+            print(f"  enlace sol.html: [{t}] {h[:160]}  «{ctx_}»")
+    enlaces = [(t, h) for t, h, _ in enlaces]
     destino = None
     for t, h in enlaces:
         if re.search(r"ingresar", t, re.I) and h and "sunat" in h:
@@ -104,6 +109,24 @@ def portal(pag, ruc, usuario, clave, a, foto, registro):
     html = pag.content()
     for m in re.finditer(PATRON, html, re.I):
         print("  ~", re.sub(r"\s+", " ", html[max(0, m.start() - 250): m.end() + 250]).replace(clave, "***")[:500])
+    # Probar las consultas del portal (por si los pagos de detracciones aparecen ahí)
+    for t in ["Consulta de Declaraciones y Pagos - Nueva Plataforma", "Consulta de Declaraciones y Pagos"]:
+        try:
+            print(f"\n===== Abrir: {t} =====")
+            antes = len(pag.context.pages)
+            pag.get_by_text(t).first.click(timeout=8000)
+            pag.wait_for_timeout(10000)
+            destino = pag.context.pages[-1] if len(pag.context.pages) > antes else pag
+            destino.wait_for_load_state("networkidle", timeout=60000)
+            print("  URL:", destino.url[:200])
+            foto("consulta_" + re.sub(r"\W+", "_", t)[:25], destino)
+            volcar_portal(destino, clave)
+            if destino is not pag:
+                destino.close()
+            else:
+                pag.go_back(); pag.wait_for_timeout(4000)
+        except Exception as e:
+            print("  (no se pudo)", str(e)[:150])
     # Opciones visibles que hablen de detracciones: hacer clic en las de consulta
     registro["activo"] = True
     textos = pag.evaluate("""(patron) => { const re = new RegExp(patron, 'i');
@@ -158,7 +181,7 @@ def main():
                 print("  (foto no tomada:", str(e)[:80], ")")
 
         def al_responder(r):
-            if not registro["activo"] or ESTATICO.search(r.url) or "api-seguridad" in r.url:
+            if not registro["activo"] or ESTATICO.search(r.url) or "api-seguridad" in r.url or "/rb_" in r.url:
                 return
             req = r.request
             if req.resource_type not in ("xhr", "fetch", "document"):
@@ -173,8 +196,12 @@ def main():
             except Exception:
                 cuerpo = "(sin cuerpo)"
             print(f"  >> {req.method} {r.url[:180]}")
-            if req.post_data:
-                print(f"     enviado: {req.post_data[:500]}")
+            try:
+                enviado = req.post_data
+            except Exception:
+                enviado = "(binario)"
+            if enviado and "rb_" not in r.url:
+                print(f"     enviado: {enviado[:500]}")
             print(f"  << HTTP {r.status}: {cuerpo}")
         ctx.on("response", al_responder)
 
