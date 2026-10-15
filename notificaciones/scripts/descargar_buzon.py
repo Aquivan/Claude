@@ -86,7 +86,7 @@ class Buzon:
         sol.pedir(MENU, {"action": "prevApp"})
         st, master = sol.pedir(f"{MENU}?action=buzon&s=ww1")
         if "visornoti" not in sol.ultima_url:
-            raise RuntimeError("No se pudo abrir el Buzón Electrónico")
+            raise RuntimeError(f"No se pudo abrir el Buzón Electrónico (HTTP {st}, SUNAT llevó a {sol.ultima_url.split('?')[0]})")
         tok = re.search(r'name="meta-token" content="([^"]+)"', master)
         self.h = {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json, text/javascript, */*; q=0.01",
                   "Referer": sol.ultima_url}
@@ -215,9 +215,18 @@ def main():
     ruc, usuario, clave = (os.environ.get(k, "") for k in ["SUNAT_RUC", "SUNAT_USUARIO", "SUNAT_CLAVE"])
     if not (ruc and usuario and clave):
         sys.exit("Faltan SUNAT_RUC / SUNAT_USUARIO / SUNAT_CLAVE")
-    sol = Sol()
-    sol.login(ruc, usuario, clave)
-    bz = Buzon(sol, ruc)
+    # De madrugada SOL a veces no abre el buzón (mantenimiento): se reintenta con un ingreso nuevo.
+    for intento in range(1, 5):
+        try:
+            sol = Sol()
+            sol.login(ruc, usuario, clave)
+            bz = Buzon(sol, ruc)
+            break
+        except Exception as e:
+            print(f"Intento {intento}: {str(e)[:200]}")
+            if intento == 4:
+                raise
+            time.sleep(60 * intento)
     carpeta = os.path.join(a.salida, ruc)
     desde = desde_clave(a.desde)
     print(f"Empresa {ruc}: buzón abierto. Desde: {desde or 'todo'}. PDF de notificaciones: {'no' if a.sin_pdf else 'sí'}")
