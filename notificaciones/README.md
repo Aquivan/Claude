@@ -57,3 +57,14 @@ workflow queda como **respaldo**: las corridas diarias se llaman igual
 ("… · diario"), van en fila (`concurrency`) y si una ya corrió, la otra no
 descarga nada.
 
+
+## Adjuntos que SUNAT entrega vacíos (verificado 15/10/2026)
+
+Algunas *Resolución de Conclusión* (7 de GRANIX y 1 de JENILE) tienen su `constancia.pdf`
+en el buzón, pero SUNAT la entrega con **0 bytes** (se probó con los dos tipos de anexo y
+reintentos). No es un error de la descarga: el archivo viene vacío desde SUNAT. Esas filas
+quedan con la columna `nota_pdf` y en la hoja dicen **⚠️ SUNAT lo entrega vacío**; se
+reintentan cada día por si SUNAT lo corrige. Los demás 200 PDF tienen contenido (revisado).
+
+Las corridas diarias que se saltan (porque otra acaba de descargar) ya no cuentan como
+"descarga hecha": antes se saltaban en cadena y la descarga de la tarde no corría.
