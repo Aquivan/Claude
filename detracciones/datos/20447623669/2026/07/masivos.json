@@ -1,0 +1,38 @@
+[
+ {
+  "mto_importe_total": 6750.0,
+  "num_cuenta": "00721034666",
+  "num_ruc_proveedor": "20447623669",
+  "mto_importe_total_desc": "6750.00",
+  "fec_pago": "2026-07-31 12:16:30.0",
+  "fec_pago_desc": "2026-07-31 12:16:30.0",
+  "num_npd": "0001958742688",
+  "des_archivo": "D20447623669260003.TXT",
+  "cod_tipcta": "1",
+  "num_detr": "80863177"
+ },
+ {
+  "mto_importe_total": 7055.0,
+  "num_cuenta": "00721034666",
+  "num_ruc_proveedor": "20447623669",
+  "mto_importe_total_desc": "7055.00",
+  "fec_pago": "2026-07-31 12:16:17.0",
+  "fec_pago_desc": "2026-07-31 12:16:17.0",
+  "num_npd": "0001958742505",
+  "des_archivo": "D20447623669260001.TXT",
+  "cod_tipcta": "1",
+  "num_detr": "80863138"
+ },
+ {
+  "mto_importe_total": 8822.0,
+  "num_cuenta": "00721034666",
+  "num_ruc_proveedor": "20447623669",
+  "mto_importe_total_desc": "8822.00",
+  "fec_pago": "2026-07-31 12:16:07.0",
+  "fec_pago_desc": "2026-07-31 12:16:07.0",
+  "num_npd": "0001958742599",
+  "des_archivo": "D20447623669260002.TXT",
+  "cod_tipcta": "1",
+  "num_detr": "80863158"
+ }
+]

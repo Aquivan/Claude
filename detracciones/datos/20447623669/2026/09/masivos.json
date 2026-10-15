@@ -1,0 +1,14 @@
+[
+ {
+  "mto_importe_total": 10627.0,
+  "num_cuenta": "00721034666",
+  "num_ruc_proveedor": "20447623669",
+  "mto_importe_total_desc": "10627.00",
+  "fec_pago": "2026-09-07 15:34:18.0",
+  "fec_pago_desc": "2026-09-07 15:34:18.0",
+  "num_npd": "0001962311322",
+  "des_archivo": "D20447623669260004.TXT",
+  "cod_tipcta": "1",
+  "num_detr": "81716343"
+ }
+]
