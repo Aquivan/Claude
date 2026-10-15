@@ -14,11 +14,11 @@ on:
         required: true
         default: "20447969531"
       modo:
-        description: "menu = buscar las opciones de detracciones · opcion = abrir códigos"
+        description: "menu = buscar opciones · opcion = abrir códigos · portal = entrar por Mis declaraciones y pagos"
         required: true
         default: "menu"
         type: choice
-        options: [menu, opcion]
+        options: [menu, opcion, portal]
       codigos:
         description: "Códigos de opción separados por coma (modo opcion)"
         required: false

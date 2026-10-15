@@ -44,9 +44,61 @@ JS_FORMULARIO = """() => [...document.querySelectorAll('input,select,button,a.bt
              (e.innerText || '').trim().slice(0, 50)].join(' | '))"""
 
 
+def portal(pag, ruc, usuario, clave, a, foto, registro):
+    """Entra como una persona: sunat.gob.pe/sol.html → "MIS DECLARACIONES Y PAGOS" → Ingresar,
+    y busca dentro de ese portal las opciones de detracciones (consulta)."""
+    pag.goto("https://www.sunat.gob.pe/sol.html", wait_until="networkidle", timeout=60000)
+    foto("sol_html")
+    enlaces = pag.evaluate("""() => [...document.querySelectorAll('a')].map(a => [(a.innerText||'').trim().slice(0,40), a.href])""")
+    destino = None
+    for t, h in enlaces:
+        if re.search(r"ingresar", t, re.I) and h and "sunat" in h:
+            print("  Ingresar →", h[:200])
+            destino = destino or h          # el primero es MIS DECLARACIONES Y PAGOS
+    if not destino:
+        print("No se encontró el botón Ingresar"); return
+    pag.goto(destino, wait_until="networkidle", timeout=60000)
+    pag.wait_for_timeout(2000)
+    print("Pantalla de ingreso:", pag.url[:200])
+    foto("ingreso_portal")
+    for sel_r, sel_u, sel_c, sel_b in [("#txtRuc", "#txtUsuario", "#txtContrasena", "#btnAceptar")]:
+        pag.fill(sel_r, ruc); pag.fill(sel_u, usuario); pag.fill(sel_c, clave); pag.click(sel_b)
+    pag.wait_for_load_state("networkidle", timeout=60000)
+    pag.wait_for_timeout(5000)
+    print("Después de ingresar:", pag.url[:200], "|", pag.title())
+    foto("portal_dentro")
+    html = pag.content()
+    for m in re.finditer(PATRON, html, re.I):
+        print("  ~", re.sub(r"\s+", " ", html[max(0, m.start() - 250): m.end() + 250]).replace(clave, "***")[:500])
+    # Opciones visibles que hablen de detracciones: hacer clic en las de consulta
+    registro["activo"] = True
+    textos = pag.evaluate("""(patron) => { const re = new RegExp(patron, 'i');
+        return [...document.querySelectorAll('a,li,span,div,button')].filter(e => re.test((e.innerText||'').trim()) && (e.innerText||'').trim().length < 80)
+          .map(e => (e.innerText||'').trim()); }""", PATRON)
+    print("Opciones con detracciones:", sorted(set(textos))[:40])
+    for t in sorted(set(textos)):
+        if not re.search(r"consulta|constancia", t, re.I):
+            continue
+        print(f"\n===== Clic en: {t} =====")
+        try:
+            pag.get_by_text(t, exact=True).first.click(timeout=8000)
+            pag.wait_for_timeout(7000)
+            foto("clic_" + re.sub(r"\W+", "_", t)[:30])
+            for fr in pag.frames:
+                if fr.url in ("about:blank", "") or "gettime" in fr.url:
+                    continue
+                print(f"  [marco] {fr.url[:200]}")
+                txt = re.sub(r"\s+", " ", fr.evaluate("() => document.body ? document.body.innerText : ''"))
+                print(f"    texto: {txt[:1500]}")
+                print("    campos:\n      " + "\n      ".join(fr.evaluate(JS_FORMULARIO)[:60]))
+        except Exception as e:
+            print("  (no se pudo)", str(e)[:150])
+    registro["activo"] = False
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--modo", default="menu", choices=["menu", "opcion"])
+    ap.add_argument("--modo", default="menu", choices=["menu", "opcion", "portal"])
     ap.add_argument("--codigos", default="")
     ap.add_argument("--periodo", default="")
     ap.add_argument("--salida", default="pantallas")
@@ -91,6 +143,12 @@ def main():
                 print(f"     enviado: {req.post_data[:500]}")
             print(f"  << HTTP {r.status}: {cuerpo}")
         ctx.on("response", al_responder)
+
+        if a.modo == "portal":
+            portal(pag, ruc, usuario, clave, a, foto, registro)
+            ctx.close(); nav.close()
+            print("Listo. Fotos en", a.salida)
+            return
 
         # Ingreso a SOL
         pag.goto(f"{SEC}/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl={ORIG}&state={STATE}",
