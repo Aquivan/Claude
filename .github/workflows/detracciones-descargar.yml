@@ -1,0 +1,142 @@
+# Proyecto "Detracciones · Grupo" (carpeta detracciones/). Descarga de SUNAT SOL
+# (Mis declaraciones y pagos → Consulta de Pago de Detracciones) los depósitos de
+# detracciones de una empresa o de todas las activas de empresas.json, mes a mes.
+# Solo escribe en detracciones/datos/. No toca ningún otro proyecto.
+# Nunca imprime claves. Solo LEE en SUNAT (no paga nada).
+
+name: Detracciones - descargar depósitos (SUNAT SOL)
+# La corrida diaria la pide la hoja (puntual); el cron de GitHub es solo respaldo.
+# Ambas se llaman igual para no repetirlas.
+run-name: ${{ (github.event_name == 'schedule' || inputs.diario) && 'Detracciones · diario' || 'Detracciones - descargar depósitos (SUNAT SOL)' }}
+
+on:
+  # Todos los días ~7:17 a. m. de Lima, todas las empresas, los últimos 3 meses.
+  schedule:
+    - cron: '17 12 * * *'
+    - cron: '47 17 * * *'   # respaldo (12:47 p. m. Lima)
+  workflow_dispatch:
+    inputs:
+      empresa:
+        description: "RUC de una empresa, o 'todas' (las activas de empresas.json)"
+        required: true
+        default: "todas"
+      desde:
+        description: "Desde qué mes de pago (AAAAMM). Vacío = los últimos 3 meses"
+        required: false
+        default: ""
+      hasta:
+        description: "Hasta qué mes de pago (AAAAMM). Vacío = este mes"
+        required: false
+        default: ""
+      ivap:
+        description: "Consultar también la cuenta especial IVAP"
+        type: boolean
+        default: false
+      guardar:
+        description: "Guardar en el repositorio (detracciones/datos/)"
+        type: boolean
+        default: true
+      diario:
+        description: "Corrida diaria automática (la pide la hoja a su hora). No hace falta marcarlo a mano."
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: ${{ (github.event_name == 'schedule' || inputs.diario) && 'detracciones-diario' || format('detracciones-descargar-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+jobs:
+  empresas:
+    runs-on: ubuntu-latest
+    outputs:
+      lista: ${{ steps.e.outputs.lista }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: empresas.json
+          sparse-checkout-cone-mode: false
+      - name: ¿Ya corrió la descarga diaria? (para no repetirla)
+        id: hoy
+        if: github.event_name == 'schedule' || inputs.diario
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          desde=$(date -u -d "10 hours ago" +%Y-%m-%dT%H:%M:%SZ)
+          n=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow detracciones-descargar.yml --limit 30 \
+                --json databaseId,displayTitle,createdAt,conclusion \
+                --jq "[.[] | select(.databaseId != $GITHUB_RUN_ID and .createdAt >= \"$desde\" and (.conclusion == \"success\" or .conclusion == \"\") and .displayTitle == \"Detracciones · diario\")] | length" || echo 0)
+          echo "Corridas diarias recientes antes de esta: ${n:-0}"
+          if [ "${n:-0}" -gt 0 ]; then echo "saltar=true" >> "$GITHUB_OUTPUT"; else echo "saltar=false" >> "$GITHUB_OUTPUT"; fi
+      - id: e
+        env:
+          SALTAR: ${{ steps.hoy.outputs.saltar }}
+          EMPRESA: ${{ inputs.empresa || 'todas' }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          sel = os.environ["EMPRESA"].strip()
+          if os.environ.get("SALTAR") == "true":
+              print("lista=[]")
+              raise SystemExit
+          emp = [e for e in json.load(open("empresas.json"))["empresas"] if e.get("activo")]
+          rucs = [e["ruc"] for e in emp] if sel.lower() == "todas" else [sel]
+          print("lista=" + json.dumps(rucs))
+          PY
+          cat "$GITHUB_OUTPUT"
+
+  descargar:
+    needs: empresas
+    if: needs.empresas.outputs.lista != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        ruc: ${{ fromJson(needs.empresas.outputs.lista) }}
+    environment: ${{ matrix.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar navegador
+        run: |
+          pip install playwright==1.47.0
+          python -m playwright install --with-deps chromium
+
+      - name: Descargar depósitos de detracciones
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          DESDE: ${{ inputs.desde }}
+          HASTA: ${{ inputs.hasta }}
+          IVAP: ${{ inputs.ivap }}
+        run: |
+          # Corrida automática: los últimos 3 meses (lo anterior ya quedó guardado).
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.diario }}" = "true" ]; then DESDE=""; HASTA=""; fi
+          extra=""
+          if [ "$IVAP" = "true" ]; then extra="--ivap"; fi
+          python detracciones/scripts/descargar_detracciones.py --salida detracciones/datos --desde "$DESDE" --hasta "$HASTA" $extra
+
+      - name: Guardar en el repositorio
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.diario || inputs.guardar) }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          [ -d detracciones/datos ] || { echo "Sin datos para guardar."; exit 0; }
+          git add detracciones/datos
+          git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
+          git commit -m "Detracciones ${{ matrix.ruc }} [skip ci]"
+          logrado=0
+          for intento in 1 2 3 4 5; do
+            if git push; then logrado=1; break; fi
+            echo "Push rechazado, reintentando con rebase (intento $intento)..."
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep $((intento * 3))
+          done
+          [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir detracciones/datos"; exit 1; }
