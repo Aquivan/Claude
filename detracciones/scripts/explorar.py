@@ -102,9 +102,37 @@ def plataforma(pag, ruc, usuario, clave, a, foto, registro):
                     print("    campos", fr.url[:80], "\n      " + "\n      ".join(fr.evaluate(JS_FORMULARIO)[:60]))
                 except Exception:
                     pass
+            if a.periodo:
+                consultar_detracciones(pag, a.periodo, foto, clave)
         except Exception as e:
             print("  (no se pudo)", str(e)[:150])
         registro["activo"] = False
+
+
+def consultar_detracciones(pag, periodo, foto, clave):
+    """En el formulario "Consulta de Pago de Detracciones" pone las fechas del mes y consulta
+    cada tipo de pago (individual y masivo) en la cuenta convencional."""
+    fr = next((f for f in pag.frames if "plataformaunica" in f.url and f.locator("#btnConsultar").count()), None)
+    if not fr:
+        print("  (no está el formulario de consulta)"); return
+    anio, mes = int(periodo[:4]), int(periodo[4:6])
+    ult = calendar.monthrange(anio, mes)[1]
+    for tipo in ["pagosIndividuales", "pagosMasivos"]:
+        print(f"\n  ---- Consultar {tipo} {periodo} ----")
+        try:
+            for sel, val in [("#fechaInicio", f"01/{mes:02d}/{anio}"), ("#fechaFin", f"{ult:02d}/{mes:02d}/{anio}")]:
+                fr.evaluate("([s, v]) => { const e = document.querySelector(s); e.removeAttribute('readonly'); e.value = v; e.dispatchEvent(new Event('change', {bubbles: true})); }", [sel, val])
+            fr.select_option("#tipoCuenta", "1")
+            fr.select_option("#tipoConsulta", tipo)
+            fr.click("#btnConsultar")
+            pag.wait_for_timeout(9000)
+            foto("consulta_" + tipo)
+            txt = re.sub(r"\s+", " ", fr.evaluate("() => document.body.innerText"))
+            print("    texto:", txt[:3000].replace(clave, "***"))
+            print("    tablas:", fr.evaluate("""() => [...document.querySelectorAll('table')].map(t => [...t.rows].slice(0, 6).map(r => [...r.cells].map(c => c.innerText.trim()).join(' | ')))"""))
+            print("    botones:", fr.evaluate(JS_CLICABLES)[:60])
+        except Exception as e:
+            print("    (no se pudo)", str(e)[:200])
 
 
 def portal(pag, ruc, usuario, clave, a, foto, registro):
