@@ -131,6 +131,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matriz: ${{ steps.leer.outputs.matriz }}
+      paralelo: ${{ steps.leer.outputs.paralelo || '1' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -330,6 +331,15 @@ jobs:
           MATRIZ=$(python3 /tmp/preparar_matriz.py)
           echo "Tareas (empresa x periodo) activas: $MATRIZ"
           echo "matriz=$MATRIZ" >> "$GITHUB_OUTPUT"
+          # Cuantas tareas corren a la vez: TODAS las empresas en paralelo cuando
+          # cada empresa aparece UNA sola vez (la descarga diaria normal): cada una
+          # escribe solo en sus carpetas (sire/<RUC>, facturas_descargadas/<RUC>,
+          # docs/...-<RUC>.md) y usa su propio usuario SOL / API SIRE. Si una misma
+          # empresa trae varios periodos (rango, o el dia del mes anterior), de a
+          # una como siempre: nunca 2 periodos de la misma empresa a la vez.
+          PARALELO=$(printf '%s' "$MATRIZ" | python3 -c "import json,sys; t=json.load(sys.stdin); r=[x['ruc'] for x in t]; print(1 if len(r) != len(set(r)) else max(1, min(len(r), 8)))")
+          echo "Empresas a la vez: $PARALELO"
+          echo "paralelo=$PARALELO" >> "$GITHUB_OUTPUT"
 
       - name: Guardar el interruptor del mes anterior (si se cambio)
         if: inputs.mes_anterior == 'activar' || inputs.mes_anterior == 'desactivar' || inputs.mes_anterior == 'cambiar'
@@ -376,8 +386,12 @@ jobs:
     # ene-ago), SOLO el primer mes de cada empresa salio bien; todo el
     # resto choco. De a una elimina el riesgo de raiz: nunca 2 periodos de
     # la misma empresa corren a la vez.
+    # (2026-10-15) Ahora: todas las empresas a la vez si cada una tiene un
+    # solo periodo (lo normal de cada dia); de a una si alguna repite empresa
+    # (ver "paralelo" en preparar_empresas). El problema de arriba era entre
+    # periodos de la MISMA empresa; empresas distintas no comparten archivos.
     strategy:
-      max-parallel: 1
+      max-parallel: ${{ fromJson(needs.preparar_empresas.outputs.paralelo || '1') }}
       fail-fast: false
       matrix:
         empresa: ${{ fromJson(needs.preparar_empresas.outputs.matriz) }}

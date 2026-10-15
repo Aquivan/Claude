@@ -107,7 +107,7 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 8   # todas las empresas a la vez (cada una escribe solo en su carpeta <RUC>)
       matrix:
         ruc: ${{ fromJson(needs.empresas.outputs.lista) }}
     environment: ${{ matrix.ruc }}
@@ -147,11 +147,11 @@ jobs:
           git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
           git commit -m "Detracciones ${{ matrix.ruc }} [skip ci]"
           logrado=0
-          for intento in 1 2 3 4 5; do
+          for intento in 1 2 3 4 5 6 7 8; do
             if git push; then logrado=1; break; fi
             echo "Push rechazado, reintentando con rebase (intento $intento)..."
             git fetch origin "$GITHUB_REF_NAME"
             git rebase "origin/$GITHUB_REF_NAME"
-            sleep $((intento * 3))
+            sleep $((intento * 2 + RANDOM % 5))
           done
           [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir detracciones/datos"; exit 1; }
