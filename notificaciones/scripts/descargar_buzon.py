@@ -129,18 +129,38 @@ class Buzon:
         st, t = self.sol.pedir(f"{VISOR}/obtenerDetalleNotiMen?codigoMensaje={cod}&tipoMsj={tipo}", headers=self.h)
         d = json.loads(t)
         anexo = 1 if d.get("tieneDocumentosAnexos") else 0
-        return [(a["codArchivo"], a.get("nomArchivo") or "archivo.pdf", anexo)
-                for a in (d.get("listAttach") or []) if a.get("codArchivo")]
+        lista = [(a["codArchivo"], a.get("nomArchivo") or "archivo.pdf", anexo)
+                 for a in (d.get("listAttach") or []) if a.get("codArchivo")]
+        if not lista:
+            print(f"   {cod}: SUNAT no lista adjuntos (HTTP {st}; campos: {sorted(d.keys())[:15]})")
+        return lista
 
-    def bajar(self, cod_archivo, anexo):
+    def bajar(self, cod_archivo, anexo, nombre=""):
+        """Devuelve (bytes, extensión) o (None, motivo). Prueba el tipo de anexo indicado y el otro,
+        y acepta cualquier archivo (PDF, ZIP, imagen…), no solo PDF."""
+        motivo = ""
         for intento in range(3):
-            st, b = self.sol.pedir(f"{VISOR}/bajarArchivo/{cod_archivo}/{anexo}/{self.id_sistema}/{self.ruc}",
-                                   headers={"Referer": self.h["Referer"]}, binario=True)
-            if st == 200 and b and b[:4] == b"%PDF":
-                return b
+            for an in (anexo, 1 - anexo):
+                st, b = self.sol.pedir(f"{VISOR}/bajarArchivo/{cod_archivo}/{an}/{self.id_sistema}/{self.ruc}",
+                                       headers={"Referer": self.h["Referer"]}, binario=True)
+                if st == 200 and b:
+                    if b[:4] == b"%PDF":
+                        return b, ".pdf"
+                    if b[:2] == b"PK":
+                        return b, ".zip"
+                    if b[:3] == b"\xff\xd8\xff":
+                        return b, ".jpg"
+                    if b[:8] == b"\x89PNG\r\n\x1a\n":
+                        return b, ".png"
+                    cab = b[:300].decode("utf-8", errors="ignore").lower()
+                    if "<html" not in cab and "<!doctype" not in cab and len(b) > 200:
+                        ext = os.path.splitext(nombre)[1].lower() or ".bin"
+                        return b, ext
+                    motivo = f"HTTP {st}, respondió una página en vez del archivo: {' '.join(cab.split())[:120]}"
+                else:
+                    motivo = f"HTTP {st}, {len(b or b'')} bytes"
             time.sleep(2 * (intento + 1))
-        return None
-
+        return None, motivo
 
 def fecha_clave(s):
     """'05/10/2026 21:34:56' → '20261005'."""
@@ -226,12 +246,13 @@ def main():
                 guardados = []
                 try:
                     for cod_arch, nom, anexo in bz.adjuntos(cod, tipo):
-                        b = bz.bajar(cod_arch, anexo)
+                        b, ext = bz.bajar(cod_arch, anexo, nom)
                         if not b:
+                            print(f"   {cod} ({fila['clase']}): no se pudo bajar '{nom}' ({ext}); se reintenta en la próxima corrida")
                             continue
                         rel = f"{ruc}/{sub}/{cod}-{nombre_archivo(nom)}"
-                        if not rel.lower().endswith(".pdf"):
-                            rel += ".pdf"
+                        if not rel.lower().endswith(ext):
+                            rel = re.sub(r"\.(pdf|bin)$", "", rel, flags=re.I) + ext
                         os.makedirs(os.path.dirname(os.path.join(a.salida, rel)), exist_ok=True)
                         open(os.path.join(a.salida, rel), "wb").write(b)
                         guardados.append(rel)

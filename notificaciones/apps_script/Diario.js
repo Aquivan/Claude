@@ -67,9 +67,21 @@ function NOT_estadoDiario_(cfg) {
   (JSON.parse(r.getContentText()).workflow_runs || []).forEach(function (run) {
     if (run.display_title !== NOT_TITULO_DIARIO_ || new Date(run.created_at).getTime() < desde) return;
     if (run.status !== 'completed') estado = 'corriendo';
-    else if (run.conclusion === 'success' && estado === 'nada') estado = 'listo';
+    else if (run.conclusion === 'success' && estado === 'nada' && NOT_descargoDeVerdad_(cfg, run.id)) estado = 'listo';
   });
   return estado;
+}
+
+/** true si la corrida descargó de verdad (sus trabajos "descargar" no se saltaron por haber otra reciente). */
+function NOT_descargoDeVerdad_(cfg, runId) {
+  try {
+    var p = NOT_api_(cfg, '/actions/runs/' + runId + '/jobs?per_page=100');
+    var r = UrlFetchApp.fetch(p.url, p);
+    if (r.getResponseCode() !== 200) return true;
+    return (JSON.parse(r.getContentText()).jobs || []).some(function (j) {
+      return /^descargar/.test(j.name) && j.conclusion === 'success';
+    });
+  } catch (e) { return true; }
 }
 
 /** Desde cuando una corrida diaria cuenta como "la de ahora". */

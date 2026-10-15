@@ -69,9 +69,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           desde=$(date -u -d "5 hours ago" +%Y-%m-%dT%H:%M:%SZ)  # ultimas 5 horas
-          n=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow notificaciones-descargar.yml --limit 30 \
+          # Solo cuenta una corrida que DE VERDAD descargó (sus trabajos "descargar" no se saltaron).
+          # Antes contaba también las corridas que se habían saltado, y así se saltaban unas a otras en cadena.
+          ids=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow notificaciones-descargar.yml --limit 30 \
                 --json databaseId,displayTitle,createdAt,conclusion \
-                --jq "[.[] | select(.databaseId != $GITHUB_RUN_ID and .createdAt >= \"$desde\" and (.conclusion == \"success\" or .conclusion == \"\") and .displayTitle == \"Notificaciones · diario\")] | length" || echo 0)
+                --jq "[.[] | select(.databaseId != $GITHUB_RUN_ID and .createdAt >= \"$desde\" and (.conclusion == \"success\" or .conclusion == \"\") and .displayTitle == \"Notificaciones · diario\")] | .[].databaseId" || true)
+          n=0
+          for id in $ids; do
+            k=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" \
+                  --jq '[.jobs[] | select((.name | startswith("descargar")) and (.conclusion == "success" or .conclusion == null or .status != "completed"))] | length' || echo 0)
+            if [ "${k:-0}" -gt 0 ]; then n=$((n+1)); fi
+          done
           echo "Corridas diarias recientes antes de esta: ${n:-0}"
           if [ "${n:-0}" -gt 0 ]; then echo "saltar=true" >> "$GITHUB_OUTPUT"; else echo "saltar=false" >> "$GITHUB_OUTPUT"; fi
       - id: e

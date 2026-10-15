@@ -116,9 +116,9 @@ function NOT_probarConexion() {
     var empresas = NOT_listarEmpresas_(cfg);
     var archivos = NOT_listarArchivos_(cfg);
     var cre = archivos.filter(function (a) { return /\/notificaciones\.csv$/.test(a.path); }).length;
-    var pdf = archivos.filter(function (a) { return /\.pdf$/.test(a.path); }).length;
+    var pdf = archivos.filter(function (a) { return /^\d{11}\/\d{4}\/\d{2}\//.test(a.path); }).length;
     ui.alert('✅ Conexión correcta con ' + cfg.owner + '/' + cfg.repo + ' (' + cfg.rama + ').\n\n' +
-      'Empresas: ' + empresas.length + '\nMeses con datos: ' + cre + '\nPDF disponibles: ' + pdf);
+      'Empresas: ' + empresas.length + '\nMeses con datos: ' + cre + '\nArchivos (PDF y otros) disponibles: ' + pdf);
   } catch (e) {
     ui.alert('❌ ' + e.message);
   }

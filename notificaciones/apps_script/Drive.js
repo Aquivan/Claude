@@ -78,14 +78,18 @@ function NOT_ordenarPdf_() {
         cache[clave] = NOT_subcarpeta_(NOT_subcarpeta_(emp, anio), NOT_MESES_CARPETA[mes - 1]);
       }
       var archivoOriginal = p.ruta.split('/').pop().replace(/^\d+-/, '');
+      var mExt = /\.[a-z0-9]{2,4}$/i.exec(archivoOriginal);
+      var ext = mExt ? mExt[0].toLowerCase() : '.pdf';
+      var base = mExt ? archivoOriginal.slice(0, mExt.index) : archivoOriginal;
       var nombre = NOT_limpiarNombre_(Utilities.formatDate(f, 'America/Lima', 'yyyy-MM-dd') + ' ' + p.clase + ' ' + (p.doc || '') +
-        ' - ' + archivoOriginal.replace(/\.pdf$/i, '')) + '.pdf';
+        ' - ' + base) + ext;
       var existe = cache[clave].getFilesByName(nombre);
       var archivo = existe.hasNext() ? existe.next() : null;
       if (!archivo) {
         var blob = NOT_leerBlob_(cfg, p.ruta, nombre);
         if (!blob) continue;
-        archivo = cache[clave].createFile(blob.setContentType('application/pdf'));
+        var tipos = { '.pdf': 'application/pdf', '.zip': 'application/zip', '.jpg': 'image/jpeg', '.png': 'image/png' };
+        archivo = cache[clave].createFile(blob.setContentType(tipos[ext] || 'application/octet-stream'));
       }
       nuevos.push([p.ruta, archivo.getId(), new Date(), nombre]);
       hechos++;
@@ -114,7 +118,7 @@ function NOT_ponerEnlacesPdf_(hoja) {
     var t = SpreadsheetApp.newRichTextValue();
     if (!lista.length) return [t.setText('—').build()];
     var partes = lista.map(function (ruta) {
-      var nom = ruta.split('/').pop().replace(/^\d+-/, '').replace(/\.pdf$/i, '');
+      var nom = ruta.split('/').pop().replace(/^\d+-/, '').replace(/\.[a-z0-9]{2,4}$/i, '');
       return { texto: '📄 ' + (/constancia/i.test(nom) ? 'constancia' : nom.slice(0, 22)), id: mapa[ruta] };
     });
     var texto = partes.map(function (p) { return p.texto; }).join('  ');
