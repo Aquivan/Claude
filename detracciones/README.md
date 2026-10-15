@@ -3,7 +3,7 @@
 Reporte multiempresa de detracciones (SPOT): los **depósitos** que cada empresa del
 grupo hizo a la cuenta del Banco de la Nación de sus proveedores (como adquiriente),
 descargados de SUNAT SOL, en una hoja propia: **"Detracciones · Grupo"**
-(carpeta *Detracciones* de Drive, Apps Script en `apps_script/`).
+(carpeta *Detracciones* de Drive: https://docs.google.com/spreadsheets/d/1p6c0G7KgIFGb4aWqeSMcRY9QNPxyePCwBg9T2wjXTIU/edit , Apps Script en `apps_script/`, `.clasp.json` ya guardado).
 
 ## De dónde salen los datos
 
