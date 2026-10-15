@@ -1,0 +1,3 @@
+empresa_ruc,rol,consulta,tipo_cuenta,num_cuenta,fecha_pago,periodo,tipo_comprobante,serie,numero,constancia,ruc_proveedor,proveedor,tipo_doc_adquiriente,doc_adquiriente,adquiriente,tipo_operacion,tipo_bien,monto,npd,origen,num_presentacion,usuario_sol
+10420738248,COMPRA,Individual,Convencional,00721038238,2026-04-07,202604,01,E001,00000101,301605526,20447817862,"""SERVICIOS Y DISTRIBUCIONES SAN JOR",06,10420738248,LUQUE RAFAEL EDWIN,01,027,36.0,,WEB SUNAT,7762256154,CUSHABIN
+10420738248,COMPRA,Individual,Convencional,00721038238,2026-04-07,202604,01,E001,00000100,301604731,20447817862,"""SERVICIOS Y DISTRIBUCIONES SAN JOR",06,10420738248,LUQUE RAFAEL EDWIN,01,027,36.0,,WEB SUNAT,7762251171,CUSHABIN

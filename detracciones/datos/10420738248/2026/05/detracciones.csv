@@ -1,0 +1,2 @@
+empresa_ruc,rol,consulta,tipo_cuenta,num_cuenta,fecha_pago,periodo,tipo_comprobante,serie,numero,constancia,ruc_proveedor,proveedor,tipo_doc_adquiriente,doc_adquiriente,adquiriente,tipo_operacion,tipo_bien,monto,npd,origen,num_presentacion,usuario_sol
+10420738248,VENTA,Individual,Convencional,00721315169,2026-05-05,202605,01,E001,00000102,303914073,10420738248,LUQUE RAFAEL EDWIN,06,20447817862,"""SERVICIOS Y DISTRIBUCIONES SAN JOR",01,027,36.0,,WEB SUNAT,7787504387,CUSHABIN
