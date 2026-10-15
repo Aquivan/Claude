@@ -1,0 +1,3 @@
+empresa_ruc,rol,consulta,tipo_cuenta,num_cuenta,fecha_pago,periodo,tipo_comprobante,serie,numero,constancia,ruc_proveedor,proveedor,tipo_doc_adquiriente,doc_adquiriente,adquiriente,tipo_operacion,tipo_bien,monto,npd,origen,num_presentacion,usuario_sol
+20609309793,COMPRA,Individual,Convencional,00062011874,2026-08-20,202608,01,FE01,00001726,313193780,20536173286,JJF LOGIST S.A.C,06,20609309793,BKF CORPORACION E.I.R.L.,01,027,53.0,,WEB SUNAT,7830390178,JFERNAND
+20609309793,COMPRA,Individual,Convencional,00059092529,2026-08-07,202607,01,E001,00001047,311979133,20601139830,LIVENCE LABORATORIO S.A.C. - LIVENC,06,20609309793,BKF CORPORACION E.I.R.L.,01,037,297.0,,WEB SUNAT,7825062209,CHIGNECT

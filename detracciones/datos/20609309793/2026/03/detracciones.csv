@@ -1,0 +1,3 @@
+empresa_ruc,rol,consulta,tipo_cuenta,num_cuenta,fecha_pago,periodo,tipo_comprobante,serie,numero,constancia,ruc_proveedor,proveedor,tipo_doc_adquiriente,doc_adquiriente,adquiriente,tipo_operacion,tipo_bien,monto,npd,origen,num_presentacion,usuario_sol
+20609309793,COMPRA,Individual,Convencional,00721351572,2026-03-27,202603,01,E001,00000115,300894597,20609773767,TARVOS TECNOLOGIA S.A.C.S,06,20609309793,BKF CORPORACION E.I.R.L.,01,022,816.0,,WEB SUNAT,7759007509,71581087
+20609309793,COMPRA,Individual,Convencional,00059190598,2026-03-05,202603,01,F003,00005291,299118978,20608850342,DISTRIBUCIONES INALTA SOCIEDAD ANON,06,20609309793,BKF CORPORACION E.I.R.L.,01,001,707.0,,WEB SUNAT,7750045943,CKSGRIAG

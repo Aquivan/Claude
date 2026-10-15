@@ -1,0 +1,3 @@
+empresa_ruc,rol,consulta,tipo_cuenta,num_cuenta,fecha_pago,periodo,tipo_comprobante,serie,numero,constancia,ruc_proveedor,proveedor,tipo_doc_adquiriente,doc_adquiriente,adquiriente,tipo_operacion,tipo_bien,monto,npd,origen,num_presentacion,usuario_sol
+20609309793,COMPRA,Individual,Convencional,00059092529,2026-04-09,202603,01,E001,00000990,302481342,20601139830,LIVENCE LABORATORIO S.A.C. - LIVENC,06,20609309793,BKF CORPORACION E.I.R.L.,01,037,173.0,,WEB SUNAT,7763315441,CHIGNECT
+20609309793,COMPRA,Individual,Convencional,00014147357,2026-04-09,202603,01,F001,00004413,302023492,20608353730,BURO DE CERTIFICACION Y ANALISIS DE,06,20609309793,BKF CORPORACION E.I.R.L.,01,037,125.0,,WEB SUNAT,7763008744,ECTREGIN

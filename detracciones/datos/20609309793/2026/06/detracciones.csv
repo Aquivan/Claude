@@ -1,0 +1,2 @@
+empresa_ruc,rol,consulta,tipo_cuenta,num_cuenta,fecha_pago,periodo,tipo_comprobante,serie,numero,constancia,ruc_proveedor,proveedor,tipo_doc_adquiriente,doc_adquiriente,adquiriente,tipo_operacion,tipo_bien,monto,npd,origen,num_presentacion,usuario_sol
+20609309793,COMPRA,Individual,Convencional,00014147357,2026-06-05,202605,01,F001,00005010,307142168,20608353730,BURO DE CERTIFICACION Y ANALISIS DE,06,20609309793,BKF CORPORACION E.I.R.L.,01,037,125.0,,WEB SUNAT,7802777654,ECTREGIN
