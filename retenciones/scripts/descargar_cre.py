@@ -195,9 +195,10 @@ def buscar(sol, tipo, fini, ffin, serie=""):
         return st, {"_error": texto(t)[:300]}
 
 
-def bajar_archivo(sol, token, id_api, accion):
-    """accion 01 = PDF, 02 = XML. Devuelve los bytes del archivo (sacado del zip) o None."""
-    for intento in range(5):
+def bajar_archivo(sol, token, id_api, accion, intentos=3):
+    """accion 01 = PDF, 02 = XML. Devuelve los bytes del archivo (sacado del zip) o None.
+    3 intentos con espera corta (antes 5 x 4 s: un XML que SUNAT nunca entrega costaba ~25 s)."""
+    for intento in range(intentos):
         st, t = sol.pedir(f"{API_CPE}/{id_api}/{accion}?formato=x", headers={
             "Authorization": f"Bearer {token}", "Accept": "application/json, text/plain, */*",
             "Origin": "https://e-factura.sunat.gob.pe", "Referer": "https://e-factura.sunat.gob.pe/"},
@@ -211,8 +212,45 @@ def bajar_archivo(sol, token, id_api, accion):
             except zipfile.BadZipFile:
                 return raw
         except Exception:
-            time.sleep(4)
+            time.sleep(1.5 * (intento + 1))
     return None
+
+
+# XML que SUNAT no entrega: se anotan por mes (xml/sin_xml.json) y no se vuelven a pedir en
+# cada corrida (antes se reintentaban siempre y le costaban minutos a cada empresa). Se
+# reintentan una vez cada DIAS_REINTENTO_XML días, por si SUNAT los corrige. Los datos del
+# comprobante igual salen del PDF.
+DIAS_REINTENTO_XML = 7
+
+
+def leer_sin_xml(carpeta):
+    ruta = os.path.join(carpeta, "xml", "sin_xml.json")
+    try:
+        with open(ruta, encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def guardar_sin_xml(carpeta, marcas):
+    ruta = os.path.join(carpeta, "xml", "sin_xml.json")
+    if not marcas:
+        if os.path.exists(ruta):
+            os.remove(ruta)
+        return
+    os.makedirs(os.path.dirname(ruta), exist_ok=True)
+    with open(ruta, "w", encoding="utf-8") as fh:
+        json.dump(dict(sorted(marcas.items())), fh, ensure_ascii=False, indent=1)
+
+
+def toca_reintentar_xml(marcas, base, hoy):
+    f = marcas.get(base)
+    if not f:
+        return True
+    try:
+        return (hoy - datetime.strptime(f, "%Y-%m-%d").date()).days >= DIAS_REINTENTO_XML
+    except Exception:
+        return True
 
 
 def detalle_html(sol, cre, diagnostico=False):
@@ -486,6 +524,9 @@ def main():
         fini, ffin = rango_mes(periodo)
         carpeta = os.path.join(a.salida, ruc, periodo[:4], periodo[4:])
         cabeceras, detalles, resumen = [], [], {}
+        sin_xml = leer_sin_xml(carpeta)
+        hoy = datetime.now(LIMA).date()
+        saltados_xml = 0
         for tipo in ["emitido", "recibido"]:
             lista = None
             for serie in ["", "E001"]:
@@ -536,6 +577,11 @@ def main():
                     id_api = f"{emisor}-20-{serie}-{numero}-{'1' if tipo == 'emitido' else '2'}"
                     for ruta, accion in [(ruta_xml, "02"), (ruta_pdf, "01")]:
                         if os.path.exists(ruta):
+                            if accion == "02":
+                                sin_xml.pop(base, None)
+                            continue
+                        if accion == "02" and not toca_reintentar_xml(sin_xml, base, hoy):
+                            saltados_xml += 1
                             continue
                         contenido = bajar_archivo(sol, token, id_api, accion)
                         if contenido and accion == "02" and not xml_valido(contenido):
@@ -547,8 +593,12 @@ def main():
                             os.makedirs(os.path.dirname(ruta), exist_ok=True)
                             with open(ruta, "wb") as fh:
                                 fh.write(contenido)
+                            if accion == "02":
+                                sin_xml.pop(base, None)
                         else:
                             print(f"    no se pudo bajar {'PDF' if accion == '01' else 'XML'} de {base}")
+                            if accion == "02":
+                                sin_xml[base] = hoy.isoformat()
                         time.sleep(0.5)
                 if os.path.exists(ruta_pdf):
                     fila["pdf"] = os.path.relpath(ruta_pdf, a.salida).replace(os.sep, "/")
@@ -604,6 +654,10 @@ def main():
                     detalles.append(det)
             time.sleep(1)
 
+        if token:
+            guardar_sin_xml(carpeta, sin_xml)
+        if saltados_xml:
+            print(f"    {periodo}: {saltados_xml} XML que SUNAT no entrega no se volvieron a pedir (se reintentan cada {DIAS_REINTENTO_XML} días; los datos salen del PDF)")
         if cabeceras:
             cabeceras.sort(key=lambda f: (f["tipo"], f["serie"], int(f["numero"]) if f["numero"].isdigit() else 0))
             guardar_csv(os.path.join(carpeta, "cre.csv"), COLS_CRE, cabeceras)
