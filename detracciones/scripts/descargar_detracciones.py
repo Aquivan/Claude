@@ -118,7 +118,7 @@ class Consulta:
                                     " e.value = v; e.dispatchEvent(new Event('change', {bubbles: true})); }", [sel, val])
                     fr.select_option("#tipoCuenta", cuenta)
                     fr.select_option("#tipoConsulta", tipo)
-                    fr.fill("#periodo", "")
+                    fr.evaluate("() => { const e = document.querySelector('#periodo'); if (e && !e.disabled) e.value = ''; }")
                     fr.click("#btnConsultar")
                 r = info.value
                 if not self.url_vista:
@@ -176,7 +176,7 @@ def main():
         pag = ctx.new_page()
         try:
             c = Consulta(pag, ruc, usuario, clave)
-            total = 0
+            total, fallidos = 0, []
             for anio, mes in meses(desde, hasta):
                 ult = calendar.monthrange(anio, mes)[1]
                 fin_d = min(dt.date(anio, mes, ult), hoy)
@@ -184,16 +184,22 @@ def main():
                     continue
                 ini, fin = f"01/{mes:02d}/{anio}", fin_d.strftime("%d/%m/%Y")
                 filas, masivos = {}, []
-                for cuenta in cuentas:
-                    for tipo, nombre in TIPOS.items():
-                        res = c.consultar(ini, fin, cuenta, tipo)
-                        for r in res:
-                            if r.get("num_constancia"):
-                                f = fila(r, ruc, nombre, cuenta)
-                                filas[(f["constancia"], f["num_presentacion"])] = f
-                            if tipo == "pagosMasivos":
-                                masivos.append(r)
-                        time.sleep(1)
+                try:
+                    for cuenta in cuentas:
+                        for tipo, nombre in TIPOS.items():
+                            res = c.consultar(ini, fin, cuenta, tipo)
+                            for r in res:
+                                if r.get("num_constancia"):
+                                    f = fila(r, ruc, nombre, cuenta)
+                                    filas[(f["constancia"], f["num_presentacion"])] = f
+                                if tipo == "pagosMasivos":
+                                    masivos.append(r)
+                            time.sleep(1)
+                except Exception as e:
+                    # No se pisa lo que ya estaba guardado de ese mes; se sigue con los demás.
+                    print(f"  {anio}-{mes:02d}: NO se pudo consultar ({str(e)[:200]})")
+                    fallidos.append(f"{anio}{mes:02d}")
+                    continue
                 carpeta = os.path.join(a.salida, ruc, str(anio), f"{mes:02d}")
                 guardar_csv(os.path.join(carpeta, "detracciones.csv"), list(filas.values()))
                 if masivos:
@@ -204,7 +210,9 @@ def main():
                 print(f"  {anio}-{mes:02d}: {len(filas)} depósitos (como adquiriente {compras}, "
                       f"como proveedor {len(filas) - compras}) · S/ {monto:,.2f}" + (f" · masivos {len(masivos)}" if masivos else ""))
                 total += len(filas)
-            print(f"Listo: {total} depósitos.")
+            print(f"Listo: {total} depósitos." + (f" Meses que fallaron: {', '.join(fallidos)}" if fallidos else ""))
+            if fallidos:
+                sys.exit(1)
         finally:
             ctx.close()
             nav.close()
