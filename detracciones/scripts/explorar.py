@@ -61,6 +61,52 @@ def volcar_portal(pag, clave):
             print("  (marco ilegible)", str(e)[:80])
 
 
+PLATAFORMA = "https://e-menu.sunat.gob.pe/cl-ti-itmenu2/MenuInternetPlataforma.htm?pestana=*&agrupacion=*"
+
+
+def plataforma(pag, ruc, usuario, clave, a, foto, registro):
+    """Menú SOL de la NUEVA PLATAFORMA "Mis declaraciones y pagos" (cl-ti-itmenu2): ingresa,
+    lista las opciones que hablan de detracciones y, con --codigos, abre cada una."""
+    pag.goto(PLATAFORMA, wait_until="networkidle", timeout=60000)
+    pag.wait_for_timeout(2000)
+    if pag.locator("#txtRuc").count():
+        pag.fill("#txtRuc", ruc); pag.fill("#txtUsuario", usuario); pag.fill("#txtContrasena", clave); pag.click("#btnAceptar")
+        pag.wait_for_load_state("networkidle", timeout=60000)
+    pag.wait_for_timeout(8000)
+    print("Plataforma:", pag.url[:160], "|", pag.title())
+    foto("plataforma")
+    html = pag.content()
+    open(os.path.join(a.salida, "plataforma.html"), "w", encoding="utf-8").write(html.replace(clave, "***"))
+    print(f"HTML: {len(html)} caracteres")
+    # Opciones del menú en el JSON de la página (cualquier forma {"name"/"id":"55.x", "description"/"nombre":...})
+    vistos = set()
+    for m in re.finditer(r'"(?:name|id|codigo|code)"\s*:\s*"(\d{1,3}(?:\.\d{1,3}){2,6})"[^{}]{0,400}', html):
+        txt = m.group(0)
+        if re.search(PATRON + r"|igv|renta mensual|pago", txt, re.I) and m.group(1) not in vistos:
+            vistos.add(m.group(1))
+            print("  OPCION", re.sub(r"\s+", " ", txt)[:300])
+    for m in re.finditer(PATRON, html, re.I):
+        k = html[max(0, m.start() - 300): m.end() + 200]
+        print("  ~", re.sub(r"\s+", " ", k).replace(clave, "***")[:500], "| códigos:", re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3,6}\b", k))
+    volcar_portal(pag, clave)
+    for cod in [c.strip() for c in a.codigos.split(",") if c.strip()]:
+        print(f"\n===== Opción {cod} =====")
+        registro["activo"] = True
+        try:
+            pag.goto(PLATAFORMA.replace("pestana=*&agrupacion=*", "pestana=*&agrupacion=*&exe=" + cod), wait_until="networkidle", timeout=60000)
+            pag.wait_for_timeout(10000)
+            foto("plat_" + cod.replace(".", "_"))
+            volcar_portal(pag, clave)
+            for fr in pag.frames:
+                try:
+                    print("    campos", fr.url[:80], "\n      " + "\n      ".join(fr.evaluate(JS_FORMULARIO)[:60]))
+                except Exception:
+                    pass
+        except Exception as e:
+            print("  (no se pudo)", str(e)[:150])
+        registro["activo"] = False
+
+
 def portal(pag, ruc, usuario, clave, a, foto, registro):
     """Entra como una persona: sunat.gob.pe/sol.html → "MIS DECLARACIONES Y PAGOS" → Ingresar,
     y busca dentro de ese portal las opciones de detracciones (consulta)."""
@@ -155,7 +201,7 @@ def portal(pag, ruc, usuario, clave, a, foto, registro):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--modo", default="menu", choices=["menu", "opcion", "portal"])
+    ap.add_argument("--modo", default="menu", choices=["menu", "opcion", "portal", "plataforma"])
     ap.add_argument("--codigos", default="")
     ap.add_argument("--periodo", default="")
     ap.add_argument("--salida", default="pantallas")
@@ -205,8 +251,8 @@ def main():
             print(f"  << HTTP {r.status}: {cuerpo}")
         ctx.on("response", al_responder)
 
-        if a.modo == "portal":
-            portal(pag, ruc, usuario, clave, a, foto, registro)
+        if a.modo in ("portal", "plataforma"):
+            (portal if a.modo == "portal" else plataforma)(pag, ruc, usuario, clave, a, foto, registro)
             ctx.close(); nav.close()
             print("Listo. Fotos en", a.salida)
             return
