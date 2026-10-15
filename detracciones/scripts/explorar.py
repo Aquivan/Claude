@@ -131,6 +131,38 @@ def consultar_detracciones(pag, periodo, foto, clave):
             print("    texto:", txt[:3000].replace(clave, "***"))
             print("    tablas:", fr.evaluate("""() => [...document.querySelectorAll('table')].map(t => [...t.rows].slice(0, 6).map(r => [...r.cells].map(c => c.innerText.trim()).join(' | ')))"""))
             print("    botones:", fr.evaluate(JS_CLICABLES)[:60])
+            # Abrir la constancia del primer depósito: ¿PDF, ventana o modal?
+            if tipo == "pagosIndividuales":
+                num = fr.evaluate("""() => { const a = [...document.querySelectorAll('a,button')].find(e => /^\\d{8,10}$/.test((e.innerText||'').trim())); return a ? a.innerText.trim() : ''; }""")
+                if num:
+                    print(f"\n  ---- Clic en constancia {num} ----")
+                    print("    elemento:", fr.evaluate("(n) => { const a = [...document.querySelectorAll('a,button')].find(e => (e.innerText||'').trim() === n); return a.outerHTML.slice(0, 400); }", num))
+                    descargas = []
+                    pag.context.on("page", lambda p: print("    [ventana nueva]", p.url[:200]))
+                    pag.on("download", lambda d: descargas.append(d))
+                    fr.get_by_text(num, exact=True).first.click(timeout=8000)
+                    pag.wait_for_timeout(8000)
+                    foto("constancia_" + num)
+                    for d in descargas:
+                        ruta = os.path.join("pantallas", "constancia_" + d.suggested_filename)
+                        d.save_as(ruta)
+                        print("    [descarga]", d.suggested_filename, os.path.getsize(ruta), "bytes")
+                    vis = fr.evaluate("""() => [...document.querySelectorAll('.modal, [role=dialog], .ui-dialog')].filter(e => e.offsetParent !== null).map(e => e.innerText.replace(/\\s+/g, ' ').slice(0, 1500))""")
+                    print("    modal visible:", vis)
+                    print("    botones ahora:", [t for t in fr.evaluate(JS_CLICABLES) if re.search(r"imprim|descarg|pdf|cerrar|guardar", t, re.I)])
+                    for t in ["Descargar", "Imprimir", "PDF"]:
+                        b = fr.locator(f".modal:visible >> text={t}")
+                        if b.count():
+                            descargas.clear()
+                            try:
+                                b.first.click(timeout=5000)
+                                pag.wait_for_timeout(6000)
+                                for d in descargas:
+                                    ruta = os.path.join("pantallas", "constancia2_" + d.suggested_filename)
+                                    d.save_as(ruta)
+                                    print(f"    [descarga con '{t}']", d.suggested_filename, os.path.getsize(ruta), "bytes")
+                            except Exception as e:
+                                print(f"    (clic '{t}' falló: {str(e)[:100]})")
         except Exception as e:
             print("    (no se pudo)", str(e)[:200])
 
