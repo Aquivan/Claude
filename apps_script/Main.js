@@ -430,9 +430,9 @@ function reprogramarSeguimiento_() {
   // dispariste "Ejecutar" dos veces seguidas) -- se evita duplicar el poll.
   var triggers = ScriptApp.getProjectTriggers();
   triggers.forEach(function (t) {
-    if (t.getHandlerFunction() === 'seguimientoAutomatico_') ScriptApp.deleteTrigger(t);
+    if (/^seguimientoAutomatico_?$/.test(t.getHandlerFunction())) ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('seguimientoAutomatico_')
+  ScriptApp.newTrigger('seguimientoAutomatico')
     .timeBased()
     .after(INTERVALO_SEGUIMIENTO_MIN_ * 60 * 1000)
     .create();
@@ -547,7 +547,7 @@ function registrarEnBitacora_(mensaje) {
 function buscarTriggerImportacionAutomatica_() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === 'importarSiHayCorridaNueva_') return triggers[i];
+    if (/^(importarSiHayCorridaNueva_|importacionAutomatica)$/.test(triggers[i].getHandlerFunction())) return triggers[i];
   }
   return null;
 }
@@ -585,7 +585,7 @@ function menuProgramarEjecucionDiaria() {
   if (trigger) ScriptApp.deleteTrigger(trigger);
 
   // Crear trigger diario de Apps Script en esa hora exacta (Hora de Lima / Perú)
-  ScriptApp.newTrigger('dispararEjecucionProgramadaDiaria_')
+  ScriptApp.newTrigger('ejecucionDiariaAutomatica')
     .timeBased()
     .everyDays(1)
     .atHour(hora)
@@ -614,7 +614,7 @@ function menuDesactivarEjecucionDiaria() {
 function buscarTriggerEjecucionDiaria_() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === 'dispararEjecucionProgramadaDiaria_') {
+    if (/^(dispararEjecucionProgramadaDiaria_|ejecucionDiariaAutomatica)$/.test(triggers[i].getHandlerFunction())) {
       return triggers[i];
     }
   }
@@ -661,7 +661,7 @@ function menuActivarImportacionAutomatica() {
   }
 
   if (yaActivo) ScriptApp.deleteTrigger(yaActivo);
-  ScriptApp.newTrigger('importarSiHayCorridaNueva_')
+  ScriptApp.newTrigger('importacionAutomatica')
     .timeBased()
     .everyMinutes(minutos)
     .create();
@@ -689,7 +689,7 @@ function menuDesactivarImportacionAutomatica() {
   var triggers = ScriptApp.getProjectTriggers();
   triggers.forEach(function (t) {
     var fn = t.getHandlerFunction();
-    if (fn === 'seguimientoAutomatico_' || fn === 'importarSiHayCorridaNueva_') {
+    if (/^(seguimientoAutomatico_?|importarSiHayCorridaNueva_|importacionAutomatica)$/.test(fn)) {
       ScriptApp.deleteTrigger(t);
     }
   });
@@ -897,4 +897,45 @@ function obtenerOCrearHoja_(ss, nombre) {
     return sheet;
   }
   return ss.insertSheet(nombre);
+}
+
+
+/* ------------------------------------------------------------------------
+ * Disparadores automáticos: Apps Script NO puede ejecutar desde un disparador
+ * una función cuyo nombre termina en "_" (es privada: "Script function not
+ * found"). Por eso la descarga diaria de la 1 AM nunca llegaba a GitHub. Los
+ * disparadores ahora llaman a estas funciones públicas, y el menú
+ * "🔧 Reparar ejecuciones automáticas" cambia los que ya estaban creados.
+ * ---------------------------------------------------------------------- */
+function ejecucionDiariaAutomatica() { dispararEjecucionProgramadaDiaria_(); }
+function importacionAutomatica() { importarSiHayCorridaNueva_(); }
+function seguimientoAutomatico() { seguimientoAutomatico_(); }
+
+function menuRepararDisparadores() {
+  var props = PropertiesService.getScriptProperties();
+  var hechos = [];
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    var fn = t.getHandlerFunction();
+    if (fn === 'dispararEjecucionProgramadaDiaria_') {
+      ScriptApp.deleteTrigger(t);
+      var hora = parseInt(props.getProperty('HORA_EJECUCION_DIARIA_PERU') || '1', 10);
+      ScriptApp.newTrigger('ejecucionDiariaAutomatica').timeBased().everyDays(1).atHour(hora).inTimezone('America/Lima').create();
+      hechos.push('Descarga diaria a las ' + hora + ':00 (hora Perú)');
+    } else if (fn === 'importarSiHayCorridaNueva_') {
+      ScriptApp.deleteTrigger(t);
+      var min = Number(props.getProperty('IMPORTACION_INTERVALO_MIN') || 30);
+      ScriptApp.newTrigger('importacionAutomatica').timeBased().everyMinutes(min).create();
+      hechos.push('Importación automática cada ' + min + ' min');
+    } else if (fn === 'seguimientoAutomatico_') {
+      ScriptApp.deleteTrigger(t);
+      ScriptApp.newTrigger('seguimientoAutomatico').timeBased().after(60 * 1000).create();
+      hechos.push('Seguimiento de la corrida en curso');
+    }
+  });
+  var activos = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); });
+  SpreadsheetApp.getUi().alert('🔧 Ejecuciones automáticas',
+    (hechos.length ? 'Reparadas:\n- ' + hechos.join('\n- ') : 'No había nada que reparar.') +
+    '\n\nActivas ahora: ' + (activos.length ? activos.join(', ') : 'ninguna') +
+    (activos.indexOf('ejecucionDiariaAutomatica') < 0 ? '\n\n⚠️ La descarga diaria NO está programada: use ⏰ Programar ejecución automática diaria.' : ''),
+    SpreadsheetApp.getUi().ButtonSet.OK);
 }

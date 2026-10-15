@@ -38,6 +38,7 @@ function onOpen() {
     .addSeparator()
     .addItem('⏰ Programar ejecución automática diaria (Hora Perú)...', 'menuProgramarEjecucionDiaria')
     .addItem('🚫 Desactivar ejecución automática diaria', 'menuDesactivarEjecucionDiaria')
+    .addItem('🔧 Reparar ejecuciones automáticas (si la diaria no corre)', 'menuRepararDisparadores')
     .addItem('📅 Descarga automática del mes anterior (activar / días)...', 'menuDescargaMesAnterior')
     .addItem('Activar/cambiar importacion automatica periodica...', 'menuActivarImportacionAutomatica')
     .addItem('Desactivar importacion automatica periodica', 'menuDesactivarImportacionAutomatica')
