@@ -44,6 +44,8 @@ var TG_SISTEMA_ = [
   '  salió (PDF de varias páginas): úsalo SOLO si piden expresamente el PDF/archivo original/completo.',
   '  ÚSALA SIEMPRE que pidan ver, enviar, adjuntar o mandar la foto/imagen/voucher/comprobante de pagos: primero ubica las filas con la',
   '  herramienta vouchers (un voucher, los de un proveedor, los de un mes…) y luego llama enviar_voucher con esas filas. No respondas solo con texto.',
+  '  NUNCA digas "te envío / te envié / te mando" un archivo o voucher si no llamaste enviar_voucher o enviar_archivo en ESTA respuesta',
+  '  (aunque en la conversación anterior ya se haya enviado: si lo vuelven a pedir, vuelve a llamar la herramienta).',
 ].join('\n');
 
 // Nombres parecidos que la IA a veces usa para las herramientas nuevas.
@@ -87,11 +89,28 @@ function TG_preguntar_(ctx, texto, adjs) {
     TG_enviar_(chatId, TG_esc_(r.error), [[{ text: '🔁 Reintentar', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: texto || 'Analiza los archivos adjuntos' }) }]]);
     return;
   }
+  // Red de seguridad: pidió el voucher/foto, la respuesta nombra filas de vouchers y la IA no las envió → se mandan igual.
+  if (!op.tg.vouchers && /(env[ií]|mand|adjunt|foto|imagen|ver el voucher|muestr)/i.test(texto || '') && /(voucher|comprobante|pago|dep[oó]sito|transferencia|foto|imagen)/i.test(texto || '')) {
+    var filasV = TG_filasVoucherEn_(ctx.ss, r.respuesta);
+    if (filasV.length) op.tg.vouchers = { filas: filasV.slice(0, 10), modo: /pdf|original|completo/i.test(texto) ? 'original' : 'imagen' };
+  }
   TG_mostrarRespuesta_(ctx, r, op.tg, Math.round((Date.now() - t0) / 1000));
   ses = TG_sesion_(chatId);
   ses.hist = (ses.hist || []).concat([{ p: texto || '(archivos adjuntos)', r: r.respuesta }]);
   ses.adj = (ses.adj || []).concat((adjs || []).filter(function (a) { return !(ses.adj || []).some(function (b) { return b.id === a.id; }); }));
   TG_guardarSesion_(chatId, ses);
+}
+
+/** Filas de vouchers ("Originales!2326", también "Originales! 2326") que aparecen en un texto. */
+function TG_filasVoucherEn_(ss, texto) {
+  var pest = [];
+  try { pest = leerConfig_(ss).pestanasVouchers || []; } catch (e) { pest = ['Originales', 'Fotos']; }
+  var res = [];
+  pest.forEach(function (p) {
+    var re = new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*!\\s*(\\d+)', 'gi'), m;
+    while ((m = re.exec(String(texto || ''))) !== null) { var f = p + '!' + m[1]; if (res.indexOf(f) < 0) res.push(f); }
+  });
+  return res;
 }
 
 /** "R2 facturas {"empresa":"GRANIX"} → 14" → "facturas GRANIX (14)" */
