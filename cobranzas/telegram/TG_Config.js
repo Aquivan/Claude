@@ -384,6 +384,7 @@ var TG_COMANDOS_ = [
   ['descargar', '⬇ Pedir una descarga a SUNAT'],
   ['actualizar', '🔄 Recalcular Cuentas por Cobrar y Pagar'],
   ['tc', '💱 Tipo de cambio SUNAT de hoy'],
+  ['voucher', '🖼 Foto de un voucher (ej. /voucher Originales!2326)'],
   ['recordatorios', '⏰ Mis recordatorios'],
   ['avisos', '🔔 Elegir mis avisos'],
   ['olvidar', '🧹 Empezar una conversación nueva'],

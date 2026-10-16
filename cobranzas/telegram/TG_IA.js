@@ -89,16 +89,44 @@ function TG_preguntar_(ctx, texto, adjs) {
     TG_enviar_(chatId, TG_esc_(r.error), [[{ text: '🔁 Reintentar', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: texto || 'Analiza los archivos adjuntos' }) }]]);
     return;
   }
-  // Red de seguridad: pidió el voucher/foto, la respuesta nombra filas de vouchers y la IA no las envió → se mandan igual.
-  if (!op.tg.vouchers && /(env[ií]|mand|adjunt|foto|imagen|ver el voucher|muestr)/i.test(texto || '') && /(voucher|comprobante|pago|dep[oó]sito|transferencia|foto|imagen)/i.test(texto || '')) {
+  // Pidió la foto/imagen de vouchers: el BOT los manda (no depende de que la IA use la herramienta).
+  // Se toman de lo que la IA realmente encontró (resultados con columnas fila y fecha), o de las filas que nombra.
+  if (!op.tg.vouchers && TG_pideFotoVoucher_(texto)) {
     var filasV = TG_filasVoucherEn_(ctx.ss, r.respuesta);
-    if (filasV.length) op.tg.vouchers = { filas: filasV.slice(0, 10), modo: /pdf|original|completo/i.test(texto) ? 'original' : 'imagen' };
+    if (!filasV.length) filasV = TG_filasDeResultados_(r.c, texto);
+    if (filasV.length) op.tg.vouchers = { filas: filasV.slice(0, 10), modo: /\b(pdf|original|completo)\b/i.test(texto) ? 'original' : 'imagen' };
   }
   TG_mostrarRespuesta_(ctx, r, op.tg, Math.round((Date.now() - t0) / 1000));
   ses = TG_sesion_(chatId);
   ses.hist = (ses.hist || []).concat([{ p: texto || '(archivos adjuntos)', r: r.respuesta }]);
   ses.adj = (ses.adj || []).concat((adjs || []).filter(function (a) { return !(ses.adj || []).some(function (b) { return b.id === a.id; }); }));
   TG_guardarSesion_(chatId, ses);
+}
+
+/** ¿Pide ver/enviar la foto o imagen de vouchers/pagos? */
+function TG_pideFotoVoucher_(t) {
+  t = String(t || '');
+  return /(foto|imagen|captura|comprobante|voucher)/i.test(t) && /(env[ií]a|envi[aá]r|m[aá]nd|adjunt|p[aá]sa|muestr|ver |verlo|ense[ñn]|quiero)/i.test(t) ||
+    /\b(foto|imagen)\b.*\b(voucher|pago|dep[oó]sito|transferencia)/i.test(t);
+}
+
+/**
+ * Filas de vouchers que la IA encontró con sus herramientas (resultados con columnas "fila" y "fecha").
+ * "el más reciente / el último / solo uno" → solo el de fecha más nueva; si no, todos los del último resultado (máx. 10).
+ */
+function TG_filasDeResultados_(c, texto) {
+  if (!c || !c.resultados) return [];
+  var ids = Object.keys(c.resultados).filter(function (id) {
+    var r = c.resultados[id];
+    return r && r.columnas && r.columnas.indexOf('fila') >= 0 && r.columnas.indexOf('fecha') >= 0 && r.filas && r.filas.length;
+  });
+  if (!ids.length) return [];
+  var r = c.resultados[ids[ids.length - 1]];
+  var jF = r.columnas.indexOf('fila'), jD = r.columnas.indexOf('fecha');
+  var filas = r.filas.filter(function (f) { return /^[^!]+!\d+$/.test(String(f[jF] || '')); })
+    .sort(function (a, b) { return (aFecha_(b[jD]) || 0) - (aFecha_(a[jD]) || 0); });
+  var uno = /(s[oó]lo uno|un solo|un voucher|el voucher|la foto del|m[aá]s reciente|[uú]ltim[oa])/i.test(String(texto || '')) && !/(todos|vouchers|fotos|los pagos)/i.test(String(texto || ''));
+  return filas.slice(0, uno ? 1 : 10).map(function (f) { return String(f[jF]); });
 }
 
 /** Filas de vouchers ("Originales!2326", también "Originales! 2326") que aparecen en un texto. */
@@ -227,14 +255,16 @@ function TG_mandarArchivo_(ctx, id, titulo) {
  * o la miniatura de la página si es PDF). Varios se mandan como álbum de 10 en 10.
  * modo "original": el archivo completo del que salió (PDF de varias páginas, etc.).
  */
-function TG_mandarVouchers_(ctx, fuentes, modo) {
+function TG_mandarVouchers_(ctx, fuentes, modo, conDiag) {
   var cfg = leerConfig_(ctx.ss);
   var libro = SpreadsheetApp.openById(cfg.idVouchers);
   var fotos = [], fallas = [];
   TG_accion_(ctx.chatId, modo === 'original' ? 'upload_document' : 'upload_photo');
   fuentes.forEach(function (f) {
     var x;
-    try { x = TG_voucherBlob_(libro, f, modo); } catch (e) { x = { error: e.message }; }
+    var diag = [];
+    try { x = TG_voucherBlob_(libro, f, modo, diag); } catch (e) { x = { error: e.message }; diag.push('error: ' + e.message); }
+    if (conDiag) TG_enviar_(ctx.chatId, '🔧 <b>Diagnóstico ' + TG_esc_(f) + '</b>\n' + TG_esc_(diag.join('\n') || '(sin datos)') + '\n→ ' + TG_esc_(x.error ? 'ERROR: ' + x.error : 'encontrado: ' + x.blob.getBytes().length + ' bytes, ' + x.blob.getContentType()));
     if (x.error) { fallas.push(f + ': ' + x.error); return; }
     if (modo === 'original' || !TG_esImagen_(x.blob) || x.blob.getBytes().length > 9 * 1024 * 1024) {
       if (!TG_enviarArchivo_(ctx.chatId, x.blob, x.caption)) fallas.push(f + ': Telegram no aceptó el archivo');
@@ -257,6 +287,7 @@ function TG_mandarVouchers_(ctx, fuentes, modo) {
 function TG_mandarFoto_(ctx, x, fallas) {
   var r = TG_llamar_('sendPhoto', { chat_id: String(ctx.chatId), photo: x.blob, caption: x.caption, parse_mode: 'HTML' });
   if (r.ok) return;
+  console.warn('sendPhoto rechazado: ' + r.description);
   var d = TG_llamar_('sendDocument', { chat_id: String(ctx.chatId), document: x.blob, caption: x.caption, parse_mode: 'HTML' });
   if (!d.ok) fallas.push(TG_sinHtml_(x.caption).split('\n')[0].replace('🖼 ', '') + ': Telegram la rechazó (' + (r.description || d.description || 'sin detalle') + ')');
 }
@@ -275,7 +306,8 @@ function TG_esImagen_(b) {
 function TG_mandarVoucher_(ctx, fuente, modo) { TG_mandarVouchers_(ctx, [fuente], modo || 'imagen'); }
 
 /** {blob, caption} del voucher de una fila, o {error}. */
-function TG_voucherBlob_(libro, fuente, modo) {
+function TG_voucherBlob_(libro, fuente, modo, diag) {
+  diag = diag || [];
   var p = String(fuente).split('!');
   var sh = libro.getSheetByName(p[0]);
   if (!sh) return { error: 'no existe la pestaña ' + p[0] };
@@ -284,29 +316,36 @@ function TG_voucherBlob_(libro, fuente, modo) {
   var val = sh.getRange(fila, 1, 1, nc).getValues()[0];
   var txt = function (n) { var j = enc.map(normHeader_).indexOf(normHeader_(n)); return j >= 0 ? val[j] : ''; };
   var celda = function () {
+    var hay = false;
     for (var j = 0; j < nc; j++) {
       var v = val[j];
       if (!v || typeof v !== 'object' || typeof v.getContentUrl !== 'function') continue;
+      hay = true;
+      diag.push('imagen en la celda ' + AUV_colLetra_(j) + fila);
       var nombre = 'voucher ' + fuente.replace('!', ' fila ') + '.jpg';
       // a) la imagen se insertó como data:…;base64 (así lo hace el Sistema de Vouchers): se decodifica directo
       try {
         var src = typeof v.getUrl === 'function' ? String(v.getUrl() || '') : '';
+        diag.push('  origen: ' + (src ? src.slice(0, 30) + '… (' + src.length + ' caracteres)' : '(vacío)'));
         var m = src.match(/^data:([^;]+);base64,(.+)$/);
-        if (m) { var b0 = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], nombre); if (TG_esImagen_(b0)) return b0; }
-        if (/^https?:/.test(src)) { var r0 = UrlFetchApp.fetch(src, { muteHttpExceptions: true }); if (r0.getResponseCode() === 200 && TG_esImagen_(r0.getBlob())) return r0.getBlob().setName(nombre); }
-      } catch (e) { /* sigue */ }
+        if (m) { var b0 = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], nombre); diag.push('  data: ' + b0.getBytes().length + ' bytes, imagen=' + TG_esImagen_(b0)); if (TG_esImagen_(b0)) return b0; }
+        if (/^https?:/.test(src)) { var r0 = UrlFetchApp.fetch(src, { muteHttpExceptions: true }); diag.push('  origen http ' + r0.getResponseCode() + ', ' + r0.getBlob().getBytes().length + ' bytes'); if (r0.getResponseCode() === 200 && TG_esImagen_(r0.getBlob())) return r0.getBlob().setName(nombre); }
+      } catch (e) { diag.push('  origen: error ' + e.message); }
       // b) la URL de Google de la imagen (con y sin autorización)
       var url = '';
-      try { url = v.getContentUrl(); } catch (e) { url = ''; }
+      try { url = v.getContentUrl(); } catch (e) { url = ''; diag.push('  getContentUrl: error ' + e.message); }
+      diag.push('  url de Google: ' + (url ? 'sí' : 'no'));
       if (!url) continue;
       var intentos = [{ headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true }, { muteHttpExceptions: true }];
       for (var k = 0; k < intentos.length; k++) {
         try {
           var r = UrlFetchApp.fetch(url, intentos[k]);
+          diag.push('  url ' + (k ? 'sin' : 'con') + ' permiso: HTTP ' + r.getResponseCode() + ', ' + r.getBlob().getBytes().length + ' bytes, ' + (r.getBlob().getContentType() || '?') + ', imagen=' + TG_esImagen_(r.getBlob()));
           if (r.getResponseCode() === 200 && TG_esImagen_(r.getBlob())) return r.getBlob().setName(nombre);
-        } catch (e) { /* sigue */ }
+        } catch (e) { diag.push('  url: error ' + e.message); }
       }
     }
+    if (!hay) diag.push('ninguna celda de la fila tiene imagen (encabezados: ' + enc.filter(Boolean).slice(0, 14).join(', ') + ')');
     return null;
   };
   var archivo = function () {
@@ -314,9 +353,13 @@ function TG_voucherBlob_(libro, fuente, modo) {
       var s = String(val[j] == null ? '' : val[j]).trim();
       var id = TG_idDrive_(s);
       try {
-        if (id) return DriveApp.getFileById(id);
-        if (/\.(jpe?g|png|pdf|webp|heic|gif)$/i.test(s)) { var it = DriveApp.getFilesByName(s); if (it.hasNext()) return it.next(); }
-      } catch (e) { /* sigue */ }
+        if (id) { var fi = DriveApp.getFileById(id); diag.push('archivo por enlace: ' + fi.getName() + ' (' + fi.getMimeType() + ')'); return fi; }
+        if (/\.(jpe?g|png|pdf|webp|heic|gif)$/i.test(s)) {
+          var it = DriveApp.getFilesByName(s);
+          if (it.hasNext()) { var fn = it.next(); diag.push('archivo por nombre: ' + fn.getName() + ' (' + fn.getMimeType() + ', ' + Math.round(fn.getSize() / 1024) + ' KB)'); return fn; }
+          diag.push('archivo "' + s + '" no está en Drive');
+        }
+      } catch (e) { diag.push('archivo: error ' + e.message); }
     }
     return null;
   };

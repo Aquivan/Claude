@@ -191,6 +191,13 @@ function TG_comando_(ctx, texto) {
       if (ctx.usuario.rol !== 'admin') return TG_enviar_(chatId, 'Solo para administradores.');
       return TG_enviarUsuarios_(ctx);
     case 'buscar': if (arg) return TG_preguntar_(ctx, 'Busca en todas las fuentes: ' + arg, []); break;
+    case 'voucher': case 'vouchers': {
+      // /voucher Originales!2326 [Fotos!12 …] [original] [diag] → manda la foto directo (sin IA); diag = paso a paso
+      var fil = TG_filasVoucherEn_(ctx.ss, arg);
+      if (!fil.length) return TG_enviar_(chatId, 'Escriba la fila del voucher, por ejemplo: <code>/voucher Originales!2326</code>  (agregue <code>original</code> para el PDF completo o <code>diag</code> para ver el detalle).');
+      var resto = arg.replace(/[^\s!]+\s*!\s*\d+/g, ' ');
+      return TG_mandarVouchers_(ctx, fil, /\b(original|pdf|completo)\b/i.test(resto) ? 'original' : 'imagen', /\bdiag/i.test(resto));
+    }
   }
   if (arg || cmd.length > 2) return TG_preguntar_(ctx, texto.replace(/^\//, ''), []);
   return TG_enviar_(chatId, 'No conozco ese comando. ' + TG_textoMenu_(), TG_tecladoMenu_());
