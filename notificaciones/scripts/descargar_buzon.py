@@ -38,7 +38,8 @@ from descargar_cre import Sol, MENU  # noqa: E402
 
 VISOR = "https://ww1.sunat.gob.pe/ol-ti-itvisornoti/visor"
 COLS = ["empresa_ruc", "tipo", "codigo", "fecha_publicacion", "fecha_envio", "asunto", "clase", "documento",
-        "etiqueta", "leido", "urgente", "destacado", "remitente", "dependencia", "adjuntos", "archivos", "nota_pdf"]
+        "etiqueta", "leido", "urgente", "destacado", "remitente", "dependencia", "adjuntos", "archivos", "nota_pdf", "revision"]
+REVISION = "2"   # 2 = ya se buscó también el documento del cuerpo (no solo la constancia)
 CLASES = [
     (r"ejecuci[oó]n coactiva", "Resolución de Ejecución Coactiva"),
     (r"orden(es)? de pago", "Orden de Pago"),
@@ -134,6 +135,20 @@ class Buzon:
         sistema = str(d.get("sistema") or self.id_sistema)
         lista = [(a["codArchivo"], a.get("nomArchivo") or "archivo.pdf", anexo, sistema, cod)
                  for a in (d.get("listAttach") or []) if a.get("codArchivo")]
+        # El DOCUMENTO mismo (la Carta, Orden de Pago, Resolución…) no está en listAttach: es el enlace
+        # "Documento" del cuerpo, que SUNAT manda como datos JSON con su propio id_archivo.
+        for texto in (d.get("msjMensaje") or "", d.get("url") or ""):
+            for m in re.finditer(r'\{[^{}]*"id_archivo"[^{}]*\}', texto.replace("&quot;", '"')):
+                try:
+                    j = json.loads(m.group(0))
+                except Exception:
+                    continue
+                ida = str(j.get("id_archivo") or "")
+                if not ida.isdigit() or any(str(x[0]) == ida for x in lista):
+                    continue
+                num = re.sub(r"[^\w\-]+", "_", str(j.get("numeroDoc") or j.get("numero") or ""))[:40].strip("_")
+                lista.append((ida, f"documento{'_' + num if num else ''}.pdf", int(j.get("id_anexo") or 0) and 1,
+                              str(j.get("sistema") or sistema), cod))
         if not lista:
             print(f"   {cod}: SUNAT no lista adjuntos (HTTP {st}; campos: {sorted(d.keys())[:15]})")
         return lista
@@ -258,15 +273,19 @@ def main():
                 "dependencia": r.get("codDepen") or "", "adjuntos": r.get("cantidadArchAdj") or 0,
                 "archivos": (previo.get(cod) or {}).get("archivos", ""),
                 "nota_pdf": (previo.get(cod) or {}).get("nota_pdf", ""),
+                "revision": (previo.get(cod) or {}).get("revision", ""),
             }
             if cod not in previo:
                 nuevas += 1
-            if con_pdf and int(fila["adjuntos"] or 0) > 0 and not fila["archivos"]:
+            if con_pdf and (not fila["archivos"] and int(fila["adjuntos"] or 0) > 0 or fila["revision"] != REVISION):
                 f = fila["fecha_publicacion"]
                 sub = f"{f[6:10]}/{f[3:5]}" if len(f) >= 10 else "sin_fecha"
-                guardados, notas = [], []
+                previos = [x for x in fila["archivos"].split(";") if x]
+                guardados, notas = list(previos), []
                 try:
                     for cod_arch, nom, anexo, sistema, cod_msj in bz.adjuntos(cod, tipo):
+                        if any(f"-{nombre_archivo(nom)}"[:-4] in x or f"_{cod_arch}." in x for x in previos):
+                            continue   # ya estaba bajado
                         b, ext = bz.bajar(cod_arch, anexo, nom, sistema, cod_msj)
                         if not b:
                             print(f"   {cod} ({fila['clase']}): no se pudo bajar '{nom}' ({ext}); se reintenta en la próxima corrida")
@@ -282,8 +301,11 @@ def main():
                         pdfs += 1
                 except Exception as e:
                     print(f"   {cod}: no se pudo bajar el adjunto ({e})")
+                    notas.append(f"Error al bajar ({str(e)[:80]}); se reintenta cada día")
                 fila["archivos"] = ";".join(guardados)
                 fila["nota_pdf"] = "" if guardados else (notas[0] if notas else "SUNAT no listó el adjunto; se reintenta cada día")
+                if not notas:
+                    fila["revision"] = REVISION
             filas.append(fila)
         vistos = {f["codigo"] for f in filas}
         filas += [r for c, r in previo.items() if c not in vistos and desde and fecha_clave(r.get("fecha_publicacion")) < desde]
