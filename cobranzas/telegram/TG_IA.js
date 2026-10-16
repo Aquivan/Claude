@@ -146,7 +146,10 @@ function TG_mostrarRespuesta_(ctx, r, tg, seg) {
   // 🚀 Descargas propuestas
   (tg.acciones || []).forEach(function (a) { TG_proponerDescarga_(ctx, a); });
   // 📎 Archivos que pidió
-  if (tg.vouchers) TG_mandarVouchers_(ctx, tg.vouchers.filas, tg.vouchers.modo);
+  if (tg.vouchers) {
+    try { TG_mandarVouchers_(ctx, tg.vouchers.filas, tg.vouchers.modo); }
+    catch (e) { TG_enviar_(ctx.chatId, '⚠️ No pude mandar los vouchers: ' + TG_esc_(e.message)); }
+  }
   (tg.archivos || []).slice(0, 10).forEach(function (a) { TG_mandarArchivo_(ctx, a.id, a.titulo); });
 }
 
@@ -214,7 +217,7 @@ function TG_mandarVouchers_(ctx, fuentes, modo) {
     var x;
     try { x = TG_voucherBlob_(libro, f, modo); } catch (e) { x = { error: e.message }; }
     if (x.error) { fallas.push(f + ': ' + x.error); return; }
-    if (modo === 'original' || !/^image\//.test(x.blob.getContentType() || '') || x.blob.getBytes().length > 9 * 1024 * 1024) {
+    if (modo === 'original' || !TG_esImagen_(x.blob) || x.blob.getBytes().length > 9 * 1024 * 1024) {
       if (!TG_enviarArchivo_(ctx.chatId, x.blob, x.caption)) fallas.push(f + ': Telegram no aceptó el archivo');
       return;
     }
@@ -222,13 +225,32 @@ function TG_mandarVouchers_(ctx, fuentes, modo) {
   });
   for (var i = 0; i < fotos.length; i += 10) {
     var lote = fotos.slice(i, i + 10);
-    if (lote.length === 1) { TG_llamar_('sendPhoto', { chat_id: String(ctx.chatId), photo: lote[0].blob, caption: lote[0].caption, parse_mode: 'HTML' }); continue; }
+    if (lote.length === 1) { TG_mandarFoto_(ctx, lote[0], fallas); continue; }
     var carga = { chat_id: String(ctx.chatId), media: lote.map(function (x, k) { return { type: 'photo', media: 'attach://f' + k, caption: x.caption, parse_mode: 'HTML' }; }) };
     lote.forEach(function (x, k) { carga['f' + k] = x.blob.setName('f' + k + '.jpg'); });
     var r = TG_llamar_('sendMediaGroup', carga);
-    if (!r.ok) lote.forEach(function (x) { TG_llamar_('sendPhoto', { chat_id: String(ctx.chatId), photo: x.blob, caption: x.caption, parse_mode: 'HTML' }); });
+    if (!r.ok) lote.forEach(function (x) { TG_mandarFoto_(ctx, x, fallas); });
   }
   if (fallas.length) TG_enviar_(ctx.chatId, '⚠️ No pude mandar: ' + TG_esc_(fallas.slice(0, 8).join(' · ')));
+}
+
+/** Una foto; si Telegram no la acepta como foto, va como archivo; si tampoco, se anota por qué. */
+function TG_mandarFoto_(ctx, x, fallas) {
+  var r = TG_llamar_('sendPhoto', { chat_id: String(ctx.chatId), photo: x.blob, caption: x.caption, parse_mode: 'HTML' });
+  if (r.ok) return;
+  var d = TG_llamar_('sendDocument', { chat_id: String(ctx.chatId), document: x.blob, caption: x.caption, parse_mode: 'HTML' });
+  if (!d.ok) fallas.push(TG_sinHtml_(x.caption).split('\n')[0].replace('🖼 ', '') + ': Telegram la rechazó (' + (r.description || d.description || 'sin detalle') + ')');
+}
+
+/** ¿Los bytes son de verdad una imagen? (JPG, PNG, GIF, WEBP) */
+function TG_esImagen_(b) {
+  try {
+    var x = b.getBytes();
+    if (x.length < 200) return false;
+    var h = function (i) { return (x[i] + 256) % 256; };
+    return (h(0) === 0xFF && h(1) === 0xD8) || (h(0) === 0x89 && h(1) === 0x50) || (h(0) === 0x47 && h(1) === 0x49) ||
+      (h(0) === 0x52 && h(1) === 0x49 && h(8) === 0x57);
+  } catch (e) { return false; }
 }
 
 function TG_mandarVoucher_(ctx, fuente, modo) { TG_mandarVouchers_(ctx, [fuente], modo || 'imagen'); }
@@ -245,10 +267,24 @@ function TG_voucherBlob_(libro, fuente, modo) {
   var celda = function () {
     for (var j = 0; j < nc; j++) {
       var v = val[j];
-      if (v && typeof v === 'object' && typeof v.getContentUrl === 'function') {
+      if (!v || typeof v !== 'object' || typeof v.getContentUrl !== 'function') continue;
+      var nombre = 'voucher ' + fuente.replace('!', ' fila ') + '.jpg';
+      // a) la imagen se insertó como data:…;base64 (así lo hace el Sistema de Vouchers): se decodifica directo
+      try {
+        var src = typeof v.getUrl === 'function' ? String(v.getUrl() || '') : '';
+        var m = src.match(/^data:([^;]+);base64,(.+)$/);
+        if (m) { var b0 = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], nombre); if (TG_esImagen_(b0)) return b0; }
+        if (/^https?:/.test(src)) { var r0 = UrlFetchApp.fetch(src, { muteHttpExceptions: true }); if (r0.getResponseCode() === 200 && TG_esImagen_(r0.getBlob())) return r0.getBlob().setName(nombre); }
+      } catch (e) { /* sigue */ }
+      // b) la URL de Google de la imagen (con y sin autorización)
+      var url = '';
+      try { url = v.getContentUrl(); } catch (e) { url = ''; }
+      if (!url) continue;
+      var intentos = [{ headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true }, { muteHttpExceptions: true }];
+      for (var k = 0; k < intentos.length; k++) {
         try {
-          var r = UrlFetchApp.fetch(v.getContentUrl(), { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
-          if (r.getResponseCode() === 200) return r.getBlob().setName('voucher ' + fuente.replace('!', ' fila ') + '.jpg');
+          var r = UrlFetchApp.fetch(url, intentos[k]);
+          if (r.getResponseCode() === 200 && TG_esImagen_(r.getBlob())) return r.getBlob().setName(nombre);
         } catch (e) { /* sigue */ }
       }
     }
@@ -273,7 +309,12 @@ function TG_voucherBlob_(libro, fuente, modo) {
     blob = celda();
     if (!blob) {
       var g = archivo();
-      if (g) blob = /^image\//.test(g.getMimeType()) ? g.getBlob() : g.getThumbnail();
+      if (g) {
+        blob = /^image\//.test(g.getMimeType()) ? g.getBlob() : null;
+        if (!blob || !TG_esImagen_(blob)) { try { blob = g.getThumbnail(); } catch (e) { blob = null; } }
+        if (blob && !TG_esImagen_(blob)) blob = null;
+        if (!blob) return { error: 'no tiene foto en la hoja (su archivo ' + g.getName() + ' es un PDF): pida "el PDF original" si lo quiere completo' };
+      }
     }
   }
   if (!blob) return { error: 'sin imagen ni archivo del voucher en la fila' };
