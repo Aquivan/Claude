@@ -57,4 +57,4 @@ Si **1️⃣ Conectar** dice que la aplicación web no está publicada, espere a
 - **Claves** (token del bot, token de GitHub, secreto): solo en las Propiedades del script. Nunca van en celdas ni en el repositorio.
 - **Pestañas nuevas** en la hoja de Cobranzas: `🤖 Telegram` (visible), y `_TG_Vistos` y `_TG_Recordatorios` (ocultas).
 - Los archivos que llegan por Telegram se guardan en la carpeta temporal de importaciones de la hoja, igual que en el 💬 Chat; se borran solos a los 7 días.
-- **Pruebas:** un simulador (Telegram, IA, GitHub y Drive falsos, con los datos reales del repositorio) cubre 80 casos: vinculación, mensajes repetidos, respuestas rápidas, chat con herramientas, fotos y álbumes, cambios ✅/↩️, voz, descargas, recordatorios, avisos, resumen diario y errores de la IA.
+- **Pruebas:** un simulador (Telegram, IA, GitHub y Drive falsos, con los datos reales del repositorio) cubre 79 casos: vinculación, mensajes repetidos, respuestas rápidas, chat con herramientas, fotos y álbumes, cambios ✅/↩️, voz, descargas, recordatorios, avisos, resumen diario y errores de la IA.
