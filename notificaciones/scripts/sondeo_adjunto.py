@@ -67,6 +67,18 @@ def main():
         cuerpo = d.get("msjMensaje") or d.get("desMensaje") or ""
         if cuerpo:
             print("enlaces en el cuerpo:", re.findall(r"""(?:href|onclick)=["']([^"']{5,200})""", cuerpo)[:10])
+        docs = re.findall(r"goArchivoDescarga\(\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*(\d+))?", cuerpo + " " + str(d.get("url") or ""))
+        print("documentos en el cuerpo:", docs)
+        print("cuerpo html:", cuerpo[:1500])
+        for ida, an, otro in docs:
+            for u, datos in [(f"{VISOR}/bajarArchivo", {"accion": "archivo", "idMensaje": cod, "idArchivo": ida, "sistema": an if an != "0" else sis}),
+                             (f"{VISOR}/bajarArchivo/{ida}/{an}/{sis}/{ruc}", None), (f"{VISOR}/bajarArchivo/{ida}/0/{sis}/{ruc}", None),
+                             (f"{VISOR}/bajarArchivo/{ida}/0/{bz.id_sistema}/{ruc}", None)]:
+                try:
+                    st, b = sol.pedir(u, datos, headers={"Referer": bz.h["Referer"]}, binario=True, intentos=1)
+                    print("  DOC", u.replace(VISOR, "visor"), datos, "→", firma(st, b))
+                except Exception as e:
+                    print("  DOC", u.replace(VISOR, "visor"), datos, "→ error", str(e)[:100])
         for a in d.get("listAttach") or []:
             ca = a.get("codArchivo")
             if not ca:
