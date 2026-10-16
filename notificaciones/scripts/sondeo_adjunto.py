@@ -22,6 +22,8 @@ BASE = "https://ww1.sunat.gob.pe"
 
 def firma(st, b):
     b = b or b""
+    if isinstance(b, str):
+        b = b.encode("utf-8", errors="ignore")
     tipo = "PDF" if b[:4] == b"%PDF" else "ZIP" if b[:2] == b"PK" else "HTML" if b"<html" in b[:400].lower() else "?"
     return f"HTTP {st} · {len(b)} bytes · {tipo} · {b[:60]!r}"
 
@@ -59,12 +61,27 @@ def main():
             print("detalle no JSON:", t[:300]); continue
         print("campos:", {k: (v if not isinstance(v, str) or len(v) < 120 else f"<texto {len(v)}>") for k, v in d.items() if k != "listAttach"})
         print("listAttach:", d.get("listAttach"))
+        print("url:", d.get("url"))
+        print("cuerpo:", re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", d.get("msjMensaje") or ""))[:300])
+        sis = d.get("sistema")
         cuerpo = d.get("msjMensaje") or d.get("desMensaje") or ""
         if cuerpo:
             print("enlaces en el cuerpo:", re.findall(r"""(?:href|onclick)=["']([^"']{5,200})""", cuerpo)[:10])
         for a in d.get("listAttach") or []:
             ca = a.get("codArchivo")
+            if not ca:
+                continue
+            for u, datos in [(f"{VISOR}/bajarArchivo", {"accion": "archivo", "idMensaje": cod, "idArchivo": ca, "sistema": sis}),
+                             (f"{VISOR}/bajarArchivo", {"cod_arch": ca, "anexo": 0, "sistema": sis})]:
+                try:
+                    st, b = sol.pedir(u, datos, headers={"Referer": bz.h["Referer"]}, binario=True, intentos=1)
+                    print("  POST", datos, "→", firma(st, b))
+                except Exception as e:
+                    print("  POST", datos, "→ error", str(e)[:100])
             pruebas = [
+                f"{VISOR}/bajarArchivo/{ca}/0/{sis}/{ruc}",
+                f"{VISOR}/bajarArchivo/{ca}/1/{sis}/{ruc}",
+                f"{VISOR}/bajarArchivo?accion=archivo&idMensaje={cod}&idArchivo={ca}&sistema={sis}",
                 f"{VISOR}/bajarArchivo/{ca}/0/{bz.id_sistema}/{ruc}",
                 f"{VISOR}/bajarArchivo/{ca}/1/{bz.id_sistema}/{ruc}",
                 f"{VISOR}/bajarArchivo?accion=archivo&idMensaje={cod}&idArchivo={ca}",

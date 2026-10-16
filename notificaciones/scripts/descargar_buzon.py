@@ -129,20 +129,31 @@ class Buzon:
         st, t = self.sol.pedir(f"{VISOR}/obtenerDetalleNotiMen?codigoMensaje={cod}&tipoMsj={tipo}", headers=self.h)
         d = json.loads(t)
         anexo = 1 if d.get("tieneDocumentosAnexos") else 0
-        lista = [(a["codArchivo"], a.get("nomArchivo") or "archivo.pdf", anexo)
+        # Cada notificación dice de qué "sistema" de SUNAT es su adjunto (ej. 6 en las Resoluciones de
+        # Conclusión de cobranza). Pedirlo con el sistema de la página (1) devuelve 0 bytes.
+        sistema = str(d.get("sistema") or self.id_sistema)
+        lista = [(a["codArchivo"], a.get("nomArchivo") or "archivo.pdf", anexo, sistema, cod)
                  for a in (d.get("listAttach") or []) if a.get("codArchivo")]
         if not lista:
             print(f"   {cod}: SUNAT no lista adjuntos (HTTP {st}; campos: {sorted(d.keys())[:15]})")
         return lista
 
-    def bajar(self, cod_archivo, anexo, nombre=""):
-        """Devuelve (bytes, extensión) o (None, motivo). Prueba el tipo de anexo indicado y el otro,
-        y acepta cualquier archivo (PDF, ZIP, imagen…), no solo PDF."""
+    def bajar(self, cod_archivo, anexo, nombre="", sistema=None, cod_mensaje=None):
+        """Devuelve (bytes, extensión) o (None, motivo). Prueba el sistema del detalle y el de la página,
+        los dos tipos de anexo y la descarga por POST que usa el portal (accion=archivo); acepta
+        cualquier archivo (PDF, ZIP, imagen…), no solo PDF."""
         motivo = ""
+        sistemas = [x for x in dict.fromkeys([str(sistema or ""), str(self.id_sistema)]) if x]
+        formas = [(f"{VISOR}/bajarArchivo/{cod_archivo}/{an}/{si}/{self.ruc}", None) for si in sistemas for an in (anexo, 1 - anexo)]
+        if cod_mensaje:
+            formas += [(f"{VISOR}/bajarArchivo", {"accion": "archivo", "idMensaje": cod_mensaje, "idArchivo": cod_archivo, "sistema": si})
+                       for si in sistemas]
         for intento in range(3):
-            for an in (anexo, 1 - anexo):
-                st, b = self.sol.pedir(f"{VISOR}/bajarArchivo/{cod_archivo}/{an}/{self.id_sistema}/{self.ruc}",
-                                       headers={"Referer": self.h["Referer"]}, binario=True)
+            for url, datos in formas:
+                st, b = self.sol.pedir(url, datos, headers={"Referer": self.h["Referer"]}, binario=True, intentos=2)
+                if isinstance(b, str):   # páginas de error llegan como texto
+                    motivo = f"HTTP {st}, {' '.join(b.split())[:120]}"
+                    continue
                 if st == 200 and b:
                     if b[:4] == b"%PDF":
                         return b, ".pdf"
@@ -255,8 +266,8 @@ def main():
                 sub = f"{f[6:10]}/{f[3:5]}" if len(f) >= 10 else "sin_fecha"
                 guardados, notas = [], []
                 try:
-                    for cod_arch, nom, anexo in bz.adjuntos(cod, tipo):
-                        b, ext = bz.bajar(cod_arch, anexo, nom)
+                    for cod_arch, nom, anexo, sistema, cod_msj in bz.adjuntos(cod, tipo):
+                        b, ext = bz.bajar(cod_arch, anexo, nom, sistema, cod_msj)
                         if not b:
                             print(f"   {cod} ({fila['clase']}): no se pudo bajar '{nom}' ({ext}); se reintenta en la próxima corrida")
                             notas.append("SUNAT entrega el archivo vacío (0 bytes); se reintenta cada día" if "0 bytes" in ext
