@@ -39,9 +39,11 @@ var TG_SISTEMA_ = [
   '- recordatorio {cuando:"dd/mm/yyyy HH:mm", texto, repetir:"no"|"diario"|"semanal"|"mensual"}: crea un recordatorio para este chat',
   '  (calcula la fecha a partir de HOY; si no dicen hora usa 09:00). - recordatorios {}: lista los de este chat.',
   '- enviar_archivo {enlace, titulo}: manda al chat el archivo de Drive de ese enlace (PDF de constancia, notificación, CRE, recibo…). Máx. 10.',
-  '- enviar_voucher {fila:"Originales!2326"} o {filas:[…]}: manda al chat la IMAGEN o PDF del voucher de esa fila de la hoja de vouchers (máx. 5).',
-  '  ÚSALA SIEMPRE que pidan ver, enviar, adjuntar o mandar la foto/imagen/voucher/comprobante de un pago: primero ubica la fila con la',
-  '  herramienta vouchers y luego llama enviar_voucher con esa fila. No respondas solo con texto ni con una tabla en ese caso.',
+  '- enviar_voucher {filas:["Originales!2326",…], modo:"imagen"|"original"}: manda al chat los vouchers de esas filas (máx. 30).',
+  '  modo "imagen" (por defecto) = la FOTO de ese voucher solamente (varios llegan como álbum). modo "original" = el archivo completo del que',
+  '  salió (PDF de varias páginas): úsalo SOLO si piden expresamente el PDF/archivo original/completo.',
+  '  ÚSALA SIEMPRE que pidan ver, enviar, adjuntar o mandar la foto/imagen/voucher/comprobante de pagos: primero ubica las filas con la',
+  '  herramienta vouchers (un voucher, los de un proveedor, los de un mes…) y luego llama enviar_voucher con esas filas. No respondas solo con texto.',
 ].join('\n');
 
 // Nombres parecidos que la IA a veces usa para las herramientas nuevas.
@@ -118,7 +120,8 @@ function TG_mostrarRespuesta_(ctx, r, tg, seg) {
     if (j < 0) return;
     t.filas.forEach(function (f) { var v = String(f[j] || ''); if (/^[^!]{1,20}![0-9]+$/.test(v)) vistos[v] = true; });
   });
-  var fuentes = Object.keys(vistos).filter(function (v) { return !(tg.archivos || []).some(function (a) { return a.voucher === v; }); }).slice(-6);
+  var enviados = tg.vouchers ? tg.vouchers.filas : [];
+  var fuentes = Object.keys(vistos).filter(function (v) { return enviados.indexOf(v) < 0; }).slice(-6);
   for (var i = 0; i < fuentes.length; i += 3) {
     teclado.push(fuentes.slice(i, i + 3).map(function (v) { return { text: '🖼 ' + v, callback_data: 'v:' + v }; }));
   }
@@ -143,7 +146,8 @@ function TG_mostrarRespuesta_(ctx, r, tg, seg) {
   // 🚀 Descargas propuestas
   (tg.acciones || []).forEach(function (a) { TG_proponerDescarga_(ctx, a); });
   // 📎 Archivos que pidió
-  (tg.archivos || []).slice(0, 10).forEach(function (a) { if (a.voucher) TG_mandarVoucher_(ctx, a.voucher); else TG_mandarArchivo_(ctx, a.id, a.titulo); });
+  if (tg.vouchers) TG_mandarVouchers_(ctx, tg.vouchers.filas, tg.vouchers.modo);
+  (tg.archivos || []).slice(0, 10).forEach(function (a) { TG_mandarArchivo_(ctx, a.id, a.titulo); });
 }
 
 function TG_mostrarCambios_(ctx, cambios) {
@@ -195,51 +199,90 @@ function TG_mandarArchivo_(ctx, id, titulo) {
   }
 }
 
-/** Imagen o PDF de un voucher (fila "Originales!2326" de la hoja de vouchers): primero el archivo original, si no la imagen de la celda. */
-function TG_mandarVoucher_(ctx, fuente) {
-  try {
-    var cfg = leerConfig_(ctx.ss);
-    var libro = SpreadsheetApp.openById(cfg.idVouchers);
-    var p = String(fuente).split('!');
-    var sh = libro.getSheetByName(p[0]);
-    if (!sh) return TG_enviar_(ctx.chatId, '⚠️ No existe la pestaña ' + TG_esc_(p[0]) + ' en la hoja de vouchers.');
-    var fila = parseInt(p[1], 10), nc = sh.getLastColumn();
-    var enc = sh.getRange(1, 1, 1, nc).getDisplayValues()[0];
-    var val = sh.getRange(fila, 1, 1, nc).getValues()[0];
-    var txt = function (n) { var j = enc.map(normHeader_).indexOf(normHeader_(n)); return j >= 0 ? val[j] : ''; };
-    var blob = null;
-    // 1) Archivo original (enlace de Drive o nombre del archivo), con su calidad completa
-    for (var j = 0; j < nc && !blob; j++) {
-      var s = String(val[j] == null ? '' : val[j]).trim();
-      var id = TG_idDrive_(s);
-      try {
-        if (id) blob = DriveApp.getFileById(id).getBlob();
-        else if (/\.(jpe?g|png|pdf|webp|heic|gif)$/i.test(s)) { var it = DriveApp.getFilesByName(s); if (it.hasNext()) blob = it.next().getBlob(); }
-      } catch (e) { blob = null; }
+/**
+ * Vouchers de la hoja de vouchers (filas "Originales!2326").
+ * modo "imagen" (por defecto): la FOTO de ese voucher (la imagen de su celda; si no hay, el archivo si es una foto,
+ * o la miniatura de la página si es PDF). Varios se mandan como álbum de 10 en 10.
+ * modo "original": el archivo completo del que salió (PDF de varias páginas, etc.).
+ */
+function TG_mandarVouchers_(ctx, fuentes, modo) {
+  var cfg = leerConfig_(ctx.ss);
+  var libro = SpreadsheetApp.openById(cfg.idVouchers);
+  var fotos = [], fallas = [];
+  TG_accion_(ctx.chatId, modo === 'original' ? 'upload_document' : 'upload_photo');
+  fuentes.forEach(function (f) {
+    var x;
+    try { x = TG_voucherBlob_(libro, f, modo); } catch (e) { x = { error: e.message }; }
+    if (x.error) { fallas.push(f + ': ' + x.error); return; }
+    if (modo === 'original' || !/^image\//.test(x.blob.getContentType() || '') || x.blob.getBytes().length > 9 * 1024 * 1024) {
+      if (!TG_enviarArchivo_(ctx.chatId, x.blob, x.caption)) fallas.push(f + ': Telegram no aceptó el archivo');
+      return;
     }
-    // 2) Imagen dentro de la celda
-    for (j = 0; j < nc && !blob; j++) {
+    fotos.push(x);
+  });
+  for (var i = 0; i < fotos.length; i += 10) {
+    var lote = fotos.slice(i, i + 10);
+    if (lote.length === 1) { TG_llamar_('sendPhoto', { chat_id: String(ctx.chatId), photo: lote[0].blob, caption: lote[0].caption, parse_mode: 'HTML' }); continue; }
+    var carga = { chat_id: String(ctx.chatId), media: lote.map(function (x, k) { return { type: 'photo', media: 'attach://f' + k, caption: x.caption, parse_mode: 'HTML' }; }) };
+    lote.forEach(function (x, k) { carga['f' + k] = x.blob.setName('f' + k + '.jpg'); });
+    var r = TG_llamar_('sendMediaGroup', carga);
+    if (!r.ok) lote.forEach(function (x) { TG_llamar_('sendPhoto', { chat_id: String(ctx.chatId), photo: x.blob, caption: x.caption, parse_mode: 'HTML' }); });
+  }
+  if (fallas.length) TG_enviar_(ctx.chatId, '⚠️ No pude mandar: ' + TG_esc_(fallas.slice(0, 8).join(' · ')));
+}
+
+function TG_mandarVoucher_(ctx, fuente, modo) { TG_mandarVouchers_(ctx, [fuente], modo || 'imagen'); }
+
+/** {blob, caption} del voucher de una fila, o {error}. */
+function TG_voucherBlob_(libro, fuente, modo) {
+  var p = String(fuente).split('!');
+  var sh = libro.getSheetByName(p[0]);
+  if (!sh) return { error: 'no existe la pestaña ' + p[0] };
+  var fila = parseInt(p[1], 10), nc = sh.getLastColumn();
+  var enc = sh.getRange(1, 1, 1, nc).getDisplayValues()[0];
+  var val = sh.getRange(fila, 1, 1, nc).getValues()[0];
+  var txt = function (n) { var j = enc.map(normHeader_).indexOf(normHeader_(n)); return j >= 0 ? val[j] : ''; };
+  var celda = function () {
+    for (var j = 0; j < nc; j++) {
       var v = val[j];
       if (v && typeof v === 'object' && typeof v.getContentUrl === 'function') {
         try {
           var r = UrlFetchApp.fetch(v.getContentUrl(), { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
-          if (r.getResponseCode() === 200) blob = r.getBlob().setName('voucher ' + fuente.replace('!', ' fila ') + '.jpg');
-        } catch (e) { blob = null; }
+          if (r.getResponseCode() === 200) return r.getBlob().setName('voucher ' + fuente.replace('!', ' fila ') + '.jpg');
+        } catch (e) { /* sigue */ }
       }
     }
-    if (!blob) return TG_enviar_(ctx.chatId, '⚠️ La fila ' + TG_esc_(fuente) + ' no tiene imagen ni archivo del voucher.');
-    var monto = txt('Monto'), fecha = val[0] instanceof Date ? TG_fecha_(val[0]) : String(val[0] || '');
-    var cap = '🖼 <b>Voucher ' + TG_esc_(fuente) + '</b>' + (fecha ? ' · ' + TG_esc_(fecha) : '') + (monto !== '' ? ' · ' + TG_esc_(txt('Moneda') || '') + ' ' + TG_num_(aNumero_(monto)) : '') +
-      (txt('Proveedor (Beneficiario)') ? '\n' + TG_esc_(txt('Proveedor (Beneficiario)')) : '');
-    if (/^image\//.test(blob.getContentType() || '') && blob.getBytes().length < 9 * 1024 * 1024) {
-      TG_accion_(ctx.chatId, 'upload_photo');
-      var rf = TG_llamar_('sendPhoto', { chat_id: String(ctx.chatId), photo: blob, caption: cap, parse_mode: 'HTML' });
-      if (rf.ok) return;
+    return null;
+  };
+  var archivo = function () {
+    for (var j = 0; j < nc; j++) {
+      var s = String(val[j] == null ? '' : val[j]).trim();
+      var id = TG_idDrive_(s);
+      try {
+        if (id) return DriveApp.getFileById(id);
+        if (/\.(jpe?g|png|pdf|webp|heic|gif)$/i.test(s)) { var it = DriveApp.getFilesByName(s); if (it.hasNext()) return it.next(); }
+      } catch (e) { /* sigue */ }
     }
-    if (!TG_enviarArchivo_(ctx.chatId, blob, cap)) TG_enviar_(ctx.chatId, '⚠️ Telegram no aceptó el archivo del voucher ' + TG_esc_(fuente) + '.');
-  } catch (e) {
-    TG_enviar_(ctx.chatId, '⚠️ No pude abrir el voucher ' + TG_esc_(fuente) + ': ' + TG_esc_(e.message));
+    return null;
+  };
+  var blob = null;
+  if (modo === 'original') {
+    var f = archivo();
+    blob = f ? f.getBlob().setName(f.getName()) : celda();
+  } else {
+    blob = celda();
+    if (!blob) {
+      var g = archivo();
+      if (g) blob = /^image\//.test(g.getMimeType()) ? g.getBlob() : g.getThumbnail();
+    }
   }
+  if (!blob) return { error: 'sin imagen ni archivo del voucher en la fila' };
+  var monto = txt('Monto'), fecha = val[0] instanceof Date ? TG_fecha_(val[0]) : String(val[0] || '');
+  var pag = txt('Pagina');
+  return { blob: blob, caption: '🖼 <b>' + TG_esc_(fuente) + '</b>' + (fecha ? ' · ' + TG_esc_(fecha) : '') +
+    (monto !== '' ? ' · ' + TG_esc_(txt('Moneda') || '') + ' ' + TG_num_(aNumero_(monto)) : '') +
+    (txt('Proveedor (Beneficiario)') ? '\n' + TG_esc_(String(txt('Proveedor (Beneficiario)')).slice(0, 60)) : '') +
+    (modo === 'original' && pag ? '\n<i>Archivo completo · el voucher está en la página ' + TG_esc_(pag) + '</i>' : '') };
 }
 
 function TG_mandarExcel_(ctx, datos) {

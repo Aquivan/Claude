@@ -116,11 +116,13 @@ var TGH_ = {
 
   enviar_voucher: function (c, a) {
     var filas = (Array.isArray(a.filas) ? a.filas : [a.fila || a.voucher || '']).map(function (f) { return String(f || '').replace(/\s/g, ''); })
-      .filter(function (f) { return /^[^!]+!\d+$/.test(f); }).slice(0, 5);
-    if (!filas.length) throw new Error('indique la fila del voucher como "Originales!2326" (columna fila de la herramienta vouchers)');
-    filas.forEach(function (f) { c.op.tg.archivos.push({ voucher: f, titulo: 'Voucher ' + f }); });
-    return { columnas: ['voucher', 'estado'], filas: filas.map(function (f) { return [f, 'la imagen se enviará al chat']; }),
-      nota: 'Listo: el sistema manda la imagen/PDF de esos vouchers al chat. En tu respuesta solo confírmalo brevemente.' };
+      .filter(function (f) { return /^[^!]+!\d+$/.test(f); });
+    filas = filas.filter(function (f, k) { return filas.indexOf(f) === k; }).slice(0, 30);
+    if (!filas.length) throw new Error('indique la(s) fila(s) del voucher como "Originales!2326" (columna fila de la herramienta vouchers)');
+    var modo = /original|pdf|completo|archivo/i.test(a.modo || '') ? 'original' : 'imagen';
+    c.op.tg.vouchers = { filas: filas, modo: modo };
+    return { columnas: ['voucher', 'estado'], filas: filas.map(function (f) { return [f, modo === 'original' ? 'se enviará el archivo original completo' : 'se enviará la foto del voucher']; }),
+      nota: 'Listo: el sistema los manda al chat. En tu respuesta solo confírmalo en una línea.' };
   },
 
   enviar_archivo: function (c, a) {
