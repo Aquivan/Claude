@@ -10,6 +10,10 @@ on:
         description: "RUC de la empresa (su Environment con claves SOL)"
         required: true
         default: "20447969531"
+      codigos:
+        description: "Códigos de notificación cuyo adjunto llega vacío (separados por espacio). Vacío = sondeo general"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -30,4 +34,6 @@ jobs:
           SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
           SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
           SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
-        run: python notificaciones/scripts/sondeo.py
+          CODIGOS: ${{ inputs.codigos }}
+        run: |
+          if [ -n "$CODIGOS" ]; then python notificaciones/scripts/sondeo_adjunto.py $CODIGOS; else python notificaciones/scripts/sondeo.py; fi
