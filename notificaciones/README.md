@@ -58,13 +58,20 @@ workflow queda como **respaldo**: las corridas diarias se llaman igual
 descarga nada.
 
 
-## Adjuntos que SUNAT entrega vacíos (verificado 15/10/2026)
+## Qué se baja de cada notificación (corregido 16/10/2026)
 
-Algunas *Resolución de Conclusión* (7 de GRANIX y 1 de JENILE) tienen su `constancia.pdf`
-en el buzón, pero SUNAT la entrega con **0 bytes** (se probó con los dos tipos de anexo y
-reintentos). No es un error de la descarga: el archivo viene vacío desde SUNAT. Esas filas
-quedan con la columna `nota_pdf` y en la hoja dicen **⚠️ SUNAT lo entrega vacío**; se
-reintentan cada día por si SUNAT lo corrige. Los demás 200 PDF tienen contenido (revisado).
+Cada notificación trae **dos archivos** y se bajan los dos:
+
+1. **📄 documento**: la Carta, Orden de Pago, Resolución de Ejecución Coactiva, Esquela… (el
+   enlace *Documento* del cuerpo del mensaje). SUNAT no lo pone en la lista de adjuntos: viene
+   en los datos del cuerpo (`id_archivo`). Se guarda como `<código>-documento_<N°>.pdf`.
+2. **📄 constancia**: la constancia de depósito en el buzón (lista de adjuntos).
+
+Cada archivo se pide con el **sistema** que indica su notificación (las *Resoluciones de
+Conclusión* de cobranza son del sistema 6; pedirlas con el 1 devolvía 0 bytes, por eso antes
+salían "⚠️ SUNAT lo entrega vacío"). Si no llega, se prueba la descarga por POST del portal.
+Las notificaciones ya bajadas antes se repasan **una sola vez** (columna `revision` = 2) para
+agregarles el documento. En la hoja la columna PDF muestra "📄 documento  📄 constancia".
 
 Las corridas diarias que se saltan (porque otra acaba de descargar) ya no cuentan como
 "descarga hecha": antes se saltaban en cadena y la descarga de la tarde no corría.

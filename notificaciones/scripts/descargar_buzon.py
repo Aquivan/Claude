@@ -303,7 +303,9 @@ def main():
                     print(f"   {cod}: no se pudo bajar el adjunto ({e})")
                     notas.append(f"Error al bajar ({str(e)[:80]}); se reintenta cada día")
                 fila["archivos"] = ";".join(guardados)
-                fila["nota_pdf"] = "" if guardados else (notas[0] if notas else "SUNAT no listó el adjunto; se reintenta cada día")
+                fila["nota_pdf"] = "" if guardados else (notas[0] if notas else
+                                                         "Sin archivos en SUNAT" if int(fila["adjuntos"] or 0) == 0 else
+                                                         "SUNAT no listó el adjunto; se reintenta cada día")
                 if not notas:
                     fila["revision"] = REVISION
             filas.append(fila)

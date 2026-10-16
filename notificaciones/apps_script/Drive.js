@@ -117,9 +117,11 @@ function NOT_ponerEnlacesPdf_(hoja) {
     var lista = String(r[0] || '').split(';').filter(function (x) { return /^\d{11}\//.test(x); });
     var t = SpreadsheetApp.newRichTextValue();
     if (!lista.length) return [t.setText(/^⚠️/.test(String(r[0])) ? (/vac[ií]o/.test(String(r[0])) ? '⚠️ SUNAT lo entrega vacío' : '⚠️ no se pudo bajar') : '—').build()];
+    // Primero el DOCUMENTO (la Carta, Orden de Pago, Resolución…) y luego la constancia de depósito.
+    lista.sort(function (a, b) { return (/-documento/i.test(b) ? 1 : 0) - (/-documento/i.test(a) ? 1 : 0); });
     var partes = lista.map(function (ruta) {
       var nom = ruta.split('/').pop().replace(/^\d+-/, '').replace(/\.[a-z0-9]{2,4}$/i, '');
-      return { texto: '📄 ' + (/constancia/i.test(nom) ? 'constancia' : nom.slice(0, 22)), id: mapa[ruta] };
+      return { texto: '📄 ' + (/^documento/i.test(nom) ? 'documento' : /constancia/i.test(nom) ? 'constancia' : nom.slice(0, 22)), id: mapa[ruta] };
     });
     var texto = partes.map(function (p) { return p.texto; }).join('  ');
     t.setText(texto);
