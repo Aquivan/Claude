@@ -39,7 +39,7 @@ from descargar_cre import Sol, MENU  # noqa: E402
 VISOR = "https://ww1.sunat.gob.pe/ol-ti-itvisornoti/visor"
 COLS = ["empresa_ruc", "tipo", "codigo", "fecha_publicacion", "fecha_envio", "asunto", "clase", "documento",
         "etiqueta", "leido", "urgente", "destacado", "remitente", "dependencia", "adjuntos", "archivos", "nota_pdf", "revision"]
-REVISION = "2"   # 2 = ya se buscó también el documento del cuerpo (no solo la constancia)
+REVISION = "3"   # 3 = solo el DOCUMENTO del cuerpo del mensaje (las constancias ya no se guardan)
 CLASES = [
     (r"ejecuci[oó]n coactiva", "Resolución de Ejecución Coactiva"),
     (r"orden(es)? de pago", "Orden de Pago"),
@@ -133,8 +133,8 @@ class Buzon:
         # Cada notificación dice de qué "sistema" de SUNAT es su adjunto (ej. 6 en las Resoluciones de
         # Conclusión de cobranza). Pedirlo con el sistema de la página (1) devuelve 0 bytes.
         sistema = str(d.get("sistema") or self.id_sistema)
-        lista = [(a["codArchivo"], a.get("nomArchivo") or "archivo.pdf", anexo, sistema, cod)
-                 for a in (d.get("listAttach") or []) if a.get("codArchivo")]
+        # Solo se baja el DOCUMENTO (enlace "Documento" del texto del mensaje), no la constancia de depósito.
+        lista = []
         # El DOCUMENTO mismo (la Carta, Orden de Pago, Resolución…) no está en listAttach: es el enlace
         # "Documento" del cuerpo, que SUNAT manda como datos JSON con su propio id_archivo.
         for texto in (d.get("msjMensaje") or "", d.get("url") or ""):
@@ -150,7 +150,7 @@ class Buzon:
                 lista.append((ida, f"documento{'_' + num if num else ''}.pdf", int(j.get("id_anexo") or 0) and 1,
                               str(j.get("sistema") or sistema), cod))
         if not lista:
-            print(f"   {cod}: SUNAT no lista adjuntos (HTTP {st}; campos: {sorted(d.keys())[:15]})")
+            print(f"   {cod}: el mensaje no trae enlace 'Documento' (HTTP {st})")
         return lista
 
     def bajar(self, cod_archivo, anexo, nombre="", sistema=None, cod_mensaje=None):
@@ -277,11 +277,21 @@ def main():
             }
             if cod not in previo:
                 nuevas += 1
-            if con_pdf and (not fila["archivos"] and int(fila["adjuntos"] or 0) > 0 or fila["revision"] != REVISION):
+            reintentar = "se reintenta" in fila["nota_pdf"]
+            if con_pdf and (fila["revision"] != REVISION or reintentar):
                 f = fila["fecha_publicacion"]
                 sub = f"{f[6:10]}/{f[3:5]}" if len(f) >= 10 else "sin_fecha"
                 previos = [x for x in fila["archivos"].split(";") if x]
+                # Las constancias que se guardaron antes se quitan: solo queda el documento.
+                for x in previos:
+                    if "-documento" not in x and os.path.exists(os.path.join(a.salida, x)):
+                        os.remove(os.path.join(a.salida, x))
+                previos = [x for x in previos if "-documento" in x]
                 guardados, notas = list(previos), []
+                if previos:   # ya tiene su documento: no hace falta volver a SUNAT
+                    fila["archivos"], fila["nota_pdf"], fila["revision"] = ";".join(previos), "", REVISION
+                    filas.append(fila)
+                    continue
                 try:
                     for cod_arch, nom, anexo, sistema, cod_msj in bz.adjuntos(cod, tipo):
                         if any(f"-{nombre_archivo(nom)}"[:-4] in x or f"_{cod_arch}." in x for x in previos):
@@ -303,9 +313,7 @@ def main():
                     print(f"   {cod}: no se pudo bajar el adjunto ({e})")
                     notas.append(f"Error al bajar ({str(e)[:80]}); se reintenta cada día")
                 fila["archivos"] = ";".join(guardados)
-                fila["nota_pdf"] = "" if guardados else (notas[0] if notas else
-                                                         "Sin archivos en SUNAT" if int(fila["adjuntos"] or 0) == 0 else
-                                                         "SUNAT no listó el adjunto; se reintenta cada día")
+                fila["nota_pdf"] = "" if guardados else (notas[0] if notas else "El mensaje no trae enlace 'Documento' en SUNAT")
                 if not notas:
                     fila["revision"] = REVISION
             filas.append(fila)
