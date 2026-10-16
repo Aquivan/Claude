@@ -114,6 +114,15 @@ var TGH_ = {
     return { columnas: ['id', 'cuando', 'texto', 'repetir'], filas: rs.map(function (r) { return [r.id, TG_fechaHoraTxt_(r.cuando), r.texto, r.repetir]; }) };
   },
 
+  enviar_voucher: function (c, a) {
+    var filas = (Array.isArray(a.filas) ? a.filas : [a.fila || a.voucher || '']).map(function (f) { return String(f || '').replace(/\s/g, ''); })
+      .filter(function (f) { return /^[^!]+!\d+$/.test(f); }).slice(0, 5);
+    if (!filas.length) throw new Error('indique la fila del voucher como "Originales!2326" (columna fila de la herramienta vouchers)');
+    filas.forEach(function (f) { c.op.tg.archivos.push({ voucher: f, titulo: 'Voucher ' + f }); });
+    return { columnas: ['voucher', 'estado'], filas: filas.map(function (f) { return [f, 'la imagen se enviará al chat']; }),
+      nota: 'Listo: el sistema manda la imagen/PDF de esos vouchers al chat. En tu respuesta solo confírmalo brevemente.' };
+  },
+
   enviar_archivo: function (c, a) {
     var id = TG_idDrive_(a.enlace || a.url || a.link || a.id || a.pdf);
     if (!id) throw new Error('falta el enlace de Drive del archivo (columna PDF/enlace de la fila)');

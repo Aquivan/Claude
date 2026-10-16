@@ -324,6 +324,7 @@ function TG_alBoton_(ss, q) {
   if (d.indexOf('av:') === 0) { TG_responderBoton_(q.id); return TG_enviarAvisos_(ctx, d.slice(3)); }
   if (d.indexOf('dw:') === 0) { TG_responderBoton_(q.id); return TG_asistenteDescarga_(ctx, d.slice(3)); }
   if (d.indexOf('f:') === 0) { TG_responderBoton_(q.id, '📎 Enviando…'); return TG_mandarArchivo_(ctx, d.slice(2), ''); }
+  if (d.indexOf('v:') === 0) { TG_responderBoton_(q.id, '🖼 Enviando el voucher…'); return TG_mandarVoucher_(ctx, d.slice(2)); }
   if (d.indexOf('rr:') === 0) { TG_responderBoton_(q.id); return TG_reintentarRun_(ctx, { id: d.slice(3), nombre: 'la descarga' }); }
   if (d.indexOf('emp:') === 0) {   // cartera de una empresa: emp:<lado>:<ruc>
     TG_responderBoton_(q.id);
