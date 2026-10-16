@@ -473,9 +473,16 @@ function ANA_textoRes_(id, herr, r, limite) {
   return L.join('\n');
 }
 
-function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos) {
+/**
+ * op (opcional, lo usa el 🤖 asistente de Telegram): {extraHerr: {nombre: fn(c, args)}, extraSistema: 'texto',
+ * alPaso: fn(pasos)} — herramientas y reglas adicionales, y aviso de avance en cada paso. Sin op funciona igual que siempre.
+ */
+function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos, op) {
   var t0 = Date.now();
   var c = ANA_ctx_(ss);
+  c.op = op || {};
+  var extra = c.op.extraHerr || {};
+  var sistema = ANA_SISTEMA_ + (c.op.extraSistema ? '\n\n' + c.op.extraSistema : '');
   c.ia = ia;
   c.deadline = t0 + ANA_LIMITE_MS_;
   var gemini = IA_PROVEEDORES_[ia.proveedor].tipo === 'gemini';
@@ -506,7 +513,7 @@ function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos) {
     consultas++;
     var r;
     try {
-      r = IA_llamarSeguro_(ia, { sistema: ANA_SISTEMA_, texto: texto, maxTokens: 16000 });
+      r = IA_llamarSeguro_(ia, { sistema: sistema, texto: texto, maxTokens: 16000 });
     } catch (e) {
       if (ia.modeloAuto && /respondió (400|403|404)/.test(e.message)) {   // el modelo más capaz no está en esta cuenta: el de siempre
         ia.modelo = ''; ia.modeloAuto = false; paso--;
@@ -516,7 +523,7 @@ function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos) {
       if (!/JSON/i.test(e.message)) throw e;
       // Respondió sin JSON: se le recuerda el protocolo; en el último intento se acepta su texto como respuesta.
       if (!apurar) { conv.push('', 'Tu última respuesta no fue JSON válido. Responde SOLO con el JSON del protocolo.'); continue; }
-      r = { respuesta: IA_llamarSeguro_(ia, { sistema: ANA_SISTEMA_, texto: texto, json: false, maxTokens: 8000 }), tablas: [] };
+      r = { respuesta: IA_llamarSeguro_(ia, { sistema: sistema, texto: texto, json: false, maxTokens: 8000 }), tablas: [] };
     }
     if (r && r.accion === 'consultar' && Array.isArray(r.consultas) && r.consultas.length && !apurar) {
       conv.push('', 'TÚ PEDISTE: ' + JSON.stringify(r.consultas).slice(0, 2000), 'RESULTADOS:');
@@ -526,9 +533,9 @@ function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos) {
         var res;
         try {
           var hn = normHeader_(h).replace(/\s+/g, '_');
-          h = ANA_HERR_[h] || ANA_HERR2_[h] || ANX_HERR_[h] ? h : ANA_ALIAS_[hn] || hn;
-          var fn = ANA_HERR_[h] || ANA_HERR2_[h] || ANX_HERR_[h];
-          if (!fn) throw new Error('herramienta desconocida "' + q.herramienta + '"; las que hay: ' + Object.keys(ANA_HERR_).concat(Object.keys(ANA_HERR2_), Object.keys(ANX_HERR_)).join(', '));
+          h = ANA_HERR_[h] || ANA_HERR2_[h] || ANX_HERR_[h] || extra[h] ? h : ANA_ALIAS_[hn] || (extra[hn] ? hn : (c.op.alias || {})[hn]) || hn;
+          var fn = ANA_HERR_[h] || ANA_HERR2_[h] || ANX_HERR_[h] || extra[h];
+          if (!fn) throw new Error('herramienta desconocida "' + q.herramienta + '"; las que hay: ' + Object.keys(ANA_HERR_).concat(Object.keys(ANA_HERR2_), Object.keys(ANX_HERR_), Object.keys(extra)).join(', '));
           res = fn(c, q.args || {});
           res.filas = res.filas.slice(0, ANA_MAX_FILAS_ * 3);
           if (!res.filas.length && !res.nota) res.nota = ANA_pistaVacio_(c, h, q.args || {});
@@ -537,6 +544,7 @@ function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos) {
         pasos.push(id + ' ' + h + ' ' + JSON.stringify(q.args || {}).slice(0, 150) + ' → ' + res.filas.length + (res.error ? ' ERROR ' + res.error : ''));
         conv.push(ANA_textoRes_(id, h, res, limRes) + (res.nota ? '\nNOTA: ' + res.nota : ''));
       });
+      if (c.op.alPaso) { try { c.op.alPaso(pasos); } catch (e) { /* el aviso de avance nunca detiene la respuesta */ } }
       continue;
     }
     // Pidió escribir/asignar y la IA respondió sin proponer nada: se le exige usar la herramienta (una vez).

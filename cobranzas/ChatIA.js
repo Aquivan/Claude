@@ -24,7 +24,19 @@ function CHAT_menuAbrir() {
  * Devuelve { respuesta, tablas: [{titulo, columnas, filas, total}], cambios: [...], adjuntos: [{id, nombre, mime}], seg, detalle }.
  */
 function CHAT_enviar(msg) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  return CHAT_enviarEn_(SpreadsheetApp.getActiveSpreadsheet(), msg);
+}
+
+/**
+ * Lo mismo que CHAT_enviar, sobre un libro dado. op (opcional, lo usa el 🤖 asistente de Telegram):
+ * las de ANA_preguntar_ (extraHerr, extraSistema, alPaso) y además
+ *   sinHoja: true = no reescribe la pestaña 💬 Resultado IA (los cambios propuestos igual se guardan para aprobarlos);
+ *   filasCompletas: true = devuelve todas las filas de cada tabla, sin formatear (para armar un Excel);
+ *   origen: texto para el registro (ej. '📱 telegram').
+ * Devuelve además "final" (la respuesta tal cual de la IA) y "c" (el contexto: archivos o acciones que pidió la IA).
+ */
+function CHAT_enviarEn_(ss, msg, op) {
+  op = op || {};
   try {
     var texto = String(msg.texto || '').trim();
     var nuevos = msg.nuevos || [], anteriores = msg.anteriores || [];
@@ -47,25 +59,30 @@ function CHAT_enviar(msg) {
     if (!ia.modelo && IA_PROVEEDORES_[ia.proveedor].tipo === 'gemini' &&
         PropertiesService.getScriptProperties().getProperty('ANA_SIN_MODELO_FUERTE') !== ANA_MODELO_GEMINI_) { ia.modelo = ANA_MODELO_GEMINI_; ia.modeloAuto = true; }
     var previas = (msg.historial || []).slice(-4).map(function (h) { return { pregunta: h.p, respuesta: h.r }; });
+    if (op.modelo) { ia.modelo = op.modelo; ia.modeloAuto = false; }
     var out = ANA_preguntar_(ss, texto + (adjuntos.length ? '\n(Archivos de la conversación: ' + adjuntos.map(function (a, i) { return 'A' + (i + 1) + ' ' + a.nombre; }).join(', ') + ')' : ''),
-      ia, previas, adjuntos.map(function (a) { return { id: a.id, nombre: a.nombre, mime: a.mime }; }));
+      ia, previas, adjuntos.map(function (a) { return { id: a.id, nombre: a.nombre, mime: a.mime }; }), op);
     if (out.c.erroresAdj && out.c.erroresAdj.length) out.final.respuesta = '⚠️ No se pudo leer: ' + out.c.erroresAdj.join(' · ') +
       '\nLos archivos siguen en la conversación: escriba "reintenta" en un momento y se vuelven a leer.\n\n' + String(out.final.respuesta || '');
     if (out.c.cambioModelo || ia.cambioModelo) out.final.respuesta = String(out.final.respuesta || '') + '\n\n(Google tenía un modelo saturado; se usó el otro modelo de Gemini.)';
-    var tablas = ANA_escribir_(ss, texto, out, ia);
+    var tablas;
+    if (op.sinHoja) {
+      tablas = ANA_tablas_(out.c, out.final.tablas);
+      if (out.c.cambios && out.c.cambios.length && !out.c.lotePropuestos) out.c.lotePropuestos = ANX_guardarPropuestos_(ss, out.c.cambios);
+    } else tablas = ANA_escribir_(ss, texto, out, ia);
     var log = ss.getSheetByName(AUD_CHAT_);
     if (!log) { log = ss.insertSheet(AUD_CHAT_); log.getRange(1, 1, 1, 4).setValues([['Fecha', 'Datos revisados', 'Pregunta', 'Respuesta']]); log.hideSheet(); }
-    log.appendRow([new Date(), ('💬 chat' + (adjuntos.length ? ' · ' + adjuntos.length + ' adjunto(s)' : '') + ' · ' + out.pasos.join(' ; ')).slice(0, 5000), texto, String(out.final.respuesta || '').slice(0, 45000)]);
+    log.appendRow([new Date(), ((op.origen || '💬 chat') + (adjuntos.length ? ' · ' + adjuntos.length + ' adjunto(s)' : '') + ' · ' + out.pasos.join(' ; ')).slice(0, 5000), texto, String(out.final.respuesta || '').slice(0, 45000)]);
     return {
       respuesta: String(out.final.respuesta || ''),
       tablas: tablas.map(function (t) {
         return { titulo: t.titulo, columnas: t.columnas, total: t.filas.length,
-          filas: t.filas.slice(0, 25).map(function (f) { return f.map(ANA_fmt_); }) };
+          filas: op.filasCompletas ? t.filas : t.filas.slice(0, 25).map(function (f) { return f.map(ANA_fmt_); }) };
       }),
       cambios: (out.c.cambios || []).map(function (x) {
         return { id: x.id, fila: x.hoja + '!' + x.fila, columna: x.encabezado, actual: x.actual, nuevo: x.nuevo, motivo: x.motivo, aviso: x.aviso, url: x.url || '' };
       }),
-      adjuntos: adjuntos, seg: out.seg,
+      adjuntos: adjuntos, seg: out.seg, final: out.final, c: op.sinHoja ? out.c : undefined, pasos: out.pasos,
       detalle: ia.proveedor + (ia.modelo ? ' ' + ia.modelo : '') + ' · ' + out.seg + ' s · revisó: ' + (out.pasos.join(' ; ') || '—'),
     };
   } catch (e) {

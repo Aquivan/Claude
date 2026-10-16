@@ -5,7 +5,12 @@
 #                      y muestra en el log el .clasp.json para guardarlo en el repo.
 #   - comparar       : muestra diferencias entre el codigo de la Sheet y el repo.
 #   - subir          : sube cobranzas/ a la Sheet.
+#   - publicar-bot   : sube y vuelve a publicar la aplicación web del 🤖 asistente de Telegram.
 # Al hacer push con cambios en cobranzas/ se sube solo (si ya existe cobranzas/.clasp.json).
+# La aplicación web del bot (doPost de cobranzas/telegram/) se republica cuando cambia
+# algo del bot o de la IA, o si la publicada tiene 3 días o más (Google permite 200
+# versiones por proyecto: así no se gastan en cada push). Su ID queda en
+# cobranzas/telegram/TG_Despliegue.js (lo escribe este workflow antes de subir).
 # ------------------------------------------------------------
 
 name: Desplegar Cobranzas
@@ -27,6 +32,7 @@ on:
         options:
           - comparar
           - subir
+          - publicar-bot
           - crear-proyecto
       sheet_id:
         description: "Solo para crear-proyecto: ID de la Google Sheet"
@@ -47,6 +53,21 @@ jobs:
     steps:
       - name: Descargar el codigo
         uses: actions/checkout@v4
+
+      - name: ¿Cambió algo del bot de Telegram?
+        id: cambios
+        env:
+          ANTES: ${{ github.event.before }}
+        run: |
+          if [ "${{ github.event_name }}" != "push" ]; then echo "bot=si" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ -z "$ANTES" ] || [ "$ANTES" = "0000000000000000000000000000000000000000" ] || ! git fetch --no-tags --depth=1 origin "$ANTES" 2>/dev/null; then
+            echo "bot=si" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if git diff --name-only "$ANTES" HEAD | grep -qE '^cobranzas/(telegram/|AnalistaIA\.js|AnalistaAdjuntos\.js|ChatIA\.js|IACliente\.js|appsscript\.json)'; then
+            echo "bot=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "bot=no" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Preparar Node.js
         uses: actions/setup-node@v4
@@ -92,22 +113,68 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"/tmp/actual"}' "$SID" > /tmp/actual/.clasp.json
           (cd /tmp/actual && clasp pull) || echo "(proyecto vacio o sin acceso)"
           echo "================ RESUMEN Sheet vs repo ================"
-          for f in *.js *.html appsscript.json; do
+          for f in *.js *.html appsscript.json telegram/*.js; do
             r="/tmp/actual/$f"; [ -f "$r" ] || r="/tmp/actual/${f%.js}.gs"
             if [ -f "$r" ]; then
               if diff -q --strip-trailing-cr "$r" "$f" >/dev/null; then echo "IGUAL      $f"; else echo "DIFERENTE  $f ($(diff --strip-trailing-cr "$r" "$f" | grep -c '^[<>]' || true) lineas)"; fi
             else echo "NUEVO      $f"; fi
           done
-          for r in /tmp/actual/*.js /tmp/actual/*.gs /tmp/actual/*.html; do
-            [ -f "$r" ] || continue; n=$(basename "$r"); b="${n%.*}"
+          for r in /tmp/actual/*.js /tmp/actual/*.gs /tmp/actual/*.html /tmp/actual/telegram/*.js; do
+            [ -f "$r" ] || continue; n="${r#/tmp/actual/}"; b="${n%.*}"
             ls "$b".* >/dev/null 2>&1 || echo "SOLO EN LA SHEET (se borraria al subir): $n"
           done
 
+      - name: ID de la aplicación web del bot
+        id: bot
+        if: hashFiles('cobranzas/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir' || inputs.accion == 'publicar-bot')
+        run: |
+          clasp --json list-deployments > /tmp/deps.json 2>/dev/null || echo '[]' > /tmp/deps.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, datetime, re
+          txt = open('/tmp/deps.json').read()
+          try: deps = json.loads(txt[txt.index('['):])
+          except Exception: deps = []
+          bot = [d for d in deps if (d.get('description') or '').startswith('Asistente Telegram')]
+          dep = bot[0] if bot else {}
+          print('id=' + (dep.get('deploymentId') or ''))
+          m = re.search(r'(\d{4}-\d{2}-\d{2})', dep.get('description') or '')
+          dias = (datetime.date.today() - datetime.date.fromisoformat(m.group(1))).days if m else 999
+          print('dias=%d' % dias)
+          PY
+          cat "$GITHUB_OUTPUT"
+          ID=$(grep '^id=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)
+          printf "/**\n * 🤖 Telegram — ID de la aplicación web (la dirección que usa Telegram para mandar los mensajes).\n * Este archivo lo REESCRIBE el workflow \"Desplegar Cobranzas\" en cada despliegue; en el repositorio queda vacío.\n */\nvar TG_DEPLOYMENT_ID_ = '%s';\n" "$ID" > telegram/TG_Despliegue.js
+
       - name: Subir el codigo a Apps Script
-        if: hashFiles('cobranzas/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir')
+        if: hashFiles('cobranzas/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir' || inputs.accion == 'publicar-bot')
         run: |
           clasp push --force
           echo "Codigo subido a la Sheet."
+
+      - name: Publicar la aplicación web del bot de Telegram
+        if: hashFiles('cobranzas/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir' || inputs.accion == 'publicar-bot')
+        env:
+          ID: ${{ steps.bot.outputs.id }}
+          DIAS: ${{ steps.bot.outputs.dias }}
+          CAMBIO: ${{ steps.cambios.outputs.bot }}
+        run: |
+          DESC="Asistente Telegram $(date -u +%Y-%m-%d)"
+          if [ -n "$ID" ] && [ "$CAMBIO" != "si" ] && [ "${DIAS:-999}" -lt 3 ] && [ "${{ inputs.accion }}" != "publicar-bot" ]; then
+            echo "El bot no cambió y su versión publicada tiene ${DIAS} día(s): no se gasta otra versión."
+            exit 0
+          fi
+          if [ -z "$ID" ]; then
+            # Primera vez: se crea la aplicación web, se anota su ID en el código y se vuelve a subir.
+            ID=$(clasp --json create-deployment -d "$DESC" | grep -oE 'AKfy[A-Za-z0-9_-]+' | head -1)
+            [ -n "$ID" ] || { echo "::error::No se pudo crear la aplicación web del bot"; exit 1; }
+            printf "/**\n * 🤖 Telegram — ID de la aplicación web (la dirección que usa Telegram para mandar los mensajes).\n * Este archivo lo REESCRIBE el workflow \"Desplegar Cobranzas\" en cada despliegue; en el repositorio queda vacío.\n */\nvar TG_DEPLOYMENT_ID_ = '%s';\n" "$ID" > telegram/TG_Despliegue.js
+            clasp push --force
+          fi
+          clasp create-deployment -i "$ID" -d "$DESC"
+          echo "Aplicación web del bot: https://script.google.com/macros/s/$ID/exec"
+          N=$(clasp --json list-versions 2>/dev/null | grep -c '"versionNumber"' || true)
+          echo "Versiones del proyecto: $N de 200"
+          if [ "${N:-0}" -ge 180 ]; then echo "::warning::El proyecto de Cobranzas tiene $N versiones (Google permite 200). Borre versiones viejas en Apps Script → Implementar → Gestionar implementaciones."; fi
 
       - name: Limpiar credenciales
         if: always()

@@ -74,6 +74,8 @@ function onOpen() {
   try { IA_agregarMenu_(); } catch (e) { Logger.log('Menu Asistente IA: ' + e.message); }
   // Menú propio de 🤝 Conciliar con IA (módulo aparte, ver ConciliacionIA.js).
   try { CIA_agregarMenu_(); } catch (e) { Logger.log('Menu Conciliar con IA: ' + e.message); }
+  // Menú del 🤖 asistente de Telegram (módulo aparte, carpeta telegram/).
+  try { TG_agregarMenu_(); } catch (e) { Logger.log('Menu Telegram: ' + e.message); }
 }
 
 function menuActualizarAhora() {
