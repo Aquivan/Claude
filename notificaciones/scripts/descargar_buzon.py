@@ -32,6 +32,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "retenciones", "scripts"))
 from descargar_cre import Sol, MENU  # noqa: E402
@@ -146,7 +147,9 @@ class Buzon:
                 ida = str(j.get("id_archivo") or "")
                 if not ida.isdigit() or any(str(x[0]) == ida for x in lista):
                     continue
-                num = re.sub(r"[^\w\-]+", "_", str(j.get("numeroDoc") or j.get("numero") or ""))[:40].strip("_")
+                num = html.unescape(str(j.get("numeroDoc") or j.get("numero") or ""))
+                num = unicodedata.normalize("NFKD", num).encode("ascii", "ignore").decode()
+                num = re.sub(r"[^\w\-]+", "_", num)[:40].strip("_")
                 lista.append((ida, f"documento{'_' + num if num else ''}.pdf", int(j.get("id_anexo") or 0) and 1,
                               str(j.get("sistema") or sistema), cod))
         if not lista:
