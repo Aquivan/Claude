@@ -1,2 +1,4 @@
 empresa_ruc,tipo,periodo,fecha_emision,comprobante,serie,numero,ruc_agente,agente,ruc_proveedor,proveedor,regimen,tasa,importe_retenido,importe_pagado,moneda,estado,facturas,correo_receptor,pdf,xml,observacion
 20609309793,Emitido,202610,03/10/2026,E001-78,E001,78,20609309793,BKF CORPORACION E.I.R.L.,20566226830,ENERGY PERU COMPANY E.I.R.L.,Tasa 3%,3,57.66,1864.31,PEN,EMITIDO,1,administracion@energy-peru.com,20609309793/2026/10/pdf/20609309793-E001-78.pdf,20609309793/2026/10/xml/20609309793-E001-78.xml,
+20609309793,Emitido,202610,13/10/2026,E001-79,E001,79,20609309793,,20605062670,,Tasa 3%,,815.62,,,EMITIDO,1,ryvdemem@gmail.com,,,(detalle desde pantalla SUNAT: sin XML)
+20609309793,Emitido,202610,15/10/2026,E001-80,E001,80,20609309793,,20608850342,,Tasa 3%,,200.01,,,EMITIDO,1,fmatey@inalta.com.pe,,,(detalle desde pantalla SUNAT: sin XML)

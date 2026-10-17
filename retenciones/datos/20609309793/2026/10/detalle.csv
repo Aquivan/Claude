@@ -1,2 +1,4 @@
 empresa_ruc,tipo,periodo,comprobante,fecha_retencion,ruc_agente,ruc_proveedor,proveedor,doc_tipo,doc_numero,doc_fecha,doc_moneda,doc_importe_total,pago_numero,pago_fecha,pago_importe,tipo_cambio,importe_retenido,importe_pagado_neto
 20609309793,Emitido,202610,E001-78,03/10/2026,20609309793,20566226830,ENERGY PERU COMPANY E.I.R.L.,Factura,F003-37128,30/09/2026,PEN,1921.97,1,03/10/2026,1921.97,1.00,57.66,1864.31
+20609309793,Emitido,202610,E001-79,13/10/2026,20609309793,20605062670,,Factura,E001,13/10/2026,PEN,27187.2,1,13/10/2026,26371.58,1.0,815.62,
+20609309793,Emitido,202610,E001-80,15/10/2026,20609309793,20608850342,,Factura,F003,15/10/2026,PEN,6667.0,1,15/10/2026,6466.99,1.0,200.01,
