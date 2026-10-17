@@ -1,0 +1,134 @@
+/**
+ * 📲 Vouchers por WhatsApp — recepción.
+ *
+ * El puente de Cloudflare reenvía aquí (doPost?token=...) cada aviso de Meta
+ * que trae mensajes. Por cada foto o PDF: se baja de Meta, se guarda en la
+ * carpeta de Entrada de Vouchers (Fotos u Originales) y se anota en la
+ * pestaña Recibidos. No se contesta mensaje por mensaje: WA_cadaMinuto manda
+ * UN aviso por tanda (y otro con el resultado), así un reenvío de 20
+ * vouchers no llena el chat ni gasta respuestas.
+ */
+
+function doPost(e) {
+  try {
+    var p = (e && e.parameter) || {};
+    var clave = WA_prop_('WA_GAS_TOKEN');
+    if (!clave || p.token !== clave) return WA_ok_('Forbidden');
+    WA_props_().setProperty('WA_ULTIMO', Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HH:mm:ss'));
+    WA_procesarAviso_(JSON.parse(e.postData.contents));
+  } catch (err) {
+    console.error('doPost WhatsApp: ' + (err && err.stack || err));
+  }
+  return WA_ok_('OK');
+}
+
+function doGet() { return WA_ok_('Vouchers WhatsApp activo ✅'); }
+
+// HtmlService (no ContentService): así lo que sigue a la redirección de Apps Script responde 200.
+function WA_ok_(t) { return HtmlService.createHtmlOutput(t); }
+
+function WA_procesarAviso_(aviso) {
+  (aviso.entry || []).forEach(function (en) {
+    (en.changes || []).forEach(function (ch) {
+      var v = ch.value || {};
+      var nombres = {};
+      (v.contacts || []).forEach(function (c) { nombres[c.wa_id] = ((c.profile || {}).name) || ''; });
+      (v.messages || []).forEach(function (m) {
+        try { WA_procesarMensaje_(m, nombres[m.from] || ''); }
+        catch (err) { console.error('Mensaje ' + m.id + ': ' + (err && err.stack || err)); }
+      });
+    });
+  });
+}
+
+function WA_procesarMensaje_(m, nombre) {
+  var cache = CacheService.getScriptCache();
+  if (cache.get('wa_m_' + m.id)) return;
+  cache.put('wa_m_' + m.id, '1', 21600);
+
+  var de = WA_soloDigitos_(m.from), permitidos = WA_permitidos_();
+  if (permitidos.length && permitidos.indexOf(de) === -1) {
+    console.warn('Número no autorizado: ' + de);
+    WA_enviarTexto_(de, '🚫 Este número no está autorizado para registrar vouchers. Pida que agreguen el ' + de + '.');
+    return;
+  }
+
+  if (m.type === 'text') { WA_comando_(de, ((m.text || {}).body || '').trim()); return; }
+
+  var media = m.image || m.document || null;
+  if (!media || (m.type !== 'image' && m.type !== 'document')) {
+    if (['audio', 'video', 'sticker'].indexOf(m.type) !== -1) WA_enviarTexto_(de, 'Solo registro fotos o PDF de vouchers 🙂');
+    return;
+  }
+
+  var mime = media.mime_type || '';
+  var esPdf = /pdf/i.test(mime), esImagen = /^image\//i.test(mime);
+  if (!esPdf && !esImagen) { WA_anotar_(m, de, nombre, '', media.filename || mime, 0, 'Error', 'Solo fotos o PDF', ''); return; }
+
+  var caption = media.caption || '';
+  var tipo = /\boriginal\b/i.test(caption) ? 'original' : /\bfoto\b/i.test(caption) ? 'foto'
+    : (WA_prop_('WA_MODO_' + de) || (esPdf ? 'original' : 'foto'));
+
+  var archivo = WA_nombreArchivo_(media.filename, caption, esPdf ? '.pdf' : '.jpg', nombre || de, m.id);
+  var blob, f;
+  try {
+    blob = WA_bajarMedia_(media.id).setName(archivo);
+    f = DriveApp.getFolderById(WA_VOUCHERS_.entrada[tipo]).createFile(blob);
+  } catch (err) {
+    WA_anotar_(m, de, nombre, tipo, archivo, 0, 'Error', String(err.message || err).slice(0, 200), '');
+    return;
+  }
+  WA_anotar_(m, de, nombre, tipo, archivo, Math.round(blob.getBytes().length / 1024), 'En cola', '', f.getId());
+}
+
+function WA_anotar_(m, de, nombre, tipo, archivo, kb, estado, resultado, idArchivo) {
+  WA_hoja_().appendRow([new Date(), nombre, de, tipo, archivo, kb, estado, resultado, m.id, idArchivo, '']);
+  WA_props_().setProperty('WA_TANDA_' + de, String(Date.now()));
+}
+
+// Igual que el bot de Telegram: nombre real del PDF, o el comentario, o fecha + quién lo mandó.
+function WA_nombreArchivo_(real, caption, ext, quien, idMsg) {
+  var sufijo = '_wa' + String(idMsg || '').replace(/[^A-Za-z0-9]/g, '').slice(-6);
+  if (real) {
+    var punto = real.lastIndexOf('.');
+    return punto > 0 ? WA_limpio_(real.slice(0, punto)) + sufijo + real.slice(punto) : WA_limpio_(real) + sufijo + ext;
+  }
+  var cap = caption.replace(/\b(original|foto)\b/ig, '').trim();
+  if (cap) return WA_limpio_(cap) + sufijo + ext;
+  var fecha = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd_HHmmss');
+  return fecha + '_' + (WA_limpio_(quien).toLowerCase() || 'whatsapp') + '_voucher' + sufijo + ext;
+}
+
+function WA_limpio_(t) {
+  return String(t || '').normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_').slice(0, 80);
+}
+
+function WA_comando_(de, texto) {
+  var t = texto.toLowerCase();
+  if (/^modo\s+(original|foto|auto)/.test(t)) {
+    var modo = t.match(/^modo\s+(\w+)/)[1];
+    if (modo === 'auto') WA_props_().deleteProperty('WA_MODO_' + de); else WA_props_().setProperty('WA_MODO_' + de, modo);
+    WA_enviarTexto_(de, modo === 'auto' ? '🔄 Modo automático: fotos → Fotos, PDF → Originales.'
+      : (modo === 'original' ? '📄 Modo ORIGINAL' : '📸 Modo FOTO') + ' activado. Escriba "modo auto" para volver al automático.');
+    return;
+  }
+  if (/^estado\b/.test(t)) { WA_enviarTexto_(de, WA_textoEstado_(de)); return; }
+  WA_enviarTexto_(de,
+    '👋 *Vouchers por WhatsApp*\n\n' +
+    'Reenvíeme las fotos o PDF de los vouchers (puede marcar varios y reenviarlos juntos). ' +
+    'Los registro en la hoja de Vouchers y le aviso el resultado.\n\n' +
+    '• Fotos → pestaña *Fotos* · PDF → *Originales*\n' +
+    '• Escriba "original" o "foto" en el comentario para cambiarlo solo esa vez\n' +
+    '• *modo original* / *modo foto* / *modo auto*\n' +
+    '• *estado*: lo que está en cola');
+}
+
+function WA_textoEstado_(de) {
+  var datos = WA_hoja_().getDataRange().getValues().slice(1);
+  var cola = datos.filter(function (r) { return String(r[2]) === de && r[6] === 'En cola'; }).length;
+  var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
+  var deHoy = datos.filter(function (r) { return String(r[2]) === de && r[0] instanceof Date && Utilities.formatDate(r[0], 'America/Lima', 'yyyy-MM-dd') === hoy; }).length;
+  return '📊 Hoy me envió ' + deHoy + ' archivo(s). En cola: ' + cola + '.' +
+    (cola ? '\nEl sistema de Vouchers los procesa cada 10 minutos.' : '');
+}
