@@ -1,0 +1,2 @@
+empresa_ruc,tipo,periodo,comprobante,fecha_retencion,ruc_agente,ruc_proveedor,proveedor,doc_tipo,doc_numero,doc_fecha,doc_moneda,doc_importe_total,pago_numero,pago_fecha,pago_importe,tipo_cambio,importe_retenido,importe_pagado_neto
+20447968216,Emitido,202610,E001-13,14/10/2026,20447968216,20539649745,,Factura,FE14,09/09/2026,PEN,64800.0,1,14/10/2026,62856.0,1.0,1944.0,

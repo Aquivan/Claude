@@ -1,0 +1,2 @@
+empresa_ruc,tipo,periodo,fecha_emision,comprobante,serie,numero,ruc_agente,agente,ruc_proveedor,proveedor,regimen,tasa,importe_retenido,importe_pagado,moneda,estado,facturas,correo_receptor,pdf,xml,observacion
+20447968216,Emitido,202610,14/10/2026,E001-13,E001,13,20447968216,,20539649745,,Tasa 3%,,1944.0,,,EMITIDO,1,contabilidad@dalsaperu.com.pe,,,(detalle desde pantalla SUNAT: sin XML)
