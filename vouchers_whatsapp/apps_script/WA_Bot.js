@@ -22,7 +22,28 @@ function doPost(e) {
   return WA_ok_('OK');
 }
 
-function doGet() { return WA_ok_('Vouchers WhatsApp activo ✅'); }
+function doGet(e) {
+  if (((e && e.parameter) || {}).p === 'privacidad') {
+    return HtmlService.createHtmlOutput(WA_PRIVACIDAD_).setTitle('Política de privacidad · Vouchers Bot');
+  }
+  return WA_ok_('Vouchers WhatsApp activo ✅');
+}
+
+// Página que Meta pide para publicar la app (URL de la política de privacidad).
+var WA_PRIVACIDAD_ =
+  '<div style="font:15px/1.6 Arial;max-width:720px;margin:24px auto;padding:0 16px">' +
+  '<h1>Política de privacidad — Vouchers Bot</h1>' +
+  '<p>Vouchers Bot es una herramienta interna de AsecontAqui (Perú) para registrar comprobantes de pago ' +
+  '(vouchers) que los propios usuarios autorizados reenvían por WhatsApp.</p>' +
+  '<h2>Qué datos se tratan</h2><p>El número de WhatsApp y el nombre de perfil de quien envía, y las fotos o ' +
+  'archivos PDF de vouchers que envía. De cada voucher se extraen fecha, banco, monto, número de operación y beneficiario.</p>' +
+  '<h2>Para qué</h2><p>Únicamente para registrar y conciliar los pagos en las hojas de cálculo de la empresa y ' +
+  'responder al remitente con el resultado. No se usan para publicidad ni se venden ni ceden a terceros.</p>' +
+  '<h2>Dónde se guardan</h2><p>En Google Drive y Google Sheets de la empresa. Intervienen como encargados Meta ' +
+  '(WhatsApp), Cloudflare y Google, conforme a la Ley N.° 29733 de Protección de Datos Personales y su reglamento.</p>' +
+  '<h2>Quién puede usarlo</h2><p>Solo números autorizados por la empresa. Los demás reciben un aviso y sus mensajes no se procesan.</p>' +
+  '<h2>Sus derechos</h2><p>Puede pedir acceso, rectificación o eliminación de sus datos al administrador de la empresa ' +
+  'por el mismo chat de WhatsApp.</p><p style="color:#777">Actualizado: octubre de 2026.</p></div>';
 
 // HtmlService (no ContentService): así lo que sigue a la redirección de Apps Script responde 200.
 function WA_ok_(t) { return HtmlService.createHtmlOutput(t); }
