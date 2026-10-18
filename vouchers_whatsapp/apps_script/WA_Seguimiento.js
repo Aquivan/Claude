@@ -25,6 +25,7 @@ function WA_cadaMinuto() {
     WA_props_().deleteProperty(k);
   });
 
+  if (tandas.length) WA_procesarYa_();
   var quedan = WA_revisarCola_(hoja, datos, ahora);
   WA_props_().setProperty('WA_HAY_COLA', quedan ? '1' : '0');
   WA_avisarResultados_(hoja, datos);
@@ -38,7 +39,8 @@ function WA_acuse_(hoja, datos, de) {
   var mal = filas.filter(function (i) { return datos[i][6] !== 'En cola'; });
   var fotos = ok.filter(function (i) { return datos[i][3] === 'foto'; }).length;
   var txt = '📥 Recibí ' + ok.length + ' archivo(s)' + (ok.length ? ': ' + fotos + ' foto(s), ' + (ok.length - fotos) + ' PDF/original(es).' : '.');
-  if (ok.length) txt += '\nLe aviso el resultado cuando estén en la hoja (el sistema revisa cada 10 min).';
+  if (ok.length) txt += WA_prop_('WA_PROCESAR_URL') ? '\n⚡ Procesando ahora; en un momento le mando el resultado.'
+    : '\nLe aviso el resultado cuando estén en la hoja (el sistema revisa cada 10 min).';
   if (mal.length) txt += '\n\n⚠️ No pude guardar:\n' + mal.map(function (i) { return '• ' + datos[i][4] + ' — ' + datos[i][7]; }).join('\n');
   WA_enviarTexto_(de, txt);
   filas.forEach(function (i) {
@@ -138,4 +140,22 @@ function WA_avisarResultados_(hoja, datos) {
     WA_enviarTexto_(de, txt);
     filas.forEach(function (i) { hoja.getRange(i + 1, 11).setValue('resultado'); });
   });
+}
+
+// Pide a la hoja de Vouchers que procese YA (su acción remota "procesar"), en vez de esperar
+// su revisión de cada 10 min. Nunca dos a la vez: la hoja de Vouchers no usa bloqueos.
+function WA_procesarYa_() {
+  var url = WA_prop_('WA_PROCESAR_URL');
+  if (!url) return;
+  var p = WA_props_(), desde = Number(p.getProperty('WA_PROCESANDO') || 0);
+  if (Date.now() - desde < 6 * 60 * 1000) return;
+  p.setProperty('WA_PROCESANDO', String(Date.now()));
+  try {
+    var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+    console.log('Procesar al instante: HTTP ' + r.getResponseCode() + ' ' + r.getContentText().slice(0, 300));
+  } catch (e) {
+    console.error('Procesar al instante falló: ' + e.message);
+  } finally {
+    p.deleteProperty('WA_PROCESANDO');
+  }
 }

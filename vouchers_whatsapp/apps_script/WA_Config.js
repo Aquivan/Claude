@@ -43,6 +43,7 @@ function onOpen() {
     .addItem('3. Probar envío (Hello World)', 'WA_menuProbar')
     .addSeparator()
     .addItem('Estado', 'WA_menuEstado')
+    .addItem('⚡ Procesar al instante (sin esperar 10 min)', 'WA_menuInstante')
     .addItem('Números autorizados', 'WA_menuNumeros')
     .addItem('Conectar app a la cuenta (si no llegan mensajes)', 'WA_menuSuscribir')
     .addToUi();
@@ -178,4 +179,22 @@ function WA_menuSuscribir() {
   if (!waba) { ui.alert('Falta el "Identificador de la cuenta de WhatsApp Business". Póngalo en "1. Configurar".'); return; }
   var r = WA_graph_('POST', waba + '/subscribed_apps', {});
   ui.alert(r.ok ? '✅ La app quedó conectada a la cuenta de WhatsApp. Mande un voucher de prueba.' : '❌ Meta respondió: ' + r.error);
+}
+
+function WA_menuInstante() {
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt('⚡ Procesar al instante',
+    'En la hoja de Vouchers abra el menú 🤖 Vouchers → 🩺 Configurar diagnostico remoto,\n' +
+    'copie la dirección que muestra y péguela aquí.\n' +
+    'Así cada tanda de WhatsApp se procesa apenas llega, sin esperar los 10 minutos.\n' +
+    (WA_prop_('WA_PROCESAR_URL') ? '(Ya hay una guardada; deje vacío para conservarla, o escriba BORRAR.)' : ''),
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var v = r.getResponseText().trim();
+  if (!v) return;
+  if (/^borrar$/i.test(v)) { WA_props_().deleteProperty('WA_PROCESAR_URL'); ui.alert('Borrada: se vuelve a esperar el proceso de cada 10 min.'); return; }
+  if (!/^https:\/\/script\.google\.com\/.+[?&]token=/.test(v)) { ui.alert('Esa dirección no parece la del diagnóstico (debe empezar con https://script.google.com/ y tener token=).'); return; }
+  v = /[?&]accion=/.test(v) ? v.replace(/([?&]accion=)[^&]*/, '$1procesar') : v + '&accion=procesar';
+  WA_props_().setProperty('WA_PROCESAR_URL', v);
+  ui.alert('✅ Guardado. Desde ahora cada tanda se procesa apenas termina de llegar (≈1 minuto).');
 }
