@@ -49,8 +49,20 @@ WhatsApp ──► Meta ──► Cloudflare Worker ──► Apps Script "Vouch
 ## Uso en WhatsApp
 
 - Reenvíe fotos o PDF (puede marcar varios). "original" / "foto" en el comentario cambia la pestaña solo esa vez.
-- `modo original`, `modo foto`, `modo auto` · `estado` · `hola` (ayuda).
+- `modo original`, `modo foto`, `modo auto` · `estado` · `hola` (ayuda) · cualquier otra cosa → 🧠 IA.
 - Solo los números de **Números autorizados** pueden mandar vouchers.
+
+## 🧠 Preguntas libres (la misma IA del asistente de Telegram)
+
+Todo texto que no sea un comando se le pregunta a la IA de Cobranzas (`cobranzas/telegram/TG_WhatsApp.js`,
+entrada `doPost?canal=wa` de la misma aplicación web del bot de Telegram): vouchers, facturas, cartera,
+Buzón SUNAT, retenciones, honorarios, detracciones, IGV, tipo de cambio… Devuelve texto, tablas cortas,
+**fotos de vouchers**, archivos y Excel, y el bot de WhatsApp los manda. Una foto/PDF con una pregunta en el
+comentario ("¿ya está registrado?" o "ia …") se analiza con la IA en vez de registrarse.
+
+- La clave entre las dos apps se crea y registra sola la primera vez (`WA_IA_CLAVE` aquí, `TGW_SECRETO` en Cobranzas).
+- Si la IA tarda más de 60 s, la respuesta se recoge en el minuto siguiente (`WA_cadaMinuto`).
+- Recordatorios, descargas de SUNAT y cambios en la hoja se confirman en Telegram.
 
 ## Límites honestos
 

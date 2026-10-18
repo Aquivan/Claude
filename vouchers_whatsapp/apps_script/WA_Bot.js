@@ -74,7 +74,11 @@ function WA_procesarMensaje_(m, nombre) {
     return;
   }
 
-  if (m.type === 'text') { WA_comando_(de, ((m.text || {}).body || '').trim()); return; }
+  if (m.type === 'text') {
+    var cuerpo = ((m.text || {}).body || '').trim();
+    if (!WA_comando_(de, cuerpo)) WA_preguntarIA_(m, de, nombre, cuerpo);
+    return;
+  }
 
   var media = m.image || m.document || null;
   if (!media || (m.type !== 'image' && m.type !== 'document')) {
@@ -87,6 +91,15 @@ function WA_procesarMensaje_(m, nombre) {
   if (!esPdf && !esImagen) { WA_anotar_(m, de, nombre, '', media.filename || mime, 0, 'Error', 'Solo fotos o PDF', ''); return; }
 
   var caption = media.caption || '';
+  // Foto/PDF con una pregunta en el comentario ("¿ya está pagado?", "ia …"): se le pregunta a la IA, no se registra.
+  if (/\?\s*$/.test(caption) || /^\s*(ia|pregunta)\b/i.test(caption)) {
+    try {
+      var b = WA_bajarMedia_(media.id);
+      WA_preguntarIA_(m, de, nombre, caption.replace(/^\s*(ia|pregunta)\b[:\s]*/i, ''),
+        [{ base64: Utilities.base64Encode(b.getBytes()), mime: mime, nombre: media.filename || ('whatsapp' + (esPdf ? '.pdf' : '.jpg')) }]);
+    } catch (err) { WA_enviarTexto_(de, '⚠️ No pude leer el archivo: ' + err.message); }
+    return;
+  }
   var tipo = /\boriginal\b/i.test(caption) ? 'original' : /\bfoto\b/i.test(caption) ? 'foto'
     : (WA_prop_('WA_MODO_' + de) || (esPdf ? 'original' : 'foto'));
 
@@ -132,9 +145,10 @@ function WA_comando_(de, texto) {
     if (modo === 'auto') WA_props_().deleteProperty('WA_MODO_' + de); else WA_props_().setProperty('WA_MODO_' + de, modo);
     WA_enviarTexto_(de, modo === 'auto' ? '🔄 Modo automático: fotos → Fotos, PDF → Originales.'
       : (modo === 'original' ? '📄 Modo ORIGINAL' : '📸 Modo FOTO') + ' activado. Escriba "modo auto" para volver al automático.');
-    return;
+    return true;
   }
-  if (/^estado\b/.test(t)) { WA_enviarTexto_(de, WA_textoEstado_(de)); return; }
+  if (/^estado[\s!.?]*$/.test(t)) { WA_enviarTexto_(de, WA_textoEstado_(de)); return true; }
+  if (!/^\/?(hola|ayuda|menu|menú|start|inicio|buenas|buenos dias|buenos días|buenas tardes|buenas noches)[\s!.¡]*$/.test(t)) return false;
   WA_enviarTexto_(de,
     '👋 *Vouchers por WhatsApp*\n\n' +
     'Reenvíeme las fotos o PDF de los vouchers (puede marcar varios y reenviarlos juntos). ' +
@@ -142,7 +156,13 @@ function WA_comando_(de, texto) {
     '• Fotos → pestaña *Fotos* · PDF → *Originales*\n' +
     '• Escriba "original" o "foto" en el comentario para cambiarlo solo esa vez\n' +
     '• *modo original* / *modo foto* / *modo auto*\n' +
-    '• *estado*: lo que está en cola');
+    '• *estado*: lo que está en cola\n\n' +
+    '🧠 *Pregúnteme lo que necesite* (la misma IA del asistente de Telegram), por ejemplo:\n' +
+    '• ¿Cuánto pagó Petro en octubre?\n' +
+    '• Mándame la foto del voucher de Cecovasa\n' +
+    '• ¿Hay notificaciones nuevas de SUNAT?\n' +
+    '• Foto o PDF con una pregunta en el comentario: "¿ya está registrado?"');
+  return true;
 }
 
 function WA_textoEstado_(de) {

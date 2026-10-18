@@ -10,6 +10,7 @@
 function doPost(e) {
   try {
     var p = (e && e.parameter) || {};
+    if (p.canal === 'wa') return TGW_doPost_(e);   // 📲 preguntas que llegan por WhatsApp (TG_WhatsApp.js)
     var secreto = PropertiesService.getScriptProperties().getProperty(TG_PROP_.SECRETO);
     if (!secreto || p.token !== secreto) return ContentService.createTextOutput('Forbidden');
     var u = JSON.parse(e.postData.contents);

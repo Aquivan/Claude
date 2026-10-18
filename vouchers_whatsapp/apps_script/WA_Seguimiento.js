@@ -17,6 +17,10 @@ function WA_cadaMinuto() {
   var props = WA_props_().getProperties(), ahora = Date.now();
   var tandas = Object.keys(props).filter(function (k) { return k.indexOf('WA_TANDA_') === 0 && ahora - Number(props[k]) >= WA_ESPERA_TANDA_MS_; });
   var hayCola = props.WA_HAY_COLA === '1';
+  if (props.WA_HAY_IA === '1') {
+    try { WA_buscarRespuestasIA_(props); } catch (e) { console.error('Respuestas IA: ' + e.message); }
+    if (!Object.keys(WA_props_().getProperties()).some(function (k) { return k.indexOf('WA_IAP_') === 0; })) WA_props_().setProperty('WA_HAY_IA', '0');
+  }
   if (!tandas.length && !hayCola) return;
 
   var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues();
