@@ -16,7 +16,14 @@
  *   WA_VERIFY      clave de verificación para Meta (se genera sola).
  */
 
-var WA_GRAPH_ = 'https://graph.facebook.com/v23.0/';
+var WA_GRAPH_ = 'https://graph.facebook.com/v25.0/';
+
+// Datos de la app "Vouchers Bot" (no son secretos). Lo que se guarde con el menú los reemplaza.
+var WA_FIJOS_ = {
+  WA_PHONE_ID: '1219097671294680',   // número de prueba +1 555 199 0951
+  WA_WABA_ID: '1414043013929024',    // Test WhatsApp Business Account
+  WA_PERMITIDOS: '51XXXXXXXXX'
+};
 
 // Mismas carpetas y hoja que usa el sistema de Vouchers (vouchers_bot_respaldo/src/Config.js).
 var WA_VOUCHERS_ = {
@@ -42,7 +49,7 @@ function onOpen() {
 }
 
 function WA_props_() { return PropertiesService.getScriptProperties(); }
-function WA_prop_(k) { return WA_props_().getProperty(k) || ''; }
+function WA_prop_(k) { return WA_props_().getProperty(k) || WA_FIJOS_[k] || ''; }
 
 function WA_hoja_() {
   var ss = null;
@@ -93,7 +100,7 @@ function WA_menuConfigurar() {
     ['WA_PERMITIDOS', 'Su número de WhatsApp con código de país, sin + ni espacios\n(ej. 51987654321). Varios: sepárelos con comas.']
   ];
   for (var i = 0; i < pasos.length; i++) {
-    var actual = p.getProperty(pasos[i][0]);
+    var actual = WA_prop_(pasos[i][0]);
     var muestra = actual ? (pasos[i][0] === 'WA_TOKEN' ? ' (ya guardado)' : ' (actual: ' + actual + ')') : '';
     var r = ui.prompt('📲 WhatsApp (' + (i + 1) + '/4)', pasos[i][1] + muestra, ui.ButtonSet.OK_CANCEL);
     if (r.getSelectedButton() !== ui.Button.OK) return;
