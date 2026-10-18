@@ -21,7 +21,7 @@ buzón (día hábil siguiente), se lea o no. La lista sola NO marca nada.
 Las claves SOL llegan por variables de entorno (SUNAT_RUC, SUNAT_USUARIO,
 SUNAT_CLAVE) y nunca se imprimen.
 
-Uso:  python descargar_buzon.py [--desde 202601 | 15/03/2026] [--salida notificaciones/datos] [--sin-pdf] [--pdf-mensajes]
+Uso:  python descargar_buzon.py [--desde 202601 | 15/03/2026] [--salida notificaciones/datos] [--sin-pdf] [--pdf-mensajes] [--solo-nuevas]
       --desde: solo lo publicado desde ese mes (AAAAMM) o fecha (dd/mm/aaaa). Vacío = todo.
 """
 import argparse
@@ -107,8 +107,9 @@ class Buzon:
         for c, d in re.findall(r"id=['\"]Etiq_(\w+)['\"][^>]*name=['\"]([^'\"]+)['\"]", master):
             self.etiquetas.setdefault(c, arreglar(d))
 
-    def lista(self, tipo, desde=None):
-        """La lista viene de la más reciente a la más antigua: se corta al pasar la fecha 'desde'."""
+    def lista(self, tipo, desde=None, conocidos=None):
+        """La lista viene de la más reciente a la más antigua: se corta al pasar la fecha 'desde'.
+        Con 'conocidos' (solo lo nuevo) se corta en la primera página en la que ya no hay nada nuevo."""
         filas, pagina, total = [], 1, 1
         while pagina <= total:
             st, t = self.sol.pedir(f"{VISOR}/listNotiMenPag?tipoMsj={tipo}&codCarpeta=00&codEtiqueta=&page={pagina}"
@@ -123,6 +124,9 @@ class Buzon:
                     break
             else:
                 filas += rows
+            if conocidos is not None and rows and all(str(r.get("codMensaje")) in conocidos for r in rows):
+                print(f"   {'Notificaciones' if tipo == '2' else 'Mensajes'}: la página {pagina} ya estaba descargada; no se revisa lo anterior.")
+                break
             pagina += 1
             time.sleep(0.5)
         return filas
@@ -240,6 +244,8 @@ def main():
     ap.add_argument("--desde", default="", help="AAAAMM o dd/mm/aaaa; vacío = todo")
     ap.add_argument("--sin-pdf", action="store_true", help="no abrir notificaciones ni bajar sus PDF")
     ap.add_argument("--pdf-mensajes", action="store_true", help="bajar también los adjuntos de los MENSAJES")
+    ap.add_argument("--solo-nuevas", action="store_true",
+                    help="solo lo nuevo: deja de revisar el buzón en la primera página que ya estaba toda descargada")
     a = ap.parse_args()
     ruc, usuario, clave = (os.environ.get(k, "") for k in ["SUNAT_RUC", "SUNAT_USUARIO", "SUNAT_CLAVE"])
     if not (ruc and usuario and clave):
@@ -258,12 +264,15 @@ def main():
             time.sleep(60 * intento)
     carpeta = os.path.join(a.salida, ruc)
     desde = desde_clave(a.desde)
-    print(f"Empresa {ruc}: buzón abierto. Desde: {desde or 'todo'}. PDF de notificaciones: {'no' if a.sin_pdf else 'sí'}")
+    print(f"Empresa {ruc}: buzón abierto. Desde: {desde or ('solo lo nuevo' if a.solo_nuevas else 'todo')}. "
+          f"PDF de notificaciones: {'no' if a.sin_pdf else 'sí'}")
     for tipo, nombre, con_pdf in [("2", "notificaciones", not a.sin_pdf), ("1", "mensajes", a.pdf_mensajes)]:
         ruta = os.path.join(carpeta, f"{nombre}.csv")
         previo = leer_previo(ruta)
         filas, nuevas, pdfs = [], 0, 0
-        for r in bz.lista(tipo, desde):
+        # Solo lo nuevo: cuenta como "ya descargada" la que está guardada y no tiene un PDF pendiente de reintento.
+        conocidos = {c for c, r in previo.items() if "se reintenta" not in (r.get("nota_pdf") or "")} if a.solo_nuevas else None
+        for r in bz.lista(tipo, desde, conocidos):
             cod = str(r.get("codMensaje"))
             asunto = arreglar(r.get("desAsunto"))
             fila = {
@@ -321,7 +330,8 @@ def main():
                     fila["revision"] = REVISION
             filas.append(fila)
         vistos = {f["codigo"] for f in filas}
-        filas += [r for c, r in previo.items() if c not in vistos and desde and fecha_clave(r.get("fecha_publicacion")) < desde]
+        filas += [r for c, r in previo.items() if c not in vistos and
+                  (a.solo_nuevas or (desde and fecha_clave(r.get("fecha_publicacion")) < desde))]
         guardar(ruta, filas)
         print(f"  {nombre}: {len(filas)} (nuevas {nuevas})" + (f" · PDF bajados {pdfs}" if con_pdf else ""))
 

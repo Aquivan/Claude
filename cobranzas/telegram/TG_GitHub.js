@@ -12,7 +12,7 @@ var TG_PROYECTOS_ = {
   honorarios: { nombre: '🧑‍💼 Recibos por honorarios', wf: 'honorarios-descargar.yml',
     inputs: function (x) { return { empresa: x.empresa, periodo: x.desde || TG_mes_(0), hasta: x.hasta || '' }; } },
   notificaciones: { nombre: '📬 Buzón SUNAT', wf: 'notificaciones-descargar.yml',
-    inputs: function (x) { return { empresa: x.empresa, desde: x.desde || '' }; } },
+    inputs: function (x) { return { empresa: x.empresa, desde: x.desde || '', solo_nuevas: !x.desde && x.nuevas !== false ? 'true' : 'false' }; } },
   detracciones: { nombre: '🏦 Detracciones', wf: 'detracciones-descargar.yml',
     inputs: function (x) { return { empresa: x.empresa, desde: x.desde || '', hasta: x.hasta || '' }; } },
 };
@@ -167,7 +167,11 @@ function TG_asistenteDescarga_(ctx, paso) {
   if (p[0] === 'e') {
     var proy = TG_PROYECTOS_[p[1]];
     var base = 'dw:t:' + p[1] + ':' + p[2] + ':';
-    var opciones = proy.unPeriodo
+    var opciones = p[1] === 'notificaciones'
+      ? [[{ text: '🆕 Solo lo nuevo (rápido)', callback_data: base + 'n' }],
+        [{ text: 'Este mes', callback_data: base + 'm0' }, { text: 'Últimos 3 meses', callback_data: base + 'm3' }],
+        [{ text: 'Todo el año', callback_data: base + 'y' }, { text: 'Todo el buzón (lento)', callback_data: base + 'todo' }]]
+      : proy.unPeriodo
       ? [[{ text: 'Este mes (' + TG_mes_(0) + ')', callback_data: base + TG_mes_(0) }, { text: 'Mes anterior (' + TG_mes_(1) + ')', callback_data: base + TG_mes_(1) }]]
       : [[{ text: 'Este mes', callback_data: base + 'm0' }, { text: 'Mes anterior', callback_data: base + 'm1' }],
         [{ text: 'Últimos 3 meses', callback_data: base + 'm3' }, { text: 'Todo el año', callback_data: base + 'y' }]];
@@ -182,6 +186,7 @@ function TG_asistenteDescarga_(ctx, paso) {
     else if (per === 'y') desde = new Date().getFullYear() + '01';
     if (p[1] === 'notificaciones' && per === 'm0') desde = TG_mes_(0);
     var acc = { t: 'descarga', proyecto: p[1], empresa: p[2], desde: desde, hasta: hasta };
+    if (p[1] === 'notificaciones' && !desde) acc.nuevas = per !== 'todo';
     TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
     return TG_proponerDescarga_(ctx, acc);
   }
@@ -196,7 +201,7 @@ function TG_textoDescarga_(acc, cob) {
   var p = TG_PROYECTOS_[acc.proyecto];
   var emp = acc.empresa === 'todas' ? 'todas las empresas' : ((cob && cob.nombreEmpresa[acc.empresa]) || acc.empresa);
   var per = acc.desde ? (acc.hasta && acc.hasta !== acc.desde ? acc.desde + ' a ' + acc.hasta : (p.unPeriodo || acc.hasta ? acc.desde : 'desde ' + acc.desde)) :
-    (acc.proyecto === 'detracciones' ? 'últimos 3 meses' : acc.proyecto === 'notificaciones' ? 'todo el buzón' : 'este mes');
+    (acc.proyecto === 'detracciones' ? 'últimos 3 meses' : acc.proyecto === 'notificaciones' ? (acc.nuevas === false ? 'todo el buzón' : 'solo lo nuevo') : 'este mes');
   return p.nombre + ' · ' + emp + ' · ' + per;
 }
 

@@ -81,22 +81,20 @@ function NOT_menuPedirDescarga() {
   var ui = SpreadsheetApp.getUi();
   try {
     var cfg = NOT_leerConfig_();
-    // Lo nuevo: desde hace 2 meses (lo anterior ya quedó guardado en el repositorio).
-    var hoy = new Date();
-    var desde = Utilities.formatDate(new Date(hoy.getFullYear(), hoy.getMonth() - 2, 1), 'America/Lima', 'yyyyMM');
-    NOT_despachar_(cfg, 'todas', cfg.bajarPdf, desde);
-    ui.alert('⬇ Pedido enviado. GitHub está revisando el Buzón Electrónico de todas las empresas' +
+    // Solo lo nuevo: en cada empresa se deja de revisar el buzón donde empieza lo ya descargado (rápido).
+    NOT_despachar_(cfg, 'todas', cfg.bajarPdf, '', true);
+    ui.alert('⬇ Pedido enviado. GitHub está revisando SOLO LO NUEVO del Buzón Electrónico de todas las empresas' +
       (cfg.bajarPdf ? ' (con PDF de las notificaciones nuevas).' : ' (solo la lista).') + '\n\nTarda unos minutos. Luego use 🔄 Actualizar todo.');
   } catch (e) {
     ui.alert('❌ ' + e.message);
   }
 }
 
-function NOT_despachar_(cfg, empresa, conPdf, desde) {
+function NOT_despachar_(cfg, empresa, conPdf, desde, soloNuevas) {
   var p = NOT_api_(cfg, '/actions/workflows/notificaciones-descargar.yml/dispatches');
   p.method = 'post';
   p.contentType = 'application/json';
-  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: empresa, pdf: conPdf ? 'true' : 'false', desde: desde || '' } });
+  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: empresa, pdf: conPdf ? 'true' : 'false', desde: desde || '', solo_nuevas: soloNuevas ? 'true' : 'false' } });
   var r = UrlFetchApp.fetch(p.url, p);
   if (r.getResponseCode() !== 204) throw new Error('GitHub respondió HTTP ' + r.getResponseCode() + ' (el token necesita permiso "Actions: Read and write").');
 }
@@ -106,10 +104,11 @@ function NOT_menuPedirRango() {
   var ui = SpreadsheetApp.getUi();
   try {
     var cfg = NOT_leerConfig_();
-    var r1 = ui.prompt('📅 Desde', 'Desde qué mes (AAAAMM, ej. 202601) o fecha (dd/mm/aaaa, ej. 15/03/2026).\nVacío = desde ' + cfg.desde + ' (Config). Escriba TODO para todo el buzón:', ui.ButtonSet.OK_CANCEL);
+    var r1 = ui.prompt('📅 Desde', 'Desde qué mes (AAAAMM, ej. 202601) o fecha (dd/mm/aaaa, ej. 15/03/2026).\nVacío = desde ' + cfg.desde + ' (Config). NUEVO = solo lo que falta (rápido). TODO = todo el buzón:', ui.ButtonSet.OK_CANCEL);
     if (r1.getSelectedButton() !== ui.Button.OK) return;
     var t = String(r1.getResponseText() || '').trim();
-    var desde = /^todo$/i.test(t) ? '' : (t || cfg.desde);
+    var soloNuevas = /^nuevo?s?$/i.test(t);
+    var desde = /^todo$/i.test(t) || soloNuevas ? '' : (t || cfg.desde);
     if (desde && !/^\d{6}$|^\d{1,2}\/\d{1,2}\/\d{4}$/.test(desde)) { ui.alert('Fecha no válida: use AAAAMM o dd/mm/aaaa.'); return; }
     var empresas = NOT_listarEmpresas_(cfg).filter(function (e) { return e.activo; });
     var r2 = ui.prompt('🏢 Empresa', empresas.map(function (e, i) { return (i + 1) + ') ' + e.nombre + ' · ' + e.ruc; }).join('\n') +
@@ -118,8 +117,8 @@ function NOT_menuPedirRango() {
     var k = parseInt(r2.getResponseText(), 10);
     var empresa = k >= 1 && k <= empresas.length ? empresas[k - 1].ruc : 'todas';
     var conPdf = ui.alert('📄 PDF', '¿Bajar el PDF de las notificaciones nuevas?\n\nSÍ = SUNAT las marca como leídas (igual que al abrirlas; la notificación ya surte efecto desde su depósito).\nNO = solo la lista.', ui.ButtonSet.YES_NO) === ui.Button.YES;
-    NOT_despachar_(cfg, empresa, conPdf, desde);
-    ui.alert('⬇ Pedido enviado: ' + (empresa === 'todas' ? 'todas las empresas' : empresa) + ', desde ' + (desde || 'el inicio') + (conPdf ? ', con PDF.' : ', solo lista.') +
+    NOT_despachar_(cfg, empresa, conPdf, desde, soloNuevas);
+    ui.alert('⬇ Pedido enviado: ' + (empresa === 'todas' ? 'todas las empresas' : empresa) + ', ' + (soloNuevas ? 'solo lo nuevo' : 'desde ' + (desde || 'el inicio')) + (conPdf ? ', con PDF.' : ', solo lista.') +
       '\n\nTarda unos minutos. Luego use 🔄 Actualizar todo.');
   } catch (e) {
     ui.alert('❌ ' + e.message);

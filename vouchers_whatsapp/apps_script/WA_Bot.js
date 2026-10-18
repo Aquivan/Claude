@@ -74,6 +74,11 @@ function WA_procesarMensaje_(m, nombre) {
     return;
   }
 
+  if (m.type === 'interactive' && m.interactive) {
+    var resp = m.interactive.button_reply || m.interactive.list_reply || {};
+    WA_boton_(de, resp.id || '');
+    return;
+  }
   if (m.type === 'text') {
     var cuerpo = ((m.text || {}).body || '').trim();
     if (!WA_comando_(de, cuerpo)) WA_preguntarIA_(m, de, nombre, cuerpo);

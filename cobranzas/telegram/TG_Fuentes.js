@@ -80,6 +80,7 @@ var TGH_ = {
     if (ruc !== 'todas' && !/^\d{11}$/.test(ruc)) throw new Error('no reconozco la empresa "' + emp + '"');
     var desde = String(a.desde || '').replace(/\D/g, '').slice(0, 6), hasta = String(a.hasta || '').replace(/\D/g, '').slice(0, 6);
     var acc = { t: 'descarga', proyecto: p, empresa: ruc, desde: desde, hasta: hasta };
+    if (p === 'notificaciones' && !desde) acc.nuevas = !(a.todo === true || /^tod/i.test(String(a.desde || '')));
     c.op.tg.acciones.push(acc);
     return { columnas: ['propuesta'], filas: [[TG_textoDescarga_(acc, c.cfg)]],
       nota: 'Queda PROPUESTA: el usuario verá un botón 🚀 para confirmarla. En tu respuesta dile qué se va a descargar y que la confirme con el botón.' };

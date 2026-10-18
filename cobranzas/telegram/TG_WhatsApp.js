@@ -18,7 +18,7 @@ var TGW_SISTEMA_ = TG_SISTEMA_.replace('ESTÁS RESPONDIENDO POR TELEGRAM', 'EST�
   '',
   'PARTICULARIDADES DE WHATSAPP:',
   '- No hay recordatorios ni avisos por WhatsApp: si los piden, di que se configuran en el bot de Telegram.',
-  '- lanzar_descarga y los cambios en la hoja se CONFIRMAN en Telegram o en la hoja: dilo al proponerlos.',
+  '- lanzar_descarga: el usuario la confirma con un botón aquí mismo en WhatsApp. Los cambios en la hoja se confirman en Telegram o en la hoja.',
   '- Las fotos de vouchers y los archivos sí se mandan por WhatsApp con enviar_voucher / enviar_archivo.',
 ].join('\n');
 
@@ -33,6 +33,7 @@ function TGW_doPost_(e) {
     return TGW_json_({ ok: true });
   }
   if (!guardada || p.token !== guardada) return TGW_json_({ ok: false, error: 'Forbidden' });
+  if (p.accion === 'boton') return TGW_json_(TGW_boton_(p.k, p.op));
   if (p.accion === 'resultado') {
     var listo = CacheService.getScriptCache().get('tgw_r_' + p.id);
     return TGW_json_(listo ? JSON.parse(listo) : { ok: false, pendiente: true });
@@ -102,7 +103,10 @@ function TGW_responder_(q) {
     catch (e) { out.avisos.push('No pude armar el Excel: ' + e.message); }
   }
   if (r.cambios && r.cambios.length) out.avisos.push('✏️ Propuse ' + r.cambios.length + ' cambio(s) en la hoja de Vouchers: confírmelos en Telegram o en la hoja.');
-  (op.tg.acciones || []).forEach(function () { out.avisos.push('🚀 La descarga propuesta se confirma en Telegram (/descargas).'); });
+  // 🚀 Descargas propuestas: el bot de WhatsApp las ofrece con botones (✔ / ✖) y la respuesta vuelve con accion=boton.
+  out.descargas = (op.tg.acciones || []).slice(0, 3).map(function (a) {
+    return { k: TG_guardarBoton_(a), texto: TG_textoDescarga_(a, cfg.cob) };
+  });
 
   if (op.tg.vouchers) {
     var libro = SpreadsheetApp.openById(leerConfig_(ss).idVouchers);
@@ -133,4 +137,18 @@ function TGW_archivo_(blob, titulo) {
   return { nombre: blob.getName() || 'archivo', mime: blob.getContentType() || 'application/octet-stream', titulo: titulo || '',
     imagen: /^image\/(jpe?g|png)$/i.test(blob.getContentType() || '') && blob.getBytes().length <= 5 * 1024 * 1024,
     base64: Utilities.base64Encode(blob.getBytes()) };
+}
+
+/** Botón 🚀 Sí, descargar / ✖ Cancelar tocado en WhatsApp. */
+function TGW_boton_(k, op) {
+  var acc = TG_leerBoton_(k);
+  if (!acc || acc.t !== 'descarga') return { ok: true, respuesta: 'Ese botón ya venció (duran 6 horas). Pídamelo de nuevo.' };
+  if (TG_yaVisto_('wadesc' + k)) return { ok: true, respuesta: 'Esa descarga ya se pidió.' };
+  if (op !== 'si') return { ok: true, respuesta: 'Listo, no pedí nada.' };
+  var cfg = TG_cfg_(TG_ss_());
+  var p = TG_PROYECTOS_[acc.proyecto];
+  try { TG_gh_(cfg, '/actions/workflows/' + p.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: p.inputs(acc) }); }
+  catch (e) { return { ok: false, error: 'No se pudo pedir la descarga: ' + e.message }; }
+  return { ok: true, respuesta: '✅ *Descarga pedida*: ' + TG_textoDescarga_(acc, cfg.cob) +
+    '\nTarda unos minutos por empresa; la hoja se actualiza sola. Pregúnteme "¿cómo van las descargas?" para ver el estado.' };
 }

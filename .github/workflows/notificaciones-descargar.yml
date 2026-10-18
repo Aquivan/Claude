@@ -25,6 +25,10 @@ on:
         description: "Desde qué mes (AAAAMM) o fecha (dd/mm/aaaa). Vacío = todo el buzón"
         required: false
         default: ""
+      solo_nuevas:
+        description: "Solo lo nuevo: deja de revisar el buzón donde empieza lo ya descargado (rápido). Se ignora si se pone 'desde'."
+        type: boolean
+        default: true
       pdf:
         description: "Bajar el PDF de cada notificación (la marca como leída en SOL)"
         type: boolean
@@ -121,12 +125,14 @@ jobs:
           PDF: ${{ inputs.pdf }}
           PDF_MENSAJES: ${{ inputs.pdf_mensajes }}
           DESDE: ${{ inputs.desde }}
+          SOLO_NUEVAS: ${{ inputs.solo_nuevas }}
         run: |
           # Corrida automática: los últimos 3 meses (lo anterior ya quedó guardado).
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.diario }}" = "true" ]; then DESDE=$(TZ=America/Lima date -d "$(TZ=America/Lima date +%Y-%m-01) -2 month" +%Y%m); fi
           extra=""
           if [ "$PDF" = "false" ]; then extra="$extra --sin-pdf"; fi
           if [ "$PDF_MENSAJES" = "true" ]; then extra="$extra --pdf-mensajes"; fi
+          if [ -z "$DESDE" ] && [ "$SOLO_NUEVAS" = "true" ]; then extra="$extra --solo-nuevas"; fi
           python3 notificaciones/scripts/descargar_buzon.py --salida notificaciones/datos --desde "$DESDE" $extra
 
       - name: Guardar en el repositorio

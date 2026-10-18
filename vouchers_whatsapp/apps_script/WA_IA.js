@@ -82,6 +82,28 @@ function WA_entregarIA_(de, r) {
     try { WA_enviarArchivo_(de, a); }
     catch (e) { WA_enviarTexto_(de, '⚠️ No pude mandar ' + (a.titulo || a.nombre) + ': ' + e.message); }
   });
+  (r.descargas || []).forEach(function (d) { WA_ofrecerDescarga_(de, d); });
+}
+
+/** 🚀 Descarga de SUNAT propuesta por la IA: se confirma con un botón, igual que en Telegram. */
+function WA_ofrecerDescarga_(de, d) {
+  var r = WA_graph_('POST', WA_prop_('WA_PHONE_ID') + '/messages', {
+    messaging_product: 'whatsapp', to: de, type: 'interactive',
+    interactive: { type: 'button', body: { text: '🚀 *¿Pido esta descarga a SUNAT?*\n' + d.texto + '\n_Corre en GitHub, solo LEE en SUNAT._' },
+      action: { buttons: [{ type: 'reply', reply: { id: 'dl:' + d.k + ':si', title: '🚀 Sí, descargar' } },
+                          { type: 'reply', reply: { id: 'dl:' + d.k + ':no', title: '✖ Cancelar' } }] } }
+  });
+  if (!r.ok) WA_enviarTexto_(de, '⚠️ No pude mostrar los botones de la descarga: ' + r.error);
+}
+
+/** Botón tocado en WhatsApp (id "dl:<clave>:si|no"). */
+function WA_boton_(de, id) {
+  var p = String(id).split(':');
+  if (p[0] !== 'dl') return;
+  var r;
+  try { r = WA_iaLlamar_({ token: WA_iaClave_(), accion: 'boton', k: p[1], op: p[2] }); }
+  catch (e) { r = { ok: false, error: e.message }; }
+  WA_entregarIA_(de, r);
 }
 
 // Markdown de la IA → formato de WhatsApp (*negrita*, _cursiva_).

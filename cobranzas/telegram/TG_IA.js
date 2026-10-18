@@ -34,6 +34,7 @@ var TG_SISTEMA_ = [
   '  si terminaron bien, con error, cuándo, qué empresa falló.',
   '- lanzar_descarga {proyecto:"sire"|"retenciones"|"honorarios"|"notificaciones"|"detracciones", empresa:"todas" o RUC/nombre, desde:"AAAAMM", hasta:"AAAAMM"}:',
   '  PROPONE pedir una descarga a SUNAT; el usuario la confirma con un botón (no se lanza sola). Para SIRE solo vale un periodo (desde).',
+  '  Notificaciones sin "desde" = SOLO LO NUEVO (lo que falta, rápido): es lo normal. Solo si piden expresamente todo el buzón usa todo:true.',
   '- tipo_cambio {}: tipo de cambio SUNAT de hoy (compra y venta).',
   '- padron_ruc {ruc}: si un RUC es agente de retención, buen contribuyente o agente de percepción (padrones SUNAT guardados).',
   '- recordatorio {cuando:"dd/mm/yyyy HH:mm", texto, repetir:"no"|"diario"|"semanal"|"mensual"}: crea un recordatorio para este chat',

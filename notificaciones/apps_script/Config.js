@@ -39,7 +39,7 @@ function onOpen() {
     .addItem('📥 Solo actualizar datos', 'NOT_menuActualizarDatos')
     .addItem('📁 Solo ordenar PDF en Drive', 'NOT_menuOrdenarPdf')
     .addSeparator()
-    .addItem('⬇ Pedir a SUNAT lo nuevo (GitHub)', 'NOT_menuPedirDescarga')
+    .addItem('⬇ Pedir a SUNAT solo lo nuevo (rápido)', 'NOT_menuPedirDescarga')
     .addItem('⬇ Pedir a SUNAT: desde un mes o fecha, una empresa, con o sin PDF…', 'NOT_menuPedirRango')
     .addSeparator()
     .addItem('⏰ Activar actualización diaria', 'NOT_activarDiario')
