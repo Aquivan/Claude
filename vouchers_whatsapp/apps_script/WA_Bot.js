@@ -80,9 +80,18 @@ function WA_procesarMensaje_(m, nombre) {
     return;
   }
 
+  // 🎤 Nota de voz o audio: la IA lo transcribe y responde lo que se pidió.
+  if (m.type === 'audio' && m.audio) {
+    try {
+      var voz = WA_bajarMedia_(m.audio.id);
+      WA_preguntarIA_(m, de, nombre, '', [], { base64: Utilities.base64Encode(voz.getBytes()), mime: m.audio.mime_type || 'audio/ogg' });
+    } catch (err) { WA_enviarTexto_(de, '⚠️ No pude bajar el audio: ' + err.message); }
+    return;
+  }
+
   var media = m.image || m.document || null;
   if (!media || (m.type !== 'image' && m.type !== 'document')) {
-    if (['audio', 'video', 'sticker'].indexOf(m.type) !== -1) WA_enviarTexto_(de, 'Solo registro fotos o PDF de vouchers 🙂');
+    if (['video', 'sticker'].indexOf(m.type) !== -1) WA_enviarTexto_(de, 'Entiendo textos, notas de voz, fotos y PDF 🙂');
     return;
   }
 
@@ -161,7 +170,8 @@ function WA_comando_(de, texto) {
     '• ¿Cuánto pagó Petro en octubre?\n' +
     '• Mándame la foto del voucher de Cecovasa\n' +
     '• ¿Hay notificaciones nuevas de SUNAT?\n' +
-    '• Foto o PDF con una pregunta en el comentario: "¿ya está registrado?"');
+    '• Foto o PDF con una pregunta en el comentario: "¿ya está registrado?"\n' +
+    '• 🎤 También puede mandarme una nota de voz');
   return true;
 }
 

@@ -59,6 +59,7 @@ entrada `doPost?canal=wa` de la misma aplicación web del bot de Telegram): vouc
 Buzón SUNAT, retenciones, honorarios, detracciones, IGV, tipo de cambio… Devuelve texto, tablas cortas,
 **fotos de vouchers**, archivos y Excel, y el bot de WhatsApp los manda. Una foto/PDF con una pregunta en el
 comentario ("¿ya está registrado?" o "ia …") se analiza con la IA en vez de registrarse.
+Una 🎤 nota de voz se transcribe (igual que en Telegram) y se responde lo que se pidió.
 
 - La clave entre las dos apps se crea y registra sola la primera vez (`WA_IA_CLAVE` aquí, `TGW_SECRETO` en Cobranzas).
 - Si la IA tarda más de 60 s, la respuesta se recoge en el minuto siguiente (`WA_cadaMinuto`).

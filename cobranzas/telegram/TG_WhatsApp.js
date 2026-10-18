@@ -58,7 +58,7 @@ function TGW_sinArchivos_(r) {
   return x;
 }
 
-/** q = {id, numero, nombre, texto, adjuntos:[{base64, mime, nombre}]} */
+/** q = {id, numero, nombre, texto, adjuntos:[{base64, mime, nombre}], audio:{base64, mime}} */
 function TGW_responder_(q) {
   var ss = TG_ss_();
   var clave = 'wa' + String(q.numero || '').replace(/\D/g, '');
@@ -71,6 +71,14 @@ function TGW_responder_(q) {
     origen: '📲 whatsapp ' + (q.nombre || q.numero), modelo: cfg.modelo || '', tg: { ctx: ctx, archivos: [], acciones: [], cfg: cfg }
   };
   var texto = String(q.texto || '').trim();
+  // 🎤 Nota de voz: se transcribe igual que en Telegram y se pregunta lo dicho.
+  var dicho = '';
+  if (q.audio && q.audio.base64) {
+    try { dicho = TG_transcribir_(ss, Utilities.newBlob(Utilities.base64Decode(q.audio.base64), q.audio.mime || 'audio/ogg', 'voz.ogg')); }
+    catch (e) { return { ok: false, error: 'No pude entender el audio: ' + e.message + '\nPuede escribirme la pregunta.' }; }
+    if (!dicho) return { ok: true, respuesta: '🎤 No escuché nada claro. ¿Me lo repite o lo escribe?', tablas: [], sugerencias: [], archivos: [], avisos: [] };
+    texto = dicho;
+  }
   var r = CHAT_enviarEn_(ss, { texto: texto, nuevos: q.adjuntos || [], anteriores: (ses.adj || []).slice(-4), historial: ses.hist || [] }, op);
   if (r.error) return { ok: false, error: r.error };
 
@@ -82,7 +90,7 @@ function TGW_responder_(q) {
 
   var tablas = (r.tablas || []).filter(function (t) { return t.columnas && t.columnas.length; });
   var out = {
-    ok: true,
+    ok: true, dicho: dicho,
     respuesta: String(r.respuesta || ''),
     tablas: tablas.slice(0, 3).map(function (t) { return { titulo: t.titulo, columnas: t.columnas, filas: t.filas.slice(0, 8).map(function (f) { return f.map(function (v, j) { return TG_valor_(v, t.columnas[j]); }); }), total: t.filas.length }; }),
     sugerencias: (r.final && Array.isArray(r.final.sugerencias) ? r.final.sugerencias : []).filter(Boolean).slice(0, 3),

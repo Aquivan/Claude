@@ -42,11 +42,11 @@ function WA_escribiendo_(idMsg) {
   });
 }
 
-function WA_preguntarIA_(m, de, nombre, texto, adjuntos) {
+function WA_preguntarIA_(m, de, nombre, texto, adjuntos, audio) {
   try { WA_escribiendo_(m.id); } catch (e) {}
   var r;
   try {
-    r = WA_iaLlamar_({ token: WA_iaClave_() }, { id: m.id, numero: de, nombre: nombre, texto: texto, adjuntos: adjuntos || [] });
+    r = WA_iaLlamar_({ token: WA_iaClave_() }, { id: m.id, numero: de, nombre: nombre, texto: texto, adjuntos: adjuntos || [], audio: audio || null });
   } catch (e) {
     // Lo más común: la IA tardó más de 60 s. Sigue trabajando en Cobranzas; WA_cadaMinuto busca el resultado.
     if (/clave|conectar/i.test(e.message)) { WA_enviarTexto_(de, '⚠️ ' + e.message); return; }
@@ -73,7 +73,7 @@ function WA_buscarRespuestasIA_(props) {
 
 function WA_entregarIA_(de, r) {
   if (!r || !r.ok) { WA_enviarTexto_(de, '⚠️ ' + ((r && r.error) || 'La IA no respondió.')); return; }
-  var txt = WA_md_(r.respuesta);
+  var txt = (r.dicho ? '🎤 _' + r.dicho + '_\n\n' : '') + WA_md_(r.respuesta);
   (r.tablas || []).forEach(function (t) { txt += '\n\n' + WA_tablaTexto_(t); });
   if ((r.avisos || []).length) txt += '\n\n' + r.avisos.join('\n');
   if ((r.sugerencias || []).length) txt += '\n\n💬 _También puede preguntar:_\n' + r.sugerencias.map(function (s) { return '• ' + s; }).join('\n');
