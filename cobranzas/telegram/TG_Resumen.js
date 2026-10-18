@@ -118,6 +118,7 @@ function TG_textoResumen_(ss) {
     if (!ok && !mal.length) return '';
     return '⚙️ <b>Descargas SUNAT:</b> ' + (mal.length ? '❌ con error: ' + TG_esc_(mal.join(', ')) + ' · ' : '') + '✅ ' + ok + ' bien';
   });
+  bloque(function () { return TGV_textoResumen_(ss); });
   bloque(function () { var tc = TG_tipoCambio_(); return '💱 <b>Tipo de cambio SUNAT:</b> compra ' + tc.compra.toFixed(3) + ' · venta ' + tc.venta.toFixed(3); });
   return partes.join('\n\n');
 }

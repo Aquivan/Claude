@@ -37,6 +37,10 @@ function TG_vigia() {
   });
   TG_guardarVistos_(ss, V);
 
+  // 📅 Vencimientos SUNAT (IGV-Renta/PLAME, SIRE): a la hora elegida en la pestaña 📅 Vencimientos.
+  // (tiene su propia hora, por eso no se salta de noche)
+  try { TGV_activarParaTodos_(ss, us); TGV_avisar_(ss, para('oblig')); } catch (e) { console.warn('Vencimientos SUNAT: ' + e.message); }
+
   // ☀️ Resumen de la mañana y ⏰ vencimientos (una vez al día, a la hora elegida o dentro de las 3 horas siguientes).
   var props = PropertiesService.getScriptProperties();
   var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd');

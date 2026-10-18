@@ -170,6 +170,7 @@ function TG_comando_(ctx, texto) {
     case 'cobrar': return TG_enviarCartera_(ctx, 'Por cobrar', arg);
     case 'pagar': return TG_enviarCartera_(ctx, 'Por pagar', arg);
     case 'vencidas': return TG_enviarVencidas_(ctx, arg);
+    case 'vencimientos': case 'obligaciones': case 'cronograma': return TGV_comando_(ctx, arg);
     case 'notificaciones': case 'buzon': case 'sunat': return TG_enviarNotificaciones_(ctx, arg);
     case 'detracciones': return TG_enviarDetracciones_(ctx, arg);
     case 'retenciones': return TG_enviarRetenciones_(ctx, arg);
@@ -370,6 +371,7 @@ function TG_alBoton_(ss, q) {
     case 'deshacer': return TG_deshacerCambios_(ctx);
     case 'archivo': return TG_mandarArchivo_(ctx, datos.id, datos.titulo);
     case 'descarga': return TG_confirmarDescarga_(ctx, datos, op);
+    case 'venc': return TGV_alBoton_(ctx, datos);
     case 'rerun': return TG_reintentarRun_(ctx, datos);
     case 'recq': return TG_quitarRecordatorio_(ctx, datos.id);
     case 'excel': return TG_mandarExcel_(ctx, datos);

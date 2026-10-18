@@ -43,6 +43,7 @@ var TG_AVISOS_ = [
   ['hon', '🧑‍💼 Recibos por honorarios nuevos'],
   ['vou', '💳 Vouchers nuevos registrados'],
   ['venc', '⏰ Facturas por vencer y vencidas'],
+  ['oblig', '📅 Vencimientos SUNAT (IGV-Renta/PLAME, SIRE)'],
   ['err', '❌ Descargas automáticas con error'],
   ['resumen', '☀️ Resumen de la mañana'],
 ];
@@ -376,6 +377,7 @@ var TG_COMANDOS_ = [
   ['cobrar', '💰 Cuentas por cobrar'],
   ['pagar', '💸 Cuentas por pagar'],
   ['vencidas', '⏰ Facturas vencidas y por vencer'],
+  ['vencimientos', '📅 Vencimientos SUNAT: IGV, PLAME, SIRE (y sus avisos)'],
   ['notificaciones', '📬 Buzón SUNAT (últimas notificaciones)'],
   ['detracciones', '🏦 Detracciones del mes'],
   ['retenciones', '🧾 Retenciones del mes'],

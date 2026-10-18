@@ -36,6 +36,10 @@ var TG_SISTEMA_ = [
   '  PROPONE pedir una descarga a SUNAT; el usuario la confirma con un botón (no se lanza sola). Para SIRE solo vale un periodo (desde).',
   '  Notificaciones sin "desde" = SOLO LO NUEVO (lo que falta, rápido): es lo normal. Solo si piden expresamente todo el buzón usa todo:true.',
   '- tipo_cambio {}: tipo de cambio SUNAT de hoy (compra y venta).',
+  '- vencimientos {empresa, periodo:"AAAAMM", pendientes:true}: vencimientos SUNAT de IGV-Renta/PLAME (misma fecha) y SIRE por empresa',
+  '  (cronograma por último dígito del RUC, Buenos Contribuyentes aparte), días que faltan y si ya está presentado. Para "¿qué vence?", "¿cuándo vence el IGV?".',
+  '- marcar_presentado {empresa, obligacion:"igv"|"sire", periodo:"AAAAMM"}: anota que ya se presentó (deja de avisar). Úsala solo si el usuario dice que ya lo presentó.',
+  '- ajustar_avisos_vencimientos {dias_igv:"5,2,0", dias_sire:"3,0", hora:8, despues:5, empresas:"GRANIX, LUQUE" o ""}: cambia cuándo avisa (lo que pida el usuario).',
   '- padron_ruc {ruc}: si un RUC es agente de retención, buen contribuyente o agente de percepción (padrones SUNAT guardados).',
   '- recordatorio {cuando:"dd/mm/yyyy HH:mm", texto, repetir:"no"|"diario"|"semanal"|"mensual"}: crea un recordatorio para este chat',
   '  (calcula la fecha a partir de HOY; si no dicen hora usa 09:00). - recordatorios {}: lista los de este chat.',
@@ -54,7 +58,7 @@ var TG_ALIAS_ = { buzon: 'notificaciones', notificacion: 'notificaciones', mensa
   honorario: 'honorarios', rhe: 'honorarios', recibos: 'honorarios', liquidacion: 'sire_liquidacion', sire: 'sire_liquidacion', igv: 'sire_liquidacion',
   libro: 'leer_libro', estado: 'estado_descargas', corridas: 'estado_descargas', descargar: 'lanzar_descarga', descarga: 'lanzar_descarga',
   cambio: 'tipo_cambio', tc: 'tipo_cambio', padron: 'padron_ruc', recordar: 'recordatorio', archivo_enviar: 'enviar_archivo', enviar: 'enviar_archivo', mandar_archivo: 'enviar_archivo',
-  imagen_voucher: 'enviar_voucher', foto_voucher: 'enviar_voucher', adjuntar_voucher: 'enviar_voucher', ver_voucher: 'enviar_voucher', mandar_voucher: 'enviar_voucher', voucher_imagen: 'enviar_voucher' };
+  imagen_voucher: 'enviar_voucher', vencimiento: 'vencimientos', cronograma: 'vencimientos', obligaciones: 'vencimientos', presentado: 'marcar_presentado', marcar: 'marcar_presentado', foto_voucher: 'enviar_voucher', adjuntar_voucher: 'enviar_voucher', ver_voucher: 'enviar_voucher', mandar_voucher: 'enviar_voucher', voucher_imagen: 'enviar_voucher' };
 
 /**
  * Pregunta a la IA y contesta en el chat. adjs: archivos ya guardados en Drive [{id, nombre, mime}].

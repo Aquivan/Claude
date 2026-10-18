@@ -110,6 +110,39 @@ var TGH_ = {
     return { columnas: ['id', 'cuando', 'texto', 'repetir'], filas: [[r.id, TG_fechaHoraTxt_(cuando), r.texto, r.repetir]], nota: 'Recordatorio creado.' };
   },
 
+  vencimientos: function (c, a) {
+    var lista = TGV_lista_(c.ss, c).filter(function (x) { return !x.sinCronograma; });
+    if (a.empresa) { var r = ANA_empresa_(c, a.empresa); lista = lista.filter(function (x) { return x.ruc === r; }); }
+    if (a.periodo) { var per = String(a.periodo).replace(/\D/g, '').slice(0, 6); lista = lista.filter(function (x) { return x.periodo === per; }); }
+    if (a.pendientes === true) lista = lista.filter(function (x) { return !x.presentado; });
+    var p = TGV_param_(c.ss);
+    return { columnas: ['empresa', 'ruc', 'obligacion', 'periodo', 'vence', 'dias_que_faltan', 'estado', 'buen_contribuyente'],
+      filas: lista.map(function (x) { return [x.nombre, x.ruc, TGV_OBLIG_[x.ob].corto, x.periodo, x.vence, x.faltan, x.presentado ? 'presentado' : (x.faltan < 0 ? 'VENCIDO sin marcar' : 'pendiente'), x.bc ? 'sí' : 'no']; }),
+      nota: 'Cronograma SUNAT por último dígito del RUC (pestaña ' + TGV_HOJA_ + '). Avisos: IGV ' + p.dias.igv.join(',') + ' y SIRE ' + p.dias.sire.join(',') + ' días antes, a las ' + p.hora + ':00. ' +
+        'El SIRE se marca presentado solo con el mensaje del Buzón; el IGV-Renta/PLAME con el botón o con marcar_presentado.' };
+  },
+
+  marcar_presentado: function (c, a) {
+    var ruc = ANA_empresa_(c, a.empresa);
+    if (!/^\d{11}$/.test(String(ruc))) throw new Error('no reconozco la empresa "' + a.empresa + '"');
+    var per = String(a.periodo || '').replace(/\D/g, '').slice(0, 6);
+    if (!/^\d{6}$/.test(per)) throw new Error('periodo debe ser AAAAMM');
+    var ob = /sire|rvie|rce|regis/i.test(a.obligacion || '') ? 'sire' : 'igv';
+    var nuevo = TGV_marcar_(c.ss, ruc, per, ob, 'chat con la IA');
+    return { columnas: ['resultado'], filas: [[(nuevo ? 'Anotado como presentado: ' : 'Ya estaba anotado: ') + TGV_OBLIG_[ob].corto + ' ' + per + ' de ' + ruc]] };
+  },
+
+  ajustar_avisos_vencimientos: function (c, a) {
+    var hecho = [];
+    var lista = function (v) { return String(v).split(/[,;\s]+/).map(Number).filter(function (n) { return !isNaN(n) && n >= 0 && n <= 60; }).join(', '); };
+    if (a.dias_igv != null) { TGV_cambiarParam_(c.ss, TGV_PARAM_[0][0], lista(a.dias_igv)); hecho.push('IGV ' + lista(a.dias_igv)); }
+    if (a.dias_sire != null) { TGV_cambiarParam_(c.ss, TGV_PARAM_[1][0], lista(a.dias_sire)); hecho.push('SIRE ' + lista(a.dias_sire)); }
+    if (a.hora != null) { TGV_cambiarParam_(c.ss, TGV_PARAM_[2][0], String(parseInt(a.hora, 10))); hecho.push('hora ' + parseInt(a.hora, 10)); }
+    if (a.despues != null) { TGV_cambiarParam_(c.ss, TGV_PARAM_[3][0], String(parseInt(a.despues, 10))); hecho.push('después de vencido ' + parseInt(a.despues, 10) + ' días'); }
+    if (a.empresas != null) { TGV_cambiarParam_(c.ss, TGV_PARAM_[4][0], String(a.empresas)); hecho.push('empresas: ' + (a.empresas || 'todas')); }
+    return { columnas: ['cambiado'], filas: hecho.map(function (h) { return [h]; }) };
+  },
+
   recordatorios: function (c) {
     var rs = TG_recordatorios_(c.ss, c.op.tg.ctx.chatId);
     return { columnas: ['id', 'cuando', 'texto', 'repetir'], filas: rs.map(function (r) { return [r.id, TG_fechaHoraTxt_(r.cuando), r.texto, r.repetir]; }) };
