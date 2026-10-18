@@ -22,8 +22,8 @@
  * comunes de IACliente.js (llamar a la IA, comparar nombres).
  */
 
-function CIA_agregarMenu_() {
-  SpreadsheetApp.getUi().createMenu('🤝 Conciliar con IA')
+function CIA_agregarMenu_(padre) {
+  var m = SpreadsheetApp.getUi().createMenu('🤝 Conciliar con IA')
     .addItem('🔍 Auditor IA: abrir (compras y pagos de todas las empresas)', 'AUD_menuAbrir')
     .addItem('▶ Auditar con IA (según los filtros)', 'AUD_menuAuditar')
     .addItem('💬 Chat con la IA (adjuntar fotos, PDF, Excel)', 'CHAT_menuAbrir')
@@ -47,7 +47,8 @@ function CIA_agregarMenu_() {
     .addSeparator()
     .addItem('🔑 Guardar clave de IA (de esta pestaña)', 'CIA_menuGuardarClave')
     .addItem('🧪 Probar conexión con la IA', 'CIA_menuProbar')
-    .addToUi();
+    ;
+  if (padre) padre.addSubMenu(m); else m.addToUi();
 }
 
 /** IA elegida en la fila 11 de esta pestaña y su clave propia. */
@@ -75,7 +76,7 @@ function CIA_menuProbar() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var ia = CIA_ia_(CIA_hoja_(ss));
   var ui = SpreadsheetApp.getUi();
-  if (!ia.clave) { ui.alert('Falta la clave: menú 🤝 Conciliar con IA → 🔑 Guardar clave de IA.'); return; }
+  if (!ia.clave) { ui.alert('Falta la clave: menú 💼 Cobranzas → 🤝 Conciliar con IA → 🔑 Guardar clave de IA.'); return; }
   try {
     var t0 = Date.now();
     var r = IA_llamar_({ proveedor: ia.proveedor, clave: ia.clave, maxTokens: 200, sistema: 'Responde solo JSON.', texto: 'Responde exactamente {"ok": true}' });
@@ -124,7 +125,7 @@ function CIA_hoja_(ss) {
     'Modo de análisis (fila 10): "Todo con IA" hace que la IA revise TODOS los vouchers con la lista completa de proveedores/clientes (más lento y usa más consultas).\n' +
     '3) Revise cada propuesta: marque ✔ Aceptar (puede corregir "Factura(s) propuesta(s)", ej. 01_F001-123,124) o ✖ Rechazar.\n' +
     '4) Menú → ✅ Aplicar lo aceptado. Queda como pago confirmado y el RUC detectado se recuerda para los próximos vouchers.\n' +
-    'La IA se elige aquí (fila 11) y su clave con el menú 🤝 Conciliar con IA → 🔑 (aparte del 🧠 Asistente IA). Sin clave, igual propone los casos evidentes.')
+    'La IA se elige aquí (fila 11) y su clave con el menú 💼 Cobranzas → 🤝 Conciliar con IA → 🔑 (aparte del 🧠 Asistente IA). Sin clave, igual propone los casos evidentes.')
     .setWrap(true).setVerticalAlignment('top').setFontSize(9).setFontColor(COLOR.TEXTO_SUAVE).setBackground('#F8FAFC');
   sh.getRange(CIA_F_ENC_ - 1, 3).setValue('PROPUESTAS').setFontWeight('bold').setFontSize(12);
   sh.getRange(CIA_F_ENC_, 1, 1, CIA_ENC_.length).setValues([CIA_ENC_]).setFontWeight('bold')
@@ -139,7 +140,7 @@ function CIA_hoja_(ss) {
 }
 
 /** Fila 10: modo de análisis (se agrega sola si la pestaña es de antes). */
-var CIA_AYUDA_ = 'Cómo usarlo (todo desde el menú 🤝 Conciliar con IA):\n' +
+var CIA_AYUDA_ = 'Cómo usarlo (todo desde el menú 💼 Cobranzas → 🤝 Conciliar con IA):\n' +
   '1) Elija empresa, Ver y el proveedor/cliente (la lista sale de las facturas SIRE con saldo).\n' +
   '2) ▶ Analizar la selección. Modo (fila 10): "Todo con IA" = la IA revisa todos los vouchers con la lista completa de proveedores.\n' +
   '3) Revise cada propuesta: ✔ Aceptar (puede corregir "Factura(s) propuesta(s)", ej. 01_F001-123,124) o ✖ Rechazar.\n' +
@@ -598,7 +599,7 @@ function CIA_analizar_(ss) {
   return Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' · ' + filas.length + ' propuestas de ' + hechos + ' proveedor(es)/cliente(s)' +
     (faltan > 0 ? ' · faltan ' + faltan + ': vuelva a ▶ Analizar' : '') +
     (sinContra ? ' · ' + sinContra + ' vouchers sin proveedor reconocible' : '') +
-    (hayIA ? ' · IA: ' + ia.proveedor + ' (' + consultas + ' consultas' + (par.todoIA ? ', modo Todo con IA' : '') + ')' : ' · sin clave de IA (menú 🤝 Conciliar con IA → 🔑)') +
+    (hayIA ? ' · IA: ' + ia.proveedor + ' (' + consultas + ' consultas' + (par.todoIA ? ', modo Todo con IA' : '') + ')' : ' · sin clave de IA (menú 💼 Cobranzas → 🤝 Conciliar con IA → 🔑)') +
     (errores ? ' · ' + errores + ' errores de IA: ' + ultimoError.slice(0, 120) : '');
 }
 

@@ -55,7 +55,7 @@ function CHAT_enviarEn_(ss, msg, op) {
     var sh = AUD_hoja_(ss);
     var cfg = leerConfig_(ss);
     var ia = AUD_ia_(ss, AUD_leerParam_(sh, cfg));
-    if (!ia.clave) return { error: 'Falta la clave de IA: menú 🤝 Conciliar con IA → 🔑 Guardar clave de IA.', adjuntos: adjuntos };
+    if (!ia.clave) return { error: 'Falta la clave de IA: menú 💼 Cobranzas → 🤝 Conciliar con IA → 🔑 Guardar clave de IA.', adjuntos: adjuntos };
     if (!ia.modelo && IA_PROVEEDORES_[ia.proveedor].tipo === 'gemini' &&
         PropertiesService.getScriptProperties().getProperty('ANA_SIN_MODELO_FUERTE') !== ANA_MODELO_GEMINI_) { ia.modelo = ANA_MODELO_GEMINI_; ia.modeloAuto = true; }
     var previas = (msg.historial || []).slice(-4).map(function (h) { return { pregunta: h.p, respuesta: h.r }; });

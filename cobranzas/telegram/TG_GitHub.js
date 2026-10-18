@@ -39,7 +39,7 @@ function TG_mes_(n) {
 /* ============================================================ API de GitHub */
 
 function TG_gh_(cfg, ruta, metodo, carga) {
-  if (!cfg.github) throw new Error('falta el 🔑 Token de GitHub (hoja de Cobranzas → menú 🤖 Telegram → 🔑 Token de GitHub).');
+  if (!cfg.github) throw new Error('falta el 🔑 Token de GitHub (hoja de Cobranzas → menú 💼 Cobranzas → 🤖 Telegram → 🔑 Token de GitHub).');
   var p = { method: metodo || 'get', muteHttpExceptions: true,
     headers: { Authorization: 'Bearer ' + cfg.github, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } };
   if (carga) { p.contentType = 'application/json'; p.payload = JSON.stringify(carga); }

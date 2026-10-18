@@ -58,7 +58,7 @@ function TG_ss_() {
   try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) { ss = null; }
   if (!ss) {
     var id = PropertiesService.getScriptProperties().getProperty(TG_PROP_.SS);
-    if (!id) throw new Error('Falta abrir una vez el menú 🤖 Telegram → 1️⃣ Conectar bot en la hoja de Cobranzas.');
+    if (!id) throw new Error('Falta abrir una vez el menú 💼 Cobranzas → 🤖 Telegram → 1️⃣ Conectar bot en la hoja de Cobranzas.');
     ss = SpreadsheetApp.openById(id);
     // El resto del sistema usa getActiveSpreadsheet(): se lo dejamos puesto.
     try { SpreadsheetApp.setActiveSpreadsheet(ss); } catch (e) { /* sin efecto en algunos contextos */ }
@@ -191,8 +191,8 @@ function TG_admins_(ss) {
 
 /* ============================================================ menú de la hoja */
 
-function TG_agregarMenu_() {
-  SpreadsheetApp.getUi().createMenu('🤖 Telegram')
+function TG_agregarMenu_(padre) {
+  var m = SpreadsheetApp.getUi().createMenu('🤖 Telegram')
     .addItem('1️⃣ Conectar bot (token de @BotFather)', 'TG_menuConectar')
     .addItem('2️⃣ Vincular mi Telegram (código)', 'TG_menuVincular')
     .addItem('🔑 Token de GitHub (descargas y estado)', 'TG_menuTokenGitHub')
@@ -201,9 +201,11 @@ function TG_agregarMenu_() {
     .addItem('🔕 Desactivar avisos automáticos', 'TG_menuDesactivarAvisos')
     .addItem('🧪 Enviarme un mensaje de prueba', 'TG_menuProbar')
     .addItem('📋 Ver estado del bot', 'TG_menuEstado')
+    .addItem('📅 Vencimientos SUNAT (avisos y cronograma)', 'TGV_menuAbrir')
     .addSeparator()
     .addItem('⛔ Desconectar bot', 'TG_menuDesconectar')
-    .addToUi();
+    ;
+  if (padre) padre.addSubMenu(m); else m.addToUi();
 }
 
 function TG_menuConectar() {

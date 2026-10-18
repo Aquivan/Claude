@@ -109,7 +109,7 @@ function AUD_menuDetener() {
 
 /* ================================================================ hoja */
 
-var AUD_AYUDA_ = 'Cómo usarlo (menú 🤝 Conciliar con IA → 🔍 Auditor IA):\n' +
+var AUD_AYUDA_ = 'Cómo usarlo (menú 💼 Cobranzas → 🤝 Conciliar con IA → 🔍 Auditor IA):\n' +
   '1) Filtre en las celdas amarillas (vacío = todo).\n' +
   '2) ▶ Auditar con IA: arma el expediente de cada proveedor y la IA concilia (si son muchos, sigue sola cada minuto).\n' +
   '   🧠 IA pura (fila ' + AUD_F_MOTOR_ + '): la IA lee los vouchers SOLO en las columnas A–J, reconoce cada columna por su contenido (aunque no tenga encabezado), ' +
@@ -778,7 +778,7 @@ function AUD_peorSemaforo_(a, b) {
 function AUD_sinIA_(e) {
   var docs = e.docs.filter(function (d) { return d.saldo > 0.5; });
   docs.forEach(function (d) { d.saldoVivo = d.saldo; });
-  var out = { props: [], sinFactura: [], hallazgos: [], dictamen: 'Sin clave de IA: solo se proponen los pagos que calzan exacto (menú 🤝 Conciliar con IA → 🔑).', semaforo: '' };
+  var out = { props: [], sinFactura: [], hallazgos: [], dictamen: 'Sin clave de IA: solo se proponen los pagos que calzan exacto (menú 💼 Cobranzas → 🤝 Conciliar con IA → 🔑).', semaforo: '' };
   var porDoc = {};
   docs.forEach(function (d) { porDoc[d.doc] = d; });
   e.sin.forEach(function (p) {

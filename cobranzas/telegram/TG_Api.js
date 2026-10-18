@@ -11,7 +11,7 @@ function TG_token_() {
 /** Llama a un método de la API. carga con un Blob adentro = se envía como archivo (multipart). */
 function TG_llamar_(metodo, carga, reintentado) {
   var token = TG_token_();
-  if (!token) throw new Error('Falta conectar el bot (menú 🤖 Telegram → 1️⃣ Conectar bot).');
+  if (!token) throw new Error('Falta conectar el bot (menú 💼 Cobranzas → 🤖 Telegram → 1️⃣ Conectar bot).');
   var params = { method: 'post', muteHttpExceptions: true };
   var conArchivo = carga && Object.keys(carga).some(function (k) { return carga[k] && typeof carga[k].getBytes === 'function'; });
   if (conArchivo) {

@@ -52,7 +52,8 @@ var PARAMETROS_ = [
 
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
-  ui.createMenu('💼 Cobranzas')
+  var menu = ui.createMenu('💼 Cobranzas');
+  menu
     .addItem('🔄 Actualizar ahora', 'menuActualizarAhora')
     .addSubMenu(ui.createMenu('🎚 Modo de cruce y actualizar')
       .addItem('🟢 Solo referenciados (lo escrito en el voucher)', 'menuModoReferenciados')
@@ -66,16 +67,13 @@ function onOpen() {
     .addSubMenu(ui.createMenu('♻️ Respaldos de datos manuales')
       .addItem('💾 Guardar respaldo ahora', 'menuRespaldarAhora')
       .addItem('♻️ Restaurar un respaldo', 'menuRestaurarRespaldo'))
-    .addSeparator()
-    .addItem('⚙️ Instalar / reparar', 'menuInstalar')
-    .addToUi();
-  // Menu del Asistente IA (modulo aparte, ver AsistenteIA.js). Si fallara,
-  // no afecta al menu de Cobranzas.
-  try { IA_agregarMenu_(); } catch (e) { Logger.log('Menu Asistente IA: ' + e.message); }
-  // Menú propio de 🤝 Conciliar con IA (módulo aparte, ver ConciliacionIA.js).
-  try { CIA_agregarMenu_(); } catch (e) { Logger.log('Menu Conciliar con IA: ' + e.message); }
-  // Menú del 🤖 asistente de Telegram (módulo aparte, carpeta telegram/).
-  try { TG_agregarMenu_(); } catch (e) { Logger.log('Menu Telegram: ' + e.message); }
+    .addSeparator();
+  // Un SOLO menú en la barra (con pantallas angostas Google esconde los demás detrás de "…"):
+  // 🧠 Asistente IA, 🤝 Conciliar con IA y 🤖 Telegram van como submenús. Si uno fallara, los demás siguen.
+  try { IA_agregarMenu_(menu); } catch (e) { Logger.log('Menu Asistente IA: ' + e.message); }
+  try { CIA_agregarMenu_(menu); } catch (e) { Logger.log('Menu Conciliar con IA: ' + e.message); }
+  try { TG_agregarMenu_(menu); } catch (e) { Logger.log('Menu Telegram: ' + e.message); }
+  menu.addSeparator().addItem('⚙️ Instalar / reparar', 'menuInstalar').addToUi();
 }
 
 function menuActualizarAhora() {

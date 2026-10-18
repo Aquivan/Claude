@@ -326,7 +326,7 @@ function TG_enviarAvisos_(ctx, cambiar) {
   var teclado = TG_AVISOS_.map(function (a) { return [{ text: (avisos.indexOf(a[0]) >= 0 ? '✅ ' : '⬜ ') + a[1], callback_data: 'av:' + a[0] }]; });
   teclado.push([{ text: 'Listo', callback_data: 'x' }]);
   var html = '🔔 <b>Mis avisos</b> · toque para activar o desactivar.' + (cfg.horaResumen >= 0 ? '\nEl ☀️ resumen llega a las ' + cfg.horaResumen + ':00.' : '') +
-    (!vig || !cfg.avisosActivos ? '\n\n⚠️ <i>Los avisos automáticos están apagados en la hoja (menú 🤖 Telegram → 🔔 Activar avisos).</i>' : '');
+    (!vig || !cfg.avisosActivos ? '\n\n⚠️ <i>Los avisos automáticos están apagados en la hoja (menú 💼 Cobranzas → 🤖 Telegram → 🔔 Activar avisos).</i>' : '');
   if (cambiar && ctx.msgId) TG_editar_(ctx.chatId, ctx.msgId, html, teclado);
   else TG_enviar_(ctx.chatId, html, teclado);
 }

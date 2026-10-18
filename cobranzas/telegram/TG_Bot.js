@@ -70,7 +70,7 @@ function TG_manejar_(u) {
     }
     if (usuario && !usuario.activo) { TG_enviar_(chatId, '🔒 Su acceso está desactivado. Pida al administrador que lo active.'); return; }
     TG_enviar_(chatId, '🔒 <b>Asistente privado del grupo.</b>\nSu ID de Telegram es <code>' + chatId + '</code>.\n' +
-      'Para usarlo envíe el código de 6 dígitos que da la hoja de Cobranzas (menú 🤖 Telegram → Vincular), o espere a que un administrador lo autorice.');
+      'Para usarlo envíe el código de 6 dígitos que da la hoja de Cobranzas (menú 💼 Cobranzas → 🤖 Telegram → Vincular), o espere a que un administrador lo autorice.');
     if (!TG_yaVisto_('pide' + chatId)) {
       var k = TG_guardarBoton_({ t: 'alta', chat: chatId, nombre: nombre }, 86400);
       TG_admins_(ss).forEach(function (a) {
@@ -386,5 +386,5 @@ function TG_enviarUsuarios_(ctx) {
     return [{ text: (u.activo ? '🟢 ' : '⚪ ') + u.nombre + ' · ' + u.rol + (u.activo && u.chatId !== ctx.chatId ? '  (🚫 quitar)' : ''), callback_data: u.activo && u.chatId !== ctx.chatId ? 'k:' + k : 'x' }];
   });
   TG_enviar_(ctx.chatId, '👥 <b>Personas con acceso</b> (' + us.filter(function (u) { return u.activo; }).length + ' activas). Toque una para quitarle el acceso. ' +
-    'Para dar acceso: menú 🤖 Telegram → Vincular en la hoja, o autorice cuando le llegue la solicitud.', filas);
+    'Para dar acceso: menú 💼 Cobranzas → 🤖 Telegram → Vincular en la hoja, o autorice cuando le llegue la solicitud.', filas);
 }
