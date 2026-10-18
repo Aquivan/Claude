@@ -20,7 +20,7 @@
 var IA_HOJA_ = '🧠 Asistente IA';
 // [fila, parametro, valor inicial, ayuda]
 var IA_PARAM_ = [
-  [3, 'Proveedor de IA', 'Gemini (Google)', 'Para cambiar de IA: elige aquí y guarda su clave (menú 💼 Cobranzas → 🧠 Asistente IA → 🔑 Guardar clave de IA).'],
+  [3, 'Proveedor de IA', 'Gemini (Google)', 'Para cambiar de IA: elige aquí y guarda su clave (menú 🧠 Asistente IA → 🔑 Guardar clave de IA).'],
   [4, 'Modelo', '', 'Vacío = el recomendado del proveedor.'],
   [5, 'Consultas a la IA por vuelta', 15, 'Bájalo si el plan gratis da error de límite.'],
   [6, 'Estado', '', 'Lo escribe el asistente.'],
@@ -38,8 +38,8 @@ var IA_RESUMEN_ = 'Dame un resumen ejecutivo: qué empresa del grupo tiene más 
 
 // ---------------- Menu ----------------
 
-function IA_agregarMenu_(padre) {
-  var m = SpreadsheetApp.getUi().createMenu('🧠 Asistente IA')
+function IA_agregarMenu_() {
+  SpreadsheetApp.getUi().createMenu('🧠 Asistente IA')
     .addItem('⚙️ Instalar / reparar asistente', 'IA_menuInstalar')
     .addSeparator()
     .addItem('🔗 Buscar facturas con IA ahora', 'IA_menuBuscar')
@@ -52,8 +52,7 @@ function IA_agregarMenu_(padre) {
     .addSeparator()
     .addItem('⏰ Activar búsqueda automática (cada hora)', 'IA_menuActivar')
     .addItem('⏸ Desactivar búsqueda automática', 'IA_menuDesactivar')
-    ;
-  if (padre) padre.addSubMenu(m); else m.addToUi();
+    .addToUi();
 }
 
 function IA_menuInstalar() {

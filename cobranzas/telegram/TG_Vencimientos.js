@@ -395,12 +395,3 @@ function TGV_activarParaTodos_(ss, usuarios) {
   usuarios.forEach(function (u) { if (u.avisos.indexOf('oblig') < 0) { u.avisos.push('oblig'); TG_guardarAvisos_(ss, u, u.avisos); } });
   props.setProperty('TGV_ACTIVADO', '1');
 }
-
-/** Menú 💼 Cobranzas → 🤖 Telegram → 📅 Vencimientos SUNAT: abre la pestaña (la crea si no existe). */
-function TGV_menuAbrir() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sh = TGV_hoja_(ss);
-  TGV_hojaPres_(ss);
-  ss.setActiveSheet(sh);
-  ss.toast('Cambie los valores de la columna B (días antes, hora, empresas). El cronograma está más abajo.', '📅 Vencimientos', 8);
-}
