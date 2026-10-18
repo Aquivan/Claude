@@ -56,6 +56,8 @@ function WA_hoja_() {
   try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) {}
   var id = WA_HOJA_ID_ || WA_prop_('WA_HOJA_ID');
   if (!ss && id) ss = SpreadsheetApp.openById(id);
+  // Misma zona horaria que el código: si no, las fechas se leen corridas y la espera se calcula mal.
+  if (ss.getSpreadsheetTimeZone() !== 'America/Lima') ss.setSpreadsheetTimeZone('America/Lima');
   var h = ss.getSheetByName(WA_PESTANA_);
   if (!h) {
     h = ss.insertSheet(WA_PESTANA_, 0);

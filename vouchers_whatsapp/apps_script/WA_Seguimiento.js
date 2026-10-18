@@ -11,6 +11,7 @@
 
 var WA_ESPERA_TANDA_MS_ = 30 * 1000;
 var WA_MAX_COLA_MS_ = 45 * 60 * 1000;
+var WA_MAX_SEGUIR_MS_ = 24 * 60 * 60 * 1000; // un "⏳ Revisar" se sigue mirando hasta 24 h
 
 function WA_cadaMinuto() {
   var props = WA_props_().getProperties(), ahora = Date.now();
@@ -50,12 +51,16 @@ function WA_acuse_(hoja, datos, de) {
 // Devuelve cuántos archivos siguen esperando al sistema de Vouchers.
 function WA_revisarCola_(hoja, datos, ahora) {
   var pendientes = [];
-  for (var i = 1; i < datos.length; i++) if (datos[i][6] === 'En cola') pendientes.push(i);
+  for (var i = 1; i < datos.length; i++) {
+    var demorado = datos[i][6] === 'Revisar' && String(datos[i][7]).indexOf('⏳') === 0 &&
+      ahora - new Date(datos[i][0]).getTime() < WA_MAX_SEGUIR_MS_;
+    if (datos[i][6] === 'En cola' || demorado) pendientes.push(i);
+  }
   if (!pendientes.length) return 0;
 
   var indice = null, quedan = 0;
   pendientes.forEach(function (i) {
-    var r = datos[i], enEntrada = false;
+    var r = datos[i], enEntrada = false, eraDemorado = r[6] === 'Revisar';
     try {
       var padres = DriveApp.getFileById(r[9]).getParents();
       while (padres.hasNext()) if (padres.next().getId() === WA_VOUCHERS_.entrada[r[3]]) enEntrada = true;
@@ -63,7 +68,8 @@ function WA_revisarCola_(hoja, datos, ahora) {
 
     var estado, resultado;
     if (enEntrada) {
-      if (ahora - new Date(r[0]).getTime() < WA_MAX_COLA_MS_) { quedan++; return; }
+      if (eraDemorado || ahora - new Date(r[0]).getTime() < WA_MAX_COLA_MS_) { quedan++; return; }
+      quedan++; // se sigue mirando: si después se procesa, llega un segundo aviso con el resultado
       estado = 'Revisar';
       resultado = '⏳ Sigue en la carpeta de Entrada: el sistema de Vouchers aún no lo procesó.';
     } else {
@@ -78,6 +84,8 @@ function WA_revisarCola_(hoja, datos, ahora) {
     }
     datos[i][6] = estado; datos[i][7] = resultado;
     hoja.getRange(i + 1, 7, 1, 2).setValues([[estado, resultado]]);
+    // Ya se había avisado "⏳ sigue en Entrada": se vuelve a avisar con el resultado real.
+    if (eraDemorado) { datos[i][10] = 'acuse'; hoja.getRange(i + 1, 11).setValue('acuse'); }
   });
   return quedan;
 }
