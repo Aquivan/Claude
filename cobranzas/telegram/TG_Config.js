@@ -201,6 +201,8 @@ function TG_agregarMenu_() {
     .addItem('🔕 Desactivar avisos automáticos', 'TG_menuDesactivarAvisos')
     .addItem('🧪 Enviarme un mensaje de prueba', 'TG_menuProbar')
     .addItem('📋 Ver estado del bot', 'TG_menuEstado')
+    .addItem('🎤 Guardar clave de Groq (audios)', 'TG_menuClaveGroq')
+    .addItem('🧪 Probar modelos de IA (cuál responde, cuál está saturado)', 'TG_menuProbarModelos')
     .addSeparator()
     .addItem('⛔ Desconectar bot', 'TG_menuDesconectar')
     .addToUi();
