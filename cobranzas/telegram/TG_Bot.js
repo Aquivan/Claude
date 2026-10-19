@@ -225,6 +225,7 @@ function TG_alEsperado_(ctx, ses, texto) {
   TG_guardarSesion_(ctx.chatId, ses);
   if (e.tipo === 'recordar') return TG_preguntar_(ctx, 'Crea un recordatorio: ' + texto, []);
   if (e.tipo === 'pregunta_adj') return TG_preguntar_(ctx, texto, e.adj || []);
+  if (e.tipo === 'entrega') return TGE_alTextoTG_(ctx, e, texto);
   return TG_preguntar_(ctx, texto, []);
 }
 
@@ -360,7 +361,7 @@ function TG_alBoton_(ss, q) {
     case 'adj': case 'adjs':
       var adjs = datos.adjs || TG_adjDelGrupo_(ss, datos.grupo, datos.adj);
       TG_llamar_('editMessageReplyMarkup', { chat_id: chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
-      if (op === 'vou') return TG_registrarVouchers_(ctx, adjs);
+      if (op === 'vou') return TGE_preguntarTG_(ctx, adjs);   // 🏷 primero: ¿de quién son?
       if (op === 'preg') {
         var ses = TG_sesion_(chatId); ses.esperando = { tipo: 'pregunta_adj', adj: adjs }; TG_guardarSesion_(chatId, ses);
         return TG_enviar_(chatId, '✍️ Escriba (o diga 🎤) su pregunta sobre ' + (adjs.length > 1 ? 'esos ' + adjs.length + ' archivos' : 'ese archivo') + '.');
@@ -372,6 +373,7 @@ function TG_alBoton_(ss, q) {
     case 'archivo': return TG_mandarArchivo_(ctx, datos.id, datos.titulo);
     case 'descarga': return TG_confirmarDescarga_(ctx, datos, op);
     case 'venc': return TGV_alBoton_(ctx, datos);
+    case 'entrega': return TGE_alBotonTG_(ctx, datos, op, partes[1]);
     case 'rerun': return TG_reintentarRun_(ctx, datos);
     case 'recq': return TG_quitarRecordatorio_(ctx, datos.id);
     case 'excel': return TG_mandarExcel_(ctx, datos);

@@ -45,6 +45,7 @@ function onOpen() {
     .addItem('Estado', 'WA_menuEstado')
     .addItem('⚡ Procesar al instante (sin esperar 10 min)', 'WA_menuInstante')
     .addItem('Números autorizados', 'WA_menuNumeros')
+    .addItem('🏷 Preguntar de quién son los vouchers (sí/no)', 'WA_menuPreguntarNombre')
     .addItem('Conectar app a la cuenta (si no llegan mensajes)', 'WA_menuSuscribir')
     .addToUi();
 }
@@ -197,4 +198,14 @@ function WA_menuInstante() {
   v = /[?&]accion=/.test(v) ? v.replace(/([?&]accion=)[^&]*/, '$1procesar') : v + '&accion=procesar';
   WA_props_().setProperty('WA_PROCESAR_URL', v);
   ui.alert('✅ Guardado. Desde ahora cada tanda se procesa apenas termina de llegar (≈1 minuto).');
+}
+
+function WA_menuPreguntarNombre() {
+  var ui = SpreadsheetApp.getUi(), si = WA_preguntarNombre_();
+  var r = ui.alert('🏷 ¿De quién son?', 'Ahora: ' + (si ? 'SÍ pregunta' : 'NO pregunta') + '.\n\n' +
+    'Al terminar cada tanda el bot pregunta de quién son los vouchers y los nombra como "18-10-26 Edit", "18-10-26 Edit 2"…\n\n' +
+    '¿Quiere que pregunte?', ui.ButtonSet.YES_NO);
+  if (r === ui.Button.CANCEL || r === ui.Button.CLOSE) return;
+  WA_props_().setProperty('WA_PREGUNTAR_NOMBRE', r === ui.Button.YES ? '1' : '0');
+  ui.alert(r === ui.Button.YES ? '✅ Preguntará de quién son.' : 'Listo: ya no pregunta (nombre del archivo o la fecha, como antes).');
 }

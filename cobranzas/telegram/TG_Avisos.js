@@ -13,6 +13,8 @@
 function TG_vigia() {
   var ss = TG_ss_();
   var cfg = TG_cfg_(ss);
+  // 🏷 Vouchers que quedaron esperando "¿de quién son?": pasados 20 min se registran sin nombre.
+  try { if (TG_token_()) TGE_vencidosTG_(ss); } catch (e) { console.warn('Vouchers sin nombre: ' + e.message); }
   if (!cfg.avisosActivos || !TG_token_()) return;
   var us = TG_usuarios_(ss).filter(function (u) { return u.activo; });
   if (!us.length) return;

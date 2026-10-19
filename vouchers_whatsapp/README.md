@@ -51,6 +51,8 @@ WhatsApp ──► Meta ──► Cloudflare Worker ──► Apps Script "Vouch
 - Reenvíe fotos o PDF (puede marcar varios). "original" / "foto" en el comentario cambia la pestaña solo esa vez.
 - `modo original`, `modo foto`, `modo auto` · `estado` · `hola` (ayuda) · cualquier otra cosa → 🧠 IA.
 - Solo los números de **Números autorizados** pueden mandar vouchers.
+- 🏷 **¿De quién son?** Al terminar cada tanda el bot pregunta UNA vez de quién son (lista con los nombres más usados y uno ⭐ sugerido por la IA según quién paga en el voucher). Se elige, se escribe o se dice 🎤: `Edit`, `Edit 15/10`, `son de Edit de ayer`. Los archivos quedan como `18-10-26 Edit.jpg`, `18-10-26 Edit 2.jpg`… en la columna "Archivo Original". Mientras tanto esperan en la carpeta *"Vouchers WhatsApp · en espera de nombre"* (estado `Espera`), así la hoja de Vouchers no los toma con el nombre provisional. `de Edit` escrito **antes** de reenviar nombra la tanda sin preguntar. Sin respuesta en 20 min → nombre de antes. `preguntar nombre no` (o el menú) lo apaga. Un nombre escrito en el comentario de un archivo se respeta.
+- Los nombres **nunca se repiten** (se revisan la columna "Archivo Original" y Drive): la hoja de Vouchers busca el archivo por ese nombre para 🔧 reparar imágenes y para continuar un PDF a medias. La numeración es la misma que en Telegram (la lleva Cobranzas, `TG_Entregas.js`).
 
 ## 🧠 Preguntas libres (la misma IA del asistente de Telegram)
 

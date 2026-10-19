@@ -21,15 +21,22 @@ function WA_cadaMinuto() {
     try { WA_buscarRespuestasIA_(props); } catch (e) { console.error('Respuestas IA: ' + e.message); }
     if (!Object.keys(WA_props_().getProperties()).some(function (k) { return k.indexOf('WA_IAP_') === 0; })) WA_props_().setProperty('WA_HAY_IA', '0');
   }
-  if (!tandas.length && !hayCola) return;
+  var hayPreg = Object.keys(props).some(function (k) { return k.indexOf('WA_PREG_') === 0; });
+  var procesar = props.WA_PROCESAR_PEND === '1';
+  if (!tandas.length && !hayCola && !hayPreg && !procesar) return;
 
+  if (hayPreg) { try { WA_vencidosNombre_(props); } catch (e) { console.error('Nombres vencidos: ' + e.message); } }
   var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues();
   tandas.forEach(function (k) {
-    WA_acuse_(hoja, datos, k.slice('WA_TANDA_'.length));
+    var de = k.slice('WA_TANDA_'.length);
     WA_props_().deleteProperty(k);
+    var espera = false;
+    try { espera = WA_tandaEnEspera_(hoja, datos, de); } catch (e) { console.error('¿De quién son? ' + e.message); }
+    if (espera) datos = hoja.getDataRange().getValues();
+    WA_acuse_(hoja, datos, de);
   });
 
-  if (tandas.length) WA_procesarYa_();
+  if (tandas.length || procesar || WA_prop_('WA_PROCESAR_PEND') === '1') { WA_props_().deleteProperty('WA_PROCESAR_PEND'); WA_procesarYa_(); }
   var quedan = WA_revisarCola_(hoja, datos, ahora);
   WA_props_().setProperty('WA_HAY_COLA', quedan ? '1' : '0');
   WA_avisarResultados_(hoja, datos);
@@ -37,7 +44,7 @@ function WA_cadaMinuto() {
 
 function WA_acuse_(hoja, datos, de) {
   var filas = [];
-  for (var i = 1; i < datos.length; i++) if (String(datos[i][2]) === de && datos[i][10] === '') filas.push(i);
+  for (var i = 1; i < datos.length; i++) if (String(datos[i][2]) === de && datos[i][10] === '' && datos[i][6] !== 'Espera') filas.push(i);
   if (!filas.length) return;
   var ok = filas.filter(function (i) { return datos[i][6] === 'En cola'; });
   var mal = filas.filter(function (i) { return datos[i][6] !== 'En cola'; });
@@ -131,7 +138,7 @@ function WA_avisarResultados_(hoja, datos) {
   var porNumero = {}, enCola = {};
   for (var i = 1; i < datos.length; i++) {
     var de = String(datos[i][2]);
-    if (datos[i][6] === 'En cola') enCola[de] = true;
+    if (datos[i][6] === 'En cola' || datos[i][6] === 'Espera') enCola[de] = true;
     else if (datos[i][10] === 'acuse') (porNumero[de] = porNumero[de] || []).push(i);
   }
   Object.keys(porNumero).forEach(function (de) {

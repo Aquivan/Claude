@@ -76,12 +76,17 @@ function WA_procesarMensaje_(m, nombre) {
 
   if (m.type === 'interactive' && m.interactive) {
     var resp = m.interactive.button_reply || m.interactive.list_reply || {};
-    WA_boton_(de, resp.id || '');
+    if (String(resp.id || '').indexOf('en:') === 0) WA_botonNombre_(de, resp.id);
+    else WA_boton_(de, resp.id || '');
     return;
   }
   if (m.type === 'text') {
     var cuerpo = ((m.text || {}).body || '').trim();
-    if (!WA_comando_(de, cuerpo)) WA_preguntarIA_(m, de, nombre, cuerpo);
+    if (WA_comando_(de, cuerpo)) return;
+    // 🏷 ¿De quién son? — respuesta a la pregunta, o "de Edit" antes de reenviar.
+    if (WA_respuestaNombre_(de, cuerpo).tomado) return;
+    if (WA_esEtiqueta_(cuerpo) && WA_etiquetaPrevia_(de, cuerpo)) return;
+    WA_preguntarIA_(m, de, nombre, cuerpo);
     return;
   }
 
@@ -89,7 +94,11 @@ function WA_procesarMensaje_(m, nombre) {
   if (m.type === 'audio' && m.audio) {
     try {
       var voz = WA_bajarMedia_(m.audio.id);
-      WA_preguntarIA_(m, de, nombre, '', [], { base64: Utilities.base64Encode(voz.getBytes()), mime: m.audio.mime_type || 'audio/ogg' });
+      var audio = { base64: Utilities.base64Encode(voz.getBytes()), mime: m.audio.mime_type || 'audio/ogg' };
+      var rn = WA_respuestaNombre_(de, '', audio);   // 🏷 si se esperaba el nombre de una tanda
+      if (rn.tomado) return;
+      if (rn.dicho) WA_preguntarIA_(m, de, nombre, rn.dicho);
+      else WA_preguntarIA_(m, de, nombre, '', [], audio);
     } catch (err) { WA_enviarTexto_(de, '⚠️ No pude bajar el audio: ' + err.message); }
     return;
   }
@@ -118,15 +127,18 @@ function WA_procesarMensaje_(m, nombre) {
     : (WA_prop_('WA_MODO_' + de) || (esPdf ? 'original' : 'foto'));
 
   var archivo = WA_nombreArchivo_(media.filename, caption, esPdf ? '.pdf' : '.jpg', nombre || de, m.id);
+  // 🏷 Espera en una carpeta aparte hasta saber de quién es (WA_Entregas.js); un nombre escrito en el comentario se respeta.
+  var esperar = WA_preguntarNombre_();
+  var propio = !!caption.replace(/\b(original|foto)\b/ig, '').trim();
   var blob, f;
   try {
     blob = WA_bajarMedia_(media.id).setName(archivo);
-    f = DriveApp.getFolderById(WA_VOUCHERS_.entrada[tipo]).createFile(blob);
+    f = (esperar ? WA_carpetaEspera_() : DriveApp.getFolderById(WA_VOUCHERS_.entrada[tipo])).createFile(blob);
   } catch (err) {
     WA_anotar_(m, de, nombre, tipo, archivo, 0, 'Error', String(err.message || err).slice(0, 200), '');
     return;
   }
-  WA_anotar_(m, de, nombre, tipo, archivo, Math.round(blob.getBytes().length / 1024), 'En cola', '', f.getId());
+  WA_anotar_(m, de, nombre, tipo, archivo, Math.round(blob.getBytes().length / 1024), esperar ? 'Espera' : 'En cola', esperar && propio ? 'nombre propio' : '', f.getId());
 }
 
 function WA_anotar_(m, de, nombre, tipo, archivo, kb, estado, resultado, idArchivo) {
@@ -162,6 +174,12 @@ function WA_comando_(de, texto) {
     return true;
   }
   if (/^estado[\s!.?]*$/.test(t)) { WA_enviarTexto_(de, WA_textoEstado_(de)); return true; }
+  if (/^preguntar\s+nombres?\s+(si|sí|no)\b/.test(t)) {
+    var si = !/\bno\b/.test(t);
+    WA_props_().setProperty('WA_PREGUNTAR_NOMBRE', si ? '1' : '0');
+    WA_enviarTexto_(de, si ? '🏷 Le preguntaré de quién son cada tanda de vouchers.' : '🏷 Ya no le pregunto de quién son: quedan con el nombre del archivo o la fecha.');
+    return true;
+  }
   if (!/^\/?(hola|ayuda|menu|menú|start|inicio|buenas|buenos dias|buenos días|buenas tardes|buenas noches)[\s!.¡]*$/.test(t)) return false;
   WA_enviarTexto_(de,
     '👋 *Vouchers por WhatsApp*\n\n' +
@@ -170,7 +188,9 @@ function WA_comando_(de, texto) {
     '• Fotos → pestaña *Fotos* · PDF → *Originales*\n' +
     '• Escriba "original" o "foto" en el comentario para cambiarlo solo esa vez\n' +
     '• *modo original* / *modo foto* / *modo auto*\n' +
-    '• *estado*: lo que está en cola\n\n' +
+    '• *estado*: lo que está en cola\n' +
+    '• 🏷 Al terminar cada tanda le pregunto *de quién son* (un toque). También puede escribir antes *de Edit* o *de Edit 15/10*. ' +
+    '*preguntar nombre no* lo apaga\n\n' +
     '🧠 *Pregúnteme lo que necesite* (la misma IA del asistente de Telegram), por ejemplo:\n' +
     '• ¿Cuánto pagó Petro en octubre?\n' +
     '• Mándame la foto del voucher de Cecovasa\n' +
@@ -182,7 +202,7 @@ function WA_comando_(de, texto) {
 
 function WA_textoEstado_(de) {
   var datos = WA_hoja_().getDataRange().getValues().slice(1);
-  var cola = datos.filter(function (r) { return String(r[2]) === de && r[6] === 'En cola'; }).length;
+  var cola = datos.filter(function (r) { return String(r[2]) === de && (r[6] === 'En cola' || r[6] === 'Espera'); }).length;
   var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
   var deHoy = datos.filter(function (r) { return String(r[2]) === de && r[0] instanceof Date && Utilities.formatDate(r[0], 'America/Lima', 'yyyy-MM-dd') === hoy; }).length;
   return '📊 Hoy me envió ' + deHoy + ' archivo(s). En cola: ' + cola + '.' +

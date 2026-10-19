@@ -34,6 +34,10 @@ function TGW_doPost_(e) {
   }
   if (!guardada || p.token !== guardada) return TGW_json_({ ok: false, error: 'Forbidden' });
   if (p.accion === 'boton') return TGW_json_(TGW_boton_(p.k, p.op));
+  if (p.accion === 'entrega') {   // 🏷 ¿de quién son estos vouchers? (ver TG_Entregas.js)
+    try { return TGW_json_(TGE_wa_(JSON.parse(e.postData.contents || '{}'))); }
+    catch (err) { return TGW_json_({ ok: false, error: err.message }); }
+  }
   if (p.accion === 'resultado') {
     var listo = CacheService.getScriptCache().get('tgw_r_' + p.id);
     return TGW_json_(listo ? JSON.parse(listo) : { ok: false, pendiente: true });
