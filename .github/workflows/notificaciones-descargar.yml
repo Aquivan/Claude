@@ -10,11 +10,10 @@ name: Notificaciones - descargar Buzón Electrónico (SUNAT SOL)
 run-name: ${{ (github.event_name == 'schedule' || inputs.diario) && 'Notificaciones · diario' || 'Notificaciones - descargar Buzón Electrónico (SUNAT SOL)' }}
 
 on:
-  # Todos los días ~7:07 a. m. y ~4:07 p. m. de Lima, todas las empresas (con PDF de notificaciones).
+  # Dos veces al día: ~7:07 a. m. y ~4:07 p. m. de Lima, todas las empresas (con PDF de notificaciones).
+  # (La hoja también la pide a las 8 y a las 17; si ya corrió, no se repite.)
   schedule:
     - cron: '7 12,21 * * *'
-    - cron: '41 16 * * *'   # respaldo (11:41 a. m. Lima)
-    - cron: '41 1 * * *'    # respaldo (8:41 p. m. Lima)
   workflow_dispatch:
     inputs:
       empresa:
@@ -61,6 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       lista: ${{ steps.e.outputs.lista }}
+      una: ${{ steps.una.outputs.una }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,6 +86,11 @@ jobs:
           done
           echo "Corridas diarias recientes antes de esta: ${n:-0}"
           if [ "${n:-0}" -gt 0 ]; then echo "saltar=true" >> "$GITHUB_OUTPUT"; else echo "saltar=false" >> "$GITHUB_OUTPUT"; fi
+      - name: ¿Una sola máquina para todas las empresas? (si existe el secreto SUNAT_CLAVES)
+        id: una
+        env:
+          CLAVES: ${{ secrets.SUNAT_CLAVES }}
+        run: if [ -n "$CLAVES" ]; then echo "una=true" >> "$GITHUB_OUTPUT"; else echo "una=false" >> "$GITHUB_OUTPUT"; fi
       - id: e
         env:
           SALTAR: ${{ steps.hoy.outputs.saltar }}
@@ -105,7 +110,7 @@ jobs:
 
   descargar:
     needs: empresas
-    if: needs.empresas.outputs.lista != '[]'
+    if: needs.empresas.outputs.lista != '[]' && needs.empresas.outputs.una != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -144,6 +149,53 @@ jobs:
           git add notificaciones/datos
           git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
           git commit -m "Notificaciones buzon ${{ matrix.ruc }} [skip ci]"
+          logrado=0
+          for intento in 1 2 3 4 5 6 7 8; do
+            if git push; then logrado=1; break; fi
+            echo "Push rechazado, reintentando con rebase (intento $intento)..."
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep $((intento * 2 + RANDOM % 5))
+          done
+          [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir notificaciones/datos"; exit 1; }
+
+  # Todas las empresas una tras otra en UNA máquina (GitHub cobra cada máquina aparte, mínimo 1 min).
+  # Se usa cuando existe el secreto del repositorio SUNAT_CLAVES (una línea por empresa: RUC USUARIO CLAVE);
+  # si no existe, corre "descargar" de arriba (una máquina por empresa, como antes).
+  descargar-todas:
+    name: descargar (todas)
+    needs: empresas
+    if: needs.empresas.outputs.lista != '[]' && needs.empresas.outputs.una == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Descargar buzón (notificaciones y mensajes) de todas las empresas
+        env:
+          SUNAT_CLAVES: ${{ secrets.SUNAT_CLAVES }}
+          LISTA: ${{ needs.empresas.outputs.lista }}
+          PDF: ${{ inputs.pdf }}
+          PDF_MENSAJES: ${{ inputs.pdf_mensajes }}
+          DESDE: ${{ inputs.desde }}
+          SOLO_NUEVAS: ${{ inputs.solo_nuevas }}
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.diario }}" = "true" ]; then DESDE=$(TZ=America/Lima date -d "$(TZ=America/Lima date +%Y-%m-01) -2 month" +%Y%m); fi
+          extra=""
+          if [ "$PDF" = "false" ]; then extra="$extra --sin-pdf"; fi
+          if [ "$PDF_MENSAJES" = "true" ]; then extra="$extra --pdf-mensajes"; fi
+          if [ -z "$DESDE" ] && [ "$SOLO_NUEVAS" = "true" ]; then extra="$extra --solo-nuevas"; fi
+          python3 scripts/por_empresa.py --rucs "$LISTA" --minutos 30 -- python3 notificaciones/scripts/descargar_buzon.py --salida notificaciones/datos --desde "$DESDE" $extra
+
+      - name: Guardar en el repositorio
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.diario || inputs.guardar) }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          [ -d notificaciones/datos ] || { echo "Sin datos para guardar."; exit 0; }
+          git add notificaciones/datos
+          git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
+          git commit -m "Notificaciones buzon todas [skip ci]"
           logrado=0
           for intento in 1 2 3 4 5 6 7 8; do
             if git push; then logrado=1; break; fi

@@ -57,10 +57,22 @@ function TG_ghRuns_(cfg, n, wf) {
 
 function TG_ghJobsFallidos_(cfg, runId) {
   var js = TG_gh_(cfg, '/actions/runs/' + runId + '/jobs?per_page=100').jobs || [];
-  return js.filter(function (j) { return j.conclusion === 'failure' || j.conclusion === 'timed_out'; }).map(function (j) {
+  var out = [];
+  js.filter(function (j) { return j.conclusion === 'failure' || j.conclusion === 'timed_out'; }).forEach(function (j) {
     var m = String(j.name).match(/\((\d{11})\)|(\d{11})/);
-    return m ? (m[1] || m[2]) : j.name;
+    if (m) { out.push(m[1] || m[2]); return; }
+    // "descargar (todas)": todas las empresas en una máquina; las que fallaron vienen en su anotación.
+    if (/todas/.test(j.name)) {
+      try {
+        var notas = TG_gh_(cfg, '/check-runs/' + j.id + '/annotations') || [];
+        var rucs = [];
+        notas.forEach(function (n) { if (/Empresas que fallaron/.test(n.title || '')) rucs = rucs.concat(String(n.message).match(/\d{11}/g) || []); });
+        if (rucs.length) { out = out.concat(rucs); return; }
+      } catch (e) {}
+    }
+    out.push(j.name);
   });
+  return out;
 }
 
 function TG_iconoRun_(r) {

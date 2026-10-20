@@ -12,8 +12,7 @@ run-name: ${{ (github.event_name == 'schedule' || inputs.diario) && 'Detraccione
 on:
   # Todos los días ~7:17 a. m. de Lima, todas las empresas, los últimos 3 meses.
   schedule:
-    - cron: '17 12 * * *'
-    - cron: '47 17 * * *'   # respaldo (12:47 p. m. Lima)
+    - cron: '17 12 * * *'   # una vez al día (la hoja también la pide a las 8; si ya corrió, no se repite)
   workflow_dispatch:
     inputs:
       empresa:
@@ -58,6 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       lista: ${{ steps.e.outputs.lista }}
+      una: ${{ steps.una.outputs.una }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,6 +83,11 @@ jobs:
           done
           echo "Corridas diarias recientes antes de esta: ${n:-0}"
           if [ "${n:-0}" -gt 0 ]; then echo "saltar=true" >> "$GITHUB_OUTPUT"; else echo "saltar=false" >> "$GITHUB_OUTPUT"; fi
+      - name: ¿Una sola máquina para todas las empresas? (si existe el secreto SUNAT_CLAVES)
+        id: una
+        env:
+          CLAVES: ${{ secrets.SUNAT_CLAVES }}
+        run: if [ -n "$CLAVES" ]; then echo "una=true" >> "$GITHUB_OUTPUT"; else echo "una=false" >> "$GITHUB_OUTPUT"; fi
       - id: e
         env:
           SALTAR: ${{ steps.hoy.outputs.saltar }}
@@ -102,7 +107,7 @@ jobs:
 
   descargar:
     needs: empresas
-    if: needs.empresas.outputs.lista != '[]'
+    if: needs.empresas.outputs.lista != '[]' && needs.empresas.outputs.una != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -146,6 +151,57 @@ jobs:
           git add detracciones/datos
           git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
           git commit -m "Detracciones ${{ matrix.ruc }} [skip ci]"
+          logrado=0
+          for intento in 1 2 3 4 5 6 7 8; do
+            if git push; then logrado=1; break; fi
+            echo "Push rechazado, reintentando con rebase (intento $intento)..."
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep $((intento * 2 + RANDOM % 5))
+          done
+          [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir detracciones/datos"; exit 1; }
+
+  # Todas las empresas una tras otra en UNA máquina (GitHub cobra cada máquina aparte, mínimo 1 min).
+  # Se usa cuando existe el secreto del repositorio SUNAT_CLAVES (una línea por empresa: RUC USUARIO CLAVE);
+  # si no existe, corre "descargar" de arriba (una máquina por empresa, como antes).
+  descargar-todas:
+    name: descargar (todas)
+    needs: empresas
+    if: needs.empresas.outputs.lista != '[]' && needs.empresas.outputs.una == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar navegador
+        run: |
+          pip install playwright==1.47.0
+          python -m playwright install --with-deps chromium
+
+      - name: Descargar depósitos de detracciones de todas las empresas
+        env:
+          SUNAT_CLAVES: ${{ secrets.SUNAT_CLAVES }}
+          LISTA: ${{ needs.empresas.outputs.lista }}
+          DESDE: ${{ inputs.desde }}
+          HASTA: ${{ inputs.hasta }}
+          IVAP: ${{ inputs.ivap }}
+          CONSTANCIAS: ${{ github.event_name == 'schedule' || inputs.constancias }}
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.diario }}" = "true" ]; then DESDE=""; HASTA=""; fi
+          extra=""
+          if [ "$IVAP" = "true" ]; then extra="--ivap"; fi
+          if [ "$CONSTANCIAS" = "true" ]; then extra="$extra --constancias"; fi
+          python scripts/por_empresa.py --rucs "$LISTA" --minutos 40 -- python detracciones/scripts/descargar_detracciones.py --salida detracciones/datos --desde "$DESDE" --hasta "$HASTA" $extra
+
+      - name: Guardar en el repositorio
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.diario || inputs.guardar) }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          [ -d detracciones/datos ] || { echo "Sin datos para guardar."; exit 0; }
+          git add detracciones/datos
+          git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
+          git commit -m "Detracciones todas [skip ci]"
           logrado=0
           for intento in 1 2 3 4 5 6 7 8; do
             if git push; then logrado=1; break; fi

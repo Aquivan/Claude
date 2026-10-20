@@ -13,8 +13,7 @@ run-name: ${{ (github.event_name == 'schedule' || inputs.diario) && 'Retenciones
 on:
   # Todos los dias ~6:07 a. m. de Lima: mes anterior y mes actual de todas las empresas.
   schedule:
-    - cron: '7 11 * * *'
-    - cron: '37 17 * * *'   # respaldo 2 (12:37 p. m. Lima)
+    - cron: '7 11 * * *'   # una vez al día (la hoja también la pide a las 7; si ya corrió, no se repite)
   workflow_dispatch:
     inputs:
       empresa:
@@ -62,6 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       lista: ${{ steps.e.outputs.lista }}
+      una: ${{ steps.una.outputs.una }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -79,6 +79,11 @@ jobs:
                 --jq "[.[] | select(.databaseId != $GITHUB_RUN_ID and .createdAt >= \"$desde\" and (.conclusion == \"success\" or .conclusion == \"\") and .displayTitle == \"Retenciones · diario\")] | length" || echo 0)
           echo "Corridas diarias recientes antes de esta: ${n:-0}"
           if [ "${n:-0}" -gt 0 ]; then echo "saltar=true" >> "$GITHUB_OUTPUT"; else echo "saltar=false" >> "$GITHUB_OUTPUT"; fi
+      - name: ¿Una sola máquina para todas las empresas? (si existe el secreto SUNAT_CLAVES)
+        id: una
+        env:
+          CLAVES: ${{ secrets.SUNAT_CLAVES }}
+        run: if [ -n "$CLAVES" ]; then echo "una=true" >> "$GITHUB_OUTPUT"; else echo "una=false" >> "$GITHUB_OUTPUT"; fi
       - id: e
         env:
           SALTAR: ${{ steps.hoy.outputs.saltar }}
@@ -98,7 +103,7 @@ jobs:
 
   descargar:
     needs: empresas
-    if: needs.empresas.outputs.lista != '[]'
+    if: needs.empresas.outputs.lista != '[]' && needs.empresas.outputs.una != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -147,6 +152,60 @@ jobs:
           git add retenciones/datos
           git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
           git commit -m "Retenciones CRE ${{ matrix.ruc }} ${{ inputs.periodo || 'automatico' }}-${{ inputs.hasta || 'actual' }} [skip ci]"
+          logrado=0
+          for intento in 1 2 3 4 5 6 7 8; do
+            if git push; then logrado=1; break; fi
+            echo "Push rechazado, reintentando con rebase (intento $intento)..."
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep $((intento * 2 + RANDOM % 5))
+          done
+          [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir retenciones/datos"; exit 1; }
+
+  # Todas las empresas una tras otra en UNA máquina (GitHub cobra cada máquina aparte, mínimo 1 min).
+  # Se usa cuando existe el secreto del repositorio SUNAT_CLAVES (una línea por empresa: RUC USUARIO CLAVE);
+  # si no existe, corre "descargar" de arriba (una máquina por empresa, como antes).
+  descargar-todas:
+    name: descargar (todas)
+    needs: empresas
+    if: needs.empresas.outputs.lista != '[]' && needs.empresas.outputs.una == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar lector de PDF
+        run: command -v pdftotext >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils)
+
+      - name: Descargar CRE emitidos y recibidos de todas las empresas
+        env:
+          SUNAT_CLAVES: ${{ secrets.SUNAT_CLAVES }}
+          LISTA: ${{ needs.empresas.outputs.lista }}
+          PERIODO: ${{ inputs.periodo }}
+          HASTA: ${{ inputs.hasta }}
+          ARCHIVOS: ${{ inputs.archivos }}
+          DIAG: ${{ inputs.diagnostico }}
+        run: |
+          case "$ARCHIVOS" in
+            pdf|xml|ninguno|ambos) ;;
+            false) ARCHIVOS=ninguno ;;
+            *) ARCHIVOS=ambos ;;
+          esac
+          extra="--archivos $ARCHIVOS"
+          if [ -z "$PERIODO" ]; then PERIODO=$(TZ=America/Lima date -d "$(TZ=America/Lima date +%Y-%m-01) -1 month" +%Y%m); fi
+          echo "Meses: $PERIODO a ${HASTA:-actual}"
+          if [ "$DIAG" = "true" ]; then extra="$extra --diagnostico"; fi
+          python3 scripts/por_empresa.py --rucs "$LISTA" --minutos 30 -- python3 retenciones/scripts/descargar_cre.py --periodo "$PERIODO" --hasta "$HASTA" --salida retenciones/datos $extra
+
+      - name: Guardar en el repositorio
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.diario || inputs.guardar) }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          [ -d retenciones/datos ] || { echo "Sin datos para guardar."; exit 0; }
+          git add retenciones/datos
+          git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
+          git commit -m "Retenciones CRE todas ${{ inputs.periodo || 'automatico' }}-${{ inputs.hasta || 'actual' }} [skip ci]"
           logrado=0
           for intento in 1 2 3 4 5 6 7 8; do
             if git push; then logrado=1; break; fi
