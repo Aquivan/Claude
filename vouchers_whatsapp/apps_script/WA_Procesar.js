@@ -17,7 +17,7 @@ function WA_revisarConIA_(de, it) {
   var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues(), filas = WA_filasEspera_(datos, de);
   if (!filas.length) { WA_enviarTexto_(de, 'Esos archivos ya se registraron 👍'); return; }
   WA_enviarTexto_(de, '🧾 Leyendo ' + (filas.length > 1 ? 'los ' + filas.length + ' archivos' : 'el archivo') + ' página por página…');
-  filas.forEach(function (i) { hoja.getRange(i + 1, 7).setValue('Revisando'); hoja.getRange(i + 1, 11).setValue('resultado'); });
+  filas.forEach(function (i) { hoja.getRange(i + 1, 7, 1, 2).setValues([['Revisando', '🧾 revisando…']]); hoja.getRange(i + 1, 11).setValue('resultado'); });
   WA_props_().deleteProperty('WA_PREG_' + de);
   var archivos = filas.map(function (i) { return { id: datos[i][9], nombre: datos[i][4], mime: /\.pdf$/i.test(datos[i][4]) ? 'application/pdf' : 'image/jpeg' }; });
   var r;
@@ -32,6 +32,7 @@ function WA_revisarConIA_(de, it) {
 }
 
 function WA_mostrarPlan_(de, r) {
+  if (r && r.ok && r.k) WA_marcarRevisando_(de, 'Revisando', '🧾 resumen ' + r.k, '');   // estas filas son de ESTE resumen
   if (!r || !r.ok) { WA_enviarTexto_(de, '⚠️ ' + ((r && r.error) || 'No pude revisarlo.') + '\nMándemelo de nuevo o elija otra opción.'); return; }
   WA_trozos_(WA_md_(r.texto)).forEach(function (t) { WA_enviarTexto_(de, t); });
   WA_botonesPlan_(de, r, '¿Lo hago?');
@@ -75,7 +76,7 @@ function WA_procesarBoton_(de, id) {
   try { r = WA_cobranzas_('procesar', { modo: op === 'si' ? 'hacer' : 'cancelar', numero: de, k: k }); }
   catch (e) { r = { ok: false, error: e.message }; }
   if (!r || !r.ok) { WA_enviarTexto_(de, '⚠️ ' + ((r && r.error) || 'No respondió Cobranzas.')); return; }
-  WA_marcarRevisando_(de, op === 'si' ? 'Revisado IA' : 'Cancelado', String(r.texto || '').replace(/<[^>]+>/g, '').slice(0, 300));
+  WA_marcarRevisando_(de, op === 'si' ? 'Revisado IA' : 'Cancelado', String(r.texto || '').replace(/<[^>]+>/g, '').slice(0, 300), k);
   WA_trozos_(WA_md_(r.texto)).forEach(function (t) { WA_enviarTexto_(de, t); });
   if (r.pendiente) {
     WA_props_().setProperty('WA_PROC_' + de, String(Date.now())); WA_props_().setProperty('WA_HAY_PROC', '1');
@@ -107,10 +108,12 @@ function WA_procesarNombre_(de, texto) {
   return true;
 }
 
-function WA_marcarRevisando_(de, estado, resultado) {
+// k = '' marca las filas recién leídas ("🧾 revisando…"); con k, solo las de ese resumen.
+function WA_marcarRevisando_(de, estado, resultado, k) {
   var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues();
+  var marca = k ? '🧾 resumen ' + k : '🧾 revisando…';
   for (var i = 1; i < datos.length; i++) {
-    if (String(datos[i][2]) === de && datos[i][6] === 'Revisando') hoja.getRange(i + 1, 7, 1, 2).setValues([[estado, resultado]]);
+    if (String(datos[i][2]) === de && datos[i][6] === 'Revisando' && String(datos[i][7]) === marca) hoja.getRange(i + 1, 7, 1, 2).setValues([[estado, resultado]]);
   }
 }
 

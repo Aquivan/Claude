@@ -319,6 +319,24 @@ function TG_registrarVouchers_(ctx, adjs) {
     } catch (e) { errores.push(a.nombre + ': ' + e.message); }
   });
   if (hechos.length) TGU_anotar_(ctx.chatId, { desc: '📥 ' + hechos.length + ' voucher(s) a la hoja de Vouchers: ' + hechos.map(function (h) { return h.nombre; }).slice(0, 3).join(', '), archivos: hechos });
+  // ⚡ Que la hoja de Vouchers los procese YA y se responda con el resultado (sin esperar su vuelta de 10 min).
+  if (hechos.length && PropertiesService.getScriptProperties().getProperty('TGP_PROCESAR_URL')) {
+    TG_accion_(ctx.chatId, 'typing');
+    TGP_procesarYa_();
+    var idx = {};
+    try { idx = TGU_indiceArchivos_(ctx.ss); } catch (e) {}
+    var lineas = hechos.map(function (h) {
+      var f = idx[h.nombre] || [];
+      if (!f.length) return '⏳ ' + TG_esc_(h.nombre) + ': aún en cola (máx. 10 min)';
+      return f.map(function (x) {
+        return /^\[DUPLICADO\]/.test(x.op) ? '⚠️ ' + x.hoja + '!' + x.fila + ': ya estaba registrado (duplicado)'
+          : /^\[/.test(x.op) ? '❌ ' + TG_esc_(h.nombre) + ': no se encontró un voucher legible'
+          : '✅ <b>' + x.hoja + '!' + x.fila + '</b> · op ' + TG_esc_(x.op) + ' · ' + Number(x.monto || 0).toFixed(2);
+      }).join('\n');
+    });
+    TG_enviar_(ctx.chatId, '📋 <b>Resultado</b>\n' + lineas.join('\n'), [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]]);
+    return;
+  }
   TG_enviar_(ctx.chatId, (n ? '📥 <b>' + n + ' archivo(s) enviados al Sistema de Vouchers</b> (carpeta de entrada de ' +
     (adjs.some(function (a) { return a.foto; }) ? 'fotos' : 'originales') + '). Se registran en la próxima vuelta automática de esa hoja; ' +
     'después aparecen aquí y en Cobranzas.' : '') + (errores.length ? '\n⚠️ ' + TG_esc_(errores.join('; ')) : ''),

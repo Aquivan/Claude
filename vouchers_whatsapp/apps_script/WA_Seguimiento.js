@@ -27,26 +27,29 @@ function WA_cadaMinuto() {
   if (!tandas.length && !hayCola && !hayPreg && !procesar) return;
 
   if (hayPreg) { try { WA_vencidosNombre_(props); } catch (e) { console.error('Nombres vencidos: ' + e.message); } }
-  var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues();
+  var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues(), enCola = 0;
   tandas.forEach(function (k) {
     var de = k.slice('WA_TANDA_'.length);
     WA_props_().deleteProperty(k);
     var espera = false;
     try { espera = WA_tandaEnEspera_(hoja, datos, de); } catch (e) { console.error('¿De quién son? ' + e.message); }
     if (espera) datos = hoja.getDataRange().getValues();
-    WA_acuse_(hoja, datos, de);
+    enCola += WA_acuse_(hoja, datos, de);
   });
 
-  if (tandas.length || procesar || WA_prop_('WA_PROCESAR_PEND') === '1') { WA_props_().deleteProperty('WA_PROCESAR_PEND'); WA_procesarYa_(); }
+  // Solo se procesa si de verdad hay algo nuevo en Entrada (una tanda que espera el nombre no cuenta).
+  if (procesar) WA_props_().deleteProperty('WA_PROCESAR_PEND');
+  if (enCola || procesar) { WA_procesarYa_(); datos = hoja.getDataRange().getValues(); }
   var quedan = WA_revisarCola_(hoja, datos, ahora);
-  WA_props_().setProperty('WA_HAY_COLA', quedan ? '1' : '0');
+  // Nunca se apaga la marca con datos viejos: se vuelve a mirar la hoja.
+  WA_props_().setProperty('WA_HAY_COLA', quedan || WA_quedaEnCola_(hoja) ? '1' : '0');
   WA_avisarResultados_(hoja, datos);
 }
 
 function WA_acuse_(hoja, datos, de) {
   var filas = [];
   for (var i = 1; i < datos.length; i++) if (String(datos[i][2]) === de && datos[i][10] === '' && datos[i][6] !== 'Espera') filas.push(i);
-  if (!filas.length) return;
+  if (!filas.length) return 0;
   var ok = filas.filter(function (i) { return datos[i][6] === 'En cola'; });
   var mal = filas.filter(function (i) { return datos[i][6] !== 'En cola'; });
   var fotos = ok.filter(function (i) { return datos[i][3] === 'foto'; }).length;
@@ -63,6 +66,26 @@ function WA_acuse_(hoja, datos, de) {
     hoja.getRange(i + 1, 11).setValue(datos[i][10]);
   });
   if (ok.length) WA_props_().setProperty('WA_HAY_COLA', '1');
+  return ok.length;
+}
+
+/**
+ * ⚡ Procesar YA y avisar el resultado en la MISMA ejecución (no espera la revisión de cada minuto).
+ * Si otra ejecución ya está pidiendo procesar, queda la marca para que la siguiente revisión lo haga.
+ */
+function WA_procesarAhora_() {
+  if (!WA_procesarYa_()) { WA_props_().setProperty('WA_PROCESAR_PEND', '1'); return; }
+  try {
+    var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues();
+    if (WA_revisarCola_(hoja, datos, Date.now())) WA_props_().setProperty('WA_HAY_COLA', '1');
+    WA_avisarResultados_(hoja, datos);
+  } catch (e) { console.error('Resultado al instante: ' + e.message); }
+}
+
+// ¿Queda algo "En cola"? Se mira la hoja de nuevo (otra ejecución pudo agregar filas mientras tanto).
+function WA_quedaEnCola_(hoja) {
+  var n = hoja.getLastRow();
+  return n > 1 && hoja.getRange(2, 7, n - 1, 1).getValues().some(function (r) { return r[0] === 'En cola'; });
 }
 
 // Devuelve cuántos archivos siguen esperando al sistema de Vouchers.
@@ -161,9 +184,9 @@ function WA_avisarResultados_(hoja, datos) {
 // su revisión de cada 10 min. Nunca dos a la vez: la hoja de Vouchers no usa bloqueos.
 function WA_procesarYa_() {
   var url = WA_prop_('WA_PROCESAR_URL');
-  if (!url) return;
+  if (!url) return false;
   var p = WA_props_(), desde = Number(p.getProperty('WA_PROCESANDO') || 0);
-  if (Date.now() - desde < 6 * 60 * 1000) return;
+  if (Date.now() - desde < 6 * 60 * 1000) return false;
   p.setProperty('WA_PROCESANDO', String(Date.now()));
   try {
     var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
@@ -173,4 +196,5 @@ function WA_procesarYa_() {
   } finally {
     p.deleteProperty('WA_PROCESANDO');
   }
+  return true;
 }

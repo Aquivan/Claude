@@ -185,8 +185,7 @@ function WA_finalizar_(de, it) {
     var corta = it.fecha.split('-'); corta = corta[2] + '-' + corta[1] + '-' + corta[0].slice(2);
     WA_enviarTexto_(de, (it.dicho ? '🎤 _' + it.dicho + '_\n' : '') + '🏷 *' + corta + ' ' + it.nombre + '* · ' + filas.length + ' archivo(s).');
   }
-  WA_acuse_(hoja, datos, de);
-  WA_props_().setProperty('WA_PROCESAR_PEND', '1');
+  if (WA_acuse_(hoja, datos, de)) WA_procesarAhora_();   // ⚡ procesa y avisa el resultado YA
 }
 
 /** WA_cadaMinuto: preguntas sin contestar → se procesan con el nombre de antes. */
