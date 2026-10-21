@@ -90,3 +90,25 @@ jobs:
       - name: Subir a la hoja
         if: inputs.accion == 'subir'
         run: cd /tmp/hoja && clasp push --force && echo "✅ Subido. Lo demás del código de la hoja quedó igual."
+      # La aplicación web (bot de Telegram de Vouchers y "procesar al instante") corre una versión fija:
+      # se actualiza cada despliegue a la versión nueva, con la MISMA dirección.
+      - name: Actualizar la aplicación web (misma dirección)
+        if: inputs.accion == 'subir'
+        run: |
+          cd /tmp/hoja
+          clasp --json list-deployments > /tmp/deps.json 2>/dev/null || echo '[]' > /tmp/deps.json
+          python3 - <<'PY' > /tmp/ids.txt
+          import json
+          txt = open('/tmp/deps.json').read()
+          try: deps = json.loads(txt[txt.index('['):])
+          except Exception: deps = []
+          for d in deps:
+              cfg = d.get('deploymentConfig') or {}
+              ver = d.get('versionNumber') or cfg.get('versionNumber')
+              if d.get('deploymentId') and ver:   # el de @HEAD no tiene versión: no se toca
+                  print(d['deploymentId'] + '\t' + (d.get('description') or cfg.get('description') or 'Vouchers').split(' · cambios')[0])
+          PY
+          if [ ! -s /tmp/ids.txt ]; then echo "::warning::No encontré despliegues con versión; la aplicación web no se actualizó."; exit 0; fi
+          while IFS=$'\t' read -r ID DESC; do
+            clasp create-deployment -i "$ID" -d "$DESC · cambios $(date -u +%Y-%m-%d)" >/dev/null && echo "✅ Despliegue actualizado (misma dirección)."
+          done < /tmp/ids.txt
