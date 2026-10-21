@@ -37,7 +37,7 @@ var TG_PARAMETROS_ = [
 
 // Avisos que cada persona puede activar o desactivar (/avisos).
 var TG_AVISOS_ = [
-  ['notif', '📬 Notificaciones y mensajes SUNAT nuevos'],
+  ['notif', '📬 Notificaciones y mensajes SUNAT nuevos (y proveedores en la lista SSCO)'],
   ['det', '🏦 Detracciones nuevas'],
   ['ret', '🧾 Retenciones nuevas'],
   ['hon', '🧑‍💼 Recibos por honorarios nuevos'],

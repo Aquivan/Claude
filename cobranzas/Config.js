@@ -61,7 +61,7 @@ function onOpen() {
     .addItem('🖼 Abrir visor de vouchers', 'abrirVisorVoucher')
     .addItem('✍️ Registrar cobro/pago manual (efectivo, compensación…)', 'menuNuevoRegistroManual')
     .addItem('🔁 Reasignar una retención a otra factura', 'menuReasignarRetencion')
-    .addItem('🧾 Actualizar padrones SUNAT (agentes de retención, buenos contribuyentes)', 'menuActualizarPadrones')
+    .addItem('🧾 Actualizar padrones SUNAT (agentes de retención, buenos contribuyentes, SSCO)', 'menuActualizarPadrones')
 
     .addSubMenu(ui.createMenu('♻️ Respaldos de datos manuales')
       .addItem('💾 Guardar respaldo ahora', 'menuRespaldarAhora')

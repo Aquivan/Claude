@@ -124,6 +124,8 @@ function actualizarTodoInterno_(forzar) {
     var filasDocs = construirFilasDocumentos_(res, cfg, hoy);
     var t1 = Date.now();
     escribirDocumentos_(ss, filasDocs); bitacora_(ss, 'Documentos', t1, filasDocs.length + ' filas'); t1 = Date.now();
+    try { bitacora_(ss, 'SSCO', t1, SSCO_escribir_(ss, res, cfg) + ' proveedores/clientes en la lista de SUNAT'); } catch (e) { bitacora_(ss, 'SSCO ERROR', t1, e.message); }
+    t1 = Date.now();
     escribirPanel_(ss, filasDocs, res, cfg, liqs); bitacora_(ss, 'Panel', t1, ''); t1 = Date.now();
     escribirMovimientos_(ss, res, cfg); bitacora_(ss, 'Movimientos', t1, res.movimientos.length + ' filas'); t1 = Date.now();
     escribirConciliar_(ss, res, cfg); bitacora_(ss, 'Conciliar', t1, res.sugerencias.length + ' sugerencias, ' + res.errores.length + ' avisos, ' + res.sinCruzar.length + ' sin cruzar'); t1 = Date.now();

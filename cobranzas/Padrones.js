@@ -5,6 +5,8 @@
  * es agente de retención, buen contribuyente, agente de percepción (venta
  * interna) o agente de percepción de combustibles. La usa Retener.js.
  *
+ * También baja la lista de Sujetos Sin Capacidad Operativa (Ssco.js).
+ *
  * Se actualiza sola una vez por semana (desde la actualización automática) y
  * con el menú 💼 Cobranzas → 🧾 Actualizar padrones SUNAT:
  *   1. Descarga directa de SUNAT (archivos *_TXT.zip, formato RUC|NOMBRE|DESDE|RESOLUCION).
@@ -101,6 +103,7 @@ function PAD_actualizar_(ss, cfg) {
   sh.getRange(2, 1, filas.length, 1).setNumberFormat('@');
   sh.getRange(2, 1, filas.length, PAD_ENC_.length).setValues(filas);
   sh.getRange(2, 2, filas.length, 4).setNumberFormat('dd/mm/yyyy');
+  origen.push(SSCO_actualizar_(ss));   // ⚠️ Sujetos Sin Capacidad Operativa (Ssco.js)
   var info = 'Padrones SUNAT al ' + Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy') + ' · ' + origen.join(' · ');
   var props = PropertiesService.getDocumentProperties();
   props.setProperty('pad_info', info);
@@ -119,7 +122,7 @@ function PAD_actualizarSiToca_(ss) {
 
 function menuActualizarPadrones() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  ss.toast('Descargando padrones de SUNAT (agentes de retención, buenos contribuyentes, percepción)…', '🧾 Padrones', 120);
+  ss.toast('Descargando padrones de SUNAT (agentes de retención, buenos contribuyentes, percepción, sin capacidad operativa)…', '🧾 Padrones', 120);
   var msg;
   try { msg = PAD_actualizar_(ss, leerConfig_(ss)); } catch (e) { msg = '❌ ' + e.message; }
   ss.toast(msg, '🧾 Padrones', 15);

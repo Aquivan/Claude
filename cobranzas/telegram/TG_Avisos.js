@@ -3,7 +3,8 @@
  *
  * Revisa lo NUEVO desde la vuelta anterior y avisa a cada persona según lo que
  * eligió en /avisos: notificaciones y mensajes del Buzón SUNAT, detracciones,
- * retenciones, recibos por honorarios, vouchers registrados y descargas
+ * retenciones, recibos por honorarios, vouchers registrados, proveedores que SUNAT
+ * publicó como Sujetos Sin Capacidad Operativa y descargas
  * automáticas que fallaron. A la hora del resumen manda el ☀️ resumen y las
  * facturas por vencer. Lo ya avisado se anota en la pestaña oculta _TG_Vistos
  * (la primera vez solo anota, para no mandar todo lo antiguo).
@@ -26,7 +27,7 @@ function TG_vigia() {
   var tareas = [
     ['err', TG_avisoErrores_],
     ['notif', TG_avisoNotificaciones_], ['notif', TG_avisoMensajes_], ['det', TG_avisoDetracciones_],
-    ['ret', TG_avisoRetenciones_], ['hon', TG_avisoHonorarios_], ['vou', TG_avisoVouchers_],
+    ['ret', TG_avisoRetenciones_], ['hon', TG_avisoHonorarios_], ['vou', TG_avisoVouchers_], ['notif', TG_avisoSsco_],
   ];
   tareas.forEach(function (t) {
     if (noche && t[0] !== 'err') return;
@@ -151,6 +152,23 @@ function TG_avisoRetenciones_(c, V) {
       }).join('\n') });
   });
   return res;
+}
+
+/** ⚠️ Proveedores / clientes / empresas del grupo que aparecen en la lista SSCO (pestaña ⚠️ SSCO). La primera vez avisa lo que ya hay. */
+function TG_avisoSsco_(c, V) {
+  var sh = c.ss.getSheetByName(SSCO_PESTANA_);
+  if (!sh || sh.getLastRow() < 7) return [];
+  var filas = sh.getRange(7, 1, sh.getLastRow() - 6, 15).getValues().filter(function (f) { return /^\d{11}$/.test(String(f[2])); });
+  var primera = !V.mapa.ssco;
+  var nuevas = TG_nuevos_(V, 'ssco', filas, function (f) { return [f[0], f[2], TG_fecha_(aFecha_(f[7]))].join('|'); });
+  if (primera) nuevas = filas;   // revisión inicial: lo que ya está en la lista también importa
+  if (!nuevas.length) return [];
+  return [{ html: '🚨 <b>' + nuevas.length + ' proveedor(es)/cliente(s) en la lista de Sujetos Sin Capacidad Operativa de SUNAT</b>\n' +
+    'Sus facturas no dan crédito fiscal ni sustentan gasto.\n\n' + nuevas.slice(0, 12).map(function (f) {
+      return '• ' + TG_esc_(f[0]) + ' · <b>' + TG_esc_(String(f[3]).slice(0, 40)) + '</b> (' + f[2] + ') · ' + TG_esc_(f[1]) +
+        (f[9] ? ': ' + f[9] + ' factura(s)' + (f[10] ? ', S/ ' + TG_num_(aNumero_(f[10])) + ' (IGV aprox. S/ ' + TG_num_(aNumero_(f[11])) + ')' : '') : '') +
+        '\n   ' + TG_esc_(f[4]);
+    }).join('\n') + (nuevas.length > 12 ? '\n…' : '') + '\n\nDetalle en la pestaña <b>⚠️ SSCO</b> de Cuentas por Cobrar y Pagar.' }];
 }
 
 function TG_avisoHonorarios_(c, V) {

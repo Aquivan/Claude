@@ -216,6 +216,10 @@ function TGP_texto_(k, p) {
   p.items.forEach(function (it) {
     var v = it.v, cab = '\n<b>Voucher ' + (p.items.length > 1 ? it.n + ' ' : '') + '</b>' + TG_esc_([v.banco, v.operacion ? 'op ' + v.operacion : '', v.fecha].filter(String).join(' · ')) + ' · <b>' + TGP_monto_(v) + '</b>';
     var fac = it.fac && it.fac.serie ? '\n   🧾 Factura ' + TG_esc_(it.fac.serie) + (it.fac.emisor ? ' de ' + TG_esc_(it.fac.emisor) : '') + ' · pago = ' + TG_esc_(it.cuadra) : '';
+    var ssco = null;   // ⚠️ proveedor en la lista de Sujetos Sin Capacidad Operativa (Ssco.js)
+    try { ssco = it.fac && it.fac.proveedor ? SSCO_ruc_(TG_ss_(), it.fac.proveedor) : null; } catch (e) {}
+    var avisoSsco = !ssco ? '' : '\n   🚨 <b>' + TG_esc_(it.fac.emisor || it.fac.proveedor) + '</b>: ' + TG_esc_(SSCO_texto_(ssco)) +
+      (ssco.plazo ? ' Puede pedir revisión hasta el ' + TG_fecha_(aFecha_(ssco.plazo)) + ' (aprox.).' : '');
     if (it.tipo === 'nuevo') {
       acciones++; nuevos++;
       L.push(cab + '\n   ❌ <b>No está registrado</b> → lo registro' + (it.pagina ? ' (solo la página ' + it.pagina + ')' : '') + fac + (fac ? ' → la completo al registrarse' : ''));
@@ -225,6 +229,7 @@ function TGP_texto_(k, p) {
     } else if (it.tipo === 'listo') {
       L.push(cab + '\n   ✅ Ya está en <b>' + TG_esc_(it.fuente) + '</b>' + (it.facturaActual ? ' con factura ' + TG_esc_(it.facturaActual) : '') + ' → no hay nada que hacer');
     } else L.push(cab + '\n   ⚠️ ' + TG_esc_(it.estado || 'no estoy seguro si ya está') + ' → no lo toco; revíselo en la hoja');
+    if (avisoSsco) L[L.length - 1] += avisoSsco;
   });
   if (nuevos) L.push('\n📂 Pestaña: <b>' + TGP_textoPestana_(p) + '</b>');
   if (nuevos) L.push('🏷 Se guardará como <b>' + TG_esc_(TGE_corta_(p.fecha) + ' ' + p.nombre) + '</b>' + (nuevos > 1 ? ', … 2…' : '') + ' (puede cambiarlo).');

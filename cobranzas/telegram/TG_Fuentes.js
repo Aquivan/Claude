@@ -96,10 +96,13 @@ var TGH_ = {
     if (!/^\d{11}$/.test(ruc)) throw new Error('RUC inválido');
     var q = {}; q[ruc] = true;
     var p = PAD_leer_(c.ss, q);
-    var x = p.mapa[ruc];
-    if (!x) return { columnas: ['ruc', 'resultado'], filas: [[ruc, 'No figura en los padrones de agentes de retención, buenos contribuyentes ni agentes de percepción']], nota: p.info };
-    return { columnas: ['ruc', 'razon_social', 'agente_retencion_desde', 'buen_contribuyente_desde', 'agente_percepcion_desde', 'percepcion_combustible_desde'],
-      filas: [[ruc, x.nombre, x.ar || '', x.bc || '', x.ap || '', x.apc || '']], nota: p.info };
+    var x = p.mapa[ruc], ss = null;
+    try { ss = SSCO_ruc_(c.ss, ruc); } catch (e) {}
+    var txtSsco = ss ? SSCO_texto_(ss) + (ss.plazo ? ' Plazo para pedir revisión: ' + TG_fecha_(aFecha_(ss.plazo)) + ' (aprox.).' : '') : 'No figura en la lista de Sujetos Sin Capacidad Operativa';
+    var nota = p.info + ' · ' + (PropertiesService.getDocumentProperties().getProperty('ssco_info') || '');
+    if (!x) return { columnas: ['ruc', 'resultado', 'sin_capacidad_operativa'], filas: [[ruc, 'No figura en los padrones de agentes de retención, buenos contribuyentes ni agentes de percepción', txtSsco]], nota: nota };
+    return { columnas: ['ruc', 'razon_social', 'agente_retencion_desde', 'buen_contribuyente_desde', 'agente_percepcion_desde', 'percepcion_combustible_desde', 'sin_capacidad_operativa'],
+      filas: [[ruc, x.nombre, x.ar || '', x.bc || '', x.ap || '', x.apc || '', txtSsco]], nota: nota };
   },
 
   recordatorio: function (c, a) {
