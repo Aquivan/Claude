@@ -21,8 +21,8 @@ var WA_GRAPH_ = 'https://graph.facebook.com/v25.0/';
 // Datos de la app "Vouchers Bot" (no son secretos). Lo que se guarde con el menú los reemplaza.
 var WA_FIJOS_ = {
   WA_PHONE_ID: '1219097671294680',   // número de prueba +1 555 199 0951
-  WA_WABA_ID: '1414043013929024',    // Test WhatsApp Business Account
-  WA_PERMITIDOS: '51XXXXXXXXX'
+  WA_WABA_ID: '1414043013929024'     // Test WhatsApp Business Account
+  // Los números autorizados NO van en el código: solo en Propiedades del script (menú "Números autorizados").
 };
 
 // Mismas carpetas y hoja que usa el sistema de Vouchers (vouchers_bot_respaldo/src/Config.js).
@@ -77,7 +77,20 @@ function WA_urlApp_() {
 }
 
 function WA_permitidos_() {
-  return WA_prop_('WA_PERMITIDOS').split(/[,\s]+/).map(WA_soloDigitos_).filter(String);
+  var v = WA_prop_('WA_PERMITIDOS') || WA_migrarPermitidos_();
+  return v.split(/[,\s]+/).map(WA_soloDigitos_).filter(String);
+}
+
+// Antes el número autorizado venía escrito en el código; ahora solo vive en Propiedades del script.
+// Si todavía no se guardó ahí, se toma de la pestaña Recibidos (solo los autorizados llegan a anotarse).
+function WA_migrarPermitidos_() {
+  try {
+    var vistos = {};
+    WA_hoja_().getDataRange().getValues().slice(1).forEach(function (r) { var n = WA_soloDigitos_(r[2]); if (n.length >= 9) vistos[n] = true; });
+    var lista = Object.keys(vistos).join(',');
+    if (lista) WA_props_().setProperty('WA_PERMITIDOS', lista);
+    return lista;
+  } catch (e) { return ''; }
 }
 
 function WA_soloDigitos_(s) { return String(s || '').replace(/\D/g, ''); }

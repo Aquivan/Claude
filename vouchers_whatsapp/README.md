@@ -34,8 +34,9 @@ WhatsApp ──► Meta ──► Cloudflare Worker ──► Apps Script "Vouch
    (permisos `whatsapp_business_messaging` y `whatsapp_business_management`, caducidad *Nunca*).
 3. **Hoja** ([Vouchers WhatsApp](https://docs.google.com/spreadsheets/d/1QtUYgJeZ_nHpnCNiyTXTEfA3FL99gIR-dfMDaohLKEc/edit)):
    menú **📲 WhatsApp → 1. Configurar** (Google pide permisos la primera vez: *Revisar permisos → Permitir*).
-   Solo hay que pegar el **token permanente**: el ID del número (1219097671294680), el de la cuenta
-   (1414043013929024) y el número autorizado (51XXXXXXXXX) ya vienen puestos; pulse Aceptar en blanco para dejarlos.
+   Solo hay que pegar el **token permanente** y **su número de WhatsApp** (con 51, sin + ni espacios): el ID del
+   número (1219097671294680) y el de la cuenta (1414043013929024) ya vienen puestos. El número autorizado se guarda
+   solo en la hoja (Propiedades del script), **nunca en el código**.
 4. **Cloudflare** (dash.cloudflare.com → Workers & Pages → Create → Worker "vouchers-wa"):
    *Edit code* → pegue `worker/worker.js` → *Deploy*. En *Settings → Variables and Secrets*
    agregue `GAS_URL`, `GAS_TOKEN`, `VERIFY_TOKEN` (salen en **📲 WhatsApp → 2. Datos**) y `APP_SECRET`.

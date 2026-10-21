@@ -68,9 +68,10 @@ function WA_procesarMensaje_(m, nombre) {
   cache.put('wa_m_' + m.id, '1', 21600);
 
   var de = WA_soloDigitos_(m.from), permitidos = WA_permitidos_();
-  if (permitidos.length && permitidos.indexOf(de) === -1) {
+  if (permitidos.indexOf(de) === -1) {   // sin lista no se acepta a nadie
     console.warn('Número no autorizado: ' + de);
-    WA_enviarTexto_(de, '🚫 Este número no está autorizado para registrar vouchers. Pida que agreguen el ' + de + '.');
+    WA_enviarTexto_(de, permitidos.length ? '🚫 Este número no está autorizado para registrar vouchers. Pida que agreguen el ' + de + '.'
+      : '🚫 Aún no hay números autorizados: en la hoja "Vouchers WhatsApp" use el menú 📲 WhatsApp → Números autorizados.');
     return;
   }
 
