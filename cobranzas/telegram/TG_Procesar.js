@@ -137,7 +137,7 @@ function TGP_analizar_(ss, adjs, op) {
   var nuevos = items.filter(function (x) { return x.tipo === 'nuevo'; });
   var plan = { t: 'procesar', canal: op.canal, destino: op.destino, clave: op.clave, adjs: adjs, items: items,
     nombre: op.nombre || (nuevos.length ? nuevos[0].nombre : ''), ordenante: op.nombre ? '' : (nuevos.length ? nuevos[0].ordenante : ''),
-    fecha: op.fecha || TGE_hoy_(), resumen: resumenArch };
+    fecha: op.fecha || TGE_hoy_(), resumen: resumenArch, pestana: /^(foto|original)$/.test(op.pestana || '') ? op.pestana : '' };
   var k = TG_guardarBoton_(plan);
   return TGP_texto_(k, plan);
 }
@@ -175,9 +175,34 @@ function TGP_texto_(k, p) {
       L.push(cab + '\n   ✅ Ya está en <b>' + TG_esc_(it.fuente) + '</b>' + (it.facturaActual ? ' con factura ' + TG_esc_(it.facturaActual) : '') + ' → no hay nada que hacer');
     } else L.push(cab + '\n   ⚠️ ' + TG_esc_(it.estado || 'no estoy seguro si ya está') + ' → no lo toco; revíselo en la hoja');
   });
-  if (nuevos) L.push('\n🏷 Se guardará como <b>' + TG_esc_(TGE_corta_(p.fecha) + ' ' + p.nombre) + '</b>' + (nuevos > 1 ? ', … 2…' : '') + ' (puede cambiarlo).');
+  if (nuevos) L.push('\n📂 Pestaña: <b>' + TGP_textoPestana_(p) + '</b>');
+  if (nuevos) L.push('🏷 Se guardará como <b>' + TG_esc_(TGE_corta_(p.fecha) + ' ' + p.nombre) + '</b>' + (nuevos > 1 ? ', … 2…' : '') + ' (puede cambiarlo).');
   L.push('\n<i>El archivo original queda en la carpeta temporal (se borra sola en 7 días). Todo se puede deshacer.</i>');
-  return { texto: L.join('\n'), k: k, hayAcciones: acciones > 0, hayNuevos: nuevos > 0, etiqueta: TGE_corta_(p.fecha) + ' ' + p.nombre, msg: p.msg || 0 };
+  return { texto: L.join('\n'), k: k, hayAcciones: acciones > 0, hayNuevos: nuevos > 0, etiqueta: TGE_corta_(p.fecha) + ' ' + p.nombre, msg: p.msg || 0,
+    pestana: TGP_pestanaEfectiva_(p), textoPestana: TGP_textoPestana_(p) };
+}
+
+/** 'foto' | 'original' | 'mixto' (PDF a Originales y fotos a Fotos, cuando no se eligió). */
+function TGP_pestanaEfectiva_(p) {
+  if (p.pestana) return p.pestana;
+  var tipos = {};
+  p.items.filter(function (x) { return x.tipo === 'nuevo'; }).forEach(function (x) { tipos[/pdf/i.test(x.mime) ? 'original' : 'foto'] = true; });
+  var k = Object.keys(tipos);
+  return k.length === 1 ? k[0] : 'mixto';
+}
+
+function TGP_textoPestana_(p) {
+  var e = TGP_pestanaEfectiva_(p);
+  return e === 'foto' ? 'Fotos' : e === 'original' ? 'Originales' : 'PDF → Originales, fotos → Fotos';
+}
+
+/** 📸 / 📄 Mandar a Fotos u Originales (todos los vouchers nuevos del resumen). */
+function TGP_cambiarPestana_(k, pestana) {
+  var p = TG_leerBoton_(k);
+  if (!p) return { error: 'Ese resumen ya venció (dura 6 horas). Mándeme el archivo de nuevo.' };
+  p.pestana = pestana === 'foto' ? 'foto' : 'original';
+  CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(p), 21600);
+  return TGP_texto_(k, p);
 }
 
 /** 🏷 Cambiar nombre/fecha de los vouchers nuevos ("Edit", "Edit 15/10"). */
@@ -216,7 +241,7 @@ function TGP_ejecutar_(ss, k) {
   TGP_aTemporal_(ss, p.adjs);
   var nuevos = p.items.filter(function (x) { return x.tipo === 'nuevo'; });
   if (nuevos.length) {
-    var job = { id: accId, canal: p.canal, destino: p.destino, clave: p.clave, estado: 'separar', t: Date.now(), nombre: p.nombre, fecha: p.fecha, ordenante: p.ordenante,
+    var job = { id: accId, canal: p.canal, destino: p.destino, clave: p.clave, estado: 'separar', t: Date.now(), nombre: p.nombre, fecha: p.fecha, ordenante: p.ordenante, pestana: p.pestana || '',
       items: nuevos.map(function (it) { return { archivo: it.archivo, mime: it.mime, pagina: it.pagina, fac: it.fac, v: it.v }; }) };
     PropertiesService.getScriptProperties().setProperty(TGP_PROP_JOB_ + accId, JSON.stringify(job));
     TGP_programar_(1);
@@ -321,7 +346,8 @@ async function TGP_separar_(ss, job) {
         }
       }
     }
-    var f = DriveApp.getFolderById(esPdf ? cfg.carpetaOriginales : cfg.carpetaFotos).createFile(blob.setName(nombres[n]));
+    var aOriginales = job.pestana ? job.pestana === 'original' : esPdf;   // 📂 la pestaña elegida, o según el tipo
+    var f = DriveApp.getFolderById(aOriginales ? cfg.carpetaOriginales : cfg.carpetaFotos).createFile(blob.setName(nombres[n]));
     idxs.forEach(function (i) { job.items[i].nuevo = { id: f.getId(), nombre: nombres[n] }; });
     creados.push({ id: f.getId(), nombre: nombres[n] });
   }
@@ -422,10 +448,17 @@ function TGP_tecladoTG_(r) {
   var f = [[{ text: '✅ Hacerlo', callback_data: 'k:' + r.k + ':si' }]];
   if (r.hayNuevos) f[0].push({ text: '🏷 Cambiar nombre', callback_data: 'k:' + r.k + ':nom' });
   f[0].push({ text: '✖ Cancelar', callback_data: 'k:' + r.k + ':no' });
+  if (r.hayNuevos) f.push([r.pestana === 'foto' ? { text: '📄 Mandar a Originales', callback_data: 'k:' + r.k + ':dor' }
+    : { text: '📸 Mandar a Fotos', callback_data: 'k:' + r.k + ':dfo' }]);
   return f;
 }
 
 function TGP_alBotonTG_(ctx, op, k) {
+  if (op === 'dfo' || op === 'dor') {   // 📸 / 📄: se corrige el mismo resumen
+    var rp = TGP_cambiarPestana_(k, op === 'dfo' ? 'foto' : 'original');
+    if (rp.error) return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(rp.error));
+    return TG_editar_(ctx.chatId, ctx.msgId, rp.texto, TGP_tecladoTG_(rp));
+  }
   if (op === 'nom') {
     var ses = TG_sesion_(ctx.chatId); ses.esperando = { tipo: 'procnombre', k: k }; TG_guardarSesion_(ctx.chatId, ses);
     return TG_enviar_(ctx.chatId, '🏷 Escríbame (o dígame 🎤) el nombre y, si es de otro día, la fecha: <i>Edit</i> o <i>Edit 15/10</i>.');
@@ -463,7 +496,7 @@ function TGP_wa_(q) {
   if (q.procesarUrl) PropertiesService.getScriptProperties().setProperty('TGP_PROCESAR_URL', q.procesarUrl);
   if (q.modo === 'analizar') {
     var r;
-    try { r = TGP_analizar_(ss, q.archivos || [], { canal: 'wa', destino: String(q.numero), clave: clave, nombre: q.nombre || '', fecha: q.fecha || '' }); r.ok = true; }
+    try { r = TGP_analizar_(ss, q.archivos || [], { canal: 'wa', destino: String(q.numero), clave: clave, nombre: q.nombre || '', fecha: q.fecha || '', pestana: q.pestana || '' }); r.ok = true; }
     catch (e) { r = { ok: false, error: 'No pude revisarlo: ' + e.message }; }
     CacheService.getScriptCache().put('tgp_r_' + clave, JSON.stringify(r), 3600);
     return r;
@@ -475,6 +508,7 @@ function TGP_wa_(q) {
   if (q.modo === 'hacer') return Object.assign({ ok: true }, TGP_ejecutar_(ss, q.k));
   if (q.modo === 'cancelar') return { ok: true, texto: TGP_cancelar_(ss, q.k) };
   if (q.modo === 'nombre') { var n = TGP_cambiarNombre_(q.k, q.texto || ''); n.ok = !n.error; return n; }
+  if (q.modo === 'pestana') { var d = TGP_cambiarPestana_(q.k, q.pestana); d.ok = !d.error; return d; }
   if (q.modo === 'mensajes') {
     var p = PropertiesService.getScriptProperties(), m = [];
     try { m = JSON.parse(p.getProperty(TGP_PROP_MSG_ + clave) || '[]'); } catch (e) {}

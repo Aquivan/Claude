@@ -22,7 +22,7 @@ function WA_revisarConIA_(de, it) {
   var archivos = filas.map(function (i) { return { id: datos[i][9], nombre: datos[i][4], mime: /\.pdf$/i.test(datos[i][4]) ? 'application/pdf' : 'image/jpeg' }; });
   var r;
   try { r = WA_cobranzas_('procesar', { modo: 'analizar', numero: de, archivos: archivos, procesarUrl: WA_prop_('WA_PROCESAR_URL'),
-    nombre: (it && it.nombre) || '', fecha: (it && it.fecha) || '' }); }
+    nombre: (it && it.nombre) || '', fecha: (it && it.fecha) || '', pestana: WA_prop_('WA_MODO_' + de) }); }   // 📂 su "modo foto/original"
   catch (e) {   // tardó más de 60 s: Cobranzas sigue y WA_cadaMinuto recoge el resultado
     WA_props_().setProperty('WA_PRA_' + de, String(Date.now()));
     WA_props_().setProperty('WA_HAY_PROC', '1');
@@ -37,10 +37,16 @@ function WA_mostrarPlan_(de, r) {
   WA_botonesPlan_(de, r, '¿Lo hago?');
 }
 
+// WhatsApp deja solo 3 botones: ✅ · 📸/📄 pestaña · ✖. El nombre se cambia escribiendo "nombre Edit 15/10".
 function WA_botonesPlan_(de, r, pregunta) {
   if (!r.hayAcciones) return;
+  WA_props_().setProperty('WA_PRK_' + de, r.k);
   var botones = [{ type: 'reply', reply: { id: 'pr:' + r.k + ':si', title: '✅ Hacerlo' } }];
-  if (r.hayNuevos) botones.push({ type: 'reply', reply: { id: 'pr:' + r.k + ':nom', title: '🏷 Cambiar nombre' } });
+  if (r.hayNuevos) {
+    botones.push(r.pestana === 'foto' ? { type: 'reply', reply: { id: 'pr:' + r.k + ':dor', title: '📄 A Originales' } }
+      : { type: 'reply', reply: { id: 'pr:' + r.k + ':dfo', title: '📸 A Fotos' } });
+    pregunta += '\n_Para cambiar el nombre escriba: *nombre Edit* o *nombre Edit 15/10*._';
+  }
   botones.push({ type: 'reply', reply: { id: 'pr:' + r.k + ':no', title: '✖ Cancelar' } });
   var s = WA_graph_('POST', WA_prop_('WA_PHONE_ID') + '/messages', {
     messaging_product: 'whatsapp', to: de, type: 'interactive',
@@ -52,11 +58,19 @@ function WA_botonesPlan_(de, r, pregunta) {
 /** Botones "pr:<k>:si|nom|no". */
 function WA_procesarBoton_(de, id) {
   var p = String(id).split(':'), k = p[1], op = p[2];
+  if (op === 'dfo' || op === 'dor') {   // 📸 / 📄 pestaña de la hoja de Vouchers
+    var rp;
+    try { rp = WA_cobranzas_('procesar', { modo: 'pestana', numero: de, k: k, pestana: op === 'dfo' ? 'foto' : 'original' }); } catch (e) { rp = { ok: false, error: e.message }; }
+    if (!rp || !rp.ok) { WA_enviarTexto_(de, '⚠️ ' + ((rp && rp.error) || 'No respondió Cobranzas.')); return; }
+    WA_botonesPlan_(de, rp, '📂 Listo: irá a la pestaña *' + rp.textoPestana + '*. ¿Lo hago?');
+    return;
+  }
   if (op === 'nom') {
     WA_props_().setProperty('WA_PRN_' + de, k);
     WA_enviarTexto_(de, '🏷 Escríbame (o dígame 🎤) el nombre y, si es de otro día, la fecha: *Edit* o *Edit 15/10*.');
     return;
   }
+  WA_props_().deleteProperty('WA_PRK_' + de);
   var r;
   try { r = WA_cobranzas_('procesar', { modo: op === 'si' ? 'hacer' : 'cancelar', numero: de, k: k }); }
   catch (e) { r = { ok: false, error: e.message }; }
@@ -69,6 +83,9 @@ function WA_procesarBoton_(de, id) {
 
 /** Texto (o voz ya transcrita) con el nombre pedido por "🏷 Cambiar nombre". true si lo tomó. */
 function WA_procesarNombre_(de, texto) {
+  // "nombre Edit 15/10" mientras hay un resumen esperando ✅
+  var mn = String(texto || '').match(/^\s*nombre\s*[:=]?\s+(.+)$/i);
+  if (mn && WA_prop_('WA_PRK_' + de)) { WA_props_().setProperty('WA_PRN_' + de, WA_prop_('WA_PRK_' + de)); texto = mn[1]; }
   var k = WA_prop_('WA_PRN_' + de);
   if (!k || !WA_pareceNombre_(texto)) return false;
   WA_props_().deleteProperty('WA_PRN_' + de);
