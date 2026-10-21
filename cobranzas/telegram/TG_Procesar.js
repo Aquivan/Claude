@@ -276,9 +276,27 @@ function TGP_programar_(minutos) {
   if (!hay) ScriptApp.newTrigger('TGP_trabajar').timeBased().after(Math.max(1, minutos) * 60 * 1000).create();
 }
 
-async function TGP_trabajar() {
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGP_trabajar') ScriptApp.deleteTrigger(t); });
-  var ss = TG_ss_(), props = PropertiesService.getScriptProperties(), todo = props.getProperties(), seguir = false;
+/** Arranca el trabajo YA (en la misma ejecución del botón ✅), sin esperar al disparador. */
+function TGP_trabajarYa_() {
+  try { TGP_trabajar(true).catch(function (e) { console.error('Procesar documento: ' + (e && e.stack || e)); }); }
+  catch (e) { console.error('Procesar documento: ' + e.message); }
+}
+
+/** ya = true cuando lo llama el botón (el disparador de respaldo queda por si esta ejecución se corta). */
+async function TGP_trabajar(ya) {
+  var props = PropertiesService.getScriptProperties();
+  // Uno a la vez: si otra ejecución está trabajando, este disparador vuelve en un minuto.
+  if (Date.now() - Number(props.getProperty('TGP_TRABAJANDO') || 0) < 5 * 60000) { if (!ya) TGP_programar_(1); return; }
+  props.setProperty('TGP_TRABAJANDO', String(Date.now()));
+  if (!ya) ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGP_trabajar') ScriptApp.deleteTrigger(t); });
+  var seguir = false;
+  try { seguir = await TGP_vuelta_(props); } finally { props.deleteProperty('TGP_TRABAJANDO'); }
+  if (seguir) TGP_programar_(1);
+  else ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGP_trabajar') ScriptApp.deleteTrigger(t); });
+}
+
+async function TGP_vuelta_(props) {
+  var ss = TG_ss_(), todo = props.getProperties(), seguir = false;
   var claves = Object.keys(todo).filter(function (x) { return x.indexOf(TGP_PROP_JOB_) === 0; });
   for (var i = 0; i < claves.length; i++) {
     var job = JSON.parse(todo[claves[i]]);
@@ -287,7 +305,7 @@ async function TGP_trabajar() {
         await TGP_separar_(ss, job);
         job.estado = 'esperar'; job.t1 = Date.now();
         props.setProperty(claves[i], JSON.stringify(job));
-        TGP_procesarYa_();
+        TGP_procesarYa_();   // la hoja de Vouchers procesa en el momento: al volver, la fila ya suele estar
       }
       if (job.estado === 'esperar') {
         if (TGP_revisar_(ss, job)) { props.deleteProperty(claves[i]); continue; }
@@ -304,7 +322,7 @@ async function TGP_trabajar() {
       props.deleteProperty(claves[i]);
     }
   }
-  if (seguir) TGP_programar_(1);
+  return seguir;
 }
 
 function TGP_cancelarTrabajo_(id) {
@@ -469,6 +487,7 @@ function TGP_alBotonTG_(ctx, op, k) {
   var r;
   try { r = TGP_ejecutar_(ctx.ss, k); } catch (e) { return TG_enviar_(ctx.chatId, '❌ ' + TG_esc_(e.message)); }
   TG_enviar_(ctx.chatId, r.texto, r.pendiente ? null : [[{ text: '↩️ Deshacer todo', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]]);
+  if (r.pendiente) TGP_trabajarYa_();
 }
 
 function TGP_alNombreTG_(ctx, e, texto) {
@@ -508,6 +527,7 @@ function TGP_wa_(q) {
   if (q.modo === 'hacer') return Object.assign({ ok: true }, TGP_ejecutar_(ss, q.k));
   if (q.modo === 'cancelar') return { ok: true, texto: TGP_cancelar_(ss, q.k) };
   if (q.modo === 'nombre') { var n = TGP_cambiarNombre_(q.k, q.texto || ''); n.ok = !n.error; return n; }
+  if (q.modo === 'trabajar') { TGP_trabajarYa_(); return { ok: true }; }
   if (q.modo === 'pestana') { var d = TGP_cambiarPestana_(q.k, q.pestana); d.ok = !d.error; return d; }
   if (q.modo === 'mensajes') {
     var p = PropertiesService.getScriptProperties(), m = [];

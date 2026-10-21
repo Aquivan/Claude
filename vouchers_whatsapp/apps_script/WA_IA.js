@@ -16,6 +16,8 @@ function WA_iaUrl_() {
 }
 
 function WA_iaLlamar_(params, cuerpo) {
+  cuerpo = cuerpo || {};
+  if (WA_prop_('WA_PROCESAR_URL')) cuerpo._pu = WA_prop_('WA_PROCESAR_URL');   // ⚡ para que Telegram también procese al instante
   var qs = Object.keys(params).map(function (k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
   var r = UrlFetchApp.fetch(WA_iaUrl_() + '?canal=wa&' + qs, {
     method: 'post', contentType: 'application/json', payload: JSON.stringify(cuerpo || {}), muteHttpExceptions: true, followRedirects: true

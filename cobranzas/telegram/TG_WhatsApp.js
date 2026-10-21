@@ -33,6 +33,11 @@ function TGW_doPost_(e) {
     return TGW_json_({ ok: true });
   }
   if (!guardada || p.token !== guardada) return TGW_json_({ ok: false, error: 'Forbidden' });
+  // La app de WhatsApp manda la dirección de "⚡ Procesar al instante" de la hoja de Vouchers: la usa también Telegram.
+  try {
+    var pu = JSON.parse((e.postData && e.postData.contents) || '{}')._pu;
+    if (pu && /^https:\/\/script\.google\.com\//.test(pu) && props.getProperty('TGP_PROCESAR_URL') !== pu) props.setProperty('TGP_PROCESAR_URL', pu);
+  } catch (err) {}
   if (p.accion === 'boton') return TGW_json_(TGW_boton_(p.k, p.op));
   if (p.accion === 'procesar' || p.accion === 'deshacer') {   // 🧾 Procesar documento · ↩️ Deshacer (TG_Procesar.js, TG_Deshacer.js)
     try { var q0 = JSON.parse(e.postData.contents || '{}'); return TGW_json_(p.accion === 'procesar' ? TGP_wa_(q0) : TGU_wa_(q0)); }
