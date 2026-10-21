@@ -93,6 +93,7 @@ function TG_manejar_(u) {
   var ses = TG_sesion_(chatId);
   if (ses.esperando && texto.charAt(0) !== '/') return TG_alEsperado_(ctx, ses, texto);
 
+  if (ses.procPend && texto.charAt(0) !== '/' && TGP_nombreDirectoTG_(ctx, ses, texto, m)) return;   // 🧾 "21-10-26 Edit"
   if (/^\/?(deshacer|desh[aá]z(lo)?|deshaga)\b/i.test(texto)) return TGU_preguntarTG_(ctx);   // ↩️ la última acción, todo
   if (texto.charAt(0) === '/') return TG_comando_(ctx, texto);
   var atajo = TG_ATAJOS_[texto];

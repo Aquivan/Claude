@@ -46,7 +46,7 @@ function WA_botonesPlan_(de, r, pregunta) {
   if (r.hayNuevos) {
     botones.push(r.pestana === 'foto' ? { type: 'reply', reply: { id: 'pr:' + r.k + ':dor', title: '📄 A Originales' } }
       : { type: 'reply', reply: { id: 'pr:' + r.k + ':dfo', title: '📸 A Fotos' } });
-    pregunta += '\n_Para cambiar el nombre escriba: *nombre Edit* o *nombre Edit 15/10*._';
+    pregunta += '\n_Para cambiar el nombre escríbalo así: *21-10-26 Edit* (o *nombre Edit*)._';
   }
   botones.push({ type: 'reply', reply: { id: 'pr:' + r.k + ':no', title: '✖ Cancelar' } });
   var s = WA_graph_('POST', WA_prop_('WA_PHONE_ID') + '/messages', {
@@ -94,7 +94,9 @@ function WA_procesarBoton_(de, id) {
 /** Texto (o voz ya transcrita) con el nombre pedido por "🏷 Cambiar nombre". true si lo tomó. */
 function WA_procesarNombre_(de, texto) {
   // "nombre Edit 15/10" mientras hay un resumen esperando ✅
+  // o el nombre escrito directo con la fecha delante: "21-10-26 Edit", "15/10 Edit".
   var mn = String(texto || '').match(/^\s*nombre\s*[:=]?\s+(.+)$/i);
+  if (!mn) mn = String(texto || '').match(/^\s*(\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{2,4})?\s+\S.*)$/);
   if (mn && WA_prop_('WA_PRK_' + de)) { WA_props_().setProperty('WA_PRN_' + de, WA_prop_('WA_PRK_' + de)); texto = mn[1]; }
   var k = WA_prop_('WA_PRN_' + de);
   if (!k || !WA_pareceNombre_(texto)) return false;

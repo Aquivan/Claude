@@ -499,6 +499,19 @@ function TGP_iniciarTG_(ctx, adjs) {
   var msg = TG_enviar_(ctx.chatId, r.texto, TGP_tecladoTG_(r));
   var p = TG_leerBoton_(r.k);
   if (p && msg) { p.msg = msg; CacheService.getScriptCache().put('tg_b_' + r.k, JSON.stringify(p), 21600); }
+  // Mientras espera ✅, "21-10-26 Edit" escrito directo cambia el nombre (TGP_nombreDirectoTG_).
+  if (r.hayNuevos) { var ses = TG_sesion_(ctx.chatId); ses.procPend = r.k; TG_guardarSesion_(ctx.chatId, ses); }
+}
+
+/** "21-10-26 Edit" / "nombre Edit" (o la respuesta al resumen) con un resumen pendiente → cambia el nombre. */
+function TGP_nombreDirectoTG_(ctx, ses, texto, m) {
+  var k = ses.procPend, p = k && TG_leerBoton_(k);
+  if (!p) return false;
+  var mn = texto.match(/^\s*nombre\s*[:=]?\s+(.+)$/i) || texto.match(/^\s*(\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{2,4})?\s+\S.*)$/);
+  var alResumen = m.reply_to_message && p.msg && m.reply_to_message.message_id === p.msg;
+  if (!mn && !(alResumen && texto.trim().split(/\s+/).length <= 6)) return false;
+  TGP_alNombreTG_(ctx, { tipo: 'procnombre', k: k }, mn ? mn[1] : texto);
+  return true;
 }
 
 /** Cuántas páginas tiene un PDF (sin abrirlo con pdf-lib). 0 si no se sabe. */
@@ -536,9 +549,11 @@ function TGP_alBotonTG_(ctx, op, k) {
   }
   if (op === 'nom') {
     var ses = TG_sesion_(ctx.chatId); ses.esperando = { tipo: 'procnombre', k: k }; TG_guardarSesion_(ctx.chatId, ses);
-    return TG_enviar_(ctx.chatId, '🏷 Escríbame (o dígame 🎤) el nombre y, si es de otro día, la fecha: <i>Edit</i> o <i>Edit 15/10</i>.');
+    return TG_enviar_(ctx.chatId, '🏷 Escríbame (o dígame 🎤) el nombre y, si es de otro día, la fecha: <i>Edit</i> o <i>15-10-26 Edit</i>.');
   }
   TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
+  var sp = TG_sesion_(ctx.chatId);
+  if (sp.procPend === k) { delete sp.procPend; TG_guardarSesion_(ctx.chatId, sp); }
   if (op === 'no') return TG_enviar_(ctx.chatId, TG_esc_(TGP_cancelar_(ctx.ss, k)));
   TG_accion_(ctx.chatId, 'typing');
   var r;
