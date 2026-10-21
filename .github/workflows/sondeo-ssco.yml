@@ -1,0 +1,30 @@
+# Sondeo temporal: ver dónde y en qué formato publica SUNAT la lista de Sujetos Sin Capacidad Operativa.
+name: Sondeo SSCO
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  sondeo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Revisar páginas de SUNAT
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"
+          for u in \
+            https://www.sunat.gob.pe/padronesnotificaciones/sujeSinCapacidadOperativa.html \
+            https://www.sunat.gob.pe/padronesnotificaciones/ \
+            https://www.sunat.gob.pe/padronesnotificaciones/index.html \
+            https://emprender.sunat.gob.pe/ruc/otros/sujeto-sin-capacidad-operativa-ssco \
+            https://www.sunat.gob.pe/descarga/SSCO/SSCO_TXT.zip \
+            https://www.sunat.gob.pe/descarga/SujSinCapOpe/SujSinCapOpe_TXT.zip ; do
+            echo "=================== $u"
+            curl -sSL -m 30 -A "$UA" -o /tmp/p -w "HTTP %{http_code} · %{content_type} · %{size_download} bytes · final %{url_effective}\n" "$u" || true
+            file /tmp/p || true
+            if grep -qi "html" <(file /tmp/p); then
+              iconv -f ISO-8859-1 -t UTF-8 /tmp/p 2>/dev/null | grep -oiE 'href="[^"]*"|src="[^"]*(frame|\.js)[^"]*"' | grep -iE 'capac|ssco|sujet|pdf|xls|zip|txt|csv|consulta|padron|frame|\.js' | sort -u | head -60
+              echo "--- texto (inicio)"
+              iconv -f ISO-8859-1 -t UTF-8 /tmp/p 2>/dev/null | sed 's/<[^>]*>/ /g' | tr -s ' \t\r\n' ' ' | grep -oiE '.{0,200}(capacidad operativa|actualizad|ssco).{0,300}' | head -8
+              echo "--- RUC en la página: $(grep -oE '\b(10|15|17|20)[0-9]{9}\b' /tmp/p | sort -u | wc -l)"
+            fi
+          done
