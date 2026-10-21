@@ -63,7 +63,7 @@ function TGE_interpretar_(texto) {
   else if (/\bhoy\b/i.test(t)) { f = hoy; quitar(/\bhoy\b/ig); }
   if (f === 'mal' || (f && isNaN(f.getTime()))) { out.error = 'No entendí la fecha.'; return out; }
   if (f && f > hoy) { out.error = 'La fecha ' + Utilities.formatDate(f, 'America/Lima', 'dd-MM-yy') + ' todavía no llega.'; return out; }
-  if (f) out.fecha = Utilities.formatDate(f, 'America/Lima', 'yyyy-MM-dd');
+  if (f) { out.fecha = Utilities.formatDate(f, 'America/Lima', 'yyyy-MM-dd'); out.conFecha = true; }
   // Palabras de relleno al inicio y al final: "son de", "es de", "entregado por", "del", "fecha"…
   t = t.replace(/^\s*(estos|estas|esos|esas|eso|esto|todos|todo)?\s*(son|es|eran|era)?\s*(los\s+)?(vouchers?\s+)?(de|del|por|entregad[oa]s?\s+por|me\s+(los?\s+)?(dio|dieron|trajo|trajeron|entreg[oó]))\s+/i, ' ');
   t = t.replace(/\s(de|del|el|la|fecha|con\s+fecha|d[ií]a)\s*$/i, ' ').replace(/^\s*(de|del)\s+/i, ' ');
@@ -221,7 +221,7 @@ function TGE_wa_(q) {
       catch (e) { return { ok: false, error: 'No pude entender el audio: ' + e.message }; }
     }
     it = TGE_interpretar_(texto);
-    if (q.fecha && !/\d/.test(texto)) it.fecha = q.fecha;
+    if (q.fecha && !it.conFecha) it.fecha = q.fecha;   // solo si no dijo fecha ("Sonia ayer" sí la dice)
   }
   if (it.error) return { ok: true, entendido: false, error: it.error, dicho: dicho };
   if (!it.nombre) return { ok: true, entendido: false, dicho: dicho };
@@ -291,7 +291,7 @@ function TGE_alTextoTG_(ctx, e, texto) {
   var datos = TG_leerBoton_(e.k);
   if (!datos) return TG_preguntar_(ctx, texto, []);
   var it = TGE_interpretar_(texto);
-  if (!/\d|ayer|antier|hoy/i.test(texto)) it.fecha = datos.fecha;
+  if (!it.conFecha) it.fecha = datos.fecha;
   var volver = function () { var s = TG_sesion_(ctx.chatId); s.esperando = e; TG_guardarSesion_(ctx.chatId, s); };
   if (it.error) { volver(); return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(it.error) + ' Escríbalo así: <i>Edit 15/10</i>.'); }
   if (!it.nombre) { volver(); return TG_preguntar_(ctx, texto, []); }   // era una pregunta: se contesta y se sigue esperando el nombre
