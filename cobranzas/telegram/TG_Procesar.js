@@ -127,7 +127,7 @@ function TGP_analizar_(ss, adjs, op) {
       it.tipo = !it.facturaActual && fac && fac.serie ? 'completar' : 'listo';
     }
     if (it.tipo === 'nuevo') {
-      var sug = TGE_nombreDeOrdenante_(it.v.ordenante);
+      var sug = TGE_nombreDeOrdenante_(TGE_ordenanteReal_(it.v.ordenante, it.v.beneficiario));
       it.nombre = sug ? sug.nombre : 'Voucher';
       it.ordenante = sug ? sug.ordenante : '';
     }
@@ -136,7 +136,8 @@ function TGP_analizar_(ss, adjs, op) {
   // Una sola fecha y nombre para todos los nuevos (como una tanda); se cambia con 🏷.
   var nuevos = items.filter(function (x) { return x.tipo === 'nuevo'; });
   var plan = { t: 'procesar', canal: op.canal, destino: op.destino, clave: op.clave, adjs: adjs, items: items,
-    nombre: nuevos.length ? nuevos[0].nombre : '', ordenante: nuevos.length ? nuevos[0].ordenante : '', fecha: TGE_hoy_(), resumen: resumenArch };
+    nombre: op.nombre || (nuevos.length ? nuevos[0].nombre : ''), ordenante: op.nombre ? '' : (nuevos.length ? nuevos[0].ordenante : ''),
+    fecha: op.fecha || TGE_hoy_(), resumen: resumenArch };
   var k = TG_guardarBoton_(plan);
   return TGP_texto_(k, plan);
 }
@@ -176,7 +177,7 @@ function TGP_texto_(k, p) {
   });
   if (nuevos) L.push('\n🏷 Se guardará como <b>' + TG_esc_(TGE_corta_(p.fecha) + ' ' + p.nombre) + '</b>' + (nuevos > 1 ? ', … 2…' : '') + ' (puede cambiarlo).');
   L.push('\n<i>El archivo original queda en la carpeta temporal (se borra sola en 7 días). Todo se puede deshacer.</i>');
-  return { texto: L.join('\n'), k: k, hayAcciones: acciones > 0, hayNuevos: nuevos > 0 };
+  return { texto: L.join('\n'), k: k, hayAcciones: acciones > 0, hayNuevos: nuevos > 0, etiqueta: TGE_corta_(p.fecha) + ' ' + p.nombre, msg: p.msg || 0 };
 }
 
 /** 🏷 Cambiar nombre/fecha de los vouchers nuevos ("Edit", "Edit 15/10"). */
@@ -394,7 +395,26 @@ function TGP_iniciarTG_(ctx, adjs) {
   var r;
   try { r = TGP_analizar_(ctx.ss, adjs, { canal: 'tg', destino: ctx.chatId, clave: ctx.chatId }); }
   catch (e) { return TG_enviar_(ctx.chatId, '❌ No pude revisarlo: ' + TG_esc_(e.message)); }
-  TG_enviar_(ctx.chatId, r.texto, TGP_tecladoTG_(r));
+  var msg = TG_enviar_(ctx.chatId, r.texto, TGP_tecladoTG_(r));
+  var p = TG_leerBoton_(r.k);
+  if (p && msg) { p.msg = msg; CacheService.getScriptCache().put('tg_b_' + r.k, JSON.stringify(p), 21600); }
+}
+
+/** Cuántas páginas tiene un PDF (sin abrirlo con pdf-lib). 0 si no se sabe. */
+function TGP_paginasPdf_(blob) {
+  try {
+    var t = Utilities.newBlob(blob.getBytes()).getDataAsString('ISO-8859-1');
+    var n = (t.match(/\/Type\s*\/Page(?![a-zA-Z])/g) || []).length;
+    (t.match(/\/Count\s+(\d+)/g) || []).forEach(function (x) { n = Math.max(n, Number(x.replace(/\D/g, ''))); });
+    return n;
+  } catch (e) { return 0; }
+}
+
+/** ¿Algún archivo es un PDF de varias páginas? (orden de compra + voucher + factura…: va a 🧾 Procesar). */
+function TGP_hayVariasPaginas_(adjs) {
+  return (adjs || []).some(function (a) {
+    try { var f = DriveApp.getFileById(a.id); return /pdf/i.test(f.getMimeType()) && TGP_paginasPdf_(f.getBlob()) > 1; } catch (e) { return false; }
+  });
 }
 
 function TGP_tecladoTG_(r) {
@@ -424,6 +444,10 @@ function TGP_alNombreTG_(ctx, e, texto) {
     var s = TG_sesion_(ctx.chatId); s.esperando = e; TG_guardarSesion_(ctx.chatId, s);
     return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(r.error));
   }
+  // Se corrige el MISMO resumen (no se manda otro) y se confirma en una línea.
+  if (r.msg && TG_editar_(ctx.chatId, r.msg, r.texto, TGP_tecladoTG_(r))) {
+    return TG_enviar_(ctx.chatId, '🏷 Listo: se guardará como <b>' + TG_esc_(r.etiqueta) + '</b>. Toque ✅ Hacerlo en el resumen de arriba.');
+  }
   TG_enviar_(ctx.chatId, r.texto, TGP_tecladoTG_(r));
 }
 
@@ -439,7 +463,7 @@ function TGP_wa_(q) {
   if (q.procesarUrl) PropertiesService.getScriptProperties().setProperty('TGP_PROCESAR_URL', q.procesarUrl);
   if (q.modo === 'analizar') {
     var r;
-    try { r = TGP_analizar_(ss, q.archivos || [], { canal: 'wa', destino: String(q.numero), clave: clave }); r.ok = true; }
+    try { r = TGP_analizar_(ss, q.archivos || [], { canal: 'wa', destino: String(q.numero), clave: clave, nombre: q.nombre || '', fecha: q.fecha || '' }); r.ok = true; }
     catch (e) { r = { ok: false, error: 'No pude revisarlo: ' + e.message }; }
     CacheService.getScriptCache().put('tgp_r_' + clave, JSON.stringify(r), 3600);
     return r;

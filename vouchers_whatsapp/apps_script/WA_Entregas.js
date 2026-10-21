@@ -155,6 +155,13 @@ function WA_finalizar_(de, it) {
   var filas = WA_filasEspera_(datos, de);
   WA_props_().deleteProperty('WA_PREG_' + de);
   if (!filas.length) return;
+  // Un PDF de varias páginas (orden de compra + voucher + factura…) no va entero a la hoja de Vouchers:
+  // se revisa con IA para registrar solo la página del voucher (con el nombre que ya dio).
+  if (filas.some(function (i) { return /\.pdf$/i.test(String(datos[i][4])) && WA_paginasPdf_(datos[i][9]) > 1; })) {
+    WA_enviarTexto_(de, '📄 El PDF tiene varias páginas: lo reviso con IA para registrar *solo el voucher* y completar la factura.');
+    WA_revisarConIA_(de, it && it.nombre ? it : null);
+    return;
+  }
   var nombres = null;
   if (it && it.nombre) {
     var aRenombrar = filas.filter(function (i) { return datos[i][7] !== 'nombre propio'; });
@@ -192,4 +199,14 @@ function WA_vencidosNombre_(props) {
     WA_enviarTexto_(de, '⌛ No me dijo de quién eran: los registro con el nombre de antes.');
     WA_finalizar_(de, null);
   });
+}
+
+/** Páginas de un PDF de Drive (sin abrirlo con una librería). 0 si no se sabe. */
+function WA_paginasPdf_(id) {
+  try {
+    var t = DriveApp.getFileById(id).getBlob().getDataAsString('ISO-8859-1');
+    var n = (t.match(/\/Type\s*\/Page(?![a-zA-Z])/g) || []).length;
+    (t.match(/\/Count\s+(\d+)/g) || []).forEach(function (x) { n = Math.max(n, Number(x.replace(/\D/g, ''))); });
+    return n;
+  } catch (e) { return 0; }
 }

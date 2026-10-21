@@ -111,10 +111,19 @@ function TGE_sugerir_(adjunto) {
   try {
     r = IA_llamar_({ proveedor: 'Gemini (Google)', clave: clave, maxTokens: 200,
       sistema: 'Lees constancias de pago bancarias de Perú (Yape, Plin, BCP, Interbank, BBVA, Scotiabank, BN…).',
-      texto: 'Devuelve solo JSON {"ordenante": "nombre de la persona o empresa que PAGA / envía el dinero, tal como aparece; vacío si no aparece"}.',
+      texto: 'Devuelve solo JSON {"ordenante": "persona o empresa que PAGA (titular de la cuenta de ORIGEN o quien hace el depósito), tal como aparece; vacío si no figura", ' +
+        '"beneficiario": "persona o empresa que RECIBE el dinero (cuenta de destino)"}. ' +
+        'En un depósito o transferencia que solo muestra la cuenta de destino, el nombre que aparece es el BENEFICIARIO: deja "ordenante" vacío.',
       adjunto: { base64: adjunto.base64, mime: adjunto.mime } });
   } catch (e) { console.warn('Sugerir nombre: ' + e.message); return null; }
-  return TGE_nombreDeOrdenante_(String((r && r.ordenante) || '').trim());
+  return TGE_nombreDeOrdenante_(TGE_ordenanteReal_(r && r.ordenante, r && r.beneficiario));
+}
+
+/** El que paga, salvo que la IA haya repetido al que recibe (pasa con los tickets de depósito). */
+function TGE_ordenanteReal_(ordenante, beneficiario) {
+  var o = String(ordenante || '').trim(), b = String(beneficiario || '').trim();
+  if (!o || (b && TGE_norm_(o) === TGE_norm_(b))) return '';
+  return o;
 }
 
 /** "INVERSIONES PETRO SAC" → el nombre que usted le suele poner (aprendido), uno ya usado que coincida, o uno corto. */

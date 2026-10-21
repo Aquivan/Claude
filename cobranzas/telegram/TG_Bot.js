@@ -366,6 +366,10 @@ function TG_alBoton_(ss, q) {
     case 'adj': case 'adjs':
       var adjs = datos.adjs || TG_adjDelGrupo_(ss, datos.grupo, datos.adj);
       TG_llamar_('editMessageReplyMarkup', { chat_id: chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
+      if (op === 'vou' && TGP_hayVariasPaginas_(adjs)) {   // PDF de varias páginas: registrar solo la del voucher
+        TG_enviar_(ctx.chatId, '📄 El PDF tiene varias páginas: lo reviso con IA para registrar <b>solo el voucher</b> y completar la factura.');
+        return TGP_iniciarTG_(ctx, adjs);
+      }
       if (op === 'vou') return TGE_preguntarTG_(ctx, adjs);   // 🏷 primero: ¿de quién son?
       if (op === 'proc') return TGP_iniciarTG_(ctx, adjs);
       if (op === 'preg') {

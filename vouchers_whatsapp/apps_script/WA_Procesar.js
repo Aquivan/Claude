@@ -13,7 +13,7 @@ function WA_cobranzas_(accion, cuerpo) {
 }
 
 /** Opción "🧾 Revisar con IA" de la lista: los archivos en Espera van a Cobranzas en vez de registrarse. */
-function WA_revisarConIA_(de) {
+function WA_revisarConIA_(de, it) {
   var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues(), filas = WA_filasEspera_(datos, de);
   if (!filas.length) { WA_enviarTexto_(de, 'Esos archivos ya se registraron 👍'); return; }
   WA_enviarTexto_(de, '🧾 Leyendo ' + (filas.length > 1 ? 'los ' + filas.length + ' archivos' : 'el archivo') + ' página por página…');
@@ -21,7 +21,8 @@ function WA_revisarConIA_(de) {
   WA_props_().deleteProperty('WA_PREG_' + de);
   var archivos = filas.map(function (i) { return { id: datos[i][9], nombre: datos[i][4], mime: /\.pdf$/i.test(datos[i][4]) ? 'application/pdf' : 'image/jpeg' }; });
   var r;
-  try { r = WA_cobranzas_('procesar', { modo: 'analizar', numero: de, archivos: archivos, procesarUrl: WA_prop_('WA_PROCESAR_URL') }); }
+  try { r = WA_cobranzas_('procesar', { modo: 'analizar', numero: de, archivos: archivos, procesarUrl: WA_prop_('WA_PROCESAR_URL'),
+    nombre: (it && it.nombre) || '', fecha: (it && it.fecha) || '' }); }
   catch (e) {   // tardó más de 60 s: Cobranzas sigue y WA_cadaMinuto recoge el resultado
     WA_props_().setProperty('WA_PRA_' + de, String(Date.now()));
     WA_props_().setProperty('WA_HAY_PROC', '1');
@@ -33,13 +34,17 @@ function WA_revisarConIA_(de) {
 function WA_mostrarPlan_(de, r) {
   if (!r || !r.ok) { WA_enviarTexto_(de, '⚠️ ' + ((r && r.error) || 'No pude revisarlo.') + '\nMándemelo de nuevo o elija otra opción.'); return; }
   WA_trozos_(WA_md_(r.texto)).forEach(function (t) { WA_enviarTexto_(de, t); });
+  WA_botonesPlan_(de, r, '¿Lo hago?');
+}
+
+function WA_botonesPlan_(de, r, pregunta) {
   if (!r.hayAcciones) return;
   var botones = [{ type: 'reply', reply: { id: 'pr:' + r.k + ':si', title: '✅ Hacerlo' } }];
   if (r.hayNuevos) botones.push({ type: 'reply', reply: { id: 'pr:' + r.k + ':nom', title: '🏷 Cambiar nombre' } });
   botones.push({ type: 'reply', reply: { id: 'pr:' + r.k + ':no', title: '✖ Cancelar' } });
   var s = WA_graph_('POST', WA_prop_('WA_PHONE_ID') + '/messages', {
     messaging_product: 'whatsapp', to: de, type: 'interactive',
-    interactive: { type: 'button', body: { text: '¿Lo hago?' }, action: { buttons: botones } }
+    interactive: { type: 'button', body: { text: pregunta }, action: { buttons: botones } }
   });
   if (!s.ok) WA_enviarTexto_(de, 'Responda *sí* para hacerlo o *no* para cancelar.');
 }
@@ -70,7 +75,9 @@ function WA_procesarNombre_(de, texto) {
   var r;
   try { r = WA_cobranzas_('procesar', { modo: 'nombre', numero: de, k: k, texto: texto }); } catch (e) { r = { ok: false, error: e.message }; }
   if (r && r.error) { WA_props_().setProperty('WA_PRN_' + de, k); WA_enviarTexto_(de, '⚠️ ' + r.error); return true; }
-  WA_mostrarPlan_(de, r);
+  if (!r || !r.ok) { WA_mostrarPlan_(de, r); return true; }
+  // No se repite todo el resumen: solo el nombre nuevo y los botones.
+  WA_botonesPlan_(de, r, '🏷 Listo: se guardará como *' + r.etiqueta + '*. ¿Lo hago?');
   return true;
 }
 
