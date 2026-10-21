@@ -1,6 +1,10 @@
 # Sondeo temporal: ver dónde y en qué formato publica SUNAT la lista de Sujetos Sin Capacidad Operativa.
 name: Sondeo SSCO
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/tender-wozniak-vnf3iq]
+    paths: ['.github/workflows/sondeo-ssco.yml']
 permissions:
   contents: read
 jobs:
@@ -17,7 +21,8 @@ jobs:
             https://www.sunat.gob.pe/padronesnotificaciones/index.html \
             https://emprender.sunat.gob.pe/ruc/otros/sujeto-sin-capacidad-operativa-ssco \
             https://www.sunat.gob.pe/descarga/SSCO/SSCO_TXT.zip \
-            https://www.sunat.gob.pe/descarga/SujSinCapOpe/SujSinCapOpe_TXT.zip ; do
+            https://www.sunat.gob.pe/descarga/SujSinCapOpe/SujSinCapOpe_TXT.zip \
+            https://e-consultaruc.sunat.gob.pe/cl-ti-itmrconsruc/FrameCriterioBusquedaWeb.jsp ; do
             echo "=================== $u"
             curl -sSL -m 30 -A "$UA" -o /tmp/p -w "HTTP %{http_code} · %{content_type} · %{size_download} bytes · final %{url_effective}\n" "$u" || true
             file /tmp/p || true
