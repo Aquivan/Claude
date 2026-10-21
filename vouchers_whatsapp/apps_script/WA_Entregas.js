@@ -95,7 +95,8 @@ function WA_preguntarDeQuien_(de, datos, filas) {
   }).concat([
     { id: 'en:otro', title: '✍️ Otro nombre', description: 'Escríbalo o dígalo en una nota de voz' },
     { id: 'en:fecha', title: '📅 Es de otra fecha', description: 'Ej.: Edit 15/10 o Edit ayer' },
-    { id: 'en:sin', title: '➖ Sin nombre', description: 'Como antes (nombre del archivo o la fecha)' }
+    { id: 'en:sin', title: '➖ Sin nombre', description: 'Como antes (nombre del archivo o la fecha)' },
+    { id: 'en:ia', title: '🧾 Revisar con IA', description: 'Ve si ya está, registra solo el voucher y completa la factura' }
   ]);
   var s = WA_graph_('POST', WA_prop_('WA_PHONE_ID') + '/messages', {
     messaging_product: 'whatsapp', to: de, type: 'interactive',
@@ -113,6 +114,7 @@ function WA_botonNombre_(de, id) {
   if (op === 'otro') { WA_enviarTexto_(de, '✍️ Escríbame el nombre (o dígalo 🎤).'); return; }
   if (op === 'fecha') { WA_enviarTexto_(de, '📅 Escríbame el nombre y la fecha, por ejemplo *Edit 15/10* o *Edit 15/10/26*.'); return; }
   if (op === 'sin') { WA_finalizar_(de, null); return; }
+  if (op === 'ia') { WA_revisarConIA_(de); return; }   // 🧾 Procesar documento (WA_Procesar.js)
   var nombre = preg.nombres[Number(op.slice(1))];
   if (nombre) WA_finalizar_(de, { nombre: nombre, fecha: preg.fecha, ordenante: preg.sug && op === 'n0' ? preg.ordenante : '' });
 }

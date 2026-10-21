@@ -21,6 +21,7 @@ function WA_cadaMinuto() {
     try { WA_buscarRespuestasIA_(props); } catch (e) { console.error('Respuestas IA: ' + e.message); }
     if (!Object.keys(WA_props_().getProperties()).some(function (k) { return k.indexOf('WA_IAP_') === 0; })) WA_props_().setProperty('WA_HAY_IA', '0');
   }
+  if (props.WA_HAY_PROC === '1') { try { WA_seguirProcesar_(props); } catch (e) { console.error('Procesar documento: ' + e.message); } }
   var hayPreg = Object.keys(props).some(function (k) { return k.indexOf('WA_PREG_') === 0; });
   var procesar = props.WA_PROCESAR_PEND === '1';
   if (!tandas.length && !hayCola && !hayPreg && !procesar) return;
@@ -54,6 +55,9 @@ function WA_acuse_(hoja, datos, de) {
     : '\nLe aviso el resultado cuando estén en la hoja (el sistema revisa cada 10 min).';
   if (mal.length) txt += '\n\n⚠️ No pude guardar:\n' + mal.map(function (i) { return '• ' + datos[i][4] + ' — ' + datos[i][7]; }).join('\n');
   WA_enviarTexto_(de, txt);
+  // ↩️ Lo que se mandó a Entrada queda anotado para poder deshacerlo ("deshacer").
+  WA_anotarAccion_(de, '📥 ' + ok.length + ' archivo(s) de WhatsApp: ' + ok.slice(0, 3).map(function (i) { return datos[i][4]; }).join(', '),
+    ok.filter(function (i) { return datos[i][9]; }).map(function (i) { return { id: datos[i][9], nombre: String(datos[i][4]) }; }));
   filas.forEach(function (i) {
     datos[i][10] = ok.indexOf(i) !== -1 ? 'acuse' : 'resultado';
     hoja.getRange(i + 1, 11).setValue(datos[i][10]);

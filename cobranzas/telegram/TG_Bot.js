@@ -93,6 +93,7 @@ function TG_manejar_(u) {
   var ses = TG_sesion_(chatId);
   if (ses.esperando && texto.charAt(0) !== '/') return TG_alEsperado_(ctx, ses, texto);
 
+  if (/^\/?(deshacer|desh[aá]z(lo)?|deshaga)\b/i.test(texto)) return TGU_preguntarTG_(ctx);   // ↩️ la última acción, todo
   if (texto.charAt(0) === '/') return TG_comando_(ctx, texto);
   var atajo = TG_ATAJOS_[texto];
   if (atajo) return TG_comando_(ctx, atajo);
@@ -226,6 +227,7 @@ function TG_alEsperado_(ctx, ses, texto) {
   if (e.tipo === 'recordar') return TG_preguntar_(ctx, 'Crea un recordatorio: ' + texto, []);
   if (e.tipo === 'pregunta_adj') return TG_preguntar_(ctx, texto, e.adj || []);
   if (e.tipo === 'entrega') return TGE_alTextoTG_(ctx, e, texto);
+  if (e.tipo === 'procnombre') return TGP_alNombreTG_(ctx, e, texto);
   return TG_preguntar_(ctx, texto, []);
 }
 
@@ -270,6 +272,7 @@ function TG_alArchivo_(ctx, m, texto) {
   if (m.media_group_id && TG_yaVisto_('album' + m.media_group_id)) return;
   var k = TG_guardarBoton_({ t: 'adj', grupo: grupo, adj: adj });
   TG_enviar_(chatId, '📎 <b>Recibí ' + (m.media_group_id ? 'sus archivos' : (m.photo ? 'la foto' : 'el archivo')) + '.</b> ¿Qué hago?', [
+    [{ text: '🧾 Procesar documento (registrar y completar factura)', callback_data: 'k:' + k + ':proc' }],
     [{ text: '🔎 Analizar y cruzar con las hojas', callback_data: 'k:' + k + ':ana' }],
     [{ text: '📥 Registrar como voucher', callback_data: 'k:' + k + ':vou' }],
     [{ text: '✍️ Le escribo mi pregunta', callback_data: 'k:' + k + ':preg' }],
@@ -306,14 +309,16 @@ function TG_transcribir_(ss, blob) {
 /** 📥 Copia los archivos a la carpeta de entrada del Sistema de Vouchers (su proceso automático los registra). */
 function TG_registrarVouchers_(ctx, adjs) {
   var cfg = TG_cfg_(ctx.ss);
-  var n = 0, errores = [];
+  var n = 0, errores = [], hechos = [];
   adjs.forEach(function (a) {
     try {
       var destino = DriveApp.getFolderById(a.foto || /^image\//.test(a.mime) ? cfg.carpetaFotos : cfg.carpetaOriginales);
-      DriveApp.getFileById(a.id).makeCopy(a.nombre, destino);
+      var copia = DriveApp.getFileById(a.id).makeCopy(a.nombre, destino);
+      hechos.push({ id: copia.getId(), nombre: a.nombre });
       n++;
     } catch (e) { errores.push(a.nombre + ': ' + e.message); }
   });
+  if (hechos.length) TGU_anotar_(ctx.chatId, { desc: '📥 ' + hechos.length + ' voucher(s) a la hoja de Vouchers: ' + hechos.map(function (h) { return h.nombre; }).slice(0, 3).join(', '), archivos: hechos });
   TG_enviar_(ctx.chatId, (n ? '📥 <b>' + n + ' archivo(s) enviados al Sistema de Vouchers</b> (carpeta de entrada de ' +
     (adjs.some(function (a) { return a.foto; }) ? 'fotos' : 'originales') + '). Se registran en la próxima vuelta automática de esa hoja; ' +
     'después aparecen aquí y en Cobranzas.' : '') + (errores.length ? '\n⚠️ ' + TG_esc_(errores.join('; ')) : ''),
@@ -362,6 +367,7 @@ function TG_alBoton_(ss, q) {
       var adjs = datos.adjs || TG_adjDelGrupo_(ss, datos.grupo, datos.adj);
       TG_llamar_('editMessageReplyMarkup', { chat_id: chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
       if (op === 'vou') return TGE_preguntarTG_(ctx, adjs);   // 🏷 primero: ¿de quién son?
+      if (op === 'proc') return TGP_iniciarTG_(ctx, adjs);
       if (op === 'preg') {
         var ses = TG_sesion_(chatId); ses.esperando = { tipo: 'pregunta_adj', adj: adjs }; TG_guardarSesion_(chatId, ses);
         return TG_enviar_(chatId, '✍️ Escriba (o diga 🎤) su pregunta sobre ' + (adjs.length > 1 ? 'esos ' + adjs.length + ' archivos' : 'ese archivo') + '.');
@@ -374,6 +380,8 @@ function TG_alBoton_(ss, q) {
     case 'descarga': return TG_confirmarDescarga_(ctx, datos, op);
     case 'venc': return TGV_alBoton_(ctx, datos);
     case 'entrega': return TGE_alBotonTG_(ctx, datos, op, partes[1]);
+    case 'procesar': return TGP_alBotonTG_(ctx, op, partes[1]);
+    case 'deshacer2': return TGU_alBotonTG_(ctx, datos, op);
     case 'rerun': return TG_reintentarRun_(ctx, datos);
     case 'recq': return TG_quitarRecordatorio_(ctx, datos.id);
     case 'excel': return TG_mandarExcel_(ctx, datos);

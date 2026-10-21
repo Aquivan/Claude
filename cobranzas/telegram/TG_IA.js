@@ -225,14 +225,16 @@ function TG_aplicarCambios_(ctx, datos, op) {
   TG_accion_(ctx.chatId, 'typing');
   var r;
   try { r = ANX_aplicarDet_(ctx.ss, datos.ids, op === 'reemplazar'); } catch (e) { return TG_enviar_(ctx.chatId, '❌ ' + TG_esc_(e.message)); }
+  if (r.lote) TGU_anotar_(ctx.chatId, { desc: '✏️ ' + (r.mensaje.split(' · ')[0] || 'datos escritos'), lotes: [r.lote] });
   var enlaces = (r.enlaces || []).slice(0, 5).map(function (e) { return '<a href="' + TG_esc_(e.url) + '">' + TG_esc_(e.fila) + '</a>'; }).join(' · ');
   TG_enviar_(ctx.chatId, TG_esc_(r.mensaje) + (enlaces ? '\n🔗 ' + enlaces : ''),
     /✅/.test(r.mensaje) ? [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]] : null);
 }
 
+/** ↩️ Deshacer: muestra qué se deshace (datos, filas y archivos de la última acción) y pide confirmar. */
 function TG_deshacerCambios_(ctx) {
   TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
-  try { TG_enviar_(ctx.chatId, TG_esc_(ANX_deshacer_(ctx.ss))); } catch (e) { TG_enviar_(ctx.chatId, '❌ ' + TG_esc_(e.message)); }
+  try { TGU_preguntarTG_(ctx); } catch (e) { TG_enviar_(ctx.chatId, '❌ ' + TG_esc_(e.message)); }
 }
 
 /** ID de un archivo de Drive a partir de un enlace (o el ID mismo). */

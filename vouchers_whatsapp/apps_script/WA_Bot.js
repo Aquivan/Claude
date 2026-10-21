@@ -76,13 +76,17 @@ function WA_procesarMensaje_(m, nombre) {
 
   if (m.type === 'interactive' && m.interactive) {
     var resp = m.interactive.button_reply || m.interactive.list_reply || {};
-    if (String(resp.id || '').indexOf('en:') === 0) WA_botonNombre_(de, resp.id);
-    else WA_boton_(de, resp.id || '');
+    var bid = String(resp.id || '');
+    if (bid.indexOf('en:') === 0) WA_botonNombre_(de, bid);
+    else if (bid.indexOf('pr:') === 0) WA_procesarBoton_(de, bid);     // 🧾 Procesar documento
+    else if (bid.indexOf('un:') === 0) WA_deshacerBoton_(de, bid);     // ↩️ Deshacer
+    else WA_boton_(de, bid);
     return;
   }
   if (m.type === 'text') {
     var cuerpo = ((m.text || {}).body || '').trim();
     if (WA_comando_(de, cuerpo)) return;
+    if (WA_procesarNombre_(de, cuerpo)) return;   // 🧾 nombre pedido con "🏷 Cambiar nombre"
     // 🏷 ¿De quién son? — respuesta a la pregunta, o "de Edit" antes de reenviar.
     if (WA_respuestaNombre_(de, cuerpo).tomado) return;
     if (WA_esEtiqueta_(cuerpo) && WA_etiquetaPrevia_(de, cuerpo)) return;
@@ -95,6 +99,10 @@ function WA_procesarMensaje_(m, nombre) {
     try {
       var voz = WA_bajarMedia_(m.audio.id);
       var audio = { base64: Utilities.base64Encode(voz.getBytes()), mime: m.audio.mime_type || 'audio/ogg' };
+      if (WA_prop_('WA_PRN_' + de)) {   // 🧾 "🏷 Cambiar nombre" dicho por voz
+        var rv = WA_entrega_({ modo: 'nombres', audio: audio });
+        if (rv && rv.entendido && WA_procesarNombre_(de, rv.nombre + ' ' + rv.corta)) return;
+      }
       var rn = WA_respuestaNombre_(de, '', audio);   // 🏷 si se esperaba el nombre de una tanda
       if (rn.tomado) return;
       if (rn.dicho) WA_preguntarIA_(m, de, nombre, rn.dicho);
@@ -174,6 +182,7 @@ function WA_comando_(de, texto) {
     return true;
   }
   if (/^estado[\s!.?]*$/.test(t)) { WA_enviarTexto_(de, WA_textoEstado_(de)); return true; }
+  if (/^\/?(deshacer|desh[aá]z(lo)?|deshaga)\b/.test(t)) { WA_deshacerVer_(de); return true; }
   if (/^preguntar\s+nombres?\s+(si|sí|no)\b/.test(t)) {
     var si = !/\bno\b/.test(t);
     WA_props_().setProperty('WA_PREGUNTAR_NOMBRE', si ? '1' : '0');
@@ -189,6 +198,8 @@ function WA_comando_(de, texto) {
     '• Escriba "original" o "foto" en el comentario para cambiarlo solo esa vez\n' +
     '• *modo original* / *modo foto* / *modo auto*\n' +
     '• *estado*: lo que está en cola\n' +
+    '• 🧾 En la lista "¿De quién son?" elija *Revisar con IA*: lee cada página, ve si el voucher ya está y completa la factura\n' +
+    '• ↩️ *deshacer*: deshace la última acción (filas, archivos y datos)\n' +
     '• 🏷 Al terminar cada tanda le pregunto *de quién son* (un toque). También puede escribir antes *de Edit* o *de Edit 15/10*. ' +
     '*preguntar nombre no* lo apaga\n\n' +
     '🧠 *Pregúnteme lo que necesite* (la misma IA del asistente de Telegram), por ejemplo:\n' +

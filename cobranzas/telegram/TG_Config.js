@@ -380,6 +380,7 @@ var TG_COMANDOS_ = [
   ['pagar', '💸 Cuentas por pagar'],
   ['vencidas', '⏰ Facturas vencidas y por vencer'],
   ['vencimientos', '📅 Vencimientos SUNAT: IGV, PLAME, SIRE (y sus avisos)'],
+  ['deshacer', '↩️ Deshacer la última acción (datos, vouchers y archivos)'],
   ['notificaciones', '📬 Buzón SUNAT (últimas notificaciones)'],
   ['detracciones', '🏦 Detracciones del mes'],
   ['retenciones', '🧾 Retenciones del mes'],

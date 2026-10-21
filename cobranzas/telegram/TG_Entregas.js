@@ -114,7 +114,11 @@ function TGE_sugerir_(adjunto) {
       texto: 'Devuelve solo JSON {"ordenante": "nombre de la persona o empresa que PAGA / envía el dinero, tal como aparece; vacío si no aparece"}.',
       adjunto: { base64: adjunto.base64, mime: adjunto.mime } });
   } catch (e) { console.warn('Sugerir nombre: ' + e.message); return null; }
-  var ord = String((r && r.ordenante) || '').trim();
+  return TGE_nombreDeOrdenante_(String((r && r.ordenante) || '').trim());
+}
+
+/** "INVERSIONES PETRO SAC" → el nombre que usted le suele poner (aprendido), uno ya usado que coincida, o uno corto. */
+function TGE_nombreDeOrdenante_(ord) {
   if (!ord) return null;
   var n = TGE_norm_(ord), apr = {};
   try { apr = JSON.parse(PropertiesService.getScriptProperties().getProperty(TGE_PROP_APRENDIDO_) || '{}'); } catch (e) {}

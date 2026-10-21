@@ -390,18 +390,19 @@ function ANX_aplicarDet_(ss, ids, reemplazar) {
   return {
     mensaje: (hechos ? '✅ ' + hechos + ' dato(s) escritos en Vouchers' : 'No se escribió nada') + (saltados.length ? ' · se dejaron ' + saltados.length + ': ' + saltados.slice(0, 5).join('; ') : '') +
       (hechos ? ' · cada celda escrita lleva una nota "✏️ Escrito por la IA" · se puede deshacer (↩️)' : '') + (r2 ? ' · ' + r2 : ''),
-    enlaces: enlaces,
+    enlaces: enlaces, lote: hechos ? lote : '',
   };
 }
 
-/** Deshace el último lote de cambios de la IA (solo si la celda sigue con lo que se escribió). */
-function ANX_deshacer_(ss) {
+/** Deshace el último lote de cambios de la IA, o el lote indicado (solo si la celda sigue con lo que se escribió). */
+function ANX_deshacer_(ss, loteDado) {
   var shL = ss.getSheetByName(IMP_LOG_);
   if (!shL || shL.getLastRow() < 2) return 'No hay cambios de la IA para deshacer.';
   var v = shL.getRange(2, 1, shL.getLastRow() - 1, 9).getValues();
   var lotes = v.map(function (r) { return String(r[0]); }).filter(function (l) { return /^IA/.test(l); });
   if (!lotes.length) return 'No hay cambios de la IA para deshacer.';
-  var lote = lotes[lotes.length - 1];
+  var lote = loteDado || lotes[lotes.length - 1];
+  if (lotes.indexOf(lote) < 0) return 'Esos datos ya no están en el registro (¿ya se deshicieron?).';
   var cfg = leerConfig_(ss);
   var libro = SpreadsheetApp.openById(cfg.idVouchers);
   var vueltos = 0, dejados = 0, borrar = [];
