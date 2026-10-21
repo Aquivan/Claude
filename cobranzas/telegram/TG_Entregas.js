@@ -243,7 +243,8 @@ function TGE_preguntarTG_(ctx, adjs) {
     if (f.getSize() < 4 * 1024 * 1024) sug = TGE_sugerir_({ base64: Utilities.base64Encode(f.getBlob().getBytes()), mime: f.getMimeType() });
   } catch (e) {}
   var nombres = TGE_recientes_(6).filter(function (n) { return !sug || n.toLowerCase() !== sug.nombre.toLowerCase(); }).slice(0, sug ? 5 : 6);
-  var datos = { t: 'entrega', adjs: adjs, nombres: (sug ? [sug.nombre] : []).concat(nombres), ordenante: sug ? sug.ordenante : '', sug: !!sug, fecha: TGE_hoy_() };
+  var pestana = adjs.some(function (a) { return a.foto || /^image\//.test(a.mime); }) ? 'foto' : 'original';
+  var datos = { t: 'entrega', adjs: adjs, nombres: (sug ? [sug.nombre] : []).concat(nombres), ordenante: sug ? sug.ordenante : '', sug: !!sug, fecha: TGE_hoy_(), pestana: pestana };
   var k = TG_guardarBoton_(datos);
   var ses = TG_sesion_(ctx.chatId); ses.esperando = { tipo: 'entrega', k: k }; TG_guardarSesion_(ctx.chatId, ses);
   var msg = TG_enviar_(ctx.chatId, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
@@ -254,6 +255,7 @@ function TGE_textoPregunta_(d) {
   return '🏷 <b>¿De quién son ' + (d.adjs.length > 1 ? 'estos ' + d.adjs.length + ' vouchers' : 'este voucher') + '?</b>\n' +
     'Quedarán como <code>' + TG_esc_(TGE_corta_(d.fecha)) + ' Nombre</code>' + (d.adjs.length > 1 ? ', <code>… Nombre 2</code>…' : '') + '\n' +
     (d.sug ? '⭐ Según el voucher paga: <i>' + TG_esc_(d.ordenante) + '</i>\n' : '') +
+    '📂 Pestaña: <b>' + (d.pestana === 'original' ? 'Originales' : 'Fotos') + '</b>\n' +
     'Toque un nombre o escríbalo (o dígalo 🎤). Si es de otro día: <i>Edit 15/10</i> o <i>Edit ayer</i>.';
 }
 
@@ -268,6 +270,8 @@ function TGE_tecladoTG_(k, d) {
   filas.push([{ text: (d.fecha === hoy ? '✔ ' : '') + 'Hoy', callback_data: 'k:' + k + ':fh' },
               { text: (d.fecha === ayer ? '✔ ' : '') + 'Ayer', callback_data: 'k:' + k + ':fa' },
               { text: (d.fecha !== hoy && d.fecha !== ayer ? '✔ ' + TGE_corta_(d.fecha) : '📅 Otra fecha'), callback_data: 'k:' + k + ':fo' }]);
+  filas.push([d.pestana === 'original' ? { text: '📸 Enviar como foto', callback_data: 'k:' + k + ':pfo' }
+    : { text: '📄 Enviar como original', callback_data: 'k:' + k + ':por' }]);
   filas.push([{ text: '➖ Sin nombre (como antes)', callback_data: 'k:' + k + ':sin' }]);
   return filas;
 }
@@ -280,6 +284,11 @@ function TGE_alBotonTG_(ctx, datos, op, k) {
   }
   if (op === 'fo') {
     return TG_enviar_(ctx.chatId, '📅 Escriba el nombre y la fecha, por ejemplo <i>Edit 15/10</i> o <i>Edit 15/10/26</i>.');
+  }
+  if (op === 'pfo' || op === 'por') {   // 📸 / 📄: cambia la pestaña en el MISMO mensaje
+    datos.pestana = op === 'pfo' ? 'foto' : 'original';
+    CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(datos), 21600);
+    return TG_editar_(ctx.chatId, ctx.msgId, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
   }
   if (op === 'sin') return TGE_cerrarTG_(ctx, k, datos, null);
   var i = Number(String(op).slice(1));
@@ -305,10 +314,10 @@ function TGE_cerrarTG_(ctx, k, datos, it) {
   var msgId = JSON.parse(pend).msg || ctx.msgId;
   var ses = TG_sesion_(ctx.chatId);
   if (ses.esperando && ses.esperando.tipo === 'entrega') { ses.esperando = null; TG_guardarSesion_(ctx.chatId, ses); }
-  var adjs = datos.adjs.slice();
+  var adjs = datos.adjs.map(function (a) { return Object.assign({}, a, datos.pestana ? { pestana: datos.pestana } : {}); });
   if (it && it.nombre) {
     var nombres = TGE_reservar_(ctx.ss, it.nombre, it.fecha, adjs.map(function (a) { return TGE_ext_(a.nombre, a.mime); }));
-    adjs = adjs.map(function (a, i) { return { id: a.id, nombre: nombres[i], mime: a.mime, foto: a.foto }; });
+    adjs = adjs.map(function (a, i) { return { id: a.id, nombre: nombres[i], mime: a.mime, foto: a.foto, pestana: datos.pestana }; });
     TGE_usar_(it.nombre, datos.ordenante && datos.nombres[0] === it.nombre ? datos.ordenante : '');
     if (msgId) TG_editar_(ctx.chatId, msgId, '🏷 <b>' + TG_esc_(TGE_corta_(it.fecha) + ' ' + it.nombre) + '</b> · ' + adjs.length + ' archivo(s)');
   } else if (msgId) TG_editar_(ctx.chatId, msgId, '➖ Sin nombre: quedan con el nombre de siempre.');

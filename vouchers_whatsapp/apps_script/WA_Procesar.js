@@ -22,7 +22,7 @@ function WA_revisarConIA_(de, it) {
   var archivos = filas.map(function (i) { return { id: datos[i][9], nombre: datos[i][4], mime: /\.pdf$/i.test(datos[i][4]) ? 'application/pdf' : 'image/jpeg' }; });
   var r;
   try { r = WA_cobranzas_('procesar', { modo: 'analizar', numero: de, archivos: archivos, procesarUrl: WA_prop_('WA_PROCESAR_URL'),
-    nombre: (it && it.nombre) || '', fecha: (it && it.fecha) || '', pestana: WA_prop_('WA_MODO_' + de) }); }   // 📂 su "modo foto/original"
+    nombre: (it && it.nombre) || '', fecha: (it && it.fecha) || '', pestana: WA_pestanaEspera_(datos, filas) }); }   // 📂 la pestaña elegida en la lista
   catch (e) {   // tardó más de 60 s: Cobranzas sigue y WA_cadaMinuto recoge el resultado
     WA_props_().setProperty('WA_PRA_' + de, String(Date.now()));
     WA_props_().setProperty('WA_HAY_PROC', '1');

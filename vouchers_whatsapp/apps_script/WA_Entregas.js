@@ -80,21 +80,38 @@ function WA_preguntarDeQuien_(de, datos, filas) {
   }
   var sug = r.sugerido;
   var nombres = (sug ? [sug.nombre] : []).concat((r.nombres || []).filter(function (n) { return !sug || n.toLowerCase() !== sug.nombre.toLowerCase(); }))
-    .filter(String).slice(0, 6);
+    .filter(String).slice(0, 5);
   var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
-  WA_props_().setProperty('WA_PREG_' + de, JSON.stringify({ t: Date.now(), nombres: nombres, sug: !!sug, ordenante: sug ? sug.ordenante : '', fecha: hoy }));
-  var n = filas.length, corta = Utilities.formatDate(new Date(), 'America/Lima', 'dd-MM-yy');
+  var preg = { t: Date.now(), nombres: nombres, sug: !!sug, ordenante: sug ? sug.ordenante : '', fecha: hoy };
+  WA_props_().setProperty('WA_PREG_' + de, JSON.stringify(preg));
+  WA_listaNombre_(de, preg, filas.length, WA_pestanaEspera_(datos, filas));
+}
+
+/** 📂 Pestaña de la tanda en espera (columna D): 'foto', 'original' o '' (mezcla: cada uno según su tipo). */
+function WA_pestanaEspera_(datos, filas) {
+  var t = filas.map(function (i) { return datos[i][3] === 'original' ? 'original' : 'foto'; });
+  return t.every(function (x) { return x === t[0]; }) ? (t[0] || 'foto') : '';
+}
+
+/** La lista "¿De quién son?" (también se vuelve a mandar al cambiar de pestaña, sin leer de nuevo con IA). */
+function WA_listaNombre_(de, preg, n, pestana) {
+  var nombres = preg.nombres, sug = preg.sug;
+  var corta = Utilities.formatDate(new Date(), 'America/Lima', 'dd-MM-yy');
   var cuerpo = '🏷 *¿De quién son ' + (n > 1 ? 'estos ' + n + ' vouchers' : 'este voucher') + '?*\n' +
     'Quedarán como _' + corta + ' Nombre_' + (n > 1 ? ', _… Nombre 2_…' : '') + '\n' +
-    (sug ? '⭐ Según el voucher paga: _' + sug.ordenante + '_\n' : '') +
+    (sug ? '⭐ Según el voucher paga: _' + preg.ordenante + '_\n' : '') +
+    '📂 Pestaña: *' + (pestana === 'original' ? 'Originales' : pestana === 'foto' ? 'Fotos' : 'Fotos y Originales (según el archivo)') + '* (puede cambiarla en la lista)\n' +
     '\nElija de la lista o escríbame el nombre (o dígalo 🎤). Si es de otro día: *Edit 15/10* o *Edit ayer*.';
   var filasLista = nombres.map(function (nm, i) {
     var fila = { id: 'en:n' + i, title: ((i === 0 && sug ? '⭐ ' : '') + nm).slice(0, 24) };
-    if (i === 0 && sug) fila.description = ('Según el voucher: ' + sug.ordenante).slice(0, 72);
+    if (i === 0 && sug) fila.description = ('Según el voucher: ' + preg.ordenante).slice(0, 72);
     return fila;
   }).concat([
     { id: 'en:otro', title: '✍️ Otro nombre', description: 'Escríbalo o dígalo en una nota de voz' },
     { id: 'en:fecha', title: '📅 Es de otra fecha', description: 'Ej.: Edit 15/10 o Edit ayer' },
+    !pestana ? { id: 'en:pfo', title: '📸 Todo como foto', description: 'Ahora cada uno va según su tipo: mandar todo a Fotos' }
+      : pestana === 'original' ? { id: 'en:pfo', title: '📸 Enviar como foto', description: 'Ahora va a Originales: cambiar a la pestaña Fotos' }
+      : { id: 'en:por', title: '📄 Enviar como original', description: 'Ahora va a Fotos: cambiar a la pestaña Originales' },
     { id: 'en:sin', title: '➖ Sin nombre', description: 'Como antes (nombre del archivo o la fecha)' },
     { id: 'en:ia', title: '🧾 Revisar con IA', description: 'Ve si ya está, registra solo el voucher y completa la factura' }
   ]);
@@ -103,7 +120,15 @@ function WA_preguntarDeQuien_(de, datos, filas) {
     interactive: { type: 'list', body: { text: cuerpo.slice(0, 1024) },
       action: { button: 'Elegir nombre', sections: [{ title: 'Entregado por', rows: filasLista }] } }
   });
-  if (!s.ok) WA_enviarTexto_(de, cuerpo + (nombres.length ? '\n\nUsados antes: ' + nombres.join(', ') : '') + '\n\nO escriba *sin nombre*.');
+  if (!s.ok) WA_enviarTexto_(de, cuerpo + (nombres.length ? '\n\nUsados antes: ' + nombres.join(', ') : '') + '\n\nO escriba *sin nombre*, *original* o *foto*.');
+}
+
+/** 📸/📄 Cambia la pestaña de la tanda en espera y vuelve a mostrar la lista. */
+function WA_cambiarPestanaEspera_(de, preg, pestana) {
+  var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues(), filas = WA_filasEspera_(datos, de);
+  if (!filas.length) { WA_enviarTexto_(de, 'Esos vouchers ya se registraron 👍'); return; }
+  filas.forEach(function (i) { hoja.getRange(i + 1, 4).setValue(pestana); });
+  WA_listaNombre_(de, preg, filas.length, pestana);
 }
 
 /** Opción tocada en la lista (id "en:n0", "en:otro", "en:fecha", "en:sin"). */
@@ -114,6 +139,7 @@ function WA_botonNombre_(de, id) {
   if (op === 'otro') { WA_enviarTexto_(de, '✍️ Escríbame el nombre (o dígalo 🎤).'); return; }
   if (op === 'fecha') { WA_enviarTexto_(de, '📅 Escríbame el nombre y la fecha, por ejemplo *Edit 15/10* o *Edit 15/10/26*.'); return; }
   if (op === 'sin') { WA_finalizar_(de, null); return; }
+  if (op === 'pfo' || op === 'por') { WA_cambiarPestanaEspera_(de, preg, op === 'pfo' ? 'foto' : 'original'); return; }
   if (op === 'ia') { WA_revisarConIA_(de); return; }   // 🧾 Procesar documento (WA_Procesar.js)
   var nombre = preg.nombres[Number(op.slice(1))];
   if (nombre) WA_finalizar_(de, { nombre: nombre, fecha: preg.fecha, ordenante: preg.sug && op === 'n0' ? preg.ordenante : '' });
@@ -127,6 +153,8 @@ function WA_respuestaNombre_(de, texto, audio) {
   var preg = WA_leerJson_('WA_PREG_' + de);
   if (!preg) return { tomado: false };
   if (!audio && /^sin\s+nombre\b/i.test(texto)) { WA_finalizar_(de, null); return { tomado: true }; }
+  var mp = !audio && String(texto).trim().match(/^(?:enviar\s+)?(?:a\s+|como\s+)?(originale?s?|fotos?)$/i);   // "original" / "foto"
+  if (mp) { WA_cambiarPestanaEspera_(de, preg, /^o/i.test(mp[1]) ? 'original' : 'foto'); return { tomado: true }; }
   if (!audio && !WA_pareceNombre_(texto)) return { tomado: false };
   var r = WA_entrega_(audio ? { modo: 'nombres', audio: audio, fecha: preg.fecha } : { modo: 'nombres', texto: texto, fecha: preg.fecha });
   if (!r || !r.ok) { WA_enviarTexto_(de, '⚠️ ' + ((r && r.error) || 'No pude anotar el nombre.') + ' Escríbalo de nuevo o elija de la lista.'); return { tomado: true }; }

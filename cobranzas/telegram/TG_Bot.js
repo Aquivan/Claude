@@ -313,7 +313,8 @@ function TG_registrarVouchers_(ctx, adjs) {
   var n = 0, errores = [], hechos = [];
   adjs.forEach(function (a) {
     try {
-      var destino = DriveApp.getFolderById(a.foto || /^image\//.test(a.mime) ? cfg.carpetaFotos : cfg.carpetaOriginales);
+      var esFoto = a.pestana ? a.pestana === 'foto' : (a.foto || /^image\//.test(a.mime));   // 📂 elegida en "¿De quién son?"
+      var destino = DriveApp.getFolderById(esFoto ? cfg.carpetaFotos : cfg.carpetaOriginales);
       var copia = DriveApp.getFileById(a.id).makeCopy(a.nombre, destino);
       hechos.push({ id: copia.getId(), nombre: a.nombre });
       n++;
