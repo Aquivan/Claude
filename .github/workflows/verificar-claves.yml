@@ -1,0 +1,56 @@
+# Compara la línea de una empresa en el secreto SUNAT_CLAVES con las claves de su Environment.
+# Solo muestra SÍ/NO (nunca claves, ni sus largos). Sirve cuando la máquina única falla para una empresa.
+name: Verificar SUNAT_CLAVES (sin mostrar claves)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa (su Environment)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  comparar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: ${{ inputs.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/por_empresa.py
+          sparse-checkout-cone-mode: false
+      - name: Comparar (solo SÍ/NO)
+        env:
+          SUNAT_CLAVES: ${{ secrets.SUNAT_CLAVES }}
+          E_RUC: ${{ secrets.SUNAT_RUC }}
+          E_USU: ${{ secrets.SUNAT_USUARIO }}
+          E_CLA: ${{ secrets.SUNAT_CLAVE }}
+          RUC: ${{ inputs.ruc }}
+        run: |
+          python3 - <<'PY'
+          import os, sys, unicodedata
+          sys.path.insert(0, "scripts")
+          from por_empresa import leer_claves
+          si = lambda b: "SÍ" if b else "NO"
+          raros = lambda s: any(unicodedata.category(c)[0] in "CZ" and c != " " for c in s) or any(ord(c) > 126 for c in s)
+          texto = os.environ.get("SUNAT_CLAVES", "")
+          lineas = [l for l in texto.splitlines() if l.strip()]
+          print("Líneas en SUNAT_CLAVES:", len(lineas))
+          print("Hay caracteres invisibles o raros en el secreto:", si(raros(texto.replace("\n", "").replace("\r", ""))))
+          c = leer_claves(texto)
+          ruc = os.environ["RUC"]
+          print("El RUC del Environment es el mismo que el de la empresa:", si(os.environ["E_RUC"].strip() == ruc))
+          print("La empresa está en SUNAT_CLAVES:", si(ruc in c))
+          if ruc in c:
+              u, k = c[ruc]
+              eu, ek = os.environ["E_USU"], os.environ["E_CLA"]
+              print("Usuario igual al del Environment:", si(u == eu.strip()))
+              print("Usuario igual sin contar mayúsculas:", si(u.upper() == eu.strip().upper()))
+              print("Clave igual a la del Environment:", si(k == ek))
+              print("Clave igual sin espacios al inicio/final:", si(k.strip() == ek.strip()))
+              print("La clave del Environment tiene espacios al inicio/final:", si(ek != ek.strip()))
+              print("La clave del secreto tiene caracteres invisibles o raros:", si(raros(k)))
+          PY
