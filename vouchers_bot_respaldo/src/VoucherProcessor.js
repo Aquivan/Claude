@@ -6,7 +6,10 @@ async function procesarVouchers() {
   // Evita que dos ejecuciones (trigger + clic manual + webhook Telegram) choquen entre si.
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) {
-    Logger.log('Ya hay otra ejecucion en curso. Se omite esta.');
+    // Otra ejecucion (la de cada 10 min o la reparacion) esta trabajando: en vez de
+    // esperar la siguiente vuelta de 10 min, se reintenta en 1 minuto.
+    Logger.log('Ya hay otra ejecucion en curso. Se reintenta en 1 minuto.');
+    try { programarReintentoAutomatico_(); } catch (e) {}
     return;
   }
 
