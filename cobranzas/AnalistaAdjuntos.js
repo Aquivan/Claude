@@ -348,7 +348,7 @@ function ANX_url_(idLibro, sh, a1) {
 }
 
 /** Como ANX_aplicar_, pero devuelve también los enlaces a las filas cambiadas: {mensaje, enlaces:[{fila, rango, url}]}. */
-function ANX_aplicarDet_(ss, ids, reemplazar) {
+function ANX_aplicarDet_(ss, ids, reemplazar, opts) {
   var sh = ANX_hojaCambios_(ss);
   if (sh.getLastRow() < 2 || !ids || !ids.length) return { mensaje: 'No hay cambios para aplicar.', enlaces: [] };
   var v = sh.getRange(2, 1, sh.getLastRow() - 1, ANX_ENC_CAMBIOS_.length).getValues();
@@ -381,7 +381,8 @@ function ANX_aplicarDet_(ss, ids, reemplazar) {
     var shL = IMP_hojaLog_(ss);
     shL.getRange(shL.getLastRow() + 1, 1, log.length, 9).setValues(log);
   }
-  var r2 = hechos ? actualizarTodo_(true) : '';
+  // opts.sinRecalcular: quien llama recalcula después (🧾 Procesar documento no hace esperar al usuario).
+  var r2 = hechos && !(opts && opts.sinRecalcular) ? actualizarTodo_(true) : '';
   var enlaces = Object.keys(filas).map(function (k) {
     var f = filas[k];
     var a1 = f.sh.getRange(f.fila, f.min, 1, f.max - f.min + 1).getA1Notation();

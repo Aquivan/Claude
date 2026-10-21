@@ -1,0 +1,92 @@
+# Aplica a la hoja "Sistema de Vouchers" SOLO los archivos de vouchers_bot_cambios/src/.
+#   1. Descarga el codigo que esta HOY en la hoja (clasp pull) y lo guarda como copia de
+#      seguridad (artefacto de esta corrida, 90 dias).
+#   2. Cada archivo se reemplaza SOLO si el de la hoja es identico al de la copia del
+#      repositorio (vouchers_bot_respaldo/src/). Si alguien lo cambio a mano, no se toca nada.
+#   3. revisar = solo muestra los cambios. subir = los sube (el resto del codigo queda igual).
+# Solo se ejecuta a mano (Actions → Run workflow).
+
+name: Cambios en hoja Vouchers
+
+on:
+  workflow_dispatch:
+    inputs:
+      accion:
+        description: "revisar (no cambia nada) o subir"
+        required: true
+        default: "revisar"
+        type: choice
+        options:
+          - revisar
+          - subir
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vouchers-bot-cambios
+  cancel-in-progress: false
+
+jobs:
+  cambios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SCRIPT_ID: 1D9dcCYU-Nqw7bgjFYPcTSUTcyrVE25AK03_zx4ZTUknId-lUieAV6J1G
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            vouchers_bot_cambios
+            vouchers_bot_respaldo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar clasp
+        run: npm install -g @google/clasp@3.3.0
+      - name: Escribir credenciales de clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then echo "::error::Falta el secret CLASPRC_JSON"; exit 1; fi
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+      - name: Descargar el codigo actual de la hoja (solo lectura)
+        run: |
+          mkdir -p /tmp/hoja
+          printf '{"scriptId":"%s","rootDir":"/tmp/hoja"}' "$SCRIPT_ID" > /tmp/hoja/.clasp.json
+          cd /tmp/hoja && clasp pull
+          mkdir -p /tmp/copia && cp -r /tmp/hoja/. /tmp/copia/ && rm -f /tmp/copia/.clasp.json
+      - name: Copia de seguridad del codigo de la hoja
+        uses: actions/upload-artifact@v4
+        with:
+          name: copia-hoja-vouchers-${{ github.run_id }}
+          path: /tmp/copia
+          retention-days: 90
+      - name: Aplicar los cambios (solo si la hoja tiene el codigo esperado)
+        run: |
+          python3 - <<'PY'
+          import os, sys, difflib, shutil
+          cambios, base, hoja = 'vouchers_bot_cambios/src', 'vouchers_bot_respaldo/src', '/tmp/hoja'
+          def buscar(nombre):
+              for raiz, _, fs in os.walk(hoja):
+                  if nombre in fs: return os.path.join(raiz, nombre)
+          errores = []
+          for f in sorted(os.listdir(cambios)):
+              vivo = buscar(f)
+              if not vivo: errores.append(f + ': no está en la hoja'); continue
+              actual = open(vivo, encoding='utf-8').read()
+              esperado = open(os.path.join(base, f), encoding='utf-8').read()
+              nuevo = open(os.path.join(cambios, f), encoding='utf-8').read()
+              if actual == nuevo: print(f + ': ya tiene el cambio'); continue
+              if actual.strip() != esperado.strip():
+                  errores.append(f + ': el código de la hoja no es el del respaldo (¿se cambió a mano?)'); continue
+              print('================ ' + f + ' ================')
+              sys.stdout.writelines(difflib.unified_diff(actual.splitlines(True), nuevo.splitlines(True), 'hoja/' + f, 'nuevo/' + f, n=1))
+              open(vivo, 'w', encoding='utf-8').write(nuevo)
+          if errores:
+              print('::error::No se sube nada: ' + ' | '.join(errores)); sys.exit(1)
+          PY
+      - name: Subir a la hoja
+        if: inputs.accion == 'subir'
+        run: cd /tmp/hoja && clasp push --force && echo "✅ Subido. Lo demás del código de la hoja quedó igual."

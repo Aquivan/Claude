@@ -108,9 +108,7 @@ function TGP_analizar_(ss, adjs, op) {
   leidos.forEach(function (x) {
     (x.r.docs || []).filter(function (d) { return TGP_tipo_(d) === 'voucher'; }).forEach(function (d) { vouchers.push({ a: x.a, d: d, mime: x.r.mime }); });
   });
-  var cruce = vouchers.length ? ANX_HERR_.cruzar_vouchers(c, { pagos: vouchers.map(function (v, i) {
-    return { ref: 'V' + (i + 1), fecha: v.d.fecha, monto: v.d.monto, operacion: v.d.operacion, banco: v.d.banco };
-  }) }) : { filas: [] };
+  var cruce = { filas: vouchers.length ? TGP_buscarVouchers_(c, vouchers) : [] };   // búsqueda directa en la hoja (rápida)
   var libro = vouchers.length ? SpreadsheetApp.openById(c.cfg.idVouchers) : null;
   vouchers.forEach(function (v, i) {
     var fila = cruce.filas[i] || [], estado = String(fila[4] || ''), fuente = String(fila[6] || '');
@@ -140,6 +138,59 @@ function TGP_analizar_(ss, adjs, op) {
     fecha: op.fecha || TGE_hoy_(), resumen: resumenArch, pestana: /^(foto|original)$/.test(op.pestana || '') ? op.pestana : '' };
   var k = TG_guardarBoton_(plan);
   return TGP_texto_(k, plan);
+}
+
+/**
+ * ¿Ya está cada voucher en la hoja de Vouchers? Busca directo en sus pestañas (N° de operación,
+ * o monto y fecha ±5 días), sin cargar todo el sistema. Filas como las de cruzar_vouchers:
+ * [ref, fecha, monto, operacion, estado, coincide_por, voucher].
+ */
+function TGP_buscarVouchers_(c, vouchers) {
+  var dig = function (s) { return String(s == null ? '' : s).replace(/\D/g, '').replace(/^0+/, ''); };
+  var pagos = [], libro = SpreadsheetApp.openById(c.cfg.idVouchers);
+  libro.getSheets().forEach(function (h) {
+    if (h.getLastRow() < 2) return;
+    var col = indiceColumnas_(h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0]);
+    var cO = col('Numero de oper', 'Numero de operacion'), cM = col('Monto'), cF = col('Fecha de depos', 'Fecha de deposito');
+    if (cO < 0 || cM < 0) return;
+    h.getRange(2, 1, h.getLastRow() - 1, Math.max(cO, cM, cF) + 1).getValues().forEach(function (r, i) {
+      var op = String(r[cO] == null ? '' : r[cO]);
+      if (/^\[/.test(op) || (!op && !r[cM])) return;   // [DUPLICADO], [OMITIDO], vacías
+      pagos.push({ fuente: h.getName() + '!' + (i + 2), op: dig(op), monto: AUV_num_(r[cM]), fecha: cF >= 0 ? AUV_fecha_(r[cF]) : null });
+    });
+  });
+  return vouchers.map(function (v, n) {
+    var q = { op: dig(v.d.operacion), monto: AUV_num_(v.d.monto), fecha: AUV_fecha_(v.d.fecha) };
+    var cand = [], como = '';
+    if (q.op.length >= 3) {
+      cand = pagos.filter(function (p) { return p.op === q.op || (q.op.length >= 5 && p.op.length >= 5 && p.op.slice(-6) === q.op.slice(-6)); });
+      if (cand.length && q.monto) {
+        var mismos = cand.filter(function (p) { return Math.abs(p.monto - q.monto) <= 0.05; });
+        if (!mismos.length) return ['V' + (n + 1), q.fecha || '', q.monto, q.op, '⚠️ Misma operación con otro monto (' + cand[0].fuente + ')', 'N° de operación', cand[0].fuente];
+        cand = mismos;
+      }
+      if (cand.length) como = 'N° de operación';
+    }
+    if (!cand.length && q.monto) {
+      cand = pagos.filter(function (p) { return Math.abs(p.monto - q.monto) <= 0.05 && (!q.fecha || !p.fecha || Math.abs(p.fecha - q.fecha) <= 5 * 864e5); });
+      if (cand.length) como = 'monto y fecha';
+    }
+    var estado = !cand.length ? '❌ No está en la hoja de vouchers'
+      : cand.length > 1 ? '⚠️ ' + cand.length + ' posibles: ' + cand.slice(0, 4).map(function (p) { return p.fuente; }).join(', ')
+      : '🟡 Registrado';
+    return ['V' + (n + 1), q.fecha || '', q.monto, q.op, estado, como, cand.length === 1 ? cand[0].fuente : ''];
+  });
+}
+
+/** El recálculo de Cuentas por Cobrar y Pagar va aparte (1 min después), para no hacer esperar el aviso. */
+function TGP_recalcularLuego_() {
+  var hay = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'TGP_recalcular'; });
+  if (!hay) ScriptApp.newTrigger('TGP_recalcular').timeBased().after(60 * 1000).create();
+}
+
+function TGP_recalcular() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGP_recalcular') ScriptApp.deleteTrigger(t); });
+  try { actualizarTodo_(true); } catch (e) { console.warn('Recalcular tras Procesar documento: ' + e.message); }
 }
 
 function TGP_celda_(libro, fuente, nombres) {
@@ -232,7 +283,8 @@ function TGP_ejecutar_(ss, k) {
     });
     if (c.cambios.length) {
       ANX_guardarPropuestos_(ss, c.cambios);
-      var r = ANX_aplicarDet_(ss, c.cambios.map(function (x) { return x.id; }), false);
+      var r = ANX_aplicarDet_(ss, c.cambios.map(function (x) { return x.id; }), false, { sinRecalcular: true });
+      if (r.lote) TGP_recalcularLuego_();
       if (r.lote) lotes.push(r.lote);
       lineas.push(r.mensaje.split(' · ')[0] + ': ' + completar.map(function (it) { return it.fuente + ' ← ' + it.fac.serie; }).join(', '));
     }
@@ -303,7 +355,7 @@ async function TGP_vuelta_(props) {
     try {
       if (job.estado === 'separar') {
         await TGP_separar_(ss, job);
-        job.estado = 'esperar'; job.t1 = Date.now();
+        job.estado = 'esperar'; job.t1 = job.tSep = Date.now();
         props.setProperty(claves[i], JSON.stringify(job));
         TGP_procesarYa_();   // la hoja de Vouchers procesa en el momento: al volver, la fila ya suele estar
       }
@@ -388,6 +440,7 @@ function TGP_revisar_(ss, job) {
     return false;   // salió de Entrada sin filas: se descartó
   });
   if (falta) return false;
+  var tFilas = Date.now();
   var c = TGP_ctx_(ss), lineas = [], vistos = {};
   c.cambios = [];
   job.items.forEach(function (it) {
@@ -410,11 +463,15 @@ function TGP_revisar_(ss, job) {
   });
   if (c.cambios.length) {
     ANX_guardarPropuestos_(ss, c.cambios);
-    var r = ANX_aplicarDet_(ss, c.cambios.map(function (x) { return x.id; }), false);
+    var r = ANX_aplicarDet_(ss, c.cambios.map(function (x) { return x.id; }), false, { sinRecalcular: true });
+    if (r.lote) TGP_recalcularLuego_();
     if (r.lote) TGU_agregar_(job.clave, job.id, { lotes: [r.lote] });
     if (!/✅/.test(r.mensaje)) lineas.push('⚠️ ' + TG_esc_(r.mensaje));
   }
-  TGP_avisar_(job, '🧾 <b>Listo</b>\n' + lineas.join('\n'));
+  var s = function (ms) { return Math.max(0, Math.round(ms / 1000)) + ' s'; }, fin = Date.now();
+  var tiempos = job.tSep ? '\n⏱ <i>' + s(fin - job.t) + ' en total: separar ' + s(job.tSep - job.t) + ' · hoja de Vouchers ' + s(tFilas - job.tSep) +
+    ' · factura ' + s(fin - tFilas) + '</i>' : '';
+  TGP_avisar_(job, '🧾 <b>Listo</b>\n' + lineas.join('\n') + tiempos);
   return true;
 }
 
