@@ -210,12 +210,10 @@ def main():
             fr.click("#btnModalAddDocu")
             fr.wait_for_timeout(1500)
             c = fr.evaluate(JS_CONFIRMA)
-            if c and (c["der"] or c["izq"]):
-                # Pregunta de SUNAT (p. ej. "ya hay pagos con retención de esta factura, ¿continuar?"): en la vista
-                # preliminar se acepta para poder verla; aceptar solo agrega la factura a la lista de esta pantalla.
-                print(f"  SUNAT pregunta: {sin_datos(c['texto'])[:300]} → se acepta [{c['der'] or c['izq']}] (solo vista)")
-                fr.click("#btnModalDer" if c["der"] else "#btnModalIzq")
-                fr.wait_for_timeout(1500)
+            if c:
+                # Si SUNAT pregunta algo (p. ej. "ya hay pagos con retención de esta factura, ¿continuar?"), el robot
+                # NO contesta por usted: se detiene y muestra la pregunta.
+                fallar(fr, f"Documento {i}: SUNAT pregunta «{sin_datos(c['texto'])[:300]}». El robot no responde por usted")
             if fr.evaluate("() => (window.lstDocumentosRelacionados || []).length") != antes + 1:
                 fallar(fr, f"Documento {i}: no se pudo agregar")
         print("Documentos en el comprobante:", fr.evaluate("() => (window.lstDocumentosRelacionados || []).length"), "de", len(docs))
