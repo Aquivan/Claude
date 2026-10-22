@@ -11,21 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Páginas públicas
+      - name: Centro de ayuda y tienda
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"
-          B=https://www.quesito.pe
-          curl -sSL -m 30 -A "$UA" "$B/" -o /tmp/home.html -w "home HTTP %{http_code} %{size_download}B\n"
-          echo "=== enlaces"
-          grep -oiE 'href="[^"#]+"' /tmp/home.html | sort -u | head -80
-          echo "=== menciones"
-          sed 's/<[^>]*>/ /g' /tmp/home.html | tr -s ' \n\t' ' ' | grep -oiE '.{0,120}(api|integraci|desarrollador|token|webhook|gu[ií]a de remisi|plan|precio|S/ ?[0-9]).{0,160}' | head -30
-          for r in robots.txt sitemap.xml api api/docs docs desarrolladores developers integraciones api/v1 swagger ayuda; do
-            c=$(curl -s -o /tmp/x -w '%{http_code}' -m 20 -A "$UA" "$B/$r"); echo "$r → $c $(head -c 300 /tmp/x | tr -s '\n\t ' ' ' | sed 's/<[^>]*>//g' | head -c 200)"
-          done
-          echo "=== sitemap"; curl -s -m 20 -A "$UA" "$B/sitemap.xml" | grep -oE '<loc>[^<]+' | head -60
-          echo "=== scripts de la app (busca rutas de API)"
-          for js in $(grep -oE 'src="[^"]+\.js[^"]*"' /tmp/home.html | cut -d'"' -f2 | head -8); do
-            u=$js; case $u in http*) ;; /*) u=$B$u;; *) u=$B/$u;; esac
-            curl -s -m 20 -A "$UA" "$u" | grep -oE '"/(api|ws|rest)[^"]{0,60}"|https://[a-z0-9.-]*quesito[a-z0-9./-]*' | sort -u | head -15
+          txt() { sed 's/<[^>]*>/ /g' | tr -s ' \n\t' ' '; }
+          for u in https://ayuda.quesito.pe https://www.quesito.pe/precios https://www.quesito.pe/tienda https://www.quesito.pe/version-nube \
+                   "https://ayuda.quesito.pe/search?q=api" "https://ayuda.quesito.pe/search?q=token" "https://ayuda.quesito.pe/search?q=integraci%C3%B3n" \
+                   "https://ayuda.quesito.pe/search?q=gu%C3%ADa+de+remisi%C3%B3n" "https://ayuda.quesito.pe/search?q=importar+excel" \
+                   https://blog.quesito.pe/facturacion-electronica/guia-de-remision-electronica-remitente-que-es-y-cuando-debes-emitirla; do
+            echo "=================== $u"
+            curl -sSL -m 30 -A "$UA" "$u" -o /tmp/p.html -w "HTTP %{http_code} %{size_download}B %{url_effective}\n"
+            grep -oiE 'href="[^"#]*(api|token|integra|guia|remision|import|excel|masiv)[^"]*"' /tmp/p.html | sort -u | head -25
+            txt < /tmp/p.html | grep -oiE '.{0,140}(api|token|integraci|importar|excel|masiv|plan |S/ ?[0-9]+|gu[ií]a de remisi).{0,180}' | head -12
           done
