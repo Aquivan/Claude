@@ -1,0 +1,39 @@
+# Prepara un Comprobante de Retención Electrónico en SUNAT SEE-SOL y se DETIENE en la "Vista preliminar".
+# NO EMITE: vista_cre.py no tiene ningún paso para emitir. Al subir cambios corre con prueba_vista.json.
+name: Retenciones - CRE vista preliminar (no emite)
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa agente (su Environment con claves SOL)"
+        required: true
+      solicitud:
+        description: 'JSON: {"proveedor_ruc":"…","documentos":[{"tipo":"01","serie":"F001","numero":"1","notas_credito":[{"serie":"FC01","numero":"1"}],"fecha_pago":"dd/mm/aaaa","importe_pago":0,"retencion":0}]}'
+        required: true
+  push:
+    branches: [claude/tender-wozniak-vnf3iq]
+    paths: ['.github/workflows/retenciones-cre-vista.yml', 'retenciones/emision/vista_cre.py', 'retenciones/emision/prueba_vista.json']
+permissions:
+  contents: read
+jobs:
+  vista:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.ruc || '20447969531' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: retenciones/emision
+      - name: Instalar navegador
+        run: |
+          pip install -q playwright==1.47.0
+          python -m playwright install --with-deps chromium >/dev/null
+      - name: Vista preliminar del CRE (no emite)
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          SOLICITUD: ${{ inputs.solicitud }}
+        run: |
+          cd retenciones/emision
+          if [ -n "$SOLICITUD" ]; then python vista_cre.py; else python vista_cre.py --solicitud prueba_vista.json; fi
