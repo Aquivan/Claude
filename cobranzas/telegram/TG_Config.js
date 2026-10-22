@@ -384,6 +384,7 @@ var TG_COMANDOS_ = [
   ['notificaciones', '📬 Buzón SUNAT (últimas notificaciones)'],
   ['detracciones', '🏦 Detracciones del mes'],
   ['retenciones', '🧾 Retenciones del mes'],
+  ['emitir', '🧾 Emitir comprobantes de retención pendientes'],
   ['honorarios', '🧑‍💼 Recibos por honorarios'],
   ['estado', '⚙️ Estado de las descargas de SUNAT'],
   ['descargar', '⬇ Pedir una descarga a SUNAT'],

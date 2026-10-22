@@ -85,6 +85,19 @@ function WA_entregarIA_(de, r) {
     catch (e) { WA_enviarTexto_(de, '⚠️ No pude mandar ' + (a.titulo || a.nombre) + ': ' + e.message); }
   });
   (r.descargas || []).forEach(function (d) { WA_ofrecerDescarga_(de, d); });
+  (r.botones || []).forEach(function (b) { WA_ofrecerBotones_(de, b); });
+  // 🧾 Algo quedó corriendo en Cobranzas (p. ej. emitir un comprobante de retención): avisar el resultado cuando termine.
+  if (r.seguir) { WA_props_().setProperty('WA_PROC_' + de, String(Date.now())); WA_props_().setProperty('WA_HAY_PROC', '1'); }
+}
+
+/** Mensaje con hasta 3 botones que vuelven a Cobranzas con accion=boton (id "dl:<clave>:<op>"). */
+function WA_ofrecerBotones_(de, b) {
+  var r = WA_graph_('POST', WA_prop_('WA_PHONE_ID') + '/messages', {
+    messaging_product: 'whatsapp', to: de, type: 'interactive',
+    interactive: { type: 'button', body: { text: WA_md_(b.texto).slice(0, 1024) },
+      action: { buttons: b.opciones.slice(0, 3).map(function (o) { return { type: 'reply', reply: { id: 'dl:' + b.k + ':' + o.op, title: o.titulo.slice(0, 20) } }; }) } }
+  });
+  if (!r.ok) WA_enviarTexto_(de, '⚠️ No pude mostrar los botones: ' + r.error);
 }
 
 /** 🚀 Descarga de SUNAT propuesta por la IA: se confirma con un botón, igual que en Telegram. */
@@ -103,7 +116,7 @@ function WA_boton_(de, id) {
   var p = String(id).split(':');
   if (p[0] !== 'dl') return;
   var r;
-  try { r = WA_iaLlamar_({ token: WA_iaClave_(), accion: 'boton', k: p[1], op: p[2] }); }
+  try { r = WA_iaLlamar_({ token: WA_iaClave_(), accion: 'boton', k: p[1], op: p[2], numero: de }); }
   catch (e) { r = { ok: false, error: e.message }; }
   WA_entregarIA_(de, r);
 }

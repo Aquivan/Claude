@@ -1,0 +1,54 @@
+# Comprobante de Retención Electrónico (CRE) en SUNAT SEE-SOL, pedido por el bot (Telegram / WhatsApp).
+#   modo vista  = llena todo y se detiene en la Vista preliminar (no emite).
+#   modo emitir = emite, solo con la clave de confirmación de ESA solicitud (ver retenciones/emision/emitir_cre.py).
+# Solo se lanza a pedido (workflow_dispatch); nunca al subir cambios. Una sola corrida a la vez por empresa.
+name: Retenciones - CRE (SEE-SOL)
+run-name: "CRE ${{ inputs.modo }} · ${{ inputs.ruc }}"
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa agente (su Environment con claves SOL)"
+        required: true
+      solicitud:
+        description: 'JSON: {"proveedor_ruc":"…","documentos":[{"tipo":"01","serie":"F001","numero":"1","notas_credito":[],"fecha_pago":"dd/mm/aaaa","importe_pago":0,"retencion":0}]}'
+        required: true
+      modo:
+        description: "vista (no emite) o emitir"
+        required: true
+        default: vista
+        type: choice
+        options: [vista, emitir]
+      confirmar:
+        description: "Clave de confirmación (la pone el bot cuando la persona aprueba). Obligatoria para emitir."
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: cre-${{ inputs.ruc }}
+  cancel-in-progress: false
+jobs:
+  cre:
+    name: "CRE ${{ inputs.modo }} (${{ inputs.ruc }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: retenciones/emision
+      - name: Instalar navegador
+        run: |
+          pip install -q playwright==1.47.0
+          python -m playwright install --with-deps chromium >/dev/null
+      - name: CRE ${{ inputs.modo }}
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          SOLICITUD: ${{ inputs.solicitud }}
+          CONFIRMAR: ${{ inputs.confirmar }}
+        run: |
+          cd retenciones/emision
+          if [ "${{ inputs.modo }}" = "emitir" ]; then python emitir_cre.py; else python vista_cre.py; fi

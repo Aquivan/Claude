@@ -103,13 +103,19 @@ def marco_con(pag, selector, ms=45000):
     raise RuntimeError(f"No apareció {selector} en la página de SUNAT")
 
 
+def alto(texto):
+    """Se detiene sin emitir y deja el motivo como anotación (el bot de Telegram/WhatsApp la lee y la cuenta)."""
+    print(f"::error title=CRE no emitido::{texto.replace(chr(10), ' ')}")
+    sys.exit(f"❌ {texto} · No se emitió nada.")
+
+
 def fallar(fr, texto):
     aviso = ""
     try:
         aviso = fr.evaluate(JS_AVISO)
     except Exception:
         pass
-    sys.exit(f"❌ {texto}" + (f" · SUNAT dice: {sin_datos(aviso)[:300]}" if aviso else "") + " · No se emitió nada.")
+    alto(texto + (f" · SUNAT dice: {sin_datos(aviso)[:300]}" if aviso else ""))
 
 
 def pagos_con_retencion(fr):
@@ -157,138 +163,156 @@ def agregar_notas_credito(fr, i, notas):
     fr.wait_for_timeout(800)
 
 
+def leer_solicitud(texto):
+    """Solicitud JSON → (dict, documentos, avisos autorizados). Sale con error si le falta algo."""
+    s = json.loads(texto or "{}")
+    docs = s.get("documentos") or []
+    if not re.fullmatch(r"\d{11}", str(s.get("proveedor_ruc", ""))) or not docs:
+        alto("La solicitud necesita proveedor_ruc (11 dígitos) y al menos un documento")
+    # Avisos de SUNAT que el usuario autorizó aceptar en ESTA solicitud (texto que debe aparecer en el aviso).
+    return s, docs, [simple(a) for a in (s.get("aceptar_avisos") or []) if simple(a)]
+
+
+def claves_sol():
+    ruc, usuario, clave = (os.environ.get(k, "") for k in ["SUNAT_RUC", "SUNAT_USUARIO", "SUNAT_CLAVE"])
+    if not (ruc and usuario and clave):
+        sys.exit("Faltan SUNAT_RUC / SUNAT_USUARIO / SUNAT_CLAVE")
+    return ruc, usuario, clave
+
+
+def preparar(pag, s, docs, avisos_ok, ruc, usuario, clave):
+    """Llena el comprobante en SEE-SOL y abre la Vista preliminar. NO emite.
+    Devuelve (marco de la vista preliminar, total de retención que calculó SUNAT)."""
+    hoy = datetime.now(LIMA).strftime("%d/%m/%Y")
+    total_ret = 0.0
+    # 1) Ingreso a SOL
+    pag.goto(f"{SEC}/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl={ORIG}&state={STATE}",
+             wait_until="networkidle", timeout=60000)
+    pag.fill("#txtRuc", ruc)
+    pag.fill("#txtUsuario", usuario)
+    pag.fill("#txtContrasena", clave)
+    pag.click("#btnAceptar")
+    pag.wait_for_load_state("networkidle", timeout=60000)
+    print("Ingreso a SOL: OK")
+
+    # 2) Formulario del comprobante de retención
+    pag.goto(f"{MENU}?action=execute&code={CODIGO_FORMULARIO}", wait_until="networkidle", timeout=60000)
+    fr = marco_con(pag, "#txtNumDoc")
+    print("Formulario abierto:", fr.url.split("?")[0])
+    fr.wait_for_timeout(1500)
+    if s.get("fecha_emision") and s["fecha_emision"] != hoy:
+        poner(fr, "#txtFecEmision", s["fecha_emision"])
+    fr.select_option("#cmbRegiPercep", "01")   # Tasa 3%
+    if s.get("observacion"):
+        fr.fill("#txtObs", s["observacion"][:250])
+
+    # 3) Proveedor
+    fr.fill("#txtNumDoc", str(s["proveedor_ruc"]))
+    fr.click("#btnValidar")
+    try:
+        esperar_valor(fr, "#txtRazonSocial")
+    except Exception:
+        fallar(fr, "SUNAT no validó el RUC del proveedor")
+    print("Proveedor validado por SUNAT: OK")
+
+    # 4) Cada factura pagada (con sus notas de crédito)
+    for i, d in enumerate(docs, 1):
+        fr.click("#btnAnadir")
+        try:
+            fr.wait_for_selector("#txtSerieDoc", state="visible", timeout=20000)
+        except Exception:
+            fallar(fr, "No se abrió el cuadro para agregar la factura (¿la empresa es agente de retención a esa fecha?)")
+        fr.select_option("#cmbTipoDocPerp", str(d.get("tipo", "01")))
+        fr.fill("#txtSerieDoc", str(d["serie"]).upper())
+        fr.fill("#txtNumDocDlg", str(int(str(d["numero"]))))
+        fr.click("#btnValidarDlg")
+        try:
+            esperar_valor(fr, "#txtImpTot")
+        except Exception:
+            fallar(fr, f"Documento {i}: SUNAT no lo encontró o no lo acepta")
+        previos = pagos_con_retencion(fr)
+        if previos:
+            print(f"  Documento {i}: SUNAT ya registra pagos con comprobante de retención: {', '.join(previos)}")
+            if not d.get("permitir_retencion_previa"):
+                fallar(fr, f"Documento {i}: ya tiene comprobante(s) de retención ({', '.join(previos)}). "
+                           "Revise si falta retener algo antes de seguir")
+        if d.get("notas_credito"):
+            agregar_notas_credito(fr, i, d["notas_credito"])
+        poner(fr, "#txtFecPago", d["fecha_pago"])
+        fr.wait_for_timeout(800)
+        poner(fr, "#txtImpCobro", f'{num(d["importe_pago"]):.2f}')
+        fr.wait_for_timeout(1200)
+        ret = num(valor(fr, "#txtImpPerc") or 0)
+        neto = num(valor(fr, "#txtMontoTotal") or 0)
+        tc = num(valor(fr, "#txtTipCamb") or 1)
+        esperado = num(d["retencion"]) if d.get("retencion") not in (None, "") else None
+        ok = esperado is None or abs(ret - esperado) < 0.015
+        cuadra = abs(neto + ret - num(d["importe_pago"]) * tc) < 0.02
+        print(f"Documento {i}: validado por SUNAT · retención {'= a la esperada ✅' if ok else '≠ a la esperada ❌'}"
+              f" · pago − retención = neto {'✅' if cuadra else '❌'}")
+        if not ok or not cuadra:
+            fallar(fr, f"Documento {i}: los montos no cuadran")
+        antes = fr.evaluate(JS_FILAS, "#tblDocuRela")
+        fr.click("#btnModalAddDocu")
+        agregado = False
+        for _ in range(40):   # hasta 20 s: SUNAT consulta los pagos anteriores de la factura
+            fr.wait_for_timeout(500)
+            c = fr.evaluate(JS_CONFIRMA)
+            if c and c["texto"]:   # la ventana se abre vacía y SUNAT pone el texto después
+                # Si SUNAT pregunta algo, el robot NO contesta por usted: se detiene y muestra la pregunta.
+                # Solo acepta los avisos que el usuario autorizó por escrito en la solicitud ("aceptar_avisos").
+                permitido = next((a for a in avisos_ok if a in simple(c["texto"])), None)
+                boton = "#btnModalIzq" if simple(c["izq"]) == "aceptar" else "#btnModalDer" if simple(c["der"]) == "aceptar" else ""
+                if permitido and not boton:   # por si el botón no es btnModalIzq/Der: el que diga "Aceptar" en esa ventana
+                    boton = fr.evaluate("""() => { const b = [...document.querySelectorAll('#idModalMensaje button')]
+                        .find(x => x.offsetParent !== null && x.innerText.trim().toLowerCase() === 'aceptar');
+                        if (!b) return ''; b.id = b.id || 'btnAceptarAvisoSunat'; return '#' + b.id; }""")
+                if not permitido or not boton:
+                    fallar(fr, f"Documento {i}: SUNAT pregunta «{sin_datos(c['texto'])[:300]}». El robot no responde por usted")
+                print(f"  SUNAT avisa «{sin_datos(c['texto'])[:200]}» → Aceptar (autorizado por el usuario: «{permitido}»; solo agrega la factura a la lista)")
+                fr.click(boton)
+                fr.wait_for_timeout(800)
+                continue
+            if fr.evaluate(JS_FILAS, "#tblDocuRela") > antes:
+                agregado = True
+                break
+        if not agregado:
+            c = fr.evaluate(JS_CONFIRMA)
+            fallar(fr, f"Documento {i}: no se pudo agregar (cuadro abierto: {'sí' if fr.is_visible('#txtSerieDoc') else 'no'}"
+                       + (f"; ventana de SUNAT abierta, botones [{c['izq']}] [{c['der']}]" if c else "") + ")")
+    print("Documentos en el comprobante:", fr.evaluate(JS_FILAS, "#tblDocuRela"), "de", len(docs))
+
+    # 5) Vista preliminar (aquí se detiene: este programa no emite)
+    fr.click("#btnVistPrel")
+    pag.wait_for_load_state("networkidle", timeout=60000)
+    pag.wait_for_timeout(2500)
+    vp = marco_con(pag, "body", 30000)
+    for f in pag.frames:
+        if "VistaPreliminar" in f.url or f.query_selector("button, input[type=button]"):
+            vp = f
+    return vp, round(total_ret, 2)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--solicitud", default="", help="archivo JSON (si no, variable SOLICITUD)")
     a = ap.parse_args()
-    ruc, usuario, clave = (os.environ.get(k, "") for k in ["SUNAT_RUC", "SUNAT_USUARIO", "SUNAT_CLAVE"])
-    if not (ruc and usuario and clave):
-        sys.exit("Faltan SUNAT_RUC / SUNAT_USUARIO / SUNAT_CLAVE")
-    s = json.load(open(a.solicitud, encoding="utf-8")) if a.solicitud else json.loads(os.environ.get("SOLICITUD", "{}"))
-    docs = s.get("documentos") or []
-    # Avisos de SUNAT que el usuario autorizó aceptar en ESTA solicitud (texto en minúsculas que debe aparecer en el aviso).
-    avisos_ok = [simple(a) for a in (s.get("aceptar_avisos") or []) if simple(a)]
-    if not re.fullmatch(r"\d{11}", str(s.get("proveedor_ruc", ""))) or not docs:
-        sys.exit("La solicitud necesita proveedor_ruc (11 dígitos) y al menos un documento")
+    ruc, usuario, clave = claves_sol()
+    s, docs, avisos_ok = leer_solicitud(open(a.solicitud, encoding="utf-8").read() if a.solicitud else os.environ.get("SOLICITUD", "{}"))
     print("Documentos:", len(docs), "| notas de crédito:", sum(len(d.get("notas_credito") or []) for d in docs), "| solo VISTA PRELIMINAR (no emite)")
-    hoy = datetime.now(LIMA).strftime("%d/%m/%Y")
 
     with sync_playwright() as p:
         nav = p.chromium.launch()
         ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
         pag = ctx.new_page()
         pag.on("dialog", lambda d: (print("  Diálogo del navegador:", sin_datos(d.message)[:200]), d.dismiss()))
-
-        # 1) Ingreso a SOL
-        pag.goto(f"{SEC}/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl={ORIG}&state={STATE}",
-                 wait_until="networkidle", timeout=60000)
-        pag.fill("#txtRuc", ruc)
-        pag.fill("#txtUsuario", usuario)
-        pag.fill("#txtContrasena", clave)
-        pag.click("#btnAceptar")
-        pag.wait_for_load_state("networkidle", timeout=60000)
-        print("Ingreso a SOL: OK")
-
-        # 2) Formulario del comprobante de retención
-        pag.goto(f"{MENU}?action=execute&code={CODIGO_FORMULARIO}", wait_until="networkidle", timeout=60000)
-        fr = marco_con(pag, "#txtNumDoc")
-        print("Formulario abierto:", fr.url.split("?")[0])
-        fr.wait_for_timeout(1500)
-        if s.get("fecha_emision") and s["fecha_emision"] != hoy:
-            poner(fr, "#txtFecEmision", s["fecha_emision"])
-        fr.select_option("#cmbRegiPercep", "01")   # Tasa 3%
-        if s.get("observacion"):
-            fr.fill("#txtObs", s["observacion"][:250])
-
-        # 3) Proveedor
-        fr.fill("#txtNumDoc", str(s["proveedor_ruc"]))
-        fr.click("#btnValidar")
-        try:
-            esperar_valor(fr, "#txtRazonSocial")
-        except Exception:
-            fallar(fr, "SUNAT no validó el RUC del proveedor")
-        print("Proveedor validado por SUNAT: OK")
-
-        # 4) Cada factura pagada (con sus notas de crédito)
-        for i, d in enumerate(docs, 1):
-            fr.click("#btnAnadir")
-            try:
-                fr.wait_for_selector("#txtSerieDoc", state="visible", timeout=20000)
-            except Exception:
-                fallar(fr, "No se abrió el cuadro para agregar la factura (¿la empresa es agente de retención a esa fecha?)")
-            fr.select_option("#cmbTipoDocPerp", str(d.get("tipo", "01")))
-            fr.fill("#txtSerieDoc", str(d["serie"]).upper())
-            fr.fill("#txtNumDocDlg", str(int(str(d["numero"]))))
-            fr.click("#btnValidarDlg")
-            try:
-                esperar_valor(fr, "#txtImpTot")
-            except Exception:
-                fallar(fr, f"Documento {i}: SUNAT no lo encontró o no lo acepta")
-            previos = pagos_con_retencion(fr)
-            if previos:
-                print(f"  Documento {i}: SUNAT ya registra pagos con comprobante de retención: {', '.join(previos)}")
-                if not d.get("permitir_retencion_previa"):
-                    fallar(fr, f"Documento {i}: ya tiene comprobante(s) de retención ({', '.join(previos)}). "
-                               "Revise si falta retener algo antes de seguir")
-            if d.get("notas_credito"):
-                agregar_notas_credito(fr, i, d["notas_credito"])
-            poner(fr, "#txtFecPago", d["fecha_pago"])
-            fr.wait_for_timeout(800)
-            poner(fr, "#txtImpCobro", f'{num(d["importe_pago"]):.2f}')
-            fr.wait_for_timeout(1200)
-            ret = num(valor(fr, "#txtImpPerc") or 0)
-            neto = num(valor(fr, "#txtMontoTotal") or 0)
-            tc = num(valor(fr, "#txtTipCamb") or 1)
-            esperado = num(d["retencion"]) if d.get("retencion") not in (None, "") else None
-            ok = esperado is None or abs(ret - esperado) < 0.015
-            cuadra = abs(neto + ret - num(d["importe_pago"]) * tc) < 0.02
-            print(f"Documento {i}: validado por SUNAT · retención {'= a la esperada ✅' if ok else '≠ a la esperada ❌'}"
-                  f" · pago − retención = neto {'✅' if cuadra else '❌'}")
-            if not ok or not cuadra:
-                fallar(fr, f"Documento {i}: los montos no cuadran")
-            antes = fr.evaluate(JS_FILAS, "#tblDocuRela")
-            fr.click("#btnModalAddDocu")
-            agregado = False
-            for _ in range(40):   # hasta 20 s: SUNAT consulta los pagos anteriores de la factura
-                fr.wait_for_timeout(500)
-                c = fr.evaluate(JS_CONFIRMA)
-                if c and c["texto"]:   # la ventana se abre vacía y SUNAT pone el texto después
-                    # Si SUNAT pregunta algo, el robot NO contesta por usted: se detiene y muestra la pregunta.
-                    # Solo acepta los avisos que el usuario autorizó por escrito en la solicitud ("aceptar_avisos").
-                    permitido = next((a for a in avisos_ok if a in simple(c["texto"])), None)
-                    boton = "#btnModalIzq" if simple(c["izq"]) == "aceptar" else "#btnModalDer" if simple(c["der"]) == "aceptar" else ""
-                    if permitido and not boton:   # por si el botón no es btnModalIzq/Der: el que diga "Aceptar" en esa ventana
-                        boton = fr.evaluate("""() => { const b = [...document.querySelectorAll('#idModalMensaje button')]
-                            .find(x => x.offsetParent !== null && x.innerText.trim().toLowerCase() === 'aceptar');
-                            if (!b) return ''; b.id = b.id || 'btnAceptarAvisoSunat'; return '#' + b.id; }""")
-                    if not permitido or not boton:
-                        fallar(fr, f"Documento {i}: SUNAT pregunta «{sin_datos(c['texto'])[:300]}». El robot no responde por usted")
-                    print(f"  SUNAT avisa «{sin_datos(c['texto'])[:200]}» → Aceptar (autorizado por el usuario: «{permitido}»; solo agrega la factura a la lista)")
-                    fr.click(boton)
-                    fr.wait_for_timeout(800)
-                    continue
-                if fr.evaluate(JS_FILAS, "#tblDocuRela") > antes:
-                    agregado = True
-                    break
-            if not agregado:
-                c = fr.evaluate(JS_CONFIRMA)
-                fallar(fr, f"Documento {i}: no se pudo agregar (cuadro abierto: {'sí' if fr.is_visible('#txtSerieDoc') else 'no'}"
-                           + (f"; ventana de SUNAT abierta, botones [{c['izq']}] [{c['der']}]" if c else "") + ")")
-        print("Documentos en el comprobante:", fr.evaluate(JS_FILAS, "#tblDocuRela"), "de", len(docs))
-
-        # 5) Vista preliminar (aquí se detiene: este programa no emite)
-        fr.click("#btnVistPrel")
-        pag.wait_for_load_state("networkidle", timeout=60000)
-        pag.wait_for_timeout(2500)
-        vp = marco_con(pag, "body", 30000)
-        for f in pag.frames:
-            if "VistaPreliminar" in f.url or f.query_selector("button, input[type=button]"):
-                vp = f
+        vp, total_ret = preparar(pag, s, docs, avisos_ok, ruc, usuario, clave)
         print("Vista preliminar abierta:", vp.url.split("?")[0])
         aviso = vp.evaluate(JS_AVISO)
         if aviso:
             print("Avisos de SUNAT:", sin_datos(aviso)[:400])
         print("Botones y campos de la vista preliminar (para el siguiente paso):\n  " + "\n  ".join(vp.evaluate(JS_ESTRUCTURA)))
+        print("::notice title=CRE vista::Vista preliminar lista: SUNAT aceptó todo. No se emitió nada.")
         print("\n✅ Llegó a la vista preliminar. NO se emitió nada: este programa no tiene el paso de emitir.")
 
 

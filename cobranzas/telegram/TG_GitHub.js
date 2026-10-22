@@ -243,10 +243,10 @@ function TG_confirmarDescarga_(ctx, acc, op) {
 
 /* ============================================================ seguimiento (avisar al terminar) */
 
-function TG_seguir_(chatId, wf, runId, texto) {
+function TG_seguir_(chatId, wf, runId, texto, extra) {
   var props = PropertiesService.getScriptProperties();
   var lista = JSON.parse(props.getProperty('TG_SEGUIR') || '[]');
-  lista.push({ chat: chatId, wf: wf, run: runId, texto: texto, desde: Date.now() });
+  lista.push({ chat: chatId, wf: wf, run: runId, texto: texto, desde: Date.now(), extra: extra || null });
   props.setProperty('TG_SEGUIR', JSON.stringify(lista.slice(-20)));
   TG_programarSeguimiento_(4);
 }
@@ -277,9 +277,10 @@ function TG_seguirDescargas() {
       if (!r) { if (edad < 30 * 60000) quedan.push(s); return; }
       if (r.status !== 'completed' || (s.run && r.run_attempt && r.updated_at && new Date(r.updated_at).getTime() < s.desde)) {
         if (edad < 4 * 3600000) quedan.push(s);
-        else TG_enviar_(s.chat, '⏳ ' + TG_esc_(s.texto) + ' sigue corriendo después de 4 horas: <a href="' + r.html_url + '">ver en GitHub</a>');
+        else if (String(s.chat).indexOf('wa') !== 0) TG_enviar_(s.chat, '⏳ ' + TG_esc_(s.texto) + ' sigue corriendo después de 4 horas: <a href="' + r.html_url + '">ver en GitHub</a>');
         return;
       }
+      if (s.extra && s.extra.tipo === 'cre') return TGR_avisarFin_(cfg, s, r);   // 🧾 comprobante de retención (TG_Retener.js)
       var fallidas = r.conclusion === 'failure' ? TG_ghJobsFallidos_(cfg, r.id) : [];
       var botones = fallidas.length ? [[{ text: '🔁 Reintentar lo que falló', callback_data: 'rr:' + r.id }]] : null;
       TG_enviar_(s.chat, TG_iconoRun_(r) + ' <b>' + (r.conclusion === 'success' ? 'Descarga terminada' : 'La descarga terminó con problemas') + '</b>: ' + TG_esc_(s.texto) +

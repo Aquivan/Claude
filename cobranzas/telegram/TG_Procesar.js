@@ -610,7 +610,7 @@ function TGP_wa_(q) {
     var p = PropertiesService.getScriptProperties(), m = [];
     try { m = JSON.parse(p.getProperty(TGP_PROP_MSG_ + clave) || '[]'); } catch (e) {}
     p.deleteProperty(TGP_PROP_MSG_ + clave);
-    var pendiente = Object.keys(p.getProperties()).some(function (k) {
+    var pendiente = TGR_pendienteWA_(clave) || Object.keys(p.getProperties()).some(function (k) {
       if (k.indexOf(TGP_PROP_JOB_) !== 0) return false;
       try { return JSON.parse(p.getProperty(k)).clave === clave; } catch (e) { return false; }
     });

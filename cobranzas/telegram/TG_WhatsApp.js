@@ -38,7 +38,7 @@ function TGW_doPost_(e) {
     var pu = JSON.parse((e.postData && e.postData.contents) || '{}')._pu;
     if (pu && /^https:\/\/script\.google\.com\//.test(pu) && props.getProperty('TGP_PROCESAR_URL') !== pu) props.setProperty('TGP_PROCESAR_URL', pu);
   } catch (err) {}
-  if (p.accion === 'boton') return TGW_json_(TGW_boton_(p.k, p.op));
+  if (p.accion === 'boton') return TGW_json_(TGW_boton_(p.k, p.op, p.numero));
   if (p.accion === 'procesar' || p.accion === 'deshacer') {   // 🧾 Procesar documento · ↩️ Deshacer (TG_Procesar.js, TG_Deshacer.js)
     try { var q0 = JSON.parse(e.postData.contents || '{}'); return TGW_json_(p.accion === 'procesar' ? TGP_wa_(q0) : TGU_wa_(q0)); }
     catch (err) { return TGW_json_({ ok: false, error: err.message }); }
@@ -85,6 +85,8 @@ function TGW_responder_(q) {
     origen: '📲 whatsapp ' + (q.nombre || q.numero), modelo: cfg.modelo || '', tg: { ctx: ctx, archivos: [], acciones: [], cfg: cfg }
   };
   var texto = String(q.texto || '').trim();
+  // 🧾 "emitir" / "retenciones por emitir": lista de comprobantes de retención pendientes con sus botones.
+  if (/^(emitir|retener|cre|retenciones por emitir|emitir retenciones)\b/i.test(texto)) return TGR_listaWA_(ss);
   // 🎤 Nota de voz: se transcribe igual que en Telegram y se pregunta lo dicho.
   var dicho = '';
   if (q.audio && q.audio.base64) {
@@ -153,8 +155,9 @@ function TGW_archivo_(blob, titulo) {
 }
 
 /** Botón 🚀 Sí, descargar / ✖ Cancelar tocado en WhatsApp. */
-function TGW_boton_(k, op) {
+function TGW_boton_(k, op, numero) {
   var acc = TG_leerBoton_(k);
+  if (acc && acc.t === 'cre') return TGR_botonWA_(acc, k, op, numero);   // 🧾 comprobante de retención (TG_Retener.js)
   if (!acc || acc.t !== 'descarga') return { ok: true, respuesta: 'Ese botón ya venció (duran 6 horas). Pídamelo de nuevo.' };
   if (TG_yaVisto_('wadesc' + k)) return { ok: true, respuesta: 'Esa descarga ya se pidió.' };
   if (op !== 'si') return { ok: true, respuesta: 'Listo, no pedí nada.' };

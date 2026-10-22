@@ -274,7 +274,8 @@ function TG_enviarRetenciones_(ctx, empresa) {
       }
     });
   } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ No pude leer Retenciones: ' + TG_esc_(e.message)); }
-  TG_enviar_(ctx.chatId, html, [[{ text: '💬 Retenciones por aplicar', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: 'Qué retenciones recibidas de SUNAT no se aplicaron a ninguna factura por cobrar, y qué facturas con retención todavía no tienen su CRE.' }) }]]);
+  TG_enviar_(ctx.chatId, html, [[{ text: '🧾 Por emitir', callback_data: 'c:emitir' },
+    { text: '💬 Retenciones por aplicar', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: 'Qué retenciones recibidas de SUNAT no se aplicaron a ninguna factura por cobrar, y qué facturas con retención todavía no tienen su CRE.' }) }]]);
 }
 
 function TG_enviarHonorarios_(ctx, empresa) {

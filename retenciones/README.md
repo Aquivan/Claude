@@ -15,7 +15,19 @@ No comparte código ni hojas con Cobranzas, SIRE ni Vouchers.
    Se guardan en `retenciones/datos/<RUC>/<AAAA>/<MM>/`.
 2. **La hoja** (Apps Script en `apps_script/`) lee esos archivos y arma las pestañas, y copia los PDF a Drive.
 
-## Emitir comprobantes de retención (en preparación)
+## Emitir comprobantes de retención
+
+**Desde el bot:** en Telegram `/emitir` (o el botón 🧾 Por emitir de `/retenciones`); en WhatsApp escriba **emitir**.
+Lista los pagos de este mes que se hicieron sin su CRE (según la hoja de Cobranzas) con dos botones:
+**👁 Vista previa** (llena el CRE en SUNAT y se detiene antes de Emitir) y **✅ Emitir** (pide "Sí, emitir").
+En Telegram solo un administrador puede emitir; en WhatsApp, los números que un administrador autorice con
+`/emitirwa <número>`. El resultado llega al mismo chat: "✅ Comprobante de retención emitido: E001-…" o el motivo.
+
+`emision/emitir_cre.py` (flujo `retenciones-cre.yml`, modo emitir) emite solo si: la clave de confirmación es la
+de ESA solicitud (sha256 de empresa|proveedor|total, la pone el bot al confirmar), SUNAT calcula exactamente el total
+aprobado, la factura no tiene ya un comprobante (lo consulta en SUNAT) y no hay avisos sin autorizar.
+Los pagos de meses anteriores ya no se pueden emitir por SEE-SOL y los de dólares se hacen a mano.
+
 
 `emision/vista_cre.py` prepara un CRE en **SEE-SOL** (menú 11.5.8.1.1 "Emitir Comprobante de Retención") con un navegador
 real y **se detiene en la Vista preliminar: no emite** (no tiene ese paso). Valida el RUC del proveedor, agrega cada
