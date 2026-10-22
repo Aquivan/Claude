@@ -64,8 +64,42 @@ var TG_ALIAS_ = { buzon: 'notificaciones', notificacion: 'notificaciones', mensa
   cambio: 'tipo_cambio', tc: 'tipo_cambio', padron: 'padron_ruc', recordar: 'recordatorio', archivo_enviar: 'enviar_archivo', enviar: 'enviar_archivo', mandar_archivo: 'enviar_archivo',
   imagen_voucher: 'enviar_voucher', vencimiento: 'vencimientos', cronograma: 'vencimientos', obligaciones: 'vencimientos', presentado: 'marcar_presentado', marcar: 'marcar_presentado', foto_voucher: 'enviar_voucher', adjuntar_voucher: 'enviar_voucher', ver_voucher: 'enviar_voucher', mandar_voucher: 'enviar_voucher', voucher_imagen: 'enviar_voucher' };
 
+/* ============================================================ responder (citar) un mensaje */
+
+/** Texto plano (sin HTML), recortado. */
+function TG_plano_(t, max) {
+  return String(t || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max || 1500);
+}
+
+/** La pregunta para la IA cuando la persona responde (cita) un mensaje anterior: va con lo citado. */
+function TG_conCita_(texto, citado) {
+  citado = TG_plano_(citado, 1500);
+  if (!citado) return texto;
+  return 'La persona RESPONDE (cita) este mensaje anterior del chat:\n«' + citado + '»\n\n' +
+    'Su mensaje se refiere a lo citado ("esta factura", "este voucher", "eso" = lo de arriba; usa sus datos —serie, RUC, ' +
+    'operación, monto, empresa— para buscar): ' + (texto || '(sin texto)');
+}
+
+/** Cómo queda la pregunta en la memoria de la conversación (con una pista de lo citado). */
+function TG_preguntaParaMemoria_(texto, citado) {
+  var c = TG_plano_(citado, 200).replace(/\s+/g, ' ');
+  return (texto || '(archivos adjuntos)') + (c ? ' [respondiendo a: «' + c + '»]' : '');
+}
+
+/** Agrega algo a la memoria de la IA de este chat (ej. lo que encontró 🧾 Procesar documento). */
+function TG_recordarEnChat_(clave, pregunta, respuesta) {
+  if (!clave) return;
+  try {
+    var ses = TG_sesion_(clave);
+    ses.hist = (ses.hist || []).concat([{ p: pregunta, r: respuesta }]);
+    TG_guardarSesion_(clave, ses);
+  } catch (e) { console.warn('Memoria del chat: ' + e.message); }
+}
+
 /**
  * Pregunta a la IA y contesta en el chat. adjs: archivos ya guardados en Drive [{id, nombre, mime}].
+ * ctx.citado: texto del mensaje que la persona respondió (citó), si respondió a uno.
  */
 function TG_preguntar_(ctx, texto, adjs) {
   var chatId = ctx.chatId;
@@ -90,7 +124,7 @@ function TG_preguntar_(ctx, texto, adjs) {
   // La IA ve los archivos nuevos y también los anteriores de la conversación (para preguntas de seguimiento).
   var anteriores = (ses.adj || []).filter(function (a) { return !(adjs || []).some(function (b) { return b.id === a.id; }); }).slice(-4);
   var todos = anteriores.concat(adjs || []).map(function (a) { return { id: a.id, nombre: a.nombre, mime: a.mime }; });
-  var pregunta = texto || (adjs && adjs.length ? 'Analiza el/los archivo(s) adjunto(s) que acabo de mandar: qué son, si ya están registrados en la hoja de vouchers, ' +
+  var pregunta = ctx.citado ? TG_conCita_(texto, ctx.citado) : texto || (adjs && adjs.length ? 'Analiza el/los archivo(s) adjunto(s) que acabo de mandar: qué son, si ya están registrados en la hoja de vouchers, ' +
     'si corresponden a alguna factura (¿ya se pagó?, ¿tiene N/C, retención o detracción?) y qué falta registrar.' : '');
   var r = CHAT_enviarEn_(ctx.ss, { texto: pregunta, nuevos: [], anteriores: todos, historial: ses.hist || [] }, op);
   TG_borrar_(chatId, estadoId);
@@ -107,7 +141,7 @@ function TG_preguntar_(ctx, texto, adjs) {
   }
   TG_mostrarRespuesta_(ctx, r, op.tg, Math.round((Date.now() - t0) / 1000));
   ses = TG_sesion_(chatId);
-  ses.hist = (ses.hist || []).concat([{ p: texto || '(archivos adjuntos)', r: r.respuesta }]);
+  ses.hist = (ses.hist || []).concat([{ p: TG_preguntaParaMemoria_(texto, ctx.citado), r: r.respuesta }]);
   ses.adj = (ses.adj || []).concat((adjs || []).filter(function (a) { return !(ses.adj || []).some(function (b) { return b.id === a.id; }); }));
   TG_guardarSesion_(chatId, ses);
 }

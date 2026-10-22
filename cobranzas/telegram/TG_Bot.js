@@ -82,6 +82,8 @@ function TG_manejar_(u) {
   }
   TG_marcarUso_(ss, usuario);
   var ctx = { ss: ss, chatId: chatId, usuario: usuario, nombre: nombre, msgId: m.message_id };
+  // ↩️ Respondió (citó) un mensaje: la IA recibe ese texto (o solo la parte que citó) para saber de qué habla.
+  if (m.reply_to_message) ctx.citado = (m.quote && m.quote.text) || m.reply_to_message.text || m.reply_to_message.caption || '';
 
   // Archivos: fotos, documentos, notas de voz y audios.
   if (m.photo || m.document || m.voice || m.audio || m.video_note) return TG_alArchivo_(ctx, m, texto);

@@ -137,7 +137,27 @@ function TGP_analizar_(ss, adjs, op) {
     nombre: op.nombre || (nuevos.length ? nuevos[0].nombre : ''), ordenante: op.nombre ? '' : (nuevos.length ? nuevos[0].ordenante : ''),
     fecha: op.fecha || TGE_hoy_(), resumen: resumenArch, pestana: /^(foto|original)$/.test(op.pestana || '') ? op.pestana : '' };
   var k = TG_guardarBoton_(plan);
-  return TGP_texto_(k, plan);
+  var res = TGP_texto_(k, plan);
+  TGP_recordar_(op.clave, adjs, facturasTodas, items, res.texto);
+  return res;
+}
+
+/**
+ * 🧠 Lo que se encontró queda en la memoria de la IA de ese chat: así "¿esta factura ya está retenida?"
+ * (o responder al resumen) se entiende aunque la IA no haya hecho el análisis.
+ */
+function TGP_recordar_(clave, adjs, facturas, items, html) {
+  var hechos = facturas.map(function (f) {
+    return 'Factura ' + (f.serie_numero || '?') + (f.fecha ? ' del ' + f.fecha : '') + ' emitida por ' + (f.emisor || '?') + ' (RUC ' + (f.ruc_emisor || '?') + ')' +
+      ' a ' + (f.receptor || '?') + ' (RUC ' + (f.ruc_receptor || '?') + ')' + (f.monto ? ', total ' + (f.moneda || '') + ' ' + f.monto : '') +
+      (f.retencion ? ', retención indicada ' + f.retencion : '') + (f.detraccion ? ', detracción indicada ' + f.detraccion : '');
+  }).concat(items.map(function (it) {
+    return 'Voucher ' + it.v.banco + ' op ' + it.v.operacion + ' del ' + it.v.fecha + ' por ' + it.v.moneda + ' ' + it.v.monto +
+      (it.fuente ? ': ya registrado en ' + it.fuente + (it.facturaActual ? ' con factura ' + it.facturaActual : '') : it.tipo === 'nuevo' ? ': todavía NO registrado' : ': dudoso') +
+      (it.fac && it.fac.serie ? ' (paga la factura ' + it.fac.serie + ')' : '');
+  }));
+  TG_recordarEnChat_(clave, '(mandé ' + adjs.length + ' archivo(s) y el bot los revisó con 🧾 Procesar documento)',
+    (hechos.length ? hechos.join('.\n') + '.\n\n' : '') + TG_plano_(html, 1200));
 }
 
 /**
@@ -481,6 +501,7 @@ function TGP_revisar_(ss, job) {
 }
 
 function TGP_avisar_(job, html) {
+  TG_recordarEnChat_(job.clave, '(resultado de 🧾 Procesar documento)', TG_plano_(html, 1500));   // 🧠 memoria de la IA
   if (job.canal === 'tg') {
     TG_enviar_(job.destino, html, [[{ text: '↩️ Deshacer todo', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]]);
     return;
@@ -514,7 +535,9 @@ function TGP_nombreDirectoTG_(ctx, ses, texto, m) {
   if (!p) return false;
   var mn = texto.match(/^\s*nombre\s*[:=]?\s+(.+)$/i) || texto.match(/^\s*(\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{2,4})?\s+\S.*)$/);
   var alResumen = m.reply_to_message && p.msg && m.reply_to_message.message_id === p.msg;
-  if (!mn && !(alResumen && texto.trim().split(/\s+/).length <= 6)) return false;
+  // Una pregunta respondiendo al resumen ("¿esta factura ya está retenida?") va a la IA, no es un nombre.
+  var pregunta = /[?¿]/.test(texto) || /^\s*(qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]nto?s?|cu[aá]ndo|d[oó]nde|qui[eé]n|por\s?qu[eé]|est[aá]n?|ya|tiene|hay|es|son|se|me|dime|dame|mu[eé]strame|busca|revisa|y)\b/i.test(texto);
+  if (!mn && !(alResumen && !pregunta && texto.trim().split(/\s+/).length <= 6)) return false;
   TGP_alNombreTG_(ctx, { tipo: 'procnombre', k: k }, mn ? mn[1] : texto);
   return true;
 }

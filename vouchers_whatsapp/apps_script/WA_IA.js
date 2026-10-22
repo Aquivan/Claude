@@ -48,7 +48,8 @@ function WA_preguntarIA_(m, de, nombre, texto, adjuntos, audio) {
   try { WA_escribiendo_(m.id); } catch (e) {}
   var r;
   try {
-    r = WA_iaLlamar_({ token: WA_iaClave_() }, { id: m.id, numero: de, nombre: nombre, texto: texto, adjuntos: adjuntos || [], audio: audio || null });
+    // citado: el mensaje que la persona respondió (citó), para que la IA sepa de qué factura/voucher habla.
+    r = WA_iaLlamar_({ token: WA_iaClave_() }, { id: m.id, numero: de, nombre: nombre, texto: texto, adjuntos: adjuntos || [], audio: audio || null, citado: WA_textoCitado_(m) });
   } catch (e) {
     // Lo más común: la IA tardó más de 60 s. Sigue trabajando en Cobranzas; WA_cadaMinuto busca el resultado.
     if (/clave|conectar/i.test(e.message)) { WA_enviarTexto_(de, '⚠️ ' + e.message); return; }
