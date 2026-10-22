@@ -138,6 +138,8 @@ def main():
         sys.exit("Faltan SUNAT_RUC / SUNAT_USUARIO / SUNAT_CLAVE")
     s = json.load(open(a.solicitud, encoding="utf-8")) if a.solicitud else json.loads(os.environ.get("SOLICITUD", "{}"))
     docs = s.get("documentos") or []
+    # Avisos de SUNAT que el usuario autorizó aceptar en ESTA solicitud (texto en minúsculas que debe aparecer en el aviso).
+    avisos_ok = [str(a).lower() for a in (s.get("aceptar_avisos") or []) if str(a).strip()]
     if not re.fullmatch(r"\d{11}", str(s.get("proveedor_ruc", ""))) or not docs:
         sys.exit("La solicitud necesita proveedor_ruc (11 dígitos) y al menos un documento")
     print("Documentos:", len(docs), "| notas de crédito:", sum(len(d.get("notas_credito") or []) for d in docs), "| solo VISTA PRELIMINAR (no emite)")
@@ -217,9 +219,16 @@ def main():
                 fr.wait_for_timeout(500)
                 c = fr.evaluate(JS_CONFIRMA)
                 if c and c["texto"]:   # la ventana se abre vacía y SUNAT pone el texto después
-                    # Si SUNAT pregunta algo (p. ej. "ya hay pagos con retención de esta factura, ¿continuar?"), el robot
-                    # NO contesta por usted: se detiene y muestra la pregunta.
-                    fallar(fr, f"Documento {i}: SUNAT pregunta «{sin_datos(c['texto'])[:300]}». El robot no responde por usted")
+                    # Si SUNAT pregunta algo, el robot NO contesta por usted: se detiene y muestra la pregunta.
+                    # Solo acepta los avisos que el usuario autorizó por escrito en la solicitud ("aceptar_avisos").
+                    permitido = next((a for a in avisos_ok if a in c["texto"].lower()), None)
+                    boton = "#btnModalIzq" if c["izq"].lower() == "aceptar" else "#btnModalDer" if c["der"].lower() == "aceptar" else ""
+                    if not permitido or not boton:
+                        fallar(fr, f"Documento {i}: SUNAT pregunta «{sin_datos(c['texto'])[:300]}». El robot no responde por usted")
+                    print(f"  SUNAT avisa «{sin_datos(c['texto'])[:200]}» → Aceptar (autorizado por el usuario: «{permitido}»; solo agrega la factura a la lista)")
+                    fr.click(boton)
+                    fr.wait_for_timeout(800)
+                    continue
                 if fr.evaluate(JS_FILAS, "#tblDocuRela") > antes:
                     agregado = True
                     break

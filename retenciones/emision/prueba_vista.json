@@ -1,4 +1,5 @@
 {"empresa_ruc": "20609309793", "proveedor_ruc": "20605062670", "observacion": "",
+ "aceptar_avisos": ["mayor determinación"],
  "documentos": [
   {"tipo": "01", "serie": "E001", "numero": "2086", "notas_credito": [{"serie": "E001", "numero": "132"}],
    "fecha_pago": "19/10/2026", "importe_pago": 18432.00, "retencion": 552.96},
