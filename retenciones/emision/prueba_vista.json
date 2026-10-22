@@ -1,7 +1,3 @@
-{"empresa_ruc": "20609309793", "proveedor_ruc": "20605062670", "observacion": "",
- "aceptar_avisos": ["mayor determinación"],
+{"empresa_ruc": "20447969531", "proveedor_ruc": "20615366791", "observacion": "",
  "documentos": [
-  {"tipo": "01", "serie": "E001", "numero": "2086", "notas_credito": [{"serie": "E001", "numero": "132"}],
-   "fecha_pago": "19/10/2026", "importe_pago": 18432.00, "retencion": 552.96},
-  {"tipo": "01", "serie": "E001", "numero": "2087", "fecha_pago": "19/10/2026", "importe_pago": 3916.80, "retencion": 117.50},
-  {"tipo": "01", "serie": "E001", "numero": "2088", "fecha_pago": "19/10/2026", "importe_pago": 446.98, "retencion": 13.41}]}
+  {"tipo": "01", "serie": "F001", "numero": "109", "fecha_pago": "19/10/2026", "importe_pago": 4080.00, "retencion": 122.40}]}
