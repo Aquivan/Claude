@@ -1,0 +1,30 @@
+# Investigación (camino A, SEE-SOL): SOLO LECTURA. Ubica la opción de emisión del Comprobante de Retención
+# Electrónico en SOL y muestra los NOMBRES de sus campos. No llena ni envía nada; no imprime valores ni claves.
+name: Retenciones - sondeo emisión CRE (SOL, solo lectura)
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa agente (su Environment con claves SOL)"
+        required: true
+        default: '20447969531'
+  push:
+    branches: [claude/tender-wozniak-vnf3iq]
+    paths: ['.github/workflows/retenciones-emision-sondeo.yml', 'retenciones/emision/sondeo_sol.py']
+permissions:
+  contents: read
+jobs:
+  sondeo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: ${{ inputs.ruc || '20447969531' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: retenciones
+      - name: Sondeo SEE-SOL (solo lectura)
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+        run: python3 retenciones/emision/sondeo_sol.py
