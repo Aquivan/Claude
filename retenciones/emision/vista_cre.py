@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import re
+import unicodedata
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -55,6 +56,12 @@ JS_CONFIRMA = """() => { const m = document.querySelector('#idModalMensaje');
   const caja = m.querySelector('.modal-content') || m;
   return {texto: caja.innerText.replace(/\\s+/g, ' ').trim(),
           der: d && d.offsetParent !== null ? d.innerText.trim() : '', izq: i && i.offsetParent !== null ? i.innerText.trim() : ''}; }"""
+
+
+def simple(t):
+    """Minúsculas, sin tildes y con un solo espacio (SUNAT a veces escribe las tildes con otra codificación)."""
+    t = unicodedata.normalize("NFKD", str(t or "")).encode("ascii", "ignore").decode()
+    return re.sub(r"\s+", " ", t).strip().lower()
 
 
 def sin_datos(t):
@@ -139,7 +146,7 @@ def main():
     s = json.load(open(a.solicitud, encoding="utf-8")) if a.solicitud else json.loads(os.environ.get("SOLICITUD", "{}"))
     docs = s.get("documentos") or []
     # Avisos de SUNAT que el usuario autorizó aceptar en ESTA solicitud (texto en minúsculas que debe aparecer en el aviso).
-    avisos_ok = [str(a).lower() for a in (s.get("aceptar_avisos") or []) if str(a).strip()]
+    avisos_ok = [simple(a) for a in (s.get("aceptar_avisos") or []) if simple(a)]
     if not re.fullmatch(r"\d{11}", str(s.get("proveedor_ruc", ""))) or not docs:
         sys.exit("La solicitud necesita proveedor_ruc (11 dígitos) y al menos un documento")
     print("Documentos:", len(docs), "| notas de crédito:", sum(len(d.get("notas_credito") or []) for d in docs), "| solo VISTA PRELIMINAR (no emite)")
@@ -221,8 +228,12 @@ def main():
                 if c and c["texto"]:   # la ventana se abre vacía y SUNAT pone el texto después
                     # Si SUNAT pregunta algo, el robot NO contesta por usted: se detiene y muestra la pregunta.
                     # Solo acepta los avisos que el usuario autorizó por escrito en la solicitud ("aceptar_avisos").
-                    permitido = next((a for a in avisos_ok if a in c["texto"].lower()), None)
-                    boton = "#btnModalIzq" if c["izq"].lower() == "aceptar" else "#btnModalDer" if c["der"].lower() == "aceptar" else ""
+                    permitido = next((a for a in avisos_ok if a in simple(c["texto"])), None)
+                    boton = "#btnModalIzq" if simple(c["izq"]) == "aceptar" else "#btnModalDer" if simple(c["der"]) == "aceptar" else ""
+                    if permitido and not boton:   # por si el botón no es btnModalIzq/Der: el que diga "Aceptar" en esa ventana
+                        boton = fr.evaluate("""() => { const b = [...document.querySelectorAll('#idModalMensaje button')]
+                            .find(x => x.offsetParent !== null && x.innerText.trim().toLowerCase() === 'aceptar');
+                            if (!b) return ''; b.id = b.id || 'btnAceptarAvisoSunat'; return '#' + b.id; }""")
                     if not permitido or not boton:
                         fallar(fr, f"Documento {i}: SUNAT pregunta «{sin_datos(c['texto'])[:300]}». El robot no responde por usted")
                     print(f"  SUNAT avisa «{sin_datos(c['texto'])[:200]}» → Aceptar (autorizado por el usuario: «{permitido}»; solo agrega la factura a la lista)")
