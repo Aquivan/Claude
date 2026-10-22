@@ -101,6 +101,10 @@ var TGH_ = {
       nota: 'Queda PROPUESTA: el usuario verá un botón 🚀 para confirmarla. En tu respuesta dile qué se va a descargar y que la confirme con el botón.' };
   },
 
+  proponer_retencion: function (c, a) {   // 🧾 comprobante de retención: propuesta con botones (TG_Retener.js)
+    return TGR_paraIA_(c, a);
+  },
+
   tipo_cambio: function () {
     var tc = TG_tipoCambio_();
     return { columnas: ['fecha', 'compra', 'venta', 'fuente'], filas: [[tc.fecha, tc.compra, tc.venta, 'SUNAT']] };

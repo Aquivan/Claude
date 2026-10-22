@@ -135,15 +135,142 @@ function TGR_comandoTG_(ctx) {
   var r;
   try { r = TGR_pendientes_(ctx.ss); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ No pude leer las retenciones: ' + TG_esc_(e.message)); }
   if (!r.lista.length) return TG_enviar_(ctx.chatId, TGR_encabezado_(r) + '\n\n✅ No hay pagos de este mes pendientes de comprobante.');
+  TGR_proponerTG_(ctx, r.lista, TGR_encabezado_(r));
+}
+
+/** Manda las propuestas con sus botones 👁 Vista previa / ✅ Emitir (lo usan /emitir, el pedido escrito y la IA). */
+function TGR_proponerTG_(ctx, lista, encabezado) {
   var filas = [], lineas = [];
-  r.lista.slice(0, TGR_MAX_).forEach(function (p, i) {
+  lista.slice(0, TGR_MAX_).forEach(function (p, i) {
     var k = TG_guardarBoton_({ t: 'cre', p: p });
     lineas.push(TGR_textoPropuesta_(p, i + 1));
     filas.push([{ text: '👁 ' + (i + 1) + ' Vista previa', callback_data: 'k:' + k + ':vp' }, { text: '✅ ' + (i + 1) + ' Emitir', callback_data: 'k:' + k + ':em' }]);
   });
-  TG_enviar_(ctx.chatId, TGR_encabezado_(r) + '\n\n' + lineas.join('\n\n') +
-    (r.lista.length > TGR_MAX_ ? '\n\n… y ' + (r.lista.length - TGR_MAX_) + ' más (emita estos primero).' : '') +
+  TG_enviar_(ctx.chatId, encabezado + '\n\n' + lineas.join('\n\n') +
+    (lista.length > TGR_MAX_ ? '\n\n… y ' + (lista.length - TGR_MAX_) + ' más (emita estos primero).' : '') +
     '\n\n👁 <i>Vista previa</i> llena el comprobante en SUNAT sin emitir. ✅ <i>Emitir</i> le pide confirmar antes.', filas);
+}
+
+/* ============================================================ pedido escrito o desde la IA */
+
+// "emite la retención de F001-215", "puedes emitir retención en sunat", "genera el CRE" (no "¿ya está emitida…?").
+var TGR_PIDE_RX_ = /\b(emitir|emite|emita|emitas|em[ií]te(la|lo|las|los|me)\w*|generar|genera|genere|gen[eé]ra(la|lo)\w*|hacer|haz|hazme|sacar|saca|s[aá]ca(la|lo)\w*)\b/i;
+var TGR_CRE_RX_ = /\b(retenci[oó]n(es)?|cre)\b/i;
+
+/** ¿El texto pide emitir un comprobante de retención? */
+function TGR_esPedido_(texto) {
+  var t = String(texto || '');
+  if (/^\s*\/?(emitir|retener|cre|retenciones por emitir|emitir retenciones)\s*$/i.test(t)) return true;
+  return TGR_PIDE_RX_.test(t) && TGR_CRE_RX_.test(t) && !/emitid[oa]s?\b/i.test(t);
+}
+
+/** "F001-215", "01_F001-00000215", "E001 - 4054" → "F001-215" (sin ceros a la izquierda). '' si no hay. */
+function TGR_normDoc_(t) {
+  var m = String(t || '').toUpperCase().match(/\b([FE][A-Z0-9]{3})\s*-\s*0*(\d{1,8})\b/) || String(t || '').toUpperCase().match(/_([FE][A-Z0-9]{3})-0*(\d{1,8})\b/);
+  return m ? m[1] + '-' + Number(m[2]) : '';
+}
+
+/**
+ * Busca qué comprobante emitir. q = {doc:'F001-215', empresa:RUC, proveedor:texto}.
+ * → {lista:[propuesta]} si hay algo que emitir, o {motivo:'…', filas:[…]} explicando por qué no (según la hoja).
+ */
+function TGR_buscar_(ss, cob, q) {
+  var r = TGR_pendientes_(ss);
+  var lista = r.lista.filter(function (p) {
+    if (q.doc && !p.s.documentos.some(function (d) { return d.serie + '-' + Number(d.numero) === q.doc; })) return false;
+    if (q.empresa && p.s.empresa_ruc !== q.empresa) return false;
+    if (q.proveedor && !ANA_coincide_(q.proveedor, p.s.proveedor_ruc, p.proveedor)) return false;
+    return true;
+  });
+  if (lista.length) return { lista: lista, r: r };
+  if (!q.doc) return { motivo: r.lista.length ? 'Con esos datos no encontré un pago pendiente de comprobante.' : 'No hay pagos de este mes pendientes de comprobante de retención.', filas: [], r: r };
+  return TGR_porQueNo_(ss, q, r);
+}
+
+/** Por qué una factura no está para emitir: lo que dice la hoja (📋 Documentos y la parte de vouchers de _Retenciones datos). */
+function TGR_porQueNo_(ss, q, r) {
+  var sh = ss.getSheetByName(HOJA.DOCS), filas = [];
+  if (sh && sh.getLastRow() > 1) {
+    var v = sh.getRange(1, 1, sh.getLastRow(), ENC_DOCS_.length).getValues(), I = {};
+    v[0].forEach(function (h, j) { I[h] = j; });
+    v.slice(1).forEach(function (x) {
+      if (x[I['Tipo']] !== 'Por pagar' || TGR_normDoc_(x[I['Documento']]) !== q.doc) return;
+      filas.push({ empresa: String(x[I['Empresa']]), contraparte: String(x[I['Contraparte']]), documento: String(x[I['Documento']]),
+        total: aNumero_(x[I['Total']]), pagado: aNumero_(x[I['Pagado']]), estado: String(x[I['Estado']]),
+        retener: String(x[I['¿Retener? (IGV 3%)']] || ''), esperada: aNumero_(x[I['Retención esperada S/']]) });
+    });
+  }
+  if (!filas.length) return { motivo: 'No encontré la factura ' + q.doc + ' en Cuentas por Pagar (📋 Documentos). Si es nueva, actualice la hoja de Cobranzas.', filas: [], r: r };
+  // Si la misma serie-número está en más de una fila (otra empresa del grupo), manda la que la hoja evaluó para retención.
+  filas.sort(function (a, b) { return (b.retener ? 1 : 0) - (a.retener ? 1 : 0); });
+  var f = filas[0], t = f.retener, motivo;
+  if (!t) motivo = 'La hoja no evalúa retención para esta factura: la empresa compradora no era agente de retención en esa fecha.';
+  else if (/^No:/.test(t)) motivo = 'No corresponde emitir comprobante de retención: ' + t.replace(/^No:\s*/, '') + ' (según la hoja de Cobranzas).';
+  else if (/^✅/.test(t)) motivo = 'Ya está retenida: ' + t + '.';
+  else if (/^⏳/.test(t)) motivo = 'Todavía no se pagó: se retiene S/ ' + TG_num_(f.esperada) + ' al pagarla (paga el total menos la retención y emite el comprobante ese mes).';
+  else {
+    motivo = 'La hoja la marca "' + t + '" (retención S/ ' + TG_num_(f.esperada) + '), pero no armé el comprobante: ';
+    var vs = TGR_vouchersDe_(ss, q.doc), hoy = new Date(Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd') + 'T12:00:00');
+    var minPago = new Date(hoy.getTime() - 5 * 864e5); minPago = new Date(minPago.getFullYear(), minPago.getMonth(), 1);
+    if (!vs.length) motivo += 'en la hoja no hay un voucher aplicado a esta factura. Registre el voucher (o actualice Cobranzas) y vuelva a pedirlo.';
+    else if (vs.some(function (x) { return x.moneda !== 'PEN'; })) motivo += 'el pago está en dólares: hágalo a mano en SOL.';
+    else if (vs.every(function (x) { return x.fecha && x.fecha < minPago; })) motivo += 'el pago es del ' + Utilities.formatDate(vs[0].fecha, 'America/Lima', 'dd/MM/yyyy') +
+      ' y SEE-SOL solo emite comprobantes con pagos del mes en curso: hágalo con su contador.';
+    else motivo += 'al voucher le falta un dato (empresa, fecha o monto aplicado). Revíselo en 🧾 Retenciones.';
+  }
+  return { motivo: motivo, filas: filas, r: r };
+}
+
+/** Vouchers (parte "Debemos retener" de _Retenciones datos) que pagaron esa factura: [{fecha, moneda, situacion}]. */
+function TGR_vouchersDe_(ss, doc) {
+  var sh = ss.getSheetByName('_Retenciones datos'), out = [];
+  if (!sh || sh.getLastRow() < 2) return out;
+  var v = sh.getRange(1, 1, sh.getLastRow(), Math.min(sh.getLastColumn(), 47)).getValues();
+  var enc = v[0].map(String), c0 = enc.indexOf('Empresa', 30);
+  if (c0 < 0) return out;
+  var I = {}; enc.slice(c0, c0 + 16).forEach(function (h, j) { I[h] = c0 + j; });
+  v.slice(1).forEach(function (r) {
+    if (String(r[I['Lado']]) !== 'Debemos retener') return;
+    var docs = String(r[I['Facturas que pagó (sujetas)']]).split(/\s*,\s*/).map(TGR_normDoc_);
+    if (docs.indexOf(doc) >= 0) out.push({ fecha: aFecha_(r[I['Fecha']]), moneda: String(r[I['Moneda']]), situacion: String(r[I['Situación']]) });
+  });
+  return out;
+}
+
+/** Telegram: texto que pide emitir una retención (con la factura escrita o en el mensaje citado). true si lo atendió. */
+function TGR_atajoTG_(ctx, texto) {
+  if (!TGR_esPedido_(texto)) return false;
+  TG_accion_(ctx.chatId, 'typing');
+  var cob = TG_cfg_(ctx.ss).cob, x;
+  var q = { doc: TGR_normDoc_(texto) || TGR_normDoc_(ctx.citado), empresa: '' };
+  try { x = TGR_buscar_(ctx.ss, cob, q); } catch (e) { TG_enviar_(ctx.chatId, '⚠️ No pude leer las retenciones: ' + TG_esc_(e.message)); return true; }
+  if (x.lista) { TGR_proponerTG_(ctx, x.lista, '🧾 <b>Comprobante de retención por emitir' + (q.doc ? ' · ' + q.doc : '') + '</b>'); return true; }
+  TG_enviar_(ctx.chatId, '🧾 <b>' + (q.doc ? 'Factura ' + TG_esc_(q.doc) : 'Comprobantes de retención') + '</b>\n' + TG_esc_(x.motivo) + TGR_filasTexto_(x.filas),
+    [[{ text: '🧾 Ver todos los pendientes', callback_data: 'c:emitir' }]]);
+  return true;
+}
+
+function TGR_filasTexto_(filas, plano) {
+  var e = plano ? String : TG_esc_;
+  return filas.slice(0, 3).map(function (f) {
+    return '\n• ' + e(f.empresa) + ' · ' + e(f.documento) + ' de ' + e(f.contraparte) + ': total S/ ' + TG_num_(f.total) +
+      ', pagado S/ ' + TG_num_(f.pagado) + ' · ' + e(f.estado) + (f.retener ? ' · ¿Retener?: ' + e(f.retener) : '');
+  }).join('');
+}
+
+/** Herramienta de la IA: proponer_retencion {factura, empresa, proveedor}. */
+function TGR_paraIA_(c, a) {
+  var emp = a.empresa ? ANA_empresa_(c, a.empresa) : '';
+  var q = { doc: TGR_normDoc_(a.factura || a.documento || ''), empresa: /^\d{11}$/.test(emp) ? emp : '', proveedor: String(a.proveedor || '').trim() };
+  var x = TGR_buscar_(c.ss, c.cfg, q);
+  if (x.lista) {
+    c.op.tg.cre = (c.op.tg.cre || []).concat(x.lista.slice(0, 5));
+    return { columnas: ['comprobante', 'pago', 'retención S/'], filas: x.lista.slice(0, 5).map(function (p) { return [p.titulo, p.detalle, p.total]; }),
+      nota: 'PROPUESTO: el usuario ve cada uno con botones 👁 Vista previa y ✅ Emitir (pide confirmar; solo administradores emiten). Tú NO emites: dile cuánto es y que toque el botón.' };
+  }
+  return { columnas: ['empresa', 'documento', 'proveedor', 'total', 'pagado', 'estado', '¿Retener? (hoja)'],
+    filas: x.filas.map(function (f) { return [f.empresa, f.documento, f.contraparte, f.total, f.pagado, f.estado, f.retener]; }),
+    nota: 'NO hay comprobante para emitir. Motivo (de la hoja, dilo tal cual y no lo recalcules): ' + x.motivo };
 }
 
 function TGR_alBotonTG_(ctx, datos, op, k) {
@@ -217,13 +344,28 @@ function TGR_pendienteWA_(clave) {
 
 /* ============================================================ WhatsApp */
 
-function TGR_listaWA_(ss) {
-  var r = TGR_pendientes_(ss), html = TGR_encabezado_(r);
-  if (!r.lista.length) return { ok: true, respuesta: html + '\n\n✅ No hay pagos de este mes pendientes de comprobante.', tablas: [], sugerencias: [], archivos: [], avisos: [] };
-  var botones = r.lista.slice(0, 5).map(function (p, i) {
+/** WhatsApp: botones de las propuestas (el mismo formato que usa la app para 👁 / ✅). */
+function TGR_botonesWA_(lista) {
+  return lista.slice(0, 5).map(function (p, i) {
     return { k: TG_guardarBoton_({ t: 'cre', p: p }), texto: TGR_textoPropuesta_(p, i + 1),
       opciones: [{ op: 'vp', titulo: '👁 Vista previa' }, { op: 'em', titulo: '✅ Emitir' }] };
   });
+}
+
+/** WhatsApp: "emite la retención de F001-215" (o citando el mensaje). null si el texto no lo pide. */
+function TGR_atajoWA_(ss, texto, citado) {
+  if (!TGR_esPedido_(texto)) return null;
+  var q = { doc: TGR_normDoc_(texto) || TGR_normDoc_(citado), empresa: '' };
+  if (!q.doc) return TGR_listaWA_(ss);
+  var x = TGR_buscar_(ss, TG_cfg_(ss).cob, q);
+  if (x.lista) return { ok: true, respuesta: '🧾 *Comprobante de retención por emitir · ' + q.doc + '*', tablas: [], sugerencias: [], archivos: [], avisos: [], botones: TGR_botonesWA_(x.lista) };
+  return { ok: true, respuesta: '🧾 *Factura ' + q.doc + '*\n' + x.motivo + TGR_filasTexto_(x.filas, true), tablas: [], sugerencias: [], archivos: [], avisos: [] };
+}
+
+function TGR_listaWA_(ss) {
+  var r = TGR_pendientes_(ss), html = TGR_encabezado_(r);
+  if (!r.lista.length) return { ok: true, respuesta: html + '\n\n✅ No hay pagos de este mes pendientes de comprobante.', tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  var botones = TGR_botonesWA_(r.lista);
   return { ok: true, respuesta: html + (r.lista.length > 5 ? '\n\nLe muestro los 5 más recientes.' : ''), tablas: [], sugerencias: [], archivos: [], avisos: [], botones: botones };
 }
 

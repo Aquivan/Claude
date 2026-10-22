@@ -37,6 +37,12 @@ var TG_SISTEMA_ = [
   '  "sire_rapido" = SOLO el reporte/registro de compras y/o ventas (rápido, sin PDF/XML), una o varias empresas, un mes o un rango desde-hasta:',
   '  úsalo cuando pidan actualizar/bajar el reporte, registro o propuesta del SIRE, varios meses o "rápido". (También: comando /sire).',
   '  Notificaciones sin "desde" = SOLO LO NUEVO (lo que falta, rápido): es lo normal. Solo si piden expresamente todo el buzón usa todo:true.',
+  '- proponer_retencion {factura:"F001-215", empresa, proveedor}: para "emite / genera / saca la retención (CRE) de …" o "¿puedes emitir la retención en SUNAT?".',
+  '  Muestra al usuario la propuesta con botones 👁 Vista previa y ✅ Emitir (pide confirmar; no se emite sola). Si responde (cita) un mensaje, toma la factura de ahí.',
+  '  Si NO hay nada que emitir, devuelve el motivo de la hoja: dilo tal cual, no lo recalcules. Nunca digas que emitiste algo.',
+  '- RETENCIÓN IGV 3 %: si una factura se retiene o no lo decide la hoja (dato "retener" / columna "¿Retener? (IGV 3%)" y "Retención esperada S/"), NO tú.',
+  '  El tope de S/ 700 se compara con el IMPORTE TOTAL de la factura CON IGV, nunca con la base imponible (ej. total 727.50 > 700 → sí se retiene, 3 % = 21.83).',
+  '  Cuando pregunten por retenciones de una factura, incluye ese dato de la hoja en la respuesta.',
   '- tipo_cambio {}: tipo de cambio SUNAT de hoy (compra y venta).',
   '- vencimientos {empresa, periodo:"AAAAMM", pendientes:true}: vencimientos SUNAT de IGV-Renta/PLAME (misma fecha) y SIRE por empresa',
   '  (cronograma por último dígito del RUC, Buenos Contribuyentes aparte), días que faltan y si ya está presentado. Para "¿qué vence?", "¿cuándo vence el IGV?".',
@@ -58,7 +64,7 @@ var TG_SISTEMA_ = [
 ].join('\n');
 
 // Nombres parecidos que la IA a veces usa para las herramientas nuevas.
-var TG_ALIAS_ = { buzon: 'notificaciones', notificacion: 'notificaciones', mensajes: 'notificaciones', retencion_sunat: 'retenciones_sunat', cre: 'retenciones_sunat',
+var TG_ALIAS_ = { emitir_retencion: 'proponer_retencion', emitir_cre: 'proponer_retencion', retencion_emitir: 'proponer_retencion', crear_retencion: 'proponer_retencion', buzon: 'notificaciones', notificacion: 'notificaciones', mensajes: 'notificaciones', retencion_sunat: 'retenciones_sunat', cre: 'retenciones_sunat',
   honorario: 'honorarios', rhe: 'honorarios', recibos: 'honorarios', liquidacion: 'sire_liquidacion', sire: 'sire_liquidacion', igv: 'sire_liquidacion',
   libro: 'leer_libro', estado: 'estado_descargas', corridas: 'estado_descargas', descargar: 'lanzar_descarga', descarga: 'lanzar_descarga',
   cambio: 'tipo_cambio', tc: 'tipo_cambio', padron: 'padron_ruc', recordar: 'recordatorio', archivo_enviar: 'enviar_archivo', enviar: 'enviar_archivo', mandar_archivo: 'enviar_archivo',
@@ -235,6 +241,7 @@ function TG_mostrarRespuesta_(ctx, r, tg, seg) {
   if (r.cambios && r.cambios.length) TG_mostrarCambios_(ctx, r.cambios);
   // 🚀 Descargas propuestas
   (tg.acciones || []).forEach(function (a) { TG_proponerDescarga_(ctx, a); });
+  if ((tg.cre || []).length) TGR_proponerTG_(ctx, tg.cre, '🧾 <b>Comprobante de retención por emitir</b>');   // proponer_retencion (TG_Retener.js)
   // 📎 Archivos que pidió
   if (tg.vouchers) {
     try { TG_mandarVouchers_(ctx, tg.vouchers.filas, tg.vouchers.modo); }

@@ -85,8 +85,9 @@ function TGW_responder_(q) {
     origen: '📲 whatsapp ' + (q.nombre || q.numero), modelo: cfg.modelo || '', tg: { ctx: ctx, archivos: [], acciones: [], cfg: cfg }
   };
   var texto = String(q.texto || '').trim();
-  // 🧾 "emitir" / "retenciones por emitir": lista de comprobantes de retención pendientes con sus botones.
-  if (/^(emitir|retener|cre|retenciones por emitir|emitir retenciones)\b/i.test(texto)) return TGR_listaWA_(ss);
+  // 🧾 "emitir" (lista de pendientes) o "emite la retención de F001-215" (o citando el mensaje): propuesta con botones.
+  var cre = TGR_atajoWA_(ss, texto, q.citado);
+  if (cre) return cre;
   // ⚡ "sire granix 202601-202609": bajar solo el reporte del SIRE (se confirma con el botón 🚀).
   var sire = TGS_wa_(ss, texto);
   if (sire) return sire;
@@ -123,6 +124,7 @@ function TGW_responder_(q) {
   }
   if (r.cambios && r.cambios.length) out.avisos.push('✏️ Propuse ' + r.cambios.length + ' cambio(s) en la hoja de Vouchers: confírmelos en Telegram o en la hoja.');
   // 🚀 Descargas propuestas: el bot de WhatsApp las ofrece con botones (✔ / ✖) y la respuesta vuelve con accion=boton.
+  if ((op.tg.cre || []).length) out.botones = TGR_botonesWA_(op.tg.cre);   // 🧾 proponer_retencion: 👁 / ✅
   out.descargas = (op.tg.acciones || []).slice(0, 3).map(function (a) {
     return { k: TG_guardarBoton_(a), texto: TG_textoDescarga_(a, cfg.cob) };
   });
