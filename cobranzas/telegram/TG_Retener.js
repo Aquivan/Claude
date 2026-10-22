@@ -207,11 +207,11 @@ function TGR_guardarWA_(clave, html) {
   p.setProperty(k, JSON.stringify(l.slice(-10)));
 }
 
-/** ¿Hay un CRE pedido desde este chat de WhatsApp que todavía no terminó? (para que la app siga preguntando) */
+/** ¿Hay un CRE o un ⚡ SIRE solo reporte pedido desde este chat de WhatsApp que todavía no terminó? (para que la app siga preguntando) */
 function TGR_pendienteWA_(clave) {
   try {
     return JSON.parse(PropertiesService.getScriptProperties().getProperty('TG_SEGUIR') || '[]')
-      .some(function (s) { return s.chat === clave && s.extra && s.extra.tipo === 'cre'; });
+      .some(function (s) { return s.chat === clave && s.extra && (s.extra.tipo === 'cre' || s.extra.tipo === 'sire_rapido'); });
   } catch (e) { return false; }
 }
 

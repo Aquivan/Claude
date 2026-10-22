@@ -544,6 +544,8 @@ jobs:
           SIRE_CLIENT_ID: ${{ secrets.SIRE_CLIENT_ID }}
           SIRE_CLIENT_SECRET: ${{ secrets.SIRE_CLIENT_SECRET }}
         run: |
+          # Hay una copia exacta de este conversor en scripts/sire_convertir.py (la usa
+          # sire-solo-reporte.yml, "SIRE solo reporte"): si se cambia aqui, cambiarla tambien.
           cat > /tmp/convertir_sire.py << 'PYEOF'
           import csv, glob, sys, os, calendar
 

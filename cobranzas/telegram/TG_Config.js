@@ -388,6 +388,7 @@ var TG_COMANDOS_ = [
   ['honorarios', '🧑‍💼 Recibos por honorarios'],
   ['estado', '⚙️ Estado de las descargas de SUNAT'],
   ['descargar', '⬇ Pedir una descarga a SUNAT'],
+  ['sire', '⚡ SIRE: bajar solo el reporte (rápido; varias empresas o meses)'],
   ['actualizar', '🔄 Recalcular Cuentas por Cobrar y Pagar'],
   ['tc', '💱 Tipo de cambio SUNAT de hoy'],
   ['voucher', '🖼 Foto de un voucher (ej. /voucher Originales!2326)'],

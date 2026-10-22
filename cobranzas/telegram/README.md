@@ -28,6 +28,7 @@ Liquidaciones IGV de SIRE, y consulta o lanza los workflows de GitHub.
 | 🎤 **Notas de voz** | Las transcribe con Gemini y las responde como si fueran texto. |
 | 📊 **Excel** | Las listas largas también llegan en `.xlsx`. |
 | ⚡ **Respuestas rápidas (sin IA)** | `/resumen`, `/cobrar`, `/pagar` (por empresa y top clientes o proveedores), `/vencidas`, `/notificaciones` (con 📄 PDF), `/detracciones` (con su constancia), `/retenciones`, `/honorarios`, `/tc` (tipo de cambio SUNAT). |
+| ⚡ **SIRE solo reporte** | `/sire` (botones) o `/sire granix 202601-202609`: baja solo el registro de compras y/o ventas del SIRE, rápido, de una, varias o todas las empresas y de un mes o un rango. Por WhatsApp: `sire granix 202609`. La hoja SIRE lo importa sola a Drive. |
 | ⬇ **Descargas de SUNAT** | `/descargar`: se elige proyecto, empresa y periodo, y se lanza el workflow de GitHub. `/estado`: muestra cómo terminó la última corrida de cada descarga y qué empresa falló, con un botón 🔁 Reintentar. Avisa cuando termina. La IA también puede **proponer** una descarga, pero nunca la lanza sin el botón. |
 | 🔔 **Avisos automáticos** | Cada hora avisa lo **nuevo**: notificaciones y mensajes del Buzón SUNAT, detracciones, retenciones, recibos por honorarios, vouchers registrados y descargas que fallaron. Cada persona elige sus avisos con `/avisos`. Por la mañana manda el ☀️ resumen con las facturas por vencer. De 23:00 a 6:00 solo avisa errores. |
 | ⏰ **Recordatorios** | Por ejemplo: *"recuérdame el lunes 9am declarar IGV de GRANIX cada mes"*. Pueden ser diarios, semanales o mensuales. `/recordatorios` los lista y deja borrarlos. |
@@ -53,6 +54,7 @@ Si **1️⃣ Conectar** dice que la aplicación web no está publicada, espere a
 | `TG_Resumen.js` | Respuestas rápidas sin IA, avisos por persona, recordatorios |
 | `TG_Avisos.js` | `TG_vigia` (disparador cada hora): avisa lo nuevo una sola vez. Lo ya avisado se guarda en `_TG_Vistos`; la primera vez solo anota |
 | `TG_GitHub.js` | Estado de las corridas, `/descargar` paso a paso, 🔁 reintentar, aviso al terminar (`TG_seguirDescargas`) |
+| `TG_SireRapido.js` | ⚡ `/sire` y WhatsApp `sire …`: SIRE **solo reporte** (rápido, sin PDF/XML) de una, varias o todas las empresas, un mes o un rango (`/sire granix, luque 202601-202609 compras`, `/sire todas mes anterior`). Siempre con botón 🚀; al terminar dice cuántos comprobantes trajo por empresa y mes |
 | `TG_Api.js` | API de Telegram: mensajes en HTML partidos a ≤3900 caracteres, botones, archivos, Excel |
 | `TG_Config.js` | Pestaña 🤖 Telegram (parámetros y personas), menú, webhook y comandos del bot |
 | `TG_Despliegue.js` | ID de la aplicación web. Lo **escribe el workflow** en cada despliegue; en el repositorio queda vacío |
