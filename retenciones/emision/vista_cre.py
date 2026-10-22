@@ -46,6 +46,9 @@ JS_AVISO = """() => {
   document.querySelectorAll('.has-error input, .has-error select').forEach(e => { if (vis(e)) out.push('campo en rojo: ' + (e.id || e.name)); });
   return out.join(' / '); }"""
 # Ventana de SUNAT que pide confirmar (Sí/No): {texto, si} o null.
+# Filas de una tabla de la pantalla (facturas del comprobante o notas de crédito).
+JS_FILAS = """(t) => { try { return jQuery(t).DataTable().rows().count(); } catch (e) {
+  return [...document.querySelectorAll(t + ' tbody tr')].filter(r => !r.querySelector('.dataTables_empty')).length; } }"""
 JS_CONFIRMA = """() => { const m = document.querySelector('#idModalMensaje');
   if (!m || !m.classList.contains('in')) return null;
   const d = document.querySelector('#btnModalDer'), i = document.querySelector('#btnModalIzq');
@@ -114,10 +117,10 @@ def agregar_notas_credito(fr, i, notas):
             esperar_valor(fr, "#txtImpTotNotaCred")
         except Exception:
             fallar(fr, f"Documento {i}, nota de crédito {j}: SUNAT no la encontró o no la acepta")
-        antes = fr.evaluate("() => (window.lstNotasCredito || []).length")
+        antes = fr.evaluate(JS_FILAS, "#tblNotaCredito")
         fr.click("#btnAgregarNotaCredito")
-        fr.wait_for_timeout(800)
-        if fr.evaluate("() => (window.lstNotasCredito || []).length") != antes + 1:
+        fr.wait_for_timeout(1500)
+        if fr.evaluate(JS_FILAS, "#tblNotaCredito") <= antes:
             fallar(fr, f"Documento {i}, nota de crédito {j}: no se pudo agregar")
         print(f"  Nota de crédito {j}: validada por SUNAT y agregada")
     fr.click("#btnCerrarAddNotaCredito")
@@ -206,17 +209,22 @@ def main():
                   f" · pago − retención = neto {'✅' if cuadra else '❌'}")
             if not ok or not cuadra:
                 fallar(fr, f"Documento {i}: los montos no cuadran")
-            antes = fr.evaluate("() => (window.lstDocumentosRelacionados || []).length")
+            antes = fr.evaluate(JS_FILAS, "#tblDocuRela")
             fr.click("#btnModalAddDocu")
-            fr.wait_for_timeout(1500)
-            c = fr.evaluate(JS_CONFIRMA)
-            if c:
-                # Si SUNAT pregunta algo (p. ej. "ya hay pagos con retención de esta factura, ¿continuar?"), el robot
-                # NO contesta por usted: se detiene y muestra la pregunta.
-                fallar(fr, f"Documento {i}: SUNAT pregunta «{sin_datos(c['texto'])[:300]}». El robot no responde por usted")
-            if fr.evaluate("() => (window.lstDocumentosRelacionados || []).length") != antes + 1:
-                fallar(fr, f"Documento {i}: no se pudo agregar")
-        print("Documentos en el comprobante:", fr.evaluate("() => (window.lstDocumentosRelacionados || []).length"), "de", len(docs))
+            agregado = False
+            for _ in range(40):   # hasta 20 s: SUNAT consulta los pagos anteriores de la factura
+                fr.wait_for_timeout(500)
+                c = fr.evaluate(JS_CONFIRMA)
+                if c:
+                    # Si SUNAT pregunta algo (p. ej. "ya hay pagos con retención de esta factura, ¿continuar?"), el robot
+                    # NO contesta por usted: se detiene y muestra la pregunta.
+                    fallar(fr, f"Documento {i}: SUNAT pregunta «{sin_datos(c['texto'])[:300]}». El robot no responde por usted")
+                if fr.evaluate(JS_FILAS, "#tblDocuRela") > antes:
+                    agregado = True
+                    break
+            if not agregado:
+                fallar(fr, f"Documento {i}: no se pudo agregar (cuadro abierto: {'sí' if fr.is_visible('#txtSerieDoc') else 'no'})")
+        print("Documentos en el comprobante:", fr.evaluate(JS_FILAS, "#tblDocuRela"), "de", len(docs))
 
         # 5) Vista preliminar (aquí se detiene: este programa no emite)
         fr.click("#btnVistPrel")
