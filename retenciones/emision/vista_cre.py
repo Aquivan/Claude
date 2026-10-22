@@ -52,7 +52,8 @@ JS_FILAS = """(t) => { try { return jQuery(t).DataTable().rows().count(); } catc
 JS_CONFIRMA = """() => { const m = document.querySelector('#idModalMensaje');
   if (!m || !m.classList.contains('in')) return null;
   const d = document.querySelector('#btnModalDer'), i = document.querySelector('#btnModalIzq');
-  return {texto: (document.querySelector('#lblModalMensaje') || m).innerText.trim(),
+  const caja = m.querySelector('.modal-content') || m;
+  return {texto: caja.innerText.replace(/\\s+/g, ' ').trim(),
           der: d && d.offsetParent !== null ? d.innerText.trim() : '', izq: i && i.offsetParent !== null ? i.innerText.trim() : ''}; }"""
 
 
@@ -215,7 +216,7 @@ def main():
             for _ in range(40):   # hasta 20 s: SUNAT consulta los pagos anteriores de la factura
                 fr.wait_for_timeout(500)
                 c = fr.evaluate(JS_CONFIRMA)
-                if c:
+                if c and c["texto"]:   # la ventana se abre vacía y SUNAT pone el texto después
                     # Si SUNAT pregunta algo (p. ej. "ya hay pagos con retención de esta factura, ¿continuar?"), el robot
                     # NO contesta por usted: se detiene y muestra la pregunta.
                     fallar(fr, f"Documento {i}: SUNAT pregunta «{sin_datos(c['texto'])[:300]}». El robot no responde por usted")
@@ -223,7 +224,9 @@ def main():
                     agregado = True
                     break
             if not agregado:
-                fallar(fr, f"Documento {i}: no se pudo agregar (cuadro abierto: {'sí' if fr.is_visible('#txtSerieDoc') else 'no'})")
+                c = fr.evaluate(JS_CONFIRMA)
+                fallar(fr, f"Documento {i}: no se pudo agregar (cuadro abierto: {'sí' if fr.is_visible('#txtSerieDoc') else 'no'}"
+                           + (f"; ventana de SUNAT abierta, botones [{c['izq']}] [{c['der']}]" if c else "") + ")")
         print("Documentos en el comprobante:", fr.evaluate(JS_FILAS, "#tblDocuRela"), "de", len(docs))
 
         # 5) Vista preliminar (aquí se detiene: este programa no emite)
