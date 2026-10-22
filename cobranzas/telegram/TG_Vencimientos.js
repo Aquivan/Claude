@@ -29,6 +29,11 @@ var TGV_PARAM_ = [
 ];
 var TGV_FILA_CRONO_ = TGV_PARAM_.length + 6;   // fila del encabezado del cronograma
 
+// R.S. 281-2022/SUNAT: el IGV-Renta/PLAME vence el 11°…17° día hábil del mes siguiente (Anexo I) y el
+// RVIE/RCE (SIRE) el 10°…16° (Anexo II): siempre UN DÍA HÁBIL ANTES, columna por columna. Por eso el SIRE
+// no lleva tabla propia: el de la columna k es el IGV de la columna k-1, y el del dígito 0 es el día hábil
+// anterior al IGV del dígito 0 (sin sábados, domingos ni feriados).
+
 // Cronograma 2026 (periodo → vencimiento por último dígito; BC = Buenos Contribuyentes/UESP).
 // Fuente: cronograma SUNAT de obligaciones mensuales 2026 (verificar en sunat.gob.pe).
 var TGV_SEMILLA_ = {
@@ -59,7 +64,7 @@ function TGV_hoja_(ss) {
   sh.getRange(3, 1, 1, 3).setValues([['Parámetro', 'Valor', 'Qué hace']]).setFontWeight('bold').setBackground('#e8eaf6');
   sh.getRange(4, 1, TGV_PARAM_.length, 3).setValues(TGV_PARAM_);
   sh.getRange(4, 2, TGV_PARAM_.length, 1).setNumberFormat('@').setBackground('#fff8e1');
-  sh.getRange(TGV_FILA_CRONO_ - 1, 1).setValue('Cronograma SUNAT de obligaciones mensuales (vence según el último dígito del RUC)').setFontWeight('bold');
+  sh.getRange(TGV_FILA_CRONO_ - 1, 1).setValue('Cronograma SUNAT IGV-Renta/PLAME (último dígito del RUC). El SIRE (RVIE/RCE) vence 1 día hábil antes (R.S. 281-2022, Anexo II).').setFontWeight('bold');
   sh.getRange(TGV_FILA_CRONO_, 1, 1, 9).setValues([['Periodo', 'Dígito 0', 'Dígito 1', 'Dígitos 2-3', 'Dígitos 4-5', 'Dígitos 6-7', 'Dígitos 8-9', 'Buenos Contrib./UESP', 'Fuente']])
     .setFontWeight('bold').setBackground('#1a237e').setFontColor('#ffffff');
   sh.setFrozenRows(3);
@@ -188,6 +193,31 @@ function TGV_periodoMenos_(hoy, n) {
   return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2);
 }
 
+/** Feriados nacionales de Perú (fijos + Jueves y Viernes Santo) como 'yyyy-mm-dd'. */
+function TGV_feriados_(anio) {
+  var f = ['01-01', '05-01', '06-07', '06-29', '07-23', '07-28', '07-29', '08-06', '08-30', '10-08', '11-01', '12-08', '12-09', '12-25']
+    .map(function (d) { return anio + '-' + d; });
+  var a = anio % 19, b = Math.floor(anio / 100), c = anio % 100, d = Math.floor(b / 4), e = b % 4, g = Math.floor((8 * b + 13) / 25);
+  var h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 19 * l) / 433);
+  var mes = Math.floor((h + l - 7 * m + 90) / 25), dia = (h + l - 7 * m + 33 * mes + 19) % 32;   // domingo de Pascua
+  [-3, -2].forEach(function (n) { var x = new Date(anio, mes - 1, dia + n); f.push(Utilities.formatDate(x, 'America/Lima', 'yyyy-MM-dd')); });
+  return f;
+}
+
+function TGV_diaHabilAntes_(fecha) {
+  var x = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate() - 1);
+  while (x.getDay() === 0 || x.getDay() === 6 || TGV_feriados_(x.getFullYear()).indexOf(Utilities.formatDate(x, 'America/Lima', 'yyyy-MM-dd')) >= 0) x.setDate(x.getDate() - 1);
+  return x;
+}
+
+/** Vencimiento de una obligación según la fila del cronograma (IGV) y la columna del RUC. */
+function TGV_vence_(fechas, col, ob) {
+  if (ob !== 'sire') return TGV_aFecha_(fechas[col]);
+  if (col > 0) return TGV_aFecha_(fechas[col - 1]);
+  var d0 = TGV_aFecha_(fechas[0]);
+  return d0 ? TGV_diaHabilAntes_(d0) : null;
+}
+
 function TGV_columna_(ruc, esBC) {
   if (esBC) return 6;
   var d = Number(String(ruc).slice(-1));
@@ -262,7 +292,7 @@ function TGV_lista_(ss, c) {
     periodos.forEach(function (per) {
       Object.keys(TGV_OBLIG_).forEach(function (ob) {
         var fila = crono[per];
-        var vence = fila ? TGV_aFecha_(fila.fechas[TGV_columna_(e.ruc, e.bc)]) : null;
+        var vence = fila ? TGV_vence_(fila.fechas, TGV_columna_(e.ruc, e.bc), ob) : null;
         if (!vence) { if (per === TGV_periodoMenos_(hoy, 1)) out.push({ ruc: e.ruc, nombre: e.nombre, periodo: per, ob: ob, sinCronograma: true }); return; }
         var faltan = TGV_dias_(hoy, vence);
         if (faltan > 40 || faltan < -Math.max(prm.despues, 10)) return;
@@ -357,7 +387,7 @@ function TGV_comando_(ctx, arg) {
   var html = '📅 <b>Vencimientos SUNAT</b> (IGV-Renta/PLAME y SIRE)\n\n' +
     (pend.length ? '<b>Pendientes</b>\n' + pend.map(TGV_linea_).join('\n') : '✅ No hay nada pendiente.') +
     (hechos.length ? '\n\n<b>Ya presentado</b>\n' + hechos.slice(-10).map(TGV_linea_).join('\n') : '') +
-    '\n\n<i>El SIRE se marca solo con el mensaje del Buzón SUNAT; el IGV con el botón ✅. Ajustes: /vencimientos ajustes</i>';
+    '\n\n<i>El SIRE (RVIE/RCE) vence 1 día hábil antes que el IGV (R.S. 281-2022, Anexo II). El SIRE se marca solo con el mensaje del Buzón SUNAT; el IGV con el botón ✅. Ajustes: /vencimientos ajustes</i>';
   TG_enviar_(ctx.chatId, html, TGV_botones_(pend));
 }
 
