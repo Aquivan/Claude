@@ -12,13 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Leer cronogramas
+      - name: Leer resolución y notas
         run: |
+          sudo apt-get install -y -qq poppler-utils >/dev/null
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"
-          B=https://www.sunat.gob.pe/orientacion/cronogramas
-          for u in $B/2026/ $B/2026/index.html $B/index.html $B/2026/cObligacionMensual2026.html $B/2026/cLibrosRegistrosElectronicos2026.html $B/2026/cRegistrosElectronicos2026.html $B/2026/cPle2026.html $B/2026/cSire2026.html; do
+          curl -sSL -m 30 -A "$UA" https://www.sunat.gob.pe/orientacion/cronogramas/2026/cObligacionMensual2026.html | iconv -f ISO-8859-1 -t UTF-8 | sed 's/<[^>]*>/ /g' | tr -s ' \t\r\n' ' ' | grep -oiE '(Base Legal|Nota|registro|atraso).{0,900}' | head -5
+          for u in https://www.sunat.gob.pe/legislacion/superin/2022/281-2022.pdf https://www.sunat.gob.pe/legislacion/superin/2025/000268-2025.pdf; do
             echo "=================== $u"
-            curl -sSL -m 30 -A "$UA" -o /tmp/p -w "HTTP %{http_code} · %{size_download} bytes\n" "$u" || true
-            iconv -f ISO-8859-1 -t UTF-8 /tmp/p 2>/dev/null | grep -oiE 'href="[^"]*"' | grep -iE 'cronog|2026|ple|sire|regist|libro' | sort -u | head -40
-            iconv -f ISO-8859-1 -t UTF-8 /tmp/p 2>/dev/null | sed 's/<[^>]*>/ /g' | tr -s ' \t\r\n' ' ' | grep -oiE '.{0,300}(registro|sire|rvie|rce|libros|atraso).{0,500}' | head -6
+            curl -sSL -m 60 -A "$UA" -o /tmp/r.pdf -w "HTTP %{http_code} · %{size_download} bytes\n" "$u" || true
+            pdftotext -layout /tmp/r.pdf /tmp/r.txt 2>/dev/null && grep -n -iE -B2 -A6 'atraso|registro de ventas|registro de compras|anexo' /tmp/r.txt | head -120
           done
