@@ -7,6 +7,12 @@
 var TG_PROYECTOS_ = {
   sire: { nombre: '📑 SIRE (compras, ventas y PDF/XML)', wf: 'sire-cadena-completa.yml', unPeriodo: true,
     inputs: function (x) { return { periodo: x.desde || '', ruc: x.empresa === 'todas' ? '' : x.empresa }; } },
+  // ⚡ Solo el registro (sin PDF/XML), varias empresas y rango de meses: ver TG_SireRapido.js.
+  sire_rapido: { nombre: '⚡ SIRE solo reporte (rápido)', wf: 'sire-solo-reporte.yml',
+    inputs: function (x) {
+      var d = x.desde || '', h = x.hasta || TG_mes_(0);
+      return { ruc: x.empresa === 'todas' ? '' : x.empresa, periodo: !d ? '' : d === h ? d : d + '-' + h, tipo: x.tipo || 'ambos' };
+    } },
   retenciones: { nombre: '🧾 Retenciones (CRE)', wf: 'retenciones-descargar.yml',
     inputs: function (x) { return { empresa: x.empresa, periodo: x.desde || TG_mes_(0), hasta: x.hasta || '' }; } },
   honorarios: { nombre: '🧑‍💼 Recibos por honorarios', wf: 'honorarios-descargar.yml',
@@ -20,6 +26,7 @@ var TG_PROYECTOS_ = {
 function TG_proyectoDe_(txt) {
   var n = normHeader_(txt || '');
   if (TG_PROYECTOS_[n]) return n;
+  if (/rapid|solo (el )?(reporte|registro)|sin (pdf|xml|factura)/.test(n)) return 'sire_rapido';
   if (/sire|compra|venta|registro/.test(n)) return 'sire';
   if (/reten|cre/.test(n)) return 'retenciones';
   if (/honor|rhe|recibo/.test(n)) return 'honorarios';
@@ -187,7 +194,8 @@ function TG_asistenteDescarga_(ctx, paso) {
       ? [[{ text: 'Este mes (' + TG_mes_(0) + ')', callback_data: base + TG_mes_(0) }, { text: 'Mes anterior (' + TG_mes_(1) + ')', callback_data: base + TG_mes_(1) }]]
       : [[{ text: 'Este mes', callback_data: base + 'm0' }, { text: 'Mes anterior', callback_data: base + 'm1' }],
         [{ text: 'Últimos 3 meses', callback_data: base + 'm3' }, { text: 'Todo el año', callback_data: base + 'y' }]];
-    return TG_editarOEnviar_(ctx, proy.nombre + ' · ' + (p[2] === 'todas' ? 'todas las empresas' : TG_esc_(TG_nombreEmpresa_(cfg, p[2]))) + '\n<b>¿Qué periodo?</b>', opciones);
+    return TG_editarOEnviar_(ctx, proy.nombre + ' · ' + (p[2] === 'todas' ? 'todas las empresas' : TG_esc_(TG_nombreEmpresa_(cfg, p[2]))) + '\n<b>¿Qué periodo?</b>' +
+      (p[1] === 'sire_rapido' ? '\n<i>Otro rango o varias empresas: escriba, por ejemplo, /sire granix, luque 202601-202609</i>' : ''), opciones);
   }
   if (p[0] === 't') {
     var per = p[3], desde = '', hasta = '';
@@ -211,7 +219,11 @@ function TG_editarOEnviar_(ctx, html, teclado) {
 
 function TG_textoDescarga_(acc, cob) {
   var p = TG_PROYECTOS_[acc.proyecto];
-  var emp = acc.empresa === 'todas' ? 'todas las empresas' : ((cob && cob.nombreEmpresa[acc.empresa]) || acc.empresa);
+  var emp = acc.empresa === 'todas' ? 'todas las empresas' : String(acc.empresa).split(',').map(function (r) { return (cob && cob.nombreEmpresa[r]) || r; }).join(', ');
+  if (acc.proyecto === 'sire_rapido') {
+    var h = acc.hasta || TG_mes_(0), d = acc.desde || h;
+    return p.nombre + ' · ' + emp + ' · ' + (d === h ? d : d + ' a ' + h) + ' · ' + ({ compra: 'solo compras', venta: 'solo ventas' }[acc.tipo] || 'compras y ventas');
+  }
   var per = acc.desde ? (acc.hasta && acc.hasta !== acc.desde ? acc.desde + ' a ' + acc.hasta : (p.unPeriodo || acc.hasta ? acc.desde : 'desde ' + acc.desde)) :
     (acc.proyecto === 'detracciones' ? 'últimos 3 meses' : acc.proyecto === 'notificaciones' ? (acc.nuevas === false ? 'todo el buzón' : 'solo lo nuevo') : 'este mes');
   return p.nombre + ' · ' + emp + ' · ' + per;
@@ -231,12 +243,13 @@ function TG_confirmarDescarga_(ctx, acc, op) {
   if (TG_yaVisto_('desc' + ctx.chatId + '_' + ctx.msgId)) return;   // doble toque
   var cfg = TG_cfg_(ctx.ss);
   var p = TG_PROYECTOS_[acc.proyecto];
+  var inputs = p.inputs(acc);
   try {
-    TG_gh_(cfg, '/actions/workflows/' + p.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: p.inputs(acc) });
+    TG_gh_(cfg, '/actions/workflows/' + p.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: inputs });
   } catch (e) {
     return TG_enviar_(ctx.chatId, '⚠️ No se pudo pedir la descarga: ' + TG_esc_(e.message));
   }
-  TG_seguir_(ctx.chatId, p.wf, null, TG_textoDescarga_(acc, cfg.cob));
+  TG_seguir_(ctx.chatId, p.wf, null, TG_textoDescarga_(acc, cfg.cob), acc.proyecto === 'sire_rapido' ? { tipo: 'sire_rapido', titulo: TGS_titulo_(inputs) } : null);
   TG_enviar_(ctx.chatId, '✅ <b>Descarga pedida</b>: ' + TG_esc_(TG_textoDescarga_(acc, cfg.cob)) + '\nLe aviso cuando termine. Mientras tanto puede seguir preguntándome.',
     [[{ text: '⚙️ Ver estado', callback_data: 'c:estado' }]]);
 }
@@ -269,7 +282,9 @@ function TG_seguirDescargas() {
       var r = null;
       if (s.run) r = TG_gh_(cfg, '/actions/runs/' + s.run);
       else {
-        r = TG_ghRuns_(cfg, 5, s.wf).filter(function (x) { return x.event === 'workflow_dispatch' && new Date(x.created_at).getTime() >= s.desde - 90000; })
+        // Si se sabe el nombre de la corrida (⚡ SIRE solo reporte), solo vale la que se llama así.
+        r = TG_ghRuns_(cfg, 10, s.wf).filter(function (x) { return x.event === 'workflow_dispatch' && new Date(x.created_at).getTime() >= s.desde - 90000 &&
+            (!s.extra || !s.extra.titulo || x.display_title === s.extra.titulo); })
           .sort(function (a, b) { return new Date(a.created_at) - new Date(b.created_at); })[0] || null;
         if (r) s.run = r.id;
       }
@@ -281,6 +296,7 @@ function TG_seguirDescargas() {
         return;
       }
       if (s.extra && s.extra.tipo === 'cre') return TGR_avisarFin_(cfg, s, r);   // 🧾 comprobante de retención (TG_Retener.js)
+      if (s.extra && s.extra.tipo === 'sire_rapido') return TGS_avisarFin_(cfg, s, r);   // ⚡ SIRE solo reporte (TG_SireRapido.js)
       var fallidas = r.conclusion === 'failure' ? TG_ghJobsFallidos_(cfg, r.id) : [];
       var botones = fallidas.length ? [[{ text: '🔁 Reintentar lo que falló', callback_data: 'rr:' + r.id }]] : null;
       TG_enviar_(s.chat, TG_iconoRun_(r) + ' <b>' + (r.conclusion === 'success' ? 'Descarga terminada' : 'La descarga terminó con problemas') + '</b>: ' + TG_esc_(s.texto) +

@@ -313,7 +313,8 @@ function ejecutarImportacion_(periodos, mostrarResultado, rucFiltro) {
   var empresas;
   try {
     empresas = listarEmpresasGitHub_(cfg, true);
-    if (rucFiltro) empresas = empresas.filter(function (e) { return e.ruc === rucFiltro; });
+    // rucFiltro: un RUC o varios separados por coma (el "solo reporte" puede pedir varias empresas).
+    if (rucFiltro) empresas = empresas.filter(function (e) { return String(rucFiltro).split(',').indexOf(e.ruc) !== -1; });
   } catch (e) {
     if (ui) ui.alert('Error leyendo empresas.json de GitHub', e.message, ui.ButtonSet.OK);
     else registrarEnBitacora_('Importacion automatica: ' + e.message);
@@ -415,9 +416,12 @@ function periodoActualStr_() {
 var INTERVALO_SEGUIMIENTO_MIN_ = 1;
 var MAX_INTENTOS_SEGUIMIENTO_ = 10; // 8 x 5min = hasta 40 minutos de margen
 
-function programarSeguimiento_(periodos, rucFiltro, desdeMs) {
+function programarSeguimiento_(periodos, rucFiltro, desdeMs, workflow) {
   var props = PropertiesService.getScriptProperties();
   props.setProperty('SEGUIMIENTO_PERIODOS', JSON.stringify(periodos));
+  // workflow: otro .yml a seguir (ej. sire-solo-reporte.yml, ver SoloReporte.gs); vacio = el configurado.
+  if (workflow) props.setProperty('SEGUIMIENTO_WORKFLOW', workflow);
+  else props.deleteProperty('SEGUIMIENTO_WORKFLOW');
   props.setProperty('SEGUIMIENTO_INTENTOS', '0');
   props.setProperty('SEGUIMIENTO_DESDE', String(desdeMs));
   if (rucFiltro) props.setProperty('SEGUIMIENTO_RUC', rucFiltro);
@@ -456,6 +460,8 @@ function seguimientoAutomatico_() {
     limpiarSeguimiento_();
     return;
   }
+  var wfSeguido = props.getProperty('SEGUIMIENTO_WORKFLOW');
+  if (wfSeguido) cfg.GITHUB_WORKFLOW = wfSeguido;
 
   // Se busca especificamente LA corrida que este seguimiento disparo (por
   // fecha de creacion), no "la ultima que sea" -- si en el medio hubo otra
@@ -506,6 +512,7 @@ function limpiarSeguimiento_() {
   props.deleteProperty('SEGUIMIENTO_INTENTOS');
   props.deleteProperty('SEGUIMIENTO_DESDE');
   props.deleteProperty('SEGUIMIENTO_RUC');
+  props.deleteProperty('SEGUIMIENTO_WORKFLOW');
 }
 
 /** Agrega una fila con fecha/hora a la pestana "Registro" de esta hoja de

@@ -181,6 +181,7 @@ function TG_comando_(ctx, texto) {
     case 'honorarios': return TG_enviarHonorarios_(ctx, arg);
     case 'estado': return TG_enviarEstado_(ctx);
     case 'descargar': return TG_asistenteDescarga_(ctx, null);
+    case 'sire': return TGS_comandoTG_(ctx, arg);   // ⚡ SIRE solo reporte (rápido): /sire granix 202601-202609
     case 'actualizar': return TG_actualizarCobranzas_(ctx);
     case 'tc': case 'cambio': return TG_enviarTipoCambio_(ctx);
     case 'recordatorios': return TG_enviarRecordatorios_(ctx);
@@ -218,6 +219,7 @@ function TG_textoAyuda_() {
     '(analizar y cruzar, o registrarlo en el Sistema de Vouchers). Si falta un dato en la hoja de vouchers, se lo propongo y usted toca ✅ para escribirlo.\n\n' +
     '📊 Las listas largas se las mando también en <b>Excel</b>.\n' +
     '⬇ <b>/descargar</b> pide a SUNAT (SIRE, retenciones, honorarios, buzón, detracciones) · <b>/estado</b> dice si las automáticas corrieron.\n' +
+    '⚡ <b>/sire</b> baja solo el reporte del SIRE, rápido (ej. <code>/sire granix 202601-202609</code>, <code>/sire todas mes anterior</code>).\n' +
     '🔔 <b>/avisos</b> elige qué le aviso solo · ⏰ <b>/recordatorios</b> · 🧹 <b>/olvidar</b> empieza de cero.\n\n' +
     '🔒 Solo consulto y propongo: nunca pago ni presento nada en SUNAT, y lo que se escribe en las hojas siempre se lo pregunto antes.';
 }

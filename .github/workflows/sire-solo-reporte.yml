@@ -1,0 +1,260 @@
+# ⚡ SIRE solo reporte (rápido): baja SOLO el registro de compras y/o ventas del SIRE por la API oficial
+# de SUNAT (sin navegador, sin PDF/XML de cada factura). Una empresa, varias o todas; un mes o un rango.
+#
+# - Todas las empresas a la vez (una máquina por empresa); los meses de cada empresa van uno tras otro.
+# - Guarda lo mismo que la descarga completa en sire/<RUC>/historico/<AAAAMM>/ (reporte_parseado.csv,
+#   reporte_parseado_ventas.csv, Propuesta_/Aceptada_<tipo>.zip y compras_propuesta/aceptada.csv),
+#   así la hoja "SIRE SUNAT" y la Liquidación IGV lo leen igual. No toca los PDF/XML ya descargados
+#   ni los archivos "más recientes" de la descarga diaria (sire-cadena-completa.yml sigue igual).
+# - Al terminar cada empresa avisa a la hoja (webhook instantáneo) para que importe esos meses a Drive.
+# Lo piden la hoja (menú ⚡), Telegram (/sire) y WhatsApp ("sire …").
+name: SIRE solo reporte (rapido)
+run-name: "SIRE solo reporte · ${{ inputs.ruc || 'todas' }} · ${{ inputs.periodo || 'mes actual' }} · ${{ inputs.tipo }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa, o varios separados por coma. Vacio = todas las activas de empresas.json."
+        required: false
+        default: ""
+      periodo:
+        description: "AAAAMM (ej. 202609) o un rango AAAAMM-AAAAMM (ej. 202601-202609). Vacio = mes actual."
+        required: false
+        default: ""
+      tipo:
+        description: "compra, venta o ambos"
+        required: true
+        default: "ambos"
+        type: choice
+        options: [ambos, compra, venta]
+
+permissions:
+  contents: write
+
+jobs:
+  preparar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matriz: ${{ steps.leer.outputs.matriz }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - name: Empresas y meses a bajar
+        id: leer
+        env:
+          RUC_INPUT: ${{ inputs.ruc }}
+          PERIODO_INPUT: ${{ inputs.periodo }}
+        run: |
+          python3 - << 'PYEOF'
+          import json, os, re, sys
+          from datetime import datetime, timedelta, timezone
+
+          def alto(msg):
+              print(f"::error title=SIRE solo reporte::{msg}")
+              sys.exit(1)
+
+          with open('empresas.json', encoding='utf-8') as f:
+              data = json.load(f)
+          empresas = data['empresas'] if isinstance(data, dict) else data
+
+          lima = datetime.now(timezone(timedelta(hours=-5)))
+          mes_actual = lima.strftime('%Y%m')
+          txt = re.sub(r'\s+', '', os.environ.get('PERIODO_INPUT', ''))
+          m = re.fullmatch(r'(\d{6})(?:-(\d{6}))?', txt) if txt else None
+          if txt and not m:
+              alto(f'Periodo "{txt}" no valido: use AAAAMM o AAAAMM-AAAAMM (ej. 202601-202609).')
+          desde = m.group(1) if m else mes_actual
+          hasta = (m.group(2) if m else None) or desde
+          for p in (desde, hasta):
+              if not re.fullmatch(r'20\d\d(0[1-9]|1[0-2])', p):
+                  alto(f'Periodo "{p}" no valido (mes 01 a 12).')
+          if hasta < desde:
+              alto(f'El rango esta al reves: {desde} es despues de {hasta}.')
+          if hasta > mes_actual:
+              alto(f'{hasta} todavia no empieza (hoy es {mes_actual} en Lima).')
+          periodos, a, mm = [], int(desde[:4]), int(desde[4:])
+          while True:
+              p = f'{a:04d}{mm:02d}'
+              periodos.append(p)
+              if p == hasta:
+                  break
+              a, mm = (a + 1, 1) if mm == 12 else (a, mm + 1)
+          if len(periodos) > 36:
+              alto(f'Son {len(periodos)} meses: el maximo es 36 por vez.')
+
+          ruc_txt = os.environ.get('RUC_INPUT', '').strip()
+          pedidos = re.findall(r'\d{11}', ruc_txt)
+          if ruc_txt and not pedidos and not ruc_txt.lower().startswith('tod'):
+              alto(f'No reconozco el RUC "{ruc_txt}" (11 digitos; varios separados por coma).')
+          activas = [e for e in empresas if e.get('activo')]
+          if pedidos:
+              faltan = [r for r in pedidos if r not in {e['ruc'] for e in activas}]
+              if faltan:
+                  alto('Estos RUC no estan activos en empresas.json: ' + ', '.join(faltan))
+              activas = [e for e in activas if e['ruc'] in pedidos]
+          if not activas:
+              alto('No hay empresas activas en empresas.json.')
+
+          matriz = [{'ruc': e['ruc'], 'nombre': (e.get('nombre') or e['ruc'])[:40], 'periodos': ' '.join(periodos)} for e in activas]
+          resumen = f"### SIRE solo reporte\n- Empresas: {', '.join(x['nombre'] for x in matriz)}\n- Meses: {desde}" + (f" a {hasta} ({len(periodos)})" if hasta != desde else '') + '\n'
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
+              f.write(resumen)
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as f:
+              f.write('matriz=' + json.dumps(matriz, ensure_ascii=False) + '\n')
+          print(resumen)
+          PYEOF
+
+  reporte:
+    needs: preparar
+    name: "${{ matrix.empresa.nombre }} (${{ matrix.empresa.ruc }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        empresa: ${{ fromJson(needs.preparar.outputs.matriz) }}
+    # Mismo Environment (= RUC) y mismos secretos que la descarga completa.
+    environment: ${{ matrix.empresa.ruc }}
+    env:
+      RUC: ${{ matrix.empresa.ruc }}
+      PERIODOS: ${{ matrix.empresa.periodos }}
+      TIPO: ${{ inputs.tipo || 'ambos' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Solo lo necesario (el repo trae ~130 MB de PDF/XML que aqui no hacen falta).
+          sparse-checkout: |
+            scripts
+            sire
+
+      - name: Bajar el registro del SIRE (API oficial)
+        id: bajar
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          SIRE_CLIENT_ID: ${{ secrets.SIRE_CLIENT_ID }}
+          SIRE_CLIENT_SECRET: ${{ secrets.SIRE_CLIENT_SECRET }}
+        run: |
+          # Sin "-e": si un mes o un tipo falla se anota y se sigue con el resto.
+          set +e -u
+          RAIZ="$GITHUB_WORKSPACE"
+          W="$RUNNER_TEMP/sire"
+          if [ "$TIPO" = "ambos" ]; then TIPOS=(compra venta); else TIPOS=("$TIPO"); fi
+          OK=""; FALLO=""; RESUMEN=""; ERRORES=""
+          for P in $PERIODOS; do
+            HIST="$RAIZ/sire/$RUC/historico/$P"
+            BIEN=1; LINEA=""
+            for T in "${TIPOS[@]}"; do
+              echo "########## $RUC · $T · $P ##########"
+              ETQ=$([ "$T" = "compra" ] && echo compras || echo ventas)
+              rm -rf "$W"; mkdir -p "$W/sire/$RUC/$T" "$W/sire/$RUC/extraido_$T"
+              EXIT_SIRE=1
+              for intento in 1 2; do
+                python3 "$RAIZ/scripts/sire_client.py" \
+                  --ruc "$SUNAT_RUC" --usuario-sol "$SUNAT_USUARIO" --clave-sol "$SUNAT_CLAVE" \
+                  --client-id "$SIRE_CLIENT_ID" --client-secret "$SIRE_CLIENT_SECRET" \
+                  --periodo "$P" --tipo "$T" --formato txt --out-dir "$W/sire/$RUC/$T" > "$W/log.txt" 2>&1
+                EXIT_SIRE=$?
+                cat "$W/log.txt"
+                [ "$EXIT_SIRE" -eq 0 ] && break
+                [ "$intento" -lt 2 ] && { echo "Fallo temporal; reintento en 5 s..."; sleep 5; }
+              done
+              if [ "$EXIT_SIRE" -ne 0 ]; then
+                BIEN=0; ERRORES="$ERRORES $P $T: SUNAT no entrego el reporte;" LINEA="$LINEA${LINEA:+ · }$ETQ ❌"
+                continue
+              fi
+              MODO=$(grep -oE 'MODO_DESCARGA=[a-zA-Z]+' "$W/log.txt" | tail -1 | cut -d= -f2)
+              ZIP=$(find "$W/sire/$RUC/$T" -maxdepth 1 -type f -iname '*.zip' | head -1)
+              if [ -n "$ZIP" ]; then
+                if ! unzip -oq "$ZIP" -d "$W/sire/$RUC/extraido_$T/"; then
+                  BIEN=0; ERRORES="$ERRORES $P $T: el archivo de SUNAT vino danado;" LINEA="$LINEA${LINEA:+ · }$ETQ ❌"
+                  continue
+                fi
+                case "$MODO" in
+                  oficial) NOMBRE_ZIP="Aceptada_$T.zip" ;;
+                  propuesta) NOMBRE_ZIP="Propuesta_$T.zip" ;;
+                  *) NOMBRE_ZIP="" ;;
+                esac
+                if [ -n "$NOMBRE_ZIP" ]; then
+                  mkdir -p "$HIST"
+                  cp "$ZIP" "$HIST/$NOMBRE_ZIP"
+                  if [ "$T" = "compra" ]; then
+                    python3 "$RAIZ/scripts/sire_versiones_compras.py" "$HIST" || echo "AVISO: no se pudo convertir propuesta/aceptada de compras a CSV."
+                  fi
+                fi
+              else
+                cp "$W/sire/$RUC/$T"/*.txt "$W/sire/$RUC/extraido_$T/" 2>/dev/null || true
+              fi
+              if [ "$T" = "compra" ]; then CSV="reporte_parseado.csv"; else CSV="reporte_parseado_ventas.csv"; fi
+              if ! (cd "$W" && python3 "$RAIZ/scripts/sire_convertir.py" "$T" "$W/salida.csv" "$W/facturas.csv" "$RUC" no); then
+                BIEN=0; ERRORES="$ERRORES $P $T: no se pudo leer el archivo de SUNAT;" LINEA="$LINEA${LINEA:+ · }$ETQ ❌"
+                continue
+              fi
+              N=0
+              if [ -s "$W/salida.csv" ]; then
+                mkdir -p "$HIST"
+                cp "$W/salida.csv" "$HIST/$CSV"
+                N=$(python3 -c "import csv,sys; print(max(0, sum(1 for _ in csv.reader(open(sys.argv[1], encoding='utf-8'))) - 1))" "$W/salida.csv")
+              fi
+              LINEA="$LINEA${LINEA:+ · }$ETQ $N${MODO:+ ($MODO)}"
+            done
+            MES="${P:4:2}/${P:0:4}"
+            if [ "$BIEN" -eq 1 ]; then OK="$OK $P"; else FALLO="$FALLO $P"; fi
+            RESUMEN="$RESUMEN${RESUMEN:+; }$MES ${LINEA:-sin datos}"
+          done
+          echo "ok=$(echo $OK)" >> "$GITHUB_OUTPUT"
+          echo "fallo=$(echo $FALLO)" >> "$GITHUB_OUTPUT"
+          echo "- **$RUC**: $RESUMEN" >> "$GITHUB_STEP_SUMMARY"
+          # El bot (Telegram/WhatsApp) lee estas anotaciones para contar el resultado.
+          echo "::notice title=SIRE reporte $RUC::$RESUMEN"
+          [ -n "$ERRORES" ] && echo "::error title=SIRE sin reporte $RUC::$ERRORES"
+          exit 0
+
+      - name: Guardar en el repositorio
+        id: guardar
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "sire/$RUC/historico" 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "Nada nuevo que guardar (SUNAT devolvio lo mismo que ya estaba)."
+            echo "subido=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -q -m "SIRE solo reporte ($RUC, $TIPO, $(echo $PERIODOS | awk '{print $1 (NF>1 ? "-" $NF : "")}')) [skip ci]"
+          for intento in 1 2 3 4 5 6 7 8; do
+            if git push -q origin "HEAD:$GITHUB_REF_NAME"; then echo "subido=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+            echo "Push rechazado (otra empresa guardo antes); traigo lo nuevo y reintento ($intento)..."
+            sleep $((2 + RANDOM % 6))
+            git pull -q --rebase -X theirs origin "$GITHUB_REF_NAME" || git rebase --abort 2>/dev/null || true
+          done
+          echo "::error title=SIRE sin guardar $RUC::No se pudo guardar en el repositorio tras 8 intentos."
+          exit 1
+
+      - name: Avisar a la hoja SIRE (importar a Drive)
+        if: steps.guardar.outputs.subido == '1' && steps.bajar.outputs.ok != ''
+        env:
+          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL || secrets.SHEETS_WEBHOOK_URL }}
+          SHEET_WEBHOOK_SECRET: ${{ secrets.SHEET_WEBHOOK_SECRET || secrets.SHEETS_WEBHOOK_SECRET }}
+          OK_PERIODOS: ${{ steps.bajar.outputs.ok }}
+        run: |
+          if [ -z "$SHEET_WEBHOOK_URL" ]; then
+            echo "Sin webhook configurado: la hoja lo toma con 'Importar resultados' o su importacion automatica."
+            exit 0
+          fi
+          for P in $OK_PERIODOS; do
+            curl -sS -L "$SHEET_WEBHOOK_URL" -H "Content-Type: application/json" \
+              -d "{\"secreto\":\"$SHEET_WEBHOOK_SECRET\",\"ruc\":\"$RUC\",\"periodo\":\"$P\"}" \
+              --max-time 60 -o /dev/null -w "Aviso $P: HTTP %{http_code}\n" || echo "AVISO: la hoja no respondio ($P)."
+          done
+
+      - name: Resultado
+        if: steps.bajar.outputs.fallo != ''
+        run: |
+          echo "Meses con problemas: ${{ steps.bajar.outputs.fallo }}"
+          exit 1

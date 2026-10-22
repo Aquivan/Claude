@@ -87,6 +87,9 @@ function TGW_responder_(q) {
   var texto = String(q.texto || '').trim();
   // 🧾 "emitir" / "retenciones por emitir": lista de comprobantes de retención pendientes con sus botones.
   if (/^(emitir|retener|cre|retenciones por emitir|emitir retenciones)\b/i.test(texto)) return TGR_listaWA_(ss);
+  // ⚡ "sire granix 202601-202609": bajar solo el reporte del SIRE (se confirma con el botón 🚀).
+  var sire = TGS_wa_(ss, texto);
+  if (sire) return sire;
   // 🎤 Nota de voz: se transcribe igual que en Telegram y se pregunta lo dicho.
   var dicho = '';
   if (q.audio && q.audio.base64) {
@@ -163,8 +166,14 @@ function TGW_boton_(k, op, numero) {
   if (op !== 'si') return { ok: true, respuesta: 'Listo, no pedí nada.' };
   var cfg = TG_cfg_(TG_ss_());
   var p = TG_PROYECTOS_[acc.proyecto];
-  try { TG_gh_(cfg, '/actions/workflows/' + p.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: p.inputs(acc) }); }
+  var inputs = p.inputs(acc);
+  try { TG_gh_(cfg, '/actions/workflows/' + p.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: inputs }); }
   catch (e) { return { ok: false, error: 'No se pudo pedir la descarga: ' + e.message }; }
+  if (acc.proyecto === 'sire_rapido' && String(numero || '').replace(/\D/g, '')) {   // ⚡ avisa aquí mismo cuántos comprobantes trajo (TG_SireRapido.js)
+    TG_seguir_('wa' + String(numero || '').replace(/\D/g, ''), p.wf, null, TG_textoDescarga_(acc, cfg.cob), { tipo: 'sire_rapido', titulo: TGS_titulo_(inputs) });
+    return { ok: true, seguir: true, respuesta: '✅ *Pedido*: ' + TG_textoDescarga_(acc, cfg.cob) +
+      '\nTarda 1 a 3 minutos por empresa y mes. Le escribo aquí cuando termine.' };
+  }
   return { ok: true, respuesta: '✅ *Descarga pedida*: ' + TG_textoDescarga_(acc, cfg.cob) +
     '\nTarda unos minutos por empresa; la hoja se actualiza sola. Pregúnteme "¿cómo van las descargas?" para ver el estado.' };
 }

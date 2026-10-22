@@ -77,9 +77,24 @@ var TGH_ = {
     if (!p) throw new Error('proyecto desconocido "' + a.proyecto + '"; los que hay: ' + Object.keys(TG_PROYECTOS_).join(', '));
     var emp = String(a.empresa || 'todas').trim();
     var ruc = /^tod/i.test(emp) ? 'todas' : ANA_empresa_(c, emp);
-    if (ruc !== 'todas' && !/^\d{11}$/.test(ruc)) throw new Error('no reconozco la empresa "' + emp + '"');
+    if (p === 'sire_rapido' && ruc !== 'todas') {   // ⚡ puede ser una o varias empresas
+      var rs = [];
+      emp.split(/\s*(?:,|;|\by\b)\s*/).filter(String).forEach(function (x) {
+        var r = ANA_empresa_(c, x);
+        if (!/^\d{11}$/.test(r)) throw new Error('no reconozco la empresa "' + x + '"');
+        if (rs.indexOf(r) < 0) rs.push(r);
+      });
+      ruc = rs.join(',') || 'todas';
+    }
+    if (ruc !== 'todas' && !/^\d{11}(,\d{11})*$/.test(ruc)) throw new Error('no reconozco la empresa "' + emp + '"');
     var desde = String(a.desde || '').replace(/\D/g, '').slice(0, 6), hasta = String(a.hasta || '').replace(/\D/g, '').slice(0, 6);
     var acc = { t: 'descarga', proyecto: p, empresa: ruc, desde: desde, hasta: hasta };
+    if (p === 'sire_rapido') {
+      if (desde && hasta && hasta < desde) { var x0 = desde; desde = hasta; hasta = x0; acc.desde = desde; acc.hasta = hasta; }
+      if ((hasta || desde) > TG_mes_(0)) throw new Error((hasta || desde) + ' todavía no empieza');
+      if (desde && TGS_meses_(desde, hasta || TG_mes_(0)).length > TGS_MAX_MESES_) throw new Error('máximo ' + TGS_MAX_MESES_ + ' meses por vez');
+      acc.tipo = /^compra/i.test(a.tipo || '') ? 'compra' : /^venta/i.test(a.tipo || '') ? 'venta' : 'ambos';
+    }
     if (p === 'notificaciones' && !desde) acc.nuevas = !(a.todo === true || /^tod/i.test(String(a.desde || '')));
     c.op.tg.acciones.push(acc);
     return { columnas: ['propuesta'], filas: [[TG_textoDescarga_(acc, c.cfg)]],
