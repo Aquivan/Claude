@@ -1,0 +1,22 @@
+# Investigación (temporal): enviar un Comprobante de Retención Electrónico con datos FICTICIOS
+# al entorno de PRUEBAS (beta) de SUNAT (SEE-Del Contribuyente). Sin validez tributaria y sin claves.
+name: Retenciones - prueba emisión CRE (beta)
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/tender-wozniak-vnf3iq]
+    paths: ['.github/workflows/retenciones-emision-beta.yml', 'retenciones/emision/**']
+permissions:
+  contents: read
+jobs:
+  beta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: retenciones/emision
+      - name: Instalar xmlsec1
+        run: sudo apt-get install -y -qq xmlsec1 >/dev/null
+      - name: CRE de prueba a SUNAT beta
+        run: cd retenciones/emision && python3 beta_see_del.py
