@@ -15,6 +15,18 @@ No comparte código ni hojas con Cobranzas, SIRE ni Vouchers.
    Se guardan en `retenciones/datos/<RUC>/<AAAA>/<MM>/`.
 2. **La hoja** (Apps Script en `apps_script/`) lee esos archivos y arma las pestañas, y copia los PDF a Drive.
 
+## Emitir comprobantes de retención (en preparación)
+
+`emision/vista_cre.py` prepara un CRE en **SEE-SOL** (menú 11.5.8.1.1 "Emitir Comprobante de Retención") con un navegador
+real y **se detiene en la Vista preliminar: no emite** (no tiene ese paso). Valida el RUC del proveedor, agrega cada
+factura (SUNAT trae su fecha y total), sus **notas de crédito** (serie y número; SUNAT trae fecha e importe y las resta),
+la fecha y el importe del pago, y comprueba que el 3 % que calcula SUNAT sea el esperado. En el registro no imprime
+montos, nombres ni RUC. Se corre con `retenciones-cre-vista.yml` (empresa + solicitud en JSON).
+
+- `emision/beta_see_del.py` + `retenciones-emision-beta.yml`: prueba del otro camino (SEE-Del Contribuyente, XML firmado)
+  en el entorno de pruebas de SUNAT, con datos ficticios.
+- `emision/sondeo_sol.py` + `retenciones-emision-sondeo.yml`: sondeo de solo lectura del formulario de SUNAT.
+
 ## Estructura
 
 | Ruta | Qué es |
