@@ -37,9 +37,8 @@ def estructura(pag, titulo):
     print('  FUNCIONES:', sorted(set(re.findall(r'function\s+(\w+)\s*\(', pag)))[:60])
 
 
-FUNCS = ['initVariables', 'setValoresDefecto', 'initComponentes', 'agregarDocumento', 'buscarUltimoNroPago', 'calcularRetencion',
-         'calcularImporteOperacion', 'getTasas', 'irVistaPreliminar', 'jqueryValida', 'updateTblDocumentosRelacionados', 'existFacturaEnDocsRel',
-         'initCompoDlg', 'cargarComboJSON', 'cargarCombo', 'startAjax', 'mostrarDialogAgregarEditar', 'calcularTipoCambio']
+FUNCS = ['initComponentesNotaCredito', 'initAddValidateFrmNotaCredito', 'updatetblNotaCredito', 'clearFrmAgregarNotaCredito',
+         'initVarDlgNotasCredito', 'initVarDlgAdd', 'clearFrmDocumentosRelacionados', 'validarEsAgenteRetencion', 'validarReceptor']
 
 
 def cuerpo_funcion(js, nombre):
@@ -74,6 +73,16 @@ for f in FUNCS:
     if c:
         print('\n----------', f, '(' + str(len(c)) + ' car.)')
         print(sin_datos(c)[:3500])
+# Botones y diálogos de la página (HTML fijo de SUNAT, sin datos)
+print('\n== Botones ==')
+for b in re.finditer(r'<(button|a|input)[^>]*?\bid="([^"]+)"[^>]*>(.*?)(?:</button>|</a>|)', pag, re.S | re.I):
+    if b.group(1).lower() != 'input' or re.search(r'type="(button|submit)"', b.group(0), re.I):
+        print('  ', b.group(2), '·', limpio(b.group(3))[:50] or limpio((re.search(r'value="([^"]*)"', b.group(0)) or [None, ''])[1]))
+print('\n== Diálogos (modal) ==')
+for d in re.finditer(r'<div[^>]*class="[^"]*modal[^"]*"[^>]*id="([^"]+)"', pag, re.I):
+    print('  ', d.group(1))
+for f in re.finditer(r'<form[^>]*id="([^"]+)"', pag, re.I):
+    print('   form', f.group(1))
 # Formulario de vista preliminar (solo nombres de campos)
 form = re.search(r'<form[^>]*verVistaPreliminar[^>]*>(.*?)</form>', pag, re.S | re.I)
 if form:
