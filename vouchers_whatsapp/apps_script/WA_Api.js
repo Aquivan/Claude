@@ -8,7 +8,11 @@ function WA_graph_(metodo, ruta, cuerpo) {
   for (var intento = 1; intento <= 3; intento++) {
     var r = UrlFetchApp.fetch(WA_GRAPH_ + ruta, op), cod = r.getResponseCode(), datos = {};
     try { datos = JSON.parse(r.getContentText() || '{}'); } catch (e) {}
-    if (cod >= 200 && cod < 300) return { ok: true, datos: datos };
+    if (cod >= 200 && cod < 300) {
+      // Se recuerda el texto de cada mensaje enviado: si la persona lo responde (cita), la IA sabe de qué habla.
+      if (cuerpo && /\/messages$/.test(ruta) && datos.messages && datos.messages[0]) WA_guardarTextoMsg_(datos.messages[0].id, WA_textoDeEnvio_(cuerpo));
+      return { ok: true, datos: datos };
+    }
     if ((cod === 429 || cod >= 500) && intento < 3) { Utilities.sleep(1500 * intento); continue; }
     var err = datos.error || {};
     return { ok: false, error: (err.message || ('HTTP ' + cod)) + (err.code ? ' (código ' + err.code + ')' : ''), datos: datos };
@@ -33,4 +37,28 @@ function WA_enviarTexto_(a, texto) {
   });
   if (!r.ok) console.error('No se pudo responder a ' + a + ': ' + r.error);
   return r.ok;
+}
+
+/* ============================================================ mensajes citados (responder a un mensaje) */
+
+// Texto de un mensaje que mandamos (texto, botones, lista o pie de foto/documento).
+function WA_textoDeEnvio_(c) {
+  if (c.text && c.text.body) return c.text.body;
+  if (c.interactive) return [c.interactive.header && c.interactive.header.text, c.interactive.body && c.interactive.body.text].filter(Boolean).join('\n');
+  var m = c.image || c.document || c.video;
+  return m && m.caption ? m.caption : (c.document && c.document.filename ? '📎 ' + c.document.filename : '');
+}
+
+// Se guarda 6 horas (lo mismo que la IA recuerda la conversación).
+function WA_guardarTextoMsg_(id, texto) {
+  texto = String(texto || '').trim();
+  if (!id || !texto) return;
+  try { CacheService.getScriptCache().put('wa_t_' + id, texto.slice(0, 2000), 21600); } catch (e) {}
+}
+
+/** Texto del mensaje al que la persona responde (m.context.id), o '' si no responde a ninguno o ya venció. */
+function WA_textoCitado_(m) {
+  var id = m && m.context && m.context.id;
+  if (!id) return '';
+  try { return CacheService.getScriptCache().get('wa_t_' + id) || ''; } catch (e) { return ''; }
 }

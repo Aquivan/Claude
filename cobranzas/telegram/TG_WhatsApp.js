@@ -98,7 +98,8 @@ function TGW_responder_(q) {
     if (!dicho) return { ok: true, respuesta: '🎤 No escuché nada claro. ¿Me lo repite o lo escribe?', tablas: [], sugerencias: [], archivos: [], avisos: [] };
     texto = dicho;
   }
-  var r = CHAT_enviarEn_(ss, { texto: texto, nuevos: q.adjuntos || [], anteriores: (ses.adj || []).slice(-4), historial: ses.hist || [] }, op);
+  // ↩️ Respondió (citó) un mensaje: la app de WhatsApp manda su texto en q.citado.
+  var r = CHAT_enviarEn_(ss, { texto: q.citado ? TG_conCita_(texto, q.citado) : texto, nuevos: q.adjuntos || [], anteriores: (ses.adj || []).slice(-4), historial: ses.hist || [] }, op);
   if (r.error) return { ok: false, error: r.error };
 
   if (!op.tg.vouchers && TG_pideFotoVoucher_(texto)) {
@@ -145,7 +146,7 @@ function TGW_responder_(q) {
   out.archivos = out.archivos.slice(0, TGW_MAX_ARCHIVOS_);
 
   ses = TG_sesion_(clave);
-  ses.hist = (ses.hist || []).concat([{ p: texto || '(archivos adjuntos)', r: out.respuesta }]);
+  ses.hist = (ses.hist || []).concat([{ p: TG_preguntaParaMemoria_(texto, q.citado), r: out.respuesta }]);
   ses.adj = (ses.adj || []).concat(r.adjuntos || []).slice(-8);
   TG_guardarSesion_(clave, ses);
   return out;
