@@ -36,8 +36,21 @@ LIMA = timezone(timedelta(hours=-5))
 JS_ESTRUCTURA = """() => [...document.querySelectorAll('input,select,button,a.btn,textarea')]
   .filter(e => e.offsetParent !== null)
   .map(e => [e.tagName, e.type || '', e.id || '', e.name || '', (e.innerText || e.value || '').trim().slice(0, 40)].join(' | '))"""
-JS_AVISO = """() => [...document.querySelectorAll('.modal.in .modal-body, .bootbox-body, .alert, .help-block')]
-  .filter(e => e.offsetParent !== null).map(e => e.innerText.trim()).filter(Boolean).join(' / ')"""
+# Solo el mensaje de SUNAT (ventana de aviso) y los errores de los campos marcados en rojo.
+JS_AVISO = """() => {
+  const vis = e => e && e.offsetParent !== null;
+  const out = [];
+  const m = document.querySelector('#idModalMensaje');
+  if (m && m.classList.contains('in')) out.push((document.querySelector('#lblModalMensaje') || m).innerText.trim());
+  document.querySelectorAll('.help-block, span.error, label.error').forEach(e => { if (vis(e) && e.innerText.trim()) out.push(e.innerText.trim()); });
+  document.querySelectorAll('.has-error input, .has-error select').forEach(e => { if (vis(e)) out.push('campo en rojo: ' + (e.id || e.name)); });
+  return out.join(' / '); }"""
+# Ventana de SUNAT que pide confirmar (Sí/No): {texto, si} o null.
+JS_CONFIRMA = """() => { const m = document.querySelector('#idModalMensaje');
+  if (!m || !m.classList.contains('in')) return null;
+  const d = document.querySelector('#btnModalDer'), i = document.querySelector('#btnModalIzq');
+  return {texto: (document.querySelector('#lblModalMensaje') || m).innerText.trim(),
+          der: d && d.offsetParent !== null ? d.innerText.trim() : '', izq: i && i.offsetParent !== null ? i.innerText.trim() : ''}; }"""
 
 
 def sin_datos(t):
@@ -195,7 +208,14 @@ def main():
                 fallar(fr, f"Documento {i}: los montos no cuadran")
             antes = fr.evaluate("() => (window.lstDocumentosRelacionados || []).length")
             fr.click("#btnModalAddDocu")
-            fr.wait_for_timeout(1200)
+            fr.wait_for_timeout(1500)
+            c = fr.evaluate(JS_CONFIRMA)
+            if c and (c["der"] or c["izq"]):
+                # Pregunta de SUNAT (p. ej. "ya hay pagos con retención de esta factura, ¿continuar?"): en la vista
+                # preliminar se acepta para poder verla; aceptar solo agrega la factura a la lista de esta pantalla.
+                print(f"  SUNAT pregunta: {sin_datos(c['texto'])[:300]} → se acepta [{c['der'] or c['izq']}] (solo vista)")
+                fr.click("#btnModalDer" if c["der"] else "#btnModalIzq")
+                fr.wait_for_timeout(1500)
             if fr.evaluate("() => (window.lstDocumentosRelacionados || []).length") != antes + 1:
                 fallar(fr, f"Documento {i}: no se pudo agregar")
         print("Documentos en el comprobante:", fr.evaluate("() => (window.lstDocumentosRelacionados || []).length"), "de", len(docs))
