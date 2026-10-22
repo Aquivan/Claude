@@ -37,27 +37,44 @@ def estructura(pag, titulo):
     print('  FUNCIONES:', sorted(set(re.findall(r'function\s+(\w+)\s*\(', pag)))[:60])
 
 
+FUNCS = ['initVariables', 'setValoresDefecto', 'initComponentes', 'agregarDocumento', 'buscarUltimoNroPago', 'calcularRetencion',
+         'calcularImporteOperacion', 'getTasas', 'irVistaPreliminar', 'jqueryValida', 'updateTblDocumentosRelacionados', 'existFacturaEnDocsRel',
+         'initCompoDlg', 'cargarComboJSON', 'cargarCombo', 'startAjax', 'mostrarDialogAgregarEditar', 'calcularTipoCambio']
+
+
+def cuerpo_funcion(js, nombre):
+    """Código de una función (por llaves balanceadas)."""
+    m = re.search(r'function\s+' + nombre + r'\s*\([^)]*\)\s*\{', js)
+    if not m: return ''
+    i, nivel = m.end(), 1
+    while i < len(js) and nivel:
+        nivel += {'{': 1, '}': -1}.get(js[i], 0); i += 1
+    return js[m.start():i]
+
+
+def sin_datos(t):
+    """Oculta números largos (RUC, DNI, montos) y correos por si la página trae datos de la empresa."""
+    t = re.sub(r'\b\d{6,}\b', '#####', t)
+    return re.sub(r'[\w.+-]+@[\w-]+\.[\w.]+', '***@***', t)
+
+
 sol = Sol()
 sol.login(os.environ['SUNAT_RUC'], os.environ['SUNAT_USUARIO'], os.environ['SUNAT_CLAVE'])
 print('Login OK')
 sol.pedir(MENU, {'action': 'prevApp'})
-_, menu = sol.pedir(MENU)
-opciones = {}
-for m in re.finditer(r'(\d{1,2}(?:\.\d{1,2}){3,6})', menu):
-    ventana = limpio(menu[max(0, m.start() - 30): m.end() + 300])
-    if re.search(r'etenci', ventana, re.I) and m.group(1) not in opciones:
-        opciones[m.group(1)] = ventana[:220]
-print('\n== Opciones del menú con "retención" ==')
-for c in sorted(opciones, key=lambda x: [int(p) for p in x.split('.')]):
-    print(c, '·', opciones[c])
-
-objetivos = [c for c, t in opciones.items() if re.search(r'emisi|emitir', t, re.I) and not re.search(r'consult', t, re.I)]
-for cod in (objetivos or list(opciones))[:4]:
-    sol.pedir(MENU, {'action': 'prevApp'})
-    st, pag = sol.pedir(f'{MENU}?action=execute&code={cod}')
-    estructura(pag, f'{cod} · HTTP {st} · {sol.ultima_url.split("?")[0]}')
-    # Si la página es un marco, se abre también lo que carga dentro (solo lectura).
-    for src in re.findall(r'<(?:iframe|frame)[^>]*src="([^"]+)"', pag, re.I)[:2]:
-        url = src if src.startswith('http') else re.sub(r'/[^/]*$', '/', sol.ultima_url.split('?')[0]) + src.lstrip('./')
-        st2, pag2 = sol.pedir(url)
-        estructura(pag2, f'  marco {url.split("?")[0]} · HTTP {st2}')
+st, pag = sol.pedir(f'{MENU}?action=execute&code=11.5.8.1.1')
+print('Emitir CRE:', st, sol.ultima_url.split('?')[0], len(pag), 'bytes')
+js = '\n'.join(re.findall(r'<script(?![^>]*src=)[^>]*>(.*?)</script>', pag, re.S | re.I))
+print('Variables globales:', sorted(set(re.findall(r'^\s*var\s+(\w+)', js, re.M)))[:80])
+print('\n== Llamadas ajax / url / submit ==')
+for m in re.finditer(r'.{0,120}(?:\$\.ajax|\$\.post|\$\.getJSON|url\s*:|\.submit\(|action\s*=|window\.location).{0,220}', js):
+    print('  ', sin_datos(re.sub(r'\s+', ' ', m.group(0)))[:340])
+for f in FUNCS:
+    c = cuerpo_funcion(js, f)
+    if c:
+        print('\n----------', f, '(' + str(len(c)) + ' car.)')
+        print(sin_datos(c)[:3500])
+# Formulario de vista preliminar (solo nombres de campos)
+form = re.search(r'<form[^>]*verVistaPreliminar[^>]*>(.*?)</form>', pag, re.S | re.I)
+if form:
+    print('\n== Campos del formulario verVistaPreliminar ==', re.findall(r'name="([^"]+)"', form.group(1)))
