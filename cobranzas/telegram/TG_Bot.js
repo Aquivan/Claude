@@ -100,6 +100,7 @@ function TG_manejar_(u) {
   if (texto.charAt(0) === '/') return TG_comando_(ctx, texto);
   var atajo = TG_ATAJOS_[texto];
   if (atajo) return TG_comando_(ctx, atajo);
+  if (TGR_atajoTG_(ctx, texto)) return;   // 🧾 "emite la retención de F001-215" (o citando el mensaje)
   TG_preguntar_(ctx, texto, []);
 }
 
