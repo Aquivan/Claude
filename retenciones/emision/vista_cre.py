@@ -112,6 +112,27 @@ def fallar(fr, texto):
     sys.exit(f"❌ {texto}" + (f" · SUNAT dice: {sin_datos(aviso)[:300]}" if aviso else "") + " · No se emitió nada.")
 
 
+def pagos_con_retencion(fr):
+    """Solo consulta: botón de SUNAT "Pagos realizados con comprobantes de retención" de la factura que se está
+    agregando. Devuelve los comprobantes que SUNAT ya tiene para ella (p. ej. ["E001-85"]) y cierra la ventana."""
+    if not fr.query_selector("#btnConsultaCobrosModal") or not fr.is_visible("#btnConsultaCobrosModal"):
+        return []
+    fr.click("#btnConsultaCobrosModal")
+    try:
+        fr.wait_for_selector("#divModalCobrosRealizados", state="visible", timeout=15000)
+    except Exception:
+        return []
+    fr.wait_for_timeout(1500)
+    texto = fr.eval_on_selector("#divModalCobrosRealizados", "e => e.innerText")
+    cre = sorted(set(re.findall(r"\b[EeRrPp]\d{3}\s*-\s*\d+\b", texto or "")))
+    if fr.query_selector("#btnCerrarCobrosRealizados"):
+        fr.click("#btnCerrarCobrosRealizados")
+    fr.wait_for_timeout(800)
+    if not fr.is_visible("#txtSerieDoc"):   # al cerrar puede volver a la pantalla principal: reabrir no hace falta, avisar
+        print("  (la ventana de la factura se cerró al cerrar la consulta)")
+    return [c.replace(" ", "").upper() for c in cre]
+
+
 def agregar_notas_credito(fr, i, notas):
     """Dentro de la factura: '¿Tiene nota de crédito? Sí' → serie/número → Validar → Agregar → Cerrar."""
     fr.click("#optNotaCredSI")
@@ -203,6 +224,12 @@ def main():
                 esperar_valor(fr, "#txtImpTot")
             except Exception:
                 fallar(fr, f"Documento {i}: SUNAT no lo encontró o no lo acepta")
+            previos = pagos_con_retencion(fr)
+            if previos:
+                print(f"  Documento {i}: SUNAT ya registra pagos con comprobante de retención: {', '.join(previos)}")
+                if not d.get("permitir_retencion_previa"):
+                    fallar(fr, f"Documento {i}: ya tiene comprobante(s) de retención ({', '.join(previos)}). "
+                               "Revise si falta retener algo antes de seguir")
             if d.get("notas_credito"):
                 agregar_notas_credito(fr, i, d["notas_credito"])
             poner(fr, "#txtFecPago", d["fecha_pago"])
