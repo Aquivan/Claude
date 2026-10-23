@@ -351,7 +351,8 @@ def resolver_con_persona(pag, salida, foto, reto):
         foto("captcha_reto")
         print("⚠️ Falta la conexión con el bot (BOT_URL / GITHUB_TOKEN): no puedo pedir ayuda. Me detengo.")
         return False
-    for ronda in range(1, 9):
+    aviso = ""
+    for ronda in range(1, 16):
         marco = next((f for f in pag.frames if "api2/bframe" in f.url), None)
         if not marco:
             return False
@@ -369,7 +370,9 @@ def resolver_con_persona(pag, salida, foto, reto):
         reto.screenshot(path=ruta)
         print(f"\n🧩 Ronda {ronda}: {texto} ({casillas} casillas)")
         _subir_foto(repo, tok, f"{run}/{ronda}.png", ruta)
-        r = _bot(bot, {"accion": "captcha", "run": run, "ronda": ronda, "pregunta": texto, "empresa": os.environ.get("EMPRESA", "")})
+        r = _bot(bot, {"accion": "captcha", "run": run, "ronda": ronda, "pregunta": texto, "casillas": casillas, "aviso": aviso,
+                       "empresa": os.environ.get("EMPRESA", "")})
+        aviso = ""
         print("   Aviso al bot:", r)
         resp = None
         for _ in range(60):   # hasta 3 minutos
@@ -405,8 +408,13 @@ def resolver_con_persona(pag, salida, foto, reto):
             print("✅ Captcha superado.")
             _bot(bot, {"accion": "fin", "run": run, "ok": True})
             return True
-        print("   Google pide otra ronda.")
-    _bot(bot, {"accion": "fin", "run": run, "ok": False, "texto": "Demasiadas rondas de captcha; me detengo."})
+        marco = next((f for f in pag.frames if "api2/bframe" in f.url), None)
+        if marco:
+            aviso = " ".join(" ".join(marco.locator(s).first.inner_text() .split()) for s in
+                             (".rc-imageselect-error-select-more", ".rc-imageselect-error-dynamic-more", ".rc-imageselect-incorrect-response")
+                             if marco.locator(s).count() and marco.locator(s).first.is_visible())
+        print("   Google pide otra ronda." + (f" Dijo: {aviso}" if aviso else ""))
+    _bot(bot, {"accion": "fin", "run": run, "ok": False, "texto": "Google pidió 15 rondas sin aceptar; me detengo."})
     return False
 
 
