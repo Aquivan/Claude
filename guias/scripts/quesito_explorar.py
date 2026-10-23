@@ -48,7 +48,7 @@ JS_NAVEGACION = """() => [...document.querySelectorAll('a,button,[role=button],[
 
 # Estructura del formulario: secciones (encabezados) y campos con su etiqueta, sin los valores escritos.
 JS_ESTRUCTURA = """() => {
-  const vis = e => e.offsetParent !== null || e.type === 'hidden';
+  const vis = e => e.offsetParent !== null || e.type === 'hidden' || e.tagName === 'SELECT';
   const etiqueta = e => {
     if (e.id) { const l = document.querySelector('label[for="' + CSS.escape(e.id) + '"]'); if (l) return l.innerText.trim(); }
     const l2 = e.closest('label'); if (l2) return l2.innerText.trim();
@@ -132,7 +132,7 @@ def main():
             nav_ = pag.evaluate(JS_NAVEGACION)
             print(f"\n=== {nombre}  ({urlsplit(pag.url).path})")
             for t in dict.fromkeys(nav_):
-                print("   ·", t)
+                print("   ·", re.sub(r"\b\d{8}(\d{3})?\b.*", "[cliente]", t))
             informe["pasos"].append({"paso": nombre, "url": urlsplit(pag.url).path, "navegacion": list(dict.fromkeys(nav_))})
             foto(nombre)
 
@@ -296,6 +296,15 @@ def main():
                             el.click(timeout=2000); abiertas += 1; pag.wait_for_timeout(400)
                     except Exception:
                         pass
+            for t in ["DATOS DEL TRASLADO", "DATOS DEL TRANSPORTISTA", "DATOS DEL CONDUCTOR", "DATOS DEL VEH", "PUNTO DE PARTIDA", "PUNTO DE LLEGADA", "OBSERVACIONES"]:
+                loc = pag.get_by_text(re.compile("^\\s*" + t, re.I))
+                for i in range(loc.count()):
+                    try:
+                        el = loc.nth(i)
+                        if el.is_visible():
+                            el.evaluate("e => e.click()"); abiertas += 1; pag.wait_for_timeout(700)
+                    except Exception:
+                        pass
             print(f"\n(Secciones desplegadas: {abiertas})")
             pag.wait_for_timeout(1500)
             est = pag.evaluate(JS_ESTRUCTURA)
@@ -320,7 +329,7 @@ def main():
                 print(f"   - {c['etiqueta'] or '(sin etiqueta)'}  <{c['tag']} {c['tipo']} name={c['name'] or c['id']}>" + (f"  ({', '.join(extra)})" if extra else ""))
                 if c.get("opciones") and not c["dentroDeTabla"] and CATALOGO.search(c["etiqueta"] + " " + c["name"] + " " + c["id"]):
                     print("       opciones:", " / ".join(c["opciones"][:25]) + (" …" if len(c["opciones"]) > 25 else ""))
-            botones = [b for b in pag.evaluate(JS_NAVEGACION)]
+            botones = [re.sub(r"\b\d{8}(\d{3})?\b.*", "[cliente]", b) for b in pag.evaluate(JS_NAVEGACION)]
             print("\nBotones del formulario (NO se presionó ninguno de acción):", " | ".join(dict.fromkeys(botones))[:1500])
         finally:
             informe["red"] = list(dict.fromkeys(red))
