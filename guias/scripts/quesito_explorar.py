@@ -300,15 +300,24 @@ def main():
 def captcha_google(pag, salida, foto):
     """Marca la casilla "No soy un robot". Si Google la acepta, sigue (True). Si pide imágenes,
     guarda la imagen del reto y la deja en el log (base64) para mostrársela a la persona; no la resuelve."""
-    ancla = pag.frame_locator("iframe[src*='api2/anchor']").first
-    ancla.locator("#recaptcha-anchor").click()
-    print("\n☑️ Marqué 'No soy un robot'.")
-    for _ in range(10):
-        pag.wait_for_timeout(1000)
-        if ancla.locator("#recaptcha-anchor[aria-checked=true]").count():
-            print("✅ Google aceptó sin pedir imágenes.")
-            return True
     reto = pag.locator("iframe[src*='api2/bframe']").first
+    if not (reto.count() and reto.is_visible()):
+        # Casilla visible (las invisibles traen size=invisible y no tienen casilla)
+        ancla = pag.frame_locator("iframe[src*='api2/anchor']:not([src*='size=invisible'])").first
+        try:
+            ancla.locator("#recaptcha-anchor").click(timeout=8000)
+            print("\n☑️ Marqué 'No soy un robot'.")
+        except Exception:
+            print("\n(No hay casilla 'No soy un robot' para marcar: es un reCAPTCHA invisible.)")
+        for _ in range(10):
+            pag.wait_for_timeout(1000)
+            if ancla.locator("#recaptcha-anchor[aria-checked=true]").count():
+                print("✅ Google aceptó sin pedir imágenes.")
+                return True
+            if reto.count() and reto.is_visible():
+                break
+    else:
+        print("\n(Google abrió directamente el reto de imágenes.)")
     if not reto.is_visible():
         print("⚠️ No aceptó ni mostró imágenes.")
         foto("captcha_sin_reto")
