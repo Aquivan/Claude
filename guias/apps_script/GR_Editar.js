@@ -96,19 +96,24 @@ function GR_tabla_(ss, nombre) {
 
 /** Catálogos y productos por ID, leídos una vez por edición. */
 function GR_contexto_(ss) {
-  var c = { emp: {}, tra: {}, veh: {}, con: {}, dir: [], prod: {}, guias: [] };
+  var c = { emp: {}, tra: {}, veh: {}, con: {}, dir: [], local: {}, prod: {}, guias: [] };
   GR_tabla_(ss, GR_EMP_).forEach(function (f) {
-    c.emp[String(f[0]).trim()] = { ruc: String(f[1]).replace(/\D/g, ''), razon: f[2], correo: f[3], serie: f[4], ubi: f[5], dir: f[6], est: String(f[7] || ''), activa: String(f[8]).toUpperCase() !== 'NO' };
+    c.emp[String(f[0]).trim()] = { ruc: String(f[1]).replace(/\D/g, ''), razon: f[2], correo: f[3], serie: f[4], ubi: f[5], dir: f[6], est: GR_codLocal_(f[7]),
+      activa: String(f[8]).toUpperCase() !== 'NO', serieFact: String(f[9] || '').toUpperCase().trim() };
   });
   GR_tabla_(ss, GR_TRA_).forEach(function (f) { c.tra[String(f[0]).replace(/\D/g, '')] = { nom: f[1], mtc: f[2] }; });
-  GR_tabla_(ss, GR_VEH_).forEach(function (f) { c.veh[GR_placa_(f[0])] = { desc: f[1], m1: String(f[2]).toUpperCase() === 'SI' }; });
+  GR_tabla_(ss, GR_VEH_).forEach(function (f) { c.veh[GR_placa_(f[0])] = { desc: f[1], m1: String(f[2]).toUpperCase() === 'SI', mtc: String(f[5] || '').trim() }; });
   GR_tabla_(ss, GR_CON_).forEach(function (f) { c.con[String(f[0]).replace(/\D/g, '')] = { nom: f[1], ape: f[2], lic: f[3] }; });
-  GR_tabla_(ss, GR_DIR_).forEach(function (f) { c.dir.push({ doc: String(f[0]).replace(/\D/g, ''), nom: f[1], uso: String(f[2] || 'Llegada'), ubi: f[3], dir: f[4], est: String(f[5] || '') }); });
+  GR_tabla_(ss, GR_DIR_).forEach(function (f) {
+    var d = { local: String(f[0]).trim(), doc: String(f[1]).replace(/\D/g, ''), nom: f[2], uso: String(f[3] || 'Llegada'), ubi: f[4], dir: f[5], est: GR_codLocal_(f[6]) };
+    c.dir.push(d); c.local[d.local] = d;
+  });
   var p = ss.getSheetByName(GR_PROD_);
-  if (p && p.getLastRow() > 1) p.getRange(2, 1, p.getLastRow() - 1, 8).getValues().forEach(function (f) {
+  if (p && p.getLastRow() > 1) p.getRange(2, 1, p.getLastRow() - 1, 10).getValues().forEach(function (f) {
     var id = String(f[0]).trim();
     if (!id) return;
-    (c.prod[id] = c.prod[id] || []).push({ desc: f[3], unidad: String(f[4]).split(' - ')[0], cant: Number(f[5]) || 0, lote: f[6] });
+    (c.prod[id] = c.prod[id] || []).push({ cod: f[2], desc: f[3], unidad: String(f[4]).split(' - ')[0], cant: Number(f[5]) || 0, lote: f[6],
+      peso: Number(f[7]) || 0, bultos: Number(f[8]) || 0, completa: String(f[9] || '') });
   });
   c.hoy = new Date(); c.hoy.setHours(0, 0, 0, 0);
   return c;
@@ -122,8 +127,17 @@ function GR_autollenar_(r, cambiadas, ctx) {
   if (r.serie) r.serie = String(r.serie).toUpperCase().replace(/\s/g, '');
   if (r.numero !== '' && /^\d+$/.test(String(r.numero).trim())) r.numero = Number(r.numero);
   if (cambio('serie') && /^B/.test(r.serie) && r.docrel === 'Factura') r.docrel = 'Boleta';
-  // Empresa → punto de partida
   var emp = ctx.emp[String(r.empresa).trim()];
+  if (emp && !r.serie && r.docrel === 'Factura' && emp.serieFact) r.serie = emp.serieFact;
+  // Locales de 📍 Direcciones (varios almacenes por empresa, direcciones de clientes)
+  var pl = ctx.local[String(r.plocal).trim()];
+  if (pl && (cambio('plocal') || !r.pubi)) { r.pubi = pl.ubi; r.pdir = pl.dir; r.pest = pl.est || r.pest; }
+  var ll = ctx.local[String(r.llocal).trim()];
+  if (ll && (cambio('llocal') || !r.lubi)) {
+    r.lubi = ll.ubi; r.ldir = ll.dir; r.lest = ll.est || r.lest;
+    if (!r.ndest && ll.doc && (!emp || ll.doc !== emp.ruc)) { r.ndest = ll.doc; if (!r.dest) r.dest = ll.nom; }
+  }
+  // Empresa → punto de partida (si no eligió local)
   if (emp && (cambio('empresa') || !r.pubi)) {
     if (!r.pubi && emp.ubi) r.pubi = emp.ubi;
     if (!r.pdir && emp.dir) r.pdir = emp.dir;
@@ -157,21 +171,33 @@ function GR_autollenar_(r, cambiadas, ctx) {
     if (!r.modalidad) r.modalidad = GR_MODALIDAD_[1];
   }
   if (r.placa2) r.placa2 = GR_placa_(r.placa2);
+  if (r.placa && !r.mtcveh) {
+    var mt = [ctx.veh[r.placa], ctx.veh[r.placa2]].filter(function (x) { return x && x.mtc; }).map(function (x) { return x.mtc; });
+    if (mt.length) r.mtcveh = mt.join('/');
+  }
   if (r.cdni !== '') {
     r.cdni = String(r.cdni).replace(/\D/g, '');
     var co = ctx.con[r.cdni];
     if (co) { if (!r.cnom) r.cnom = co.nom; if (!r.cape) r.cape = co.ape; if (!r.clic) r.clic = co.lic; }
   }
-  if (r.clic) r.clic = String(r.clic).toUpperCase().replace(/\s/g, '');
+  if (r.clic) r.clic = String(r.clic).toUpperCase().replace(/[\s-]/g, '');
+  // "HENRRY NOEL CABANA MAMANI" en Nombres y sin apellidos → se parte (los dos últimos son los apellidos)
+  if (r.cnom && !r.cape && String(r.cnom).trim().split(/\s+/).length >= 3) { var pn = GR_partirNombre_(r.cnom); r.cnom = pn.nom; r.cape = pn.ape; }
+  ['pest', 'lest'].forEach(function (k) { if (r[k] !== '') r[k] = GR_codLocal_(r[k]); });
   // Ubigeos escritos a mano ("santa anita", "150137") → etiqueta de la lista
+  [['pubi', 'pdir'], ['lubi', 'ldir']].forEach(function (x) { if (!r[x[0]] && r[x[1]]) r[x[0]] = GR_ubigeoDeTexto_(r[x[1]]); });
   ['pubi', 'lubi'].forEach(function (k) {
     if (!r[k]) return;
     var cod = GR_codUbigeo_(r[k]);
     var et = cod ? GR_ubigeos_()[cod] : GR_buscarUbigeo_(r[k]);
     if (et) r[k] = et;
   });
-  // Productos de 📦 (resumen)
-  r.productos = GR_resumenProductos_(ctx.prod[r.id] || []);
+  // Productos de 📦 (resumen) y, si todos traen peso o bultos, la suma va a la guía
+  var ps = ctx.prod[r.id] || [];
+  r.productos = GR_resumenProductos_(ps);
+  if (ps.length && ps.every(function (p) { return p.peso > 0; })) r.peso = Math.round(ps.reduce(function (t, p) { return t + p.peso; }, 0) * 100) / 100;
+  // Un saco a medias sigue siendo un bulto: cada producto se redondea hacia arriba (SUNAT pide un entero)
+  if (ps.length && ps.every(function (p) { return p.bultos > 0; })) r.bultos = ps.reduce(function (t, p) { return t + Math.ceil(p.bultos - 1e-9); }, 0);
   r.obsFinal = GR_observaciones_(r);
 }
 
@@ -187,6 +213,7 @@ function GR_observaciones_(r) {
   var mod = t('modalidad').slice(0, 2);
   if (mod === '01' && t('mtc')) p.push('N° Registro MTC: ' + t('mtc'));
   if (mod === '02' && t('m1') !== 'SI') {
+    if (t('mtcveh')) p.push('N° Registro MTC: ' + t('mtcveh'));
     if (t('placa')) p.push('Placa N°1: ' + t('placa'));
     if (t('placa2')) p.push('Placa N°2: ' + t('placa2'));
     if (t('cnom') || t('cape')) p.push('Conductor: ' + (t('cnom') + ' ' + t('cape')).trim() + (t('cdni') ? ', DNI ' + t('cdni') : '') + (t('clic') ? ', Licencia ' + t('clic') : ''));
@@ -224,13 +251,16 @@ function GR_validar_(r, ctx) {
     if (!/^\d{1,8}$/.test(txt('numero'))) F.push('número de ' + doc.toLowerCase());
   }
   // Destinatario
-  var td = cod2('tdest').trim(), nd = txt('ndest');
-  if (!td) F.push('tipo doc. destinatario');
-  else if (td === '6' && !GR_rucValido_(nd)) F.push(nd ? 'RUC destinatario inválido' : 'RUC destinatario');
-  else if (td === '1' && !/^\d{8}$/.test(nd)) F.push('DNI destinatario (8 dígitos)');
-  else if (!nd) F.push('N° doc. destinatario');
-  if (doc === 'Factura' && td && td !== '6') F.push('con factura el destinatario va con RUC');
-  if (!txt('dest')) F.push('nombre destinatario');
+  // Con factura/boleta, Quesito toma el destinatario del comprobante: aquí es opcional (si se pone, se revisa).
+  var td = cod2('tdest').trim(), nd = txt('ndest'), pideDest = doc === 'Ninguno' || nd !== '';
+  if (pideDest) {
+    if (!td) F.push('tipo doc. destinatario');
+    else if (td === '6' && !GR_rucValido_(nd)) F.push(nd ? 'RUC destinatario inválido' : 'RUC destinatario');
+    else if (td === '1' && !/^\d{8}$/.test(nd)) F.push('DNI destinatario (8 dígitos)');
+    else if (!nd) F.push('N° doc. destinatario');
+    if (doc === 'Factura' && td && td !== '6') F.push('con factura el destinatario va con RUC');
+    if (!txt('dest')) F.push('nombre destinatario');
+  }
   if (emp && nd && nd === emp.ruc && cod2('motivo') !== '04' && cod2('motivo') !== '18') A.push('destinatario = misma empresa (¿motivo 04?)');
   // Traslado
   var mot = cod2('motivo');
@@ -246,8 +276,7 @@ function GR_validar_(r, ctx) {
   var parcial = txt('total') === 'NO' || doc === 'Ninguno';
   var prods = ctx.prod[txt('id')] || [];
   if (parcial && !prods.length) F.push('productos en 📦 Productos');
-  if (prods.some(function (p) { return !(p.cant > 0) || !String(p.desc).trim() || !p.unidad; })) F.push('productos sin descripción, unidad o cantidad');
-  if (!parcial && prods.length) A.push('hay productos en 📦 pero dice "todo lo de la factura"');
+  if (prods.some(function (p) { return !(p.cant > 0) || !String(p.desc).trim() || (doc === 'Ninguno' && !p.unidad); })) F.push('productos sin descripción o cantidad');
   // Transporte
   if (mod === '01') {
     if (!GR_rucValido_(txt('truc'))) F.push(txt('truc') ? 'RUC transportista inválido' : 'RUC transportista');
@@ -334,8 +363,8 @@ function GR_menuDuplicar() {
   sh.getRange(nueva, 1, 1, GR_COLS_.length).setValues([GR_COLS_.map(function (c) { return x[c.k]; })]);
   GR_procesarFilas_(ss, nueva, nueva, []);
   var idNuevo = sh.getRange(nueva, 1).getValue();
-  var p = ss.getSheetByName(GR_PROD_), ps = p.getLastRow() > 1 ? p.getRange(2, 1, p.getLastRow() - 1, 8).getValues().filter(function (q) { return String(q[0]) === idViejo; }) : [];
-  if (ps.length) { p.getRange(p.getLastRow() + 1, 1, ps.length, 8).setValues(ps.map(function (q) { q[0] = idNuevo; return q; })); GR_actualizarPorIds_(ss, [idNuevo]); }
+  var p = ss.getSheetByName(GR_PROD_), ps = p.getLastRow() > 1 ? p.getRange(2, 1, p.getLastRow() - 1, 10).getValues().filter(function (q) { return String(q[0]) === idViejo; }) : [];
+  if (ps.length) { p.getRange(p.getLastRow() + 1, 1, ps.length, 10).setValues(ps.map(function (q) { q[0] = idNuevo; return q; })); GR_actualizarPorIds_(ss, [idNuevo]); }
   sh.getRange(nueva, GR_col_('fecha')).activate();
   ss.toast('Copia ' + idNuevo + ' de ' + idViejo + (ps.length ? ' (con ' + ps.length + ' producto(s))' : '') + '. Ponga la fecha de traslado y revise lo que cambie.', '📄 Duplicada', 8);
   GR_registrar_(idNuevo, 'Duplicada', 'Copia de ' + idViejo);
