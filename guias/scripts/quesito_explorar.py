@@ -151,16 +151,33 @@ def main():
             # 1) Ingreso
             pag.goto(INICIO, wait_until="networkidle", timeout=60000)
             anotar("pantalla_ingreso")
-            if pag.locator("iframe[src*=recaptcha], [data-sitekey], img[src*=captcha i]").count():
-                print("\n⚠️ La pantalla de ingreso muestra un CAPTCHA. Me detengo aquí (no intento resolverlo).")
-                informe["captcha"] = True
-            campo = pag.locator("input[type=email], input[name*=mail i], input[name*=correo i], input[name*=usuario i], input[name*=user i]").first
+            cap = pag.evaluate("""() => ({
+                casilla: [...document.querySelectorAll('iframe[src*=recaptcha]')].some(f => /anchor/.test(f.src) && f.offsetParent !== null && !/size=invisible/.test(f.src)),
+                invisible: !!document.querySelector('.grecaptcha-badge, iframe[src*="size=invisible"], script[src*="recaptcha/api.js?render="]'),
+                imagen: !!document.querySelector('img[src*=captcha i]') })""")
+            informe["captcha"] = cap
+            print("\nCaptcha en el ingreso:", cap)
+            if cap["casilla"] or cap["imagen"]:
+                print("⚠️ Hay un captcha visible (casilla 'No soy un robot' o imagen). Me detengo aquí (no intento resolverlo).")
+                sys.exit(1)
+            # Ingreso en dos pasos: correo → "Continuar" → contraseña
+            campo = pag.locator("input[type=email]:visible, input[name*=mail i]:visible, input[name*=correo i]:visible, input[name*=usuario i]:visible, input[name*=user i]:visible").first
             campo.fill(correo)
-            pag.locator("input[type=password]").first.fill(clave)
-            pag.locator("button[type=submit], input[type=submit], button:has-text('Ingresar'), button:has-text('Iniciar')").first.click()
+            clave_ = pag.locator("input[type=password]").first
+            if not clave_.is_visible():
+                pag.locator("button:has-text('Continuar'):visible, input[type=submit][value*=Continuar i]:visible").first.click()
+                clave_.wait_for(state="visible", timeout=30000)
+                anotar("pide_contrasena")
+            clave_.fill(clave)
+            pag.locator("button[type=submit]:visible, input[type=submit]:visible, button:has-text('Ingresar'):visible, button:has-text('Iniciar'):visible").first.click()
             pag.wait_for_load_state("networkidle", timeout=60000)
+            pag.wait_for_timeout(2000)
             if pag.locator("input[type=password]").count() and pag.locator("input[type=password]").first.is_visible():
                 anotar("sigue_en_ingreso")
+                avisos = pag.evaluate("""() => [...document.querySelectorAll('.alert,.error,.invalid-feedback,.help-block,.toast,.flash,[role=alert]')]
+                    .filter(e => e.offsetParent !== null).map(e => e.innerText.trim()).filter(Boolean)""")
+                print("Mensajes en pantalla:", avisos)
+                print("Captcha después de 'Continuar':", pag.evaluate("() => [...document.querySelectorAll('iframe[src*=recaptcha]')].filter(f => f.offsetParent !== null).map(f => f.src.split('?')[0])"))
                 sys.exit("❌ No pude entrar: sigue la pantalla de ingreso (¿clave, correo o captcha?). Revise la foto.")
             anotar("escritorio")
 
