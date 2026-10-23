@@ -92,6 +92,7 @@ function TGC_respuesta_(texto) {
   if (!m) return null;
   act = JSON.parse(act);
   var k = 'tgc_resp_' + act.run + '_' + act.ronda, valor, acuse;
+  if (m[1] && /^0+$/.test(m[1])) m = [m[0], '', '0'];   // "0" = ninguna (no es la casilla 0)
   if (m[1]) {
     var nums = m[1].split(/\D+/).filter(Boolean).map(Number).filter(function (n) { return n >= 1 && n <= 16; });
     nums = nums.filter(function (n, i) { return nums.indexOf(n) === i; });
