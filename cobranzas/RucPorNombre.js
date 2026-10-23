@@ -51,7 +51,7 @@ function RPN_puntaje_(q, c) {
     total += mejor * peso;
   });
   var sobran = c.filter(function (x, j) { return !usadas[j] && RPN_DEBILES_.indexOf(x) < 0; }).length;
-  return Math.max(0, Math.min(100, Math.round(100 * total / pesoTotal - 4 * sobran)));
+  return Math.max(0, Math.min(100, Math.round(100 * total / pesoTotal - 6 * sobran)));
 }
 
 /** Candidatos propios: RUC → nombre de las facturas del SIRE y de las empresas del grupo. */
