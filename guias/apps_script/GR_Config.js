@@ -82,6 +82,8 @@ var GR_COLS_ = [
   { k: 'ldir', t: 'Dirección llegada', g: 'lle', w: 240 },
   { k: 'lest', t: 'Cód. local llegada', g: 'lle', w: 75, f: '@', n: 'Solo motivo 04 (traslado entre establecimientos de la misma empresa).' },
   { k: 'obs', t: 'Observaciones', g: 'otro', w: 220, n: 'Texto libre que sale en la guía (ej. lotes, referencia del pedido).' },
+  { k: 'obsFinal', t: 'Observaciones que irá en la guía (automático)', g: 'otro', w: 320,
+    n: 'Lo arma la hoja: sus observaciones + cotización, N° MTC, placas y conductor (Quesito no tiene campos propios para esos datos, así quedan en la guía). Es lo que el robot pondrá en Observaciones.' },
   { k: 'productos', t: 'Productos (de 📦)', g: 'otro', w: 200, n: 'Resumen automático de 📦 Productos para esta guía (solo si es parcial o sin factura).' },
   { k: 'guia', t: 'N° guía emitida', g: 'res', w: 95 },
   { k: 'femi', t: 'Emitida el', g: 'res', w: 115, f: 'dd/mm/yyyy hh:mm' },

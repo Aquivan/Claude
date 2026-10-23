@@ -13,7 +13,7 @@ function GR_menuEditar() {
 }
 
 function GR_abrirFormulario_(id) {
-  var t = HtmlService.createTemplateFromFile('GR_Formulario');
+  var t = HtmlService.createTemplateFromFile('GR_FormularioVista');
   t.idGuia = id;
   SpreadsheetApp.getUi().showSidebar(t.evaluate().setTitle(id ? '✏️ Guía ' + id : '➕ Nueva guía de remisión'));
 }
@@ -67,7 +67,7 @@ function GR_guardarFormulario(g) {
       g.id = '';
     }
     var actual = GR_leerGuias_(sh, f, f)[0].r;
-    var editables = GR_COLS_.filter(function (c) { return c.g !== 'res' && ['id', 'estado', 'productos'].indexOf(c.k) < 0; });
+    var editables = GR_COLS_.filter(function (c) { return c.g !== 'res' && ['id', 'estado', 'productos', 'obsFinal'].indexOf(c.k) < 0; });
     editables.forEach(function (c) {
       var v = g[c.k] == null ? '' : g[c.k];
       if (c.k === 'fecha' && v) { var p = String(v).split('-'); v = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])); }
