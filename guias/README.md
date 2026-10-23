@@ -31,3 +31,11 @@ las guías en [Quesito](https://www.quesito.pe) con un robot (próxima etapa) y 
 1. Robot de Quesito (GitHub Actions + Playwright, como el de retenciones): con la cuenta de cada empresa (correo en 🏢 Empresas, clave como secreto `QUESITO_CLAVE` del Environment de su RUC), busca la factura, "Generar GUÍA DE REMISIÓN REMITENTE", deja solo los productos de 📦 si es parcial, llena traslado, transporte, partida, llegada y observaciones. **👁 Vista previa** se detiene antes de "Crear Guía de Remisión"; **✅ Emitir** solo con confirmación, y anota N° de guía, estado SUNAT y PDF.
 2. Telegram y WhatsApp: "guía para la factura FQQ1-3525" → completa lo que falta preguntando → 👁 / ✅.
 3. Importar el Excel actual y, después, facturas.
+
+## Explorar Quesito (solo mirar)
+
+Workflow **"Guías - explorar Quesito (solo mirar)"** (`guias-quesito-explorar.yml`, script
+`guias/scripts/quesito_explorar.py`): entra con la cuenta de una empresa, abre "Generar GUIA DE
+REMISIÓN REMITENTE" desde una factura y anota todos los campos del formulario. No emite nada:
+no presiona "Crear Guía", bloquea los envíos de datos y rechaza las confirmaciones. Necesita los
+secretos `QUESITO_CORREO` y `QUESITO_CLAVE` en el Environment de la empresa (su RUC).
