@@ -11,6 +11,7 @@ function doPost(e) {
   try {
     var p = (e && e.parameter) || {};
     if (p.canal === 'wa') return TGW_doPost_(e);   // 📲 preguntas que llegan por WhatsApp (TG_WhatsApp.js)
+    if (p.canal === 'gh') return TGC_doPost_(e);   // 🧩 captcha de Quesito que pide el robot de GitHub (TG_Captcha.js)
     var secreto = PropertiesService.getScriptProperties().getProperty(TG_PROP_.SECRETO);
     if (!secreto || p.token !== secreto) return ContentService.createTextOutput('Forbidden');
     var u = JSON.parse(e.postData.contents);
@@ -84,6 +85,9 @@ function TG_manejar_(u) {
   var ctx = { ss: ss, chatId: chatId, usuario: usuario, nombre: nombre, msgId: m.message_id };
   // ↩️ Respondió (citó) un mensaje: la IA recibe ese texto (o solo la parte que citó) para saber de qué habla.
   if (m.reply_to_message) ctx.citado = (m.quote && m.quote.text) || m.reply_to_message.text || m.reply_to_message.caption || '';
+  // 🧩 "1 6 9" mientras el robot de Quesito espera la respuesta de un captcha.
+  var capt = m.text && TGC_respuesta_(texto);
+  if (capt) return TG_enviar_(chatId, capt);
 
   // Archivos: fotos, documentos, notas de voz y audios.
   if (m.photo || m.document || m.voice || m.audio || m.video_note) return TG_alArchivo_(ctx, m, texto);

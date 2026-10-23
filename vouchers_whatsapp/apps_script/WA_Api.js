@@ -62,3 +62,40 @@ function WA_textoCitado_(m) {
   if (!id) return '';
   try { return CacheService.getScriptCache().get('wa_t_' + id) || ''; } catch (e) { return ''; }
 }
+
+/* ============================================================ avisos que manda Cobranzas */
+
+/**
+ * 🧩 Cobranzas pide mandar algo a los números autorizados (hoy: el captcha de Quesito para que la persona
+ * responda las casillas). Usa la misma clave que esta app usa para hablar con Cobranzas.
+ * Cuerpo: {tipo:'foto', base64, texto} o {tipo:'texto', texto}.
+ */
+function WA_desdeCobranzas_(e, p) {
+  var clave = WA_props_().getProperty('WA_IA_CLAVE');
+  if (!clave || p.token !== clave) return WA_ok_('Forbidden');
+  try {
+    var q = JSON.parse((e.postData && e.postData.contents) || '{}'), media = '';
+    if (q.tipo === 'foto' && q.base64) media = WA_subirImagen_(Utilities.newBlob(Utilities.base64Decode(q.base64), 'image/png', 'captcha.png'));
+    WA_permitidos_().forEach(function (a) {
+      if (media) {
+        var r = WA_graph_('POST', WA_prop_('WA_PHONE_ID') + '/messages', {
+          messaging_product: 'whatsapp', to: a, type: 'image', image: { id: media, caption: String(q.texto || '').slice(0, 1000) } });
+        if (!r.ok) console.error('Foto para ' + a + ': ' + r.error);
+      } else if (q.texto) WA_enviarTexto_(a, q.texto);
+    });
+  } catch (err) {
+    console.error('Aviso de Cobranzas: ' + (err && err.stack || err));
+  }
+  return WA_ok_('OK');
+}
+
+/** Sube una imagen a Meta y devuelve su id para mandarla. */
+function WA_subirImagen_(blob) {
+  var r = UrlFetchApp.fetch(WA_GRAPH_ + WA_prop_('WA_PHONE_ID') + '/media', {
+    method: 'post', muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + WA_prop_('WA_TOKEN') },
+    payload: { messaging_product: 'whatsapp', type: blob.getContentType(), file: blob } });
+  var d = {};
+  try { d = JSON.parse(r.getContentText() || '{}'); } catch (err) {}
+  if (!d.id) throw new Error('Meta no aceptó la imagen (HTTP ' + r.getResponseCode() + ')');
+  return d.id;
+}

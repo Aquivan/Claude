@@ -181,8 +181,12 @@ def main():
                 if not clave_.count() and pag.locator("iframe[src*='api2/anchor']").count():
                     if not captcha_google(pag, a.salida, foto):
                         sys.exit(1)
-                    pag.locator("button:has-text('Continuar'):visible, input[type=submit][value*=Continuar i]:visible").first.click()
                     pag.wait_for_timeout(3000)
+                    if not pag.locator("input[type=password]:visible").count():
+                        seguir = pag.locator("button:has-text('Continuar'):visible, input[type=submit][value*=Continuar i]:visible")
+                        if seguir.count():
+                            seguir.first.click()
+                            pag.wait_for_timeout(3000)
                     anotar("despues_del_captcha")
                     clave_ = pag.locator("input[type=password]:visible").first
                 if not clave_.count():
@@ -299,7 +303,7 @@ def main():
 
 def captcha_google(pag, salida, foto):
     """Marca la casilla "No soy un robot". Si Google la acepta, sigue (True). Si pide imágenes,
-    guarda la imagen del reto y la deja en el log (base64) para mostrársela a la persona; no la resuelve."""
+    se la pide resolver a la persona por Telegram/WhatsApp (resolver_con_persona)."""
     reto = pag.locator("iframe[src*='api2/bframe']").first
     if not (reto.count() and reto.is_visible()):
         # Casilla visible (las invisibles traen size=invisible y no tienen casilla)
@@ -322,18 +326,116 @@ def captcha_google(pag, salida, foto):
         print("⚠️ No aceptó ni mostró imágenes.")
         foto("captcha_sin_reto")
         return False
-    cuerpo = pag.frame_locator("iframe[src*='api2/bframe']").first
-    try:
-        texto = cuerpo.locator(".rc-imageselect-desc-wrapper, .rc-imageselect-instructions, .rc-doscaptcha-header").first.inner_text(timeout=5000)
-    except Exception:
-        texto = ""
-    print("🧩 Google pide un reto de imágenes:", " ".join(texto.split()))
-    if cuerpo.locator(".rc-doscaptcha-header").count():
-        print("⛔ Google dice que hay 'consultas automáticas' desde esta red: no deja resolverlo.")
-    ruta = os.path.join(salida, "captcha_reto.png")
-    reto.screenshot(path=ruta)
-    print("(Por ahora no hay forma de enviar la respuesta: me detengo aquí.)")
+    return resolver_con_persona(pag, salida, foto, reto)
+
+
+JS_NUMERAR = """() => {
+  document.querySelectorAll('.tgc-n').forEach(e => e.remove());
+  const t = [...document.querySelectorAll('td.rc-imageselect-tile')];
+  t.forEach((td, i) => {
+    const d = document.createElement('div');
+    d.className = 'tgc-n'; d.textContent = i + 1;
+    d.style.cssText = 'position:absolute;left:3px;top:3px;background:#d50000;color:#fff;font:bold 17px Arial;' +
+      'padding:1px 7px;border-radius:10px;z-index:99;pointer-events:none;box-shadow:0 0 2px #000';
+    td.style.position = 'relative'; td.appendChild(d);
+  });
+  return t.length;
+}"""
+
+
+def resolver_con_persona(pag, salida, foto, reto):
+    """La persona resuelve el captcha desde Telegram/WhatsApp: se numeran las casillas, la foto va a la rama
+    quesito-captcha, el bot de Cobranzas se la manda y aquí se espera su respuesta ("1 6 9", "0", "otra")."""
+    bot, run, repo, tok = (os.environ.get(k, "") for k in ("BOT_URL", "GITHUB_RUN_ID", "GITHUB_REPOSITORY", "GITHUB_TOKEN"))
+    if not (bot and run and repo and tok):
+        foto("captcha_reto")
+        print("⚠️ Falta la conexión con el bot (BOT_URL / GITHUB_TOKEN): no puedo pedir ayuda. Me detengo.")
+        return False
+    for ronda in range(1, 9):
+        marco = next((f for f in pag.frames if "api2/bframe" in f.url), None)
+        if not marco:
+            return False
+        if marco.locator(".rc-doscaptcha-header").count():
+            print("⛔ Google dice que hay 'consultas automáticas' desde esta red: no deja resolverlo.")
+            _bot(bot, {"accion": "fin", "run": run, "ok": False, "texto": "Google bloqueó el captcha desde la red de GitHub. Intente más tarde."})
+            return False
+        try:
+            texto = " ".join(marco.locator(".rc-imageselect-desc-wrapper, .rc-imageselect-instructions").first.inner_text(timeout=5000).split())
+        except Exception:
+            texto = ""
+        casillas = marco.evaluate(JS_NUMERAR)
+        pag.wait_for_timeout(300)
+        ruta = os.path.join(salida, f"captcha_{ronda}.png")
+        reto.screenshot(path=ruta)
+        print(f"\n🧩 Ronda {ronda}: {texto} ({casillas} casillas)")
+        _subir_foto(repo, tok, f"{run}/{ronda}.png", ruta)
+        r = _bot(bot, {"accion": "captcha", "run": run, "ronda": ronda, "pregunta": texto, "empresa": os.environ.get("EMPRESA", "")})
+        print("   Aviso al bot:", r)
+        resp = None
+        for _ in range(60):   # hasta 3 minutos
+            pag.wait_for_timeout(3000)
+            x = _bot(bot, {"accion": "respuesta", "run": run, "ronda": ronda})
+            if x.get("respuesta"):
+                resp = x["respuesta"]
+                break
+        if not resp:
+            print("⌛ Nadie respondió a tiempo.")
+            _bot(bot, {"accion": "fin", "run": run, "ok": False, "texto": "Nadie respondió el captcha a tiempo. Vuelva a lanzar el robot cuando pueda responder."})
+            return False
+        print("   Respuesta:", resp)
+        if resp == "cancelar":
+            return False
+        if resp == "otra":
+            marco.locator("#recaptcha-reload-button").click()
+            pag.wait_for_timeout(2500)
+            continue
+        dinamico = "ya no quede ninguna" in texto.lower() or "none left" in texto.lower()
+        if resp != "0":
+            tiles = marco.locator("td.rc-imageselect-tile")
+            for n in [int(x) for x in resp.split(",")]:
+                if 1 <= n <= tiles.count():
+                    tiles.nth(n - 1).click()
+                    pag.wait_for_timeout(400)
+        if dinamico and resp != "0":
+            pag.wait_for_timeout(4500)   # aparecen fotos nuevas en las casillas marcadas: se vuelve a preguntar
+            continue
+        marco.locator("#recaptcha-verify-button").click()
+        pag.wait_for_timeout(3500)
+        if not reto.is_visible():
+            print("✅ Captcha superado.")
+            _bot(bot, {"accion": "fin", "run": run, "ok": True})
+            return True
+        print("   Google pide otra ronda.")
+    _bot(bot, {"accion": "fin", "run": run, "ok": False, "texto": "Demasiadas rondas de captcha; me detengo."})
     return False
+
+
+def _bot(url, cuerpo):
+    """Llama al bot de Cobranzas (?canal=gh). Apps Script responde con una redirección que se sigue con GET."""
+    import urllib.request
+    req = urllib.request.Request(url + ("&" if "?" in url else "?") + "canal=gh", data=json.dumps(cuerpo).encode(),
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.loads(r.read().decode() or "{}")
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+def _subir_foto(repo, tok, ruta_repo, archivo):
+    """Deja la foto en la rama quesito-captcha (la crea vacía si no existe) con la API de GitHub."""
+    import base64
+    import urllib.request
+    api = os.environ.get("GITHUB_API_URL", "https://api.github.com") + f"/repos/{repo}"
+    h = {"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json", "Content-Type": "application/json"}
+
+    def llamar(metodo, ruta, cuerpo=None):
+        req = urllib.request.Request(api + ruta, data=json.dumps(cuerpo).encode() if cuerpo is not None else None, headers=h, method=metodo)
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.loads(r.read().decode() or "{}")
+    with open(archivo, "rb") as f:
+        contenido = base64.b64encode(f.read()).decode()
+    llamar("PUT", f"/contents/{ruta_repo}", {"message": "Captcha de Quesito (temporal)", "content": contenido, "branch": "quesito-captcha"})
 
 
 def _campos_post(req):
