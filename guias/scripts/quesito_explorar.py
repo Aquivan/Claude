@@ -144,7 +144,10 @@ def main():
                     txt = (el.inner_text() or "").strip()
                     if PELIGRO.search(txt) and not re.search(r"generar\s+gu[ií]a", txt, re.I):
                         raise RuntimeError("Me negué a hacer clic en: " + txt[:60])
-                    el.click()
+                    try:
+                        el.click(timeout=5000)
+                    except Exception:   # otra ventana (reveal-overlay) tapa el elemento: clic directo
+                        el.evaluate("e => e.click()")
                     return txt
             return None
 
@@ -254,13 +257,18 @@ def main():
                 elegido = next((o for o in ops if ("FACTURA" if a.serie.upper().startswith("F") else "BOLETA") in o.upper()), None)
                 if elegido:
                     tipo.first.select_option(index=ops.index(elegido))
-            pag.locator("input[type=submit][name=commit]:visible, input[type=submit][value*=Buscar i]:visible").first.click()
+            # Enter en el número envía el formulario (a veces otra ventana de Quesito tapa el botón "Buscar").
+            pag.locator("input[name=numero]:visible").first.press("Enter")
             pag.wait_for_timeout(2500)
             anotar("resultado_busqueda")
 
             # 4) Opciones → Generar GUIA DE REMISIÓN REMITENTE
             fila = pag.locator("tr", has_text=f"{a.serie}").filter(has_text=str(a.numero)).first
-            (fila.get_by_text(re.compile(r"Opciones", re.I)).first if fila.count() else pag.get_by_text(re.compile(r"Opciones", re.I)).first).click()
+            opc = fila.get_by_text(re.compile(r"Opciones", re.I)).first if fila.count() else pag.get_by_text(re.compile(r"Opciones", re.I)).first
+            try:
+                opc.click(timeout=8000)
+            except Exception:
+                opc.evaluate("e => e.click()")
             pag.wait_for_timeout(1000)
             opciones = pag.evaluate("""() => [...document.querySelectorAll('.dropdown-menu.show a, .dropdown-menu.show button, .open .dropdown-menu a, [role=menu] [role=menuitem]')]
                 .filter(e => e.offsetParent !== null).map(e => e.innerText.trim().replace(/\\s+/g, ' '))""")
