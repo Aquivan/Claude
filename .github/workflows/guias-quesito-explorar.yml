@@ -6,7 +6,7 @@
 # (se borran solas a los 3 días). Nunca imprime claves.
 #
 # Secretos en el Environment de la empresa (Settings → Environments → <RUC>):
-#   QUESITO_CORREO  y  QUESITO_CLAVE
+#   QUESITO_CORREO  y  QUESITO_CLAVE, o mejor QUESITO_SESION (la sesión copiada del Chrome: sin captcha)
 
 name: Guías - explorar Quesito (solo mirar)
 
@@ -88,6 +88,7 @@ jobs:
         env:
           QUESITO_CORREO: ${{ secrets.QUESITO_CORREO }}
           QUESITO_CLAVE: ${{ secrets.QUESITO_CLAVE }}
+          QUESITO_SESION: ${{ secrets.QUESITO_SESION }}   # 🍪 sesión copiada del Chrome (sin captcha); si está, se usa primero
           SERIE: ${{ inputs.serie }}
           NUMERO: ${{ inputs.numero }}
           GITHUB_TOKEN: ${{ github.token }}
