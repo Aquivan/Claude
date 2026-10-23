@@ -1,0 +1,335 @@
+/**
+ * 🚚 Guías — al escribir en la hoja: pone el ID, llena lo que ya se conoce (empresa → partida,
+ * cliente → nombre y llegada, transportista, conductor, ubigeo por nombre) y revisa la fila (Estado).
+ */
+
+var GR_FIJOS_ = [GR_ESTADOS_.VISTA, GR_ESTADOS_.EMITIENDO, GR_ESTADOS_.EMITIDA, GR_ESTADOS_.ANULADA];
+
+function onEdit(e) {
+  try { GR_alEditar_(e); } catch (err) { console.warn('onEdit: ' + (err && err.stack || err)); }
+}
+
+function GR_alEditar_(e) {
+  if (!e || !e.range) return;
+  var sh = e.range.getSheet(), n = sh.getName(), ss = sh.getParent();
+  if (n === GR_HOJA_) {
+    var f0 = Math.max(e.range.getRow(), GR_FILA1_), f1 = Math.min(e.range.getLastRow(), f0 + 300);
+    if (f1 < f0) return;
+    var c0 = e.range.getColumn(), c1 = e.range.getLastColumn();
+    var cambiadas = GR_COLS_.filter(function (c, j) { return j + 1 >= c0 && j + 1 <= c1; }).map(function (c) { return c.k; });
+    GR_procesarFilas_(ss, f0, f1, cambiadas);
+  } else if (n === GR_PROD_) {
+    var ids = sh.getRange(Math.max(2, e.range.getRow()), 1, e.range.getNumRows(), 1).getValues().map(function (r) { return String(r[0]); });
+    if (e.oldValue) ids.push(String(e.oldValue));
+    GR_actualizarPorIds_(ss, ids);
+  } else if (GR_CATALOGOS_[n] && e.range.getRow() > 1) {
+    GR_normalizarCatalogo_(sh, e.range);
+  }
+}
+
+/** Lee la hoja de 🚚 Guías como objetos {fila, r:{clave: valor}}. */
+function GR_leerGuias_(sh, f0, f1) {
+  var v = sh.getRange(f0, 1, f1 - f0 + 1, GR_COLS_.length).getValues();
+  return v.map(function (fila, i) {
+    var r = {};
+    GR_COLS_.forEach(function (c, j) { r[c.k] = fila[j]; });
+    return { fila: f0 + i, r: r, antes: fila.slice() };
+  });
+}
+
+/** Autollenado + revisión de las filas f0..f1; escribe solo las celdas que cambian. */
+function GR_procesarFilas_(ss, f0, f1, cambiadas) {
+  var sh = ss.getSheetByName(GR_HOJA_), ctx = GR_contexto_(ss);
+  var filas = GR_leerGuias_(sh, f0, f1);
+  filas.forEach(function (x) {
+    var r = x.r;
+    var vacia = GR_COLS_.every(function (c) { return c.k === 'estado' || c.k === 'id' || r[c.k] === '' || r[c.k] === null; });
+    if (vacia) { if (r.id || r.estado) { r.id = ''; r.estado = ''; } }
+    else {
+      if (!r.id) { r.id = GR_nuevoId_(); GR_valoresIniciales_(r); }
+      GR_autollenar_(r, cambiadas, ctx);
+      GR_ponerEstado_(r, ctx);
+    }
+    GR_COLS_.forEach(function (c, j) {
+      var a = x.antes[j], b = r[c.k];
+      var igual = (a instanceof Date && b instanceof Date) ? a.getTime() === b.getTime() : String(a) === String(b);
+      if (!igual) sh.getRange(x.fila, j + 1).setValue(b);
+    });
+  });
+}
+
+function GR_nuevoId_() {
+  var lock = LockService.getDocumentLock();
+  try { lock.waitLock(10000); } catch (e) {}
+  try { return GR_siguienteId_(); } finally { try { lock.releaseLock(); } catch (e) {} }
+}
+
+function GR_siguienteId_() {
+  var p = PropertiesService.getDocumentProperties(), n = Number(p.getProperty('GR_ULTIMO_ID') || 0) + 1;
+  // Por si alguien borró la propiedad: no repetir un ID que ya está en la hoja.
+  var sh = SpreadsheetApp.getActive().getSheetByName(GR_HOJA_);
+  if (n === 1 && sh.getLastRow() >= GR_FILA1_) {
+    sh.getRange(GR_FILA1_, 1, sh.getLastRow() - GR_FILA1_ + 1, 1).getValues().forEach(function (v) {
+      var m = String(v[0]).match(/^G-(\d+)$/); if (m) n = Math.max(n, Number(m[1]) + 1);
+    });
+  }
+  p.setProperty('GR_ULTIMO_ID', String(n));
+  return 'G-' + ('00000' + n).slice(-6);
+}
+
+function GR_valoresIniciales_(r) {
+  if (!r.docrel) r.docrel = 'Factura';
+  if (!r.motivo) r.motivo = GR_MOTIVOS_[0];
+  if (!r.total) r.total = 'SI';
+  if (!r.upeso) r.upeso = GR_PESO_[0];
+  if (!r.m1) r.m1 = 'NO';
+  if (!r.tdest && r.docrel === 'Factura') r.tdest = GR_TIPODOC_[0];
+}
+
+/* ============================================================ catálogos en memoria */
+
+function GR_tabla_(ss, nombre) {
+  var sh = ss.getSheetByName(nombre);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues().filter(function (f) { return String(f[0]).trim() !== ''; });
+}
+
+/** Catálogos y productos por ID, leídos una vez por edición. */
+function GR_contexto_(ss) {
+  var c = { emp: {}, tra: {}, veh: {}, con: {}, dir: [], prod: {}, guias: [] };
+  GR_tabla_(ss, GR_EMP_).forEach(function (f) {
+    c.emp[String(f[0]).trim()] = { ruc: String(f[1]).replace(/\D/g, ''), razon: f[2], correo: f[3], serie: f[4], ubi: f[5], dir: f[6], est: String(f[7] || ''), activa: String(f[8]).toUpperCase() !== 'NO' };
+  });
+  GR_tabla_(ss, GR_TRA_).forEach(function (f) { c.tra[String(f[0]).replace(/\D/g, '')] = { nom: f[1], mtc: f[2] }; });
+  GR_tabla_(ss, GR_VEH_).forEach(function (f) { c.veh[GR_placa_(f[0])] = { desc: f[1], m1: String(f[2]).toUpperCase() === 'SI' }; });
+  GR_tabla_(ss, GR_CON_).forEach(function (f) { c.con[String(f[0]).replace(/\D/g, '')] = { nom: f[1], ape: f[2], lic: f[3] }; });
+  GR_tabla_(ss, GR_DIR_).forEach(function (f) { c.dir.push({ doc: String(f[0]).replace(/\D/g, ''), nom: f[1], uso: String(f[2] || 'Llegada'), ubi: f[3], dir: f[4], est: String(f[5] || '') }); });
+  var p = ss.getSheetByName(GR_PROD_);
+  if (p && p.getLastRow() > 1) p.getRange(2, 1, p.getLastRow() - 1, 8).getValues().forEach(function (f) {
+    var id = String(f[0]).trim();
+    if (!id) return;
+    (c.prod[id] = c.prod[id] || []).push({ desc: f[3], unidad: String(f[4]).split(' - ')[0], cant: Number(f[5]) || 0, lote: f[6] });
+  });
+  c.hoy = new Date(); c.hoy.setHours(0, 0, 0, 0);
+  return c;
+}
+
+/* ============================================================ autollenado */
+
+function GR_autollenar_(r, cambiadas, ctx) {
+  var cambio = function (k) { return cambiadas.indexOf(k) >= 0; };
+  // Documento relacionado
+  if (r.serie) r.serie = String(r.serie).toUpperCase().replace(/\s/g, '');
+  if (r.numero !== '' && /^\d+$/.test(String(r.numero).trim())) r.numero = Number(r.numero);
+  if (cambio('serie') && /^B/.test(r.serie) && r.docrel === 'Factura') r.docrel = 'Boleta';
+  // Empresa → punto de partida
+  var emp = ctx.emp[String(r.empresa).trim()];
+  if (emp && (cambio('empresa') || !r.pubi)) {
+    if (!r.pubi && emp.ubi) r.pubi = emp.ubi;
+    if (!r.pdir && emp.dir) r.pdir = emp.dir;
+    if (!r.pest && emp.est) r.pest = emp.est;
+  }
+  // Destinatario: tipo por largo, nombre y llegada conocidos
+  if (r.ndest !== '') {
+    r.ndest = String(r.ndest).replace(/\D/g, '');
+    // Al escribir el número, el tipo sigue al largo: 11 dígitos = RUC, 8 = DNI (los demás se eligen a mano).
+    var porLargo = r.ndest.length === 11 ? GR_TIPODOC_[0] : r.ndest.length === 8 ? GR_TIPODOC_[1] : '';
+    if (porLargo && (!r.tdest || (cambio('ndest') && /^[61] /.test(r.tdest)))) r.tdest = porLargo;
+    if (cambio('ndest') || !r.dest || !r.lubi) {
+      var dirs = ctx.dir.filter(function (d) { return d.doc === r.ndest; });
+      if (!r.dest && dirs.length) r.dest = dirs[0].nom;
+      var lle = dirs.filter(function (d) { return /llegada|ambos/i.test(d.uso); });
+      if (!r.lubi && !r.ldir && lle.length === 1) { r.lubi = lle[0].ubi; r.ldir = lle[0].dir; if (!r.lest) r.lest = lle[0].est; }
+    }
+  }
+  // Transportista
+  if (r.truc !== '') {
+    r.truc = String(r.truc).replace(/\D/g, '');
+    var t = ctx.tra[r.truc];
+    if (t) { if (!r.tnom) r.tnom = t.nom; if (!r.mtc && t.mtc) r.mtc = t.mtc; }
+    if (!r.modalidad) r.modalidad = GR_MODALIDAD_[0];
+  }
+  // Vehículo y conductor
+  if (r.placa) {
+    r.placa = GR_placa_(r.placa);
+    var v = ctx.veh[r.placa];
+    if (v && v.m1 && cambio('placa')) r.m1 = 'SI';
+    if (!r.modalidad) r.modalidad = GR_MODALIDAD_[1];
+  }
+  if (r.placa2) r.placa2 = GR_placa_(r.placa2);
+  if (r.cdni !== '') {
+    r.cdni = String(r.cdni).replace(/\D/g, '');
+    var co = ctx.con[r.cdni];
+    if (co) { if (!r.cnom) r.cnom = co.nom; if (!r.cape) r.cape = co.ape; if (!r.clic) r.clic = co.lic; }
+  }
+  if (r.clic) r.clic = String(r.clic).toUpperCase().replace(/\s/g, '');
+  // Ubigeos escritos a mano ("santa anita", "150137") → etiqueta de la lista
+  ['pubi', 'lubi'].forEach(function (k) {
+    if (!r[k]) return;
+    var cod = GR_codUbigeo_(r[k]);
+    var et = cod ? GR_ubigeos_()[cod] : GR_buscarUbigeo_(r[k]);
+    if (et) r[k] = et;
+  });
+  // Productos de 📦 (resumen)
+  r.productos = GR_resumenProductos_(ctx.prod[r.id] || []);
+}
+
+function GR_resumenProductos_(ps) {
+  if (!ps.length) return '';
+  return ps.length + ' producto(s): ' + ps.slice(0, 3).map(function (p) { return p.cant + ' ' + p.unidad + ' ' + String(p.desc).slice(0, 30); }).join(' · ') + (ps.length > 3 ? ' …' : '');
+}
+
+/* ============================================================ revisión (Estado) */
+
+function GR_ponerEstado_(r, ctx) {
+  if (GR_FIJOS_.some(function (s) { return String(r.estado).indexOf(s) === 0; })) return;
+  var v = GR_validar_(r, ctx);
+  r.estado = v.faltas.length ? GR_ESTADOS_.BORRADOR + ' · falta: ' + v.faltas.join(', ') : GR_ESTADOS_.LISTA + (v.avisos.length ? ' · ojo: ' + v.avisos.join(', ') : '');
+}
+
+/** {faltas:[], avisos:[]} con todo lo que pide SUNAT para la GRE Remitente. */
+function GR_validar_(r, ctx) {
+  var F = [], A = [], txt = function (k) { return String(r[k] == null ? '' : r[k]).trim(); }, cod2 = function (k) { return txt(k).slice(0, 2); };
+  // Empresa
+  var emp = ctx.emp[txt('empresa')];
+  if (!emp) F.push('empresa');
+  else if (!emp.activa) F.push('empresa inactiva');
+  else if (!emp.serie) A.push('serie de guía en 🏢 Empresas');
+  // Documento relacionado
+  var doc = txt('docrel') || 'Factura';
+  if (doc !== 'Ninguno') {
+    if (!/^[A-Z0-9]{4}$/.test(txt('serie'))) F.push('serie (4 caracteres)');
+    else if (doc === 'Factura' && !/^[FE]/.test(txt('serie'))) A.push('serie de factura empieza con F o E');
+    else if (doc === 'Boleta' && !/^[BE]/.test(txt('serie'))) A.push('serie de boleta empieza con B o E');
+    if (!/^\d{1,8}$/.test(txt('numero'))) F.push('número de ' + doc.toLowerCase());
+  }
+  // Destinatario
+  var td = cod2('tdest').trim(), nd = txt('ndest');
+  if (!td) F.push('tipo doc. destinatario');
+  else if (td === '6' && !GR_rucValido_(nd)) F.push(nd ? 'RUC destinatario inválido' : 'RUC destinatario');
+  else if (td === '1' && !/^\d{8}$/.test(nd)) F.push('DNI destinatario (8 dígitos)');
+  else if (!nd) F.push('N° doc. destinatario');
+  if (doc === 'Factura' && td && td !== '6') F.push('con factura el destinatario va con RUC');
+  if (!txt('dest')) F.push('nombre destinatario');
+  if (emp && nd && nd === emp.ruc && cod2('motivo') !== '04' && cod2('motivo') !== '18') A.push('destinatario = misma empresa (¿motivo 04?)');
+  // Traslado
+  var mot = cod2('motivo');
+  if (!mot) F.push('motivo');
+  if (mot === '13' && !txt('motivoTxt')) F.push('descripción del motivo 13');
+  var mod = cod2('modalidad');
+  if (!mod) F.push('modalidad (público/privado)');
+  if (!(r.fecha instanceof Date)) F.push('fecha de inicio');
+  else if (r.fecha < ctx.hoy) A.push('fecha de inicio ya pasó (SUNAT no acepta una anterior a la emisión)');
+  if (!(Number(r.peso) > 0)) F.push('peso bruto');
+  if (!txt('upeso')) F.push('unidad de peso');
+  if (txt('bultos') !== '' && !(Number(r.bultos) >= 0 && Number(r.bultos) % 1 === 0)) F.push('N° bultos (entero)');
+  var parcial = txt('total') === 'NO' || doc === 'Ninguno';
+  var prods = ctx.prod[txt('id')] || [];
+  if (parcial && !prods.length) F.push('productos en 📦 Productos');
+  if (prods.some(function (p) { return !(p.cant > 0) || !String(p.desc).trim() || !p.unidad; })) F.push('productos sin descripción, unidad o cantidad');
+  if (!parcial && prods.length) A.push('hay productos en 📦 pero dice "todo lo de la factura"');
+  // Transporte
+  if (mod === '01') {
+    if (!GR_rucValido_(txt('truc'))) F.push(txt('truc') ? 'RUC transportista inválido' : 'RUC transportista');
+    if (!txt('tnom')) F.push('razón social transportista');
+    if (emp && txt('truc') === emp.ruc) A.push('el transportista es la misma empresa: eso es transporte PRIVADO');
+  } else if (mod === '02' && txt('m1') !== 'SI') {
+    if (!/^[A-Z0-9]{3}-?[A-Z0-9]{3}$/.test(txt('placa'))) F.push(txt('placa') ? 'placa (ej. ABC-123)' : 'placa');
+    if (txt('placa2') && !/^[A-Z0-9]{3}-?[A-Z0-9]{3}$/.test(txt('placa2'))) F.push('placa secundaria');
+    if (!/^\d{8}$/.test(txt('cdni'))) F.push(txt('cdni') ? 'DNI conductor (8 dígitos)' : 'DNI conductor');
+    if (!txt('cnom')) F.push('nombres conductor');
+    if (!txt('cape')) F.push('apellidos conductor');
+    if (!txt('clic')) F.push('licencia');
+    else if (!/^[A-Z]\d{8}$/.test(txt('clic'))) A.push('licencia (formato usual Q12345678)');
+  }
+  // Partida y llegada
+  var ub = GR_ubigeos_();
+  ['p', 'l'].forEach(function (x) {
+    var nom = x === 'p' ? 'partida' : 'llegada', c = GR_codUbigeo_(txt(x + 'ubi'));
+    if (!c || !ub[c]) F.push('ubigeo ' + nom);
+    if (txt(x + 'dir').length < 5) F.push('dirección ' + nom);
+    if (mot === '04' && !/^\d{4}$/.test(txt(x + 'est'))) F.push('cód. local ' + nom + ' (motivo 04)');
+  });
+  if (GR_codUbigeo_(txt('pubi')) && GR_codUbigeo_(txt('pubi')) === GR_codUbigeo_(txt('lubi')) && GR_norm_(txt('pdir')) === GR_norm_(txt('ldir'))) F.push('partida y llegada son iguales');
+  return { faltas: F, avisos: A };
+}
+
+/* ============================================================ productos y catálogos */
+
+/** Recalcula las guías con esos IDs (cuando cambian sus productos). */
+function GR_actualizarPorIds_(ss, ids) {
+  ids = ids.filter(function (x) { return /^G-\d+$/.test(x); });
+  if (!ids.length) return;
+  var sh = ss.getSheetByName(GR_HOJA_), ult = sh.getLastRow();
+  if (ult < GR_FILA1_) return;
+  var col = sh.getRange(GR_FILA1_, 1, ult - GR_FILA1_ + 1, 1).getValues();
+  col.forEach(function (v, i) { if (ids.indexOf(String(v[0])) >= 0) GR_procesarFilas_(ss, GR_FILA1_ + i, GR_FILA1_ + i, ['productos']); });
+}
+
+/** En los catálogos: RUC/DNI/placa ordenados y aviso en rojo si el RUC no es válido. */
+function GR_normalizarCatalogo_(sh, rango) {
+  var n = sh.getName();
+  for (var f = rango.getRow(); f <= rango.getLastRow(); f++) {
+    var c = sh.getRange(f, 1), v = String(c.getValue()).trim();
+    if (!v) { c.setBackground(null).setNote(''); continue; }
+    if (n === GR_VEH_) { c.setValue(GR_placa_(v)); continue; }
+    var d = v.replace(/\D/g, '');
+    var esRuc = n === GR_TRA_ || (n === GR_DIR_ && d.length === 11) || n === GR_EMP_;
+    var celda = n === GR_EMP_ ? sh.getRange(f, 2) : c, val = n === GR_EMP_ ? String(sh.getRange(f, 2).getValue()).replace(/\D/g, '') : d;
+    if (n !== GR_EMP_ && d !== v) c.setValue(d);
+    var ok = esRuc ? GR_rucValido_(val) : (n === GR_CON_ || (n === GR_DIR_ && d.length === 8)) ? /^\d{8}$/.test(val) : true;
+    celda.setBackground(ok ? null : '#ffcdd2').setNote(ok ? '' : (esRuc ? 'RUC inválido: no cuadra el dígito verificador (¿está bien escrito?).' : 'DNI de 8 dígitos.'));
+    if (n === GR_EMP_ || n === GR_DIR_) {
+      var cu = sh.getRange(f, n === GR_EMP_ ? 6 : 4), u = String(cu.getValue());
+      if (u) { var et = GR_codUbigeo_(u) ? GR_ubigeos_()[GR_codUbigeo_(u)] : GR_buscarUbigeo_(u); if (et && et !== u) cu.setValue(et); }
+    }
+  }
+}
+
+/** Menú 🔍 Revisar todas. */
+function GR_menuRevisar() {
+  var ss = SpreadsheetApp.getActive();
+  var r = GR_revisarTodo_(ss);
+  ss.toast(r.lista + ' lista(s) para emitir · ' + r.borrador + ' con datos por completar.', '🔍 Revisión', 8);
+}
+
+function GR_revisarTodo_(ss) {
+  var sh = ss.getSheetByName(GR_HOJA_), ult = sh.getLastRow(), out = { lista: 0, borrador: 0 };
+  if (ult >= GR_FILA1_) GR_procesarFilas_(ss, GR_FILA1_, ult, []);
+  if (ult >= GR_FILA1_) sh.getRange(GR_FILA1_, GR_col_('estado'), ult - GR_FILA1_ + 1, 1).getValues().forEach(function (v) {
+    if (String(v[0]).indexOf(GR_ESTADOS_.LISTA) === 0) out.lista++; else if (String(v[0]).indexOf(GR_ESTADOS_.BORRADOR) === 0) out.borrador++;
+  });
+  return out;
+}
+
+function GR_menuDuplicar() {
+  var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), f = sh.getActiveRange().getRow();
+  if (sh.getName() !== GR_HOJA_ || f < GR_FILA1_) return SpreadsheetApp.getUi().alert('Seleccione una fila de 🚚 Guías.');
+  var x = GR_leerGuias_(sh, f, f)[0].r;
+  if (!x.id) return SpreadsheetApp.getUi().alert('Esa fila está vacía.');
+  var nueva = Math.max(sh.getLastRow() + 1, GR_FILA1_);
+  var idViejo = x.id;
+  x.id = ''; x.estado = ''; x.fecha = ''; ['guia', 'femi', 'sunat', 'pdf', 'ticket', 'msg', 'actualizado'].forEach(function (k) { x[k] = ''; });
+  sh.getRange(nueva, 1, 1, GR_COLS_.length).setValues([GR_COLS_.map(function (c) { return x[c.k]; })]);
+  GR_procesarFilas_(ss, nueva, nueva, []);
+  var idNuevo = sh.getRange(nueva, 1).getValue();
+  var p = ss.getSheetByName(GR_PROD_), ps = p.getLastRow() > 1 ? p.getRange(2, 1, p.getLastRow() - 1, 8).getValues().filter(function (q) { return String(q[0]) === idViejo; }) : [];
+  if (ps.length) { p.getRange(p.getLastRow() + 1, 1, ps.length, 8).setValues(ps.map(function (q) { q[0] = idNuevo; return q; })); GR_actualizarPorIds_(ss, [idNuevo]); }
+  sh.getRange(nueva, GR_col_('fecha')).activate();
+  ss.toast('Copia ' + idNuevo + ' de ' + idViejo + (ps.length ? ' (con ' + ps.length + ' producto(s))' : '') + '. Ponga la fecha de traslado y revise lo que cambie.', '📄 Duplicada', 8);
+  GR_registrar_(idNuevo, 'Duplicada', 'Copia de ' + idViejo);
+}
+
+function GR_menuProductos() {
+  var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), f = sh.getActiveRange().getRow();
+  var id = sh.getName() === GR_HOJA_ && f >= GR_FILA1_ ? String(sh.getRange(f, 1).getValue()) : '';
+  var p = ss.getSheetByName(GR_PROD_);
+  p.activate();
+  if (!id) return;
+  var vals = p.getLastRow() > 1 ? p.getRange(2, 1, p.getLastRow() - 1, 1).getValues() : [];
+  for (var i = 0; i < vals.length; i++) if (String(vals[i][0]) === id) return p.getRange(i + 2, 1).activate();
+  var nueva = p.getLastRow() + 1;
+  p.getRange(nueva, 1, 1, 2).setValues([[id, 1]]);
+  p.getRange(nueva, 3).activate();
+  ss.toast('Escriba aquí los productos de ' + id + ' (una fila por producto, con el mismo ID).', '📦 Productos', 8);
+}

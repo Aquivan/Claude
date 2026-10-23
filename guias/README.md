@@ -1,0 +1,33 @@
+# 🚚 Guías de Remisión Remitente · Grupo
+
+Hoja de Google **"Guías de Remisión · Grupo"** (código en `guias/apps_script/`, prefijo `GR_`): una sola hoja para todas
+las empresas con **todo lo que pide SUNAT para la GRE Remitente** y el formulario de Quesito. Es la base para emitir
+las guías en [Quesito](https://www.quesito.pe) con un robot (próxima etapa) y desde Telegram / WhatsApp.
+
+## Pestañas
+
+| Pestaña | Qué tiene |
+|---|---|
+| **🚚 Guías** | Una fila por guía, en grupos de colores: 🆔 Guía (ID, Estado, Empresa) · 🧾 Comprobante (cotización, factura/boleta, serie, número) · 👤 Destinatario · 🚚 Traslado (motivo cat. 20, modalidad cat. 18, fecha de inicio, ¿todo lo de la factura?, peso, unidad, bultos, vehículo M1/L) · 🏢 Transportista (público) · 🚗 Vehículo y conductor (privado) · 📍 Partida · 🏁 Llegada (ubigeo, dirección, cód. de local) · 📝 Observaciones y resumen de productos · ✅ Resultado (N° de guía, fecha, estado SUNAT, PDF, ticket, mensaje: lo llena el robot). Cada título tiene una nota con lo que va. |
+| **📦 Productos** | Solo para guías **parciales** o **sin factura**: una fila por producto (ID guía, descripción como en la factura, unidad cat. 03, cantidad, lote). |
+| **🏢 Empresas** | Empresa, RUC, razón social, correo de Quesito, serie de guía, partida (ubigeo, dirección, cód. de local), activa. Precargadas M&D y DSM (GRANIX inactiva). **La clave de Quesito no va en la hoja**: va como secreto en GitHub. |
+| **🚛 Transportistas · 🚗 Vehículos · 👤 Conductores · 📍 Direcciones** | Lo que se repite: con el RUC del transportista se llenan su nombre y MTC; con el DNI del conductor, nombres, apellidos y licencia; con el RUC del cliente, su nombre y su dirección de llegada. |
+| **🗺️ Ubigeos** | Catálogo 13 de SUNAT (UBIGEO INEI, 1 892 distritos). En las columnas de ubigeo se elige de la lista o se escribe el distrito ("santa anita") o el código. |
+| **🧾 Registro · 📖 Ayuda** | Qué se hizo y cuándo · instrucciones. |
+
+## Cómo funciona
+
+- **ID** (`G-000001`) y **Estado** se ponen solos. `✏️ Borrador · falta: …` dice exactamente qué falta; `✅ Lista para emitir` cuando está completa (con "ojo:" si hay algo que revisar). `👁 Vista previa`, `⏳ Emitiendo`, `🚚 Emitida`, `⚠️ Error`, `🚫 Anulada` los pondrá el robot.
+- **Columnas en gris** = no aplican (transporte público → sin vehículo ni conductor; privado → sin transportista; M1/L → sin placa ni conductor; cód. de local solo en el motivo 04; descripción solo en el motivo 13).
+- **Reglas que revisa** (`GR_validar_`): RUC con dígito verificador (detecta RUC mal escritos, como `20447623673`), DNI de 8 dígitos, placa `ABC-123`, licencia, serie de 4 caracteres, con factura el destinatario va con RUC, fecha de inicio no anterior a hoy, peso > 0, partida y llegada con ubigeo válido y distintas, motivo 04 con códigos de local, motivo 13 con descripción, parcial o sin factura con productos.
+- **Menú 🚚 Guías**: ➕ Nueva guía (formulario lateral con listas, búsqueda de distritos, autocompletado y productos) · ✏️ Editar · 📄 Duplicar (para varias guías de una misma factura) · 🔍 Revisar todas · 📦 Ver productos · 🧰 Preparar / reparar (nunca borra datos) · 📖 Ayuda.
+
+## Despliegue
+
+`deploy-guias.yml`: **crear-proyecto** (una vez) crea la hoja con su Apps Script y guarda `.clasp.json`; después cada push con cambios en `guias/apps_script/` sube el código. Al abrir la hoja por primera vez se arma sola (`onOpen`).
+
+## Próximas etapas
+
+1. Robot de Quesito (GitHub Actions + Playwright, como el de retenciones): con la cuenta de cada empresa (correo en 🏢 Empresas, clave como secreto `QUESITO_CLAVE` del Environment de su RUC), busca la factura, "Generar GUÍA DE REMISIÓN REMITENTE", deja solo los productos de 📦 si es parcial, llena traslado, transporte, partida, llegada y observaciones. **👁 Vista previa** se detiene antes de "Crear Guía de Remisión"; **✅ Emitir** solo con confirmación, y anota N° de guía, estado SUNAT y PDF.
+2. Telegram y WhatsApp: "guía para la factura FQQ1-3525" → completa lo que falta preguntando → 👁 / ✅.
+3. Importar el Excel actual y, después, facturas.
