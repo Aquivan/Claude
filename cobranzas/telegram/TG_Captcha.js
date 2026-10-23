@@ -21,6 +21,11 @@ function TGC_doPost_(e) {
   try { q = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) {}
   try {
     var ss = TG_ss_(), cfg = TG_cfg_(ss), run = String(q.run || '').replace(/\D/g, '');
+    // 🔎 RUC por nombre (RucPorNombre.js): solo una ejecución de ruc-por-nombre.yml que esté corriendo.
+    if (/^rpn_/.test(String(q.accion || ''))) {
+      if (!run || !TGC_runValido_(cfg, run, /(^|\/)ruc-por-nombre\.ya?ml$/)) return TGW_json_({ ok: false, error: 'Forbidden' });
+      return TGW_json_(RPN_gh_(q));
+    }
     if (!run || !TGC_runValido_(cfg, run)) return TGW_json_({ ok: false, error: 'Forbidden' });
     if (q.accion === 'captcha') return TGW_json_(TGC_avisar_(ss, cfg, run, q));
     if (q.accion === 'respuesta') {
@@ -36,12 +41,13 @@ function TGC_doPost_(e) {
 }
 
 /** Solo ejecuciones de "guias-quesito…" que siguen corriendo (se recuerda 2 min para no preguntar a GitHub en cada consulta). */
-function TGC_runValido_(cfg, run) {
-  var c = CacheService.getScriptCache();
-  if (c.get('tgc_ok_' + run)) return true;
+function TGC_runValido_(cfg, run, patron) {
+  patron = patron || /(^|\/)guias-quesito[\w-]*\.ya?ml$/;
+  var c = CacheService.getScriptCache(), k = 'tgc_ok_' + run + '_' + hashTexto_(String(patron)).slice(0, 8);
+  if (c.get(k)) return true;
   var r = TG_gh_(cfg, '/actions/runs/' + run);
-  var ok = r && r.status !== 'completed' && /(^|\/)guias-quesito[\w-]*\.ya?ml$/.test(String(r.path || ''));
-  if (ok) c.put('tgc_ok_' + run, '1', 120);
+  var ok = r && r.status !== 'completed' && patron.test(String(r.path || ''));
+  if (ok) c.put(k, '1', 120);
   return !!ok;
 }
 

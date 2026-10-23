@@ -1,0 +1,86 @@
+# 🔎 RUC por nombre (proyecto Cobranzas, cobranzas/RucPorNombre.js).
+# Busca en el Padrón Reducido del RUC de SUNAT (descarga pública) los nombres de vouchers que no
+# traen RUC. Lo lanza el bot de Cobranzas con un "lote": los nombres NO van en las entradas ni en el
+# registro (pueden ser de personas); el robot se los pide al bot y le devuelve los candidatos.
+# El padrón (~390 MB) se guarda en la caché de Actions una semana; no se sube al repositorio.
+
+name: RUC por nombre (padrón SUNAT)
+
+on:
+  workflow_dispatch:
+    inputs:
+      lote:
+        description: "Lote que dejó el bot de Cobranzas (o \"prueba\" para revisar el padrón con empresas conocidas)"
+        required: true
+
+run-name: "RUC por nombre · lote ${{ inputs.lote }}"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ruc-por-nombre
+  cancel-in-progress: false
+
+jobs:
+  buscar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/ruc_por_nombre.py
+            cobranzas/.clasp.json
+          sparse-checkout-cone-mode: false
+
+      - name: Dirección del bot
+        if: inputs.lote != 'prueba'
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          [ -n "$CLASPRC_JSON" ] || { echo "::error::Falta el secret CLASPRC_JSON"; exit 1; }
+          npm install -g @google/clasp@3.3.0 >/dev/null 2>&1
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"; chmod 600 "$HOME/.clasprc.json"
+          cd cobranzas
+          ID=$(clasp --json list-deployments 2>/dev/null | python3 -c "
+          import json,sys
+          t=sys.stdin.read()
+          try: d=json.loads(t[t.index('['):])
+          except Exception: d=[]
+          b=[x for x in d if (x.get('description') or '').startswith('Asistente Telegram')]
+          print(b[0]['deploymentId'] if b else '')")
+          rm -f "$HOME/.clasprc.json"
+          [ -n "$ID" ] || { echo "::error::No encontré la aplicación web del bot"; exit 1; }
+          echo "::add-mask::$ID"
+          echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
+
+      - name: Semana (para la caché del padrón)
+        id: semana
+        run: echo "s=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Padrón en caché
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: padron_reducido_ruc.zip
+          key: padron-ruc-${{ steps.semana.outputs.s }}
+
+      - name: Descargar el padrón de SUNAT
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          for url in https://www.sunat.gob.pe/descargaPRR/padron_reducido_ruc.zip https://www2.sunat.gob.pe/padron_reducido_ruc.zip; do
+            for i in 1 2 3; do
+              if curl -fsSL --retry 2 --max-time 900 -A "Mozilla/5.0" -o padron_reducido_ruc.zip "$url" && unzip -tq padron_reducido_ruc.zip >/dev/null; then
+                echo "Padrón descargado: $(du -h padron_reducido_ruc.zip | cut -f1)"; exit 0
+              fi
+              echo "Intento $i con $url falló"; rm -f padron_reducido_ruc.zip; sleep $((i*20))
+            done
+          done
+          echo "::error::No se pudo descargar el padrón de SUNAT"; exit 1
+
+      - name: Buscar los nombres
+        if: always()
+        env:
+          LOTE: ${{ inputs.lote }}
+        run: python3 scripts/ruc_por_nombre.py --padron padron_reducido_ruc.zip --lote "$LOTE"
