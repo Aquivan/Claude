@@ -178,6 +178,13 @@ def main():
                     .filter(e => e.offsetParent !== null).map(e => e.innerText.trim()).filter(Boolean)"""))
                 print("Captcha visible:", pag.evaluate("() => [...document.querySelectorAll('iframe[src*=recaptcha], iframe[src*=hcaptcha], iframe[src*=turnstile]')].filter(f => f.offsetParent !== null).map(f => f.src.split('?')[0])"))
                 clave_ = pag.locator("input[type=password]:visible").first
+                if not clave_.count() and pag.locator("iframe[src*='api2/anchor']").count():
+                    if not captcha_google(pag, a.salida, foto):
+                        sys.exit(1)
+                    pag.locator("button:has-text('Continuar'):visible, input[type=submit][value*=Continuar i]:visible").first.click()
+                    pag.wait_for_timeout(3000)
+                    anotar("despues_del_captcha")
+                    clave_ = pag.locator("input[type=password]:visible").first
                 if not clave_.count():
                     sys.exit("❌ Después de 'Continuar' no apareció el campo de contraseña. Revise los datos de arriba.")
             clave_.fill(clave)
@@ -288,6 +295,43 @@ def main():
             for r in informe["red"]:
                 print("   ", r)
             nav.close()
+
+
+def captcha_google(pag, salida, foto):
+    """Marca la casilla "No soy un robot". Si Google la acepta, sigue (True). Si pide imágenes,
+    guarda la imagen del reto y la deja en el log (base64) para mostrársela a la persona; no la resuelve."""
+    ancla = pag.frame_locator("iframe[src*='api2/anchor']").first
+    ancla.locator("#recaptcha-anchor").click()
+    print("\n☑️ Marqué 'No soy un robot'.")
+    for _ in range(10):
+        pag.wait_for_timeout(1000)
+        if ancla.locator("#recaptcha-anchor[aria-checked=true]").count():
+            print("✅ Google aceptó sin pedir imágenes.")
+            return True
+    reto = pag.locator("iframe[src*='api2/bframe']").first
+    if not reto.is_visible():
+        print("⚠️ No aceptó ni mostró imágenes.")
+        foto("captcha_sin_reto")
+        return False
+    cuerpo = pag.frame_locator("iframe[src*='api2/bframe']").first
+    try:
+        texto = cuerpo.locator(".rc-imageselect-desc-wrapper, .rc-imageselect-instructions, .rc-doscaptcha-header").first.inner_text(timeout=5000)
+    except Exception:
+        texto = ""
+    print("🧩 Google pide un reto de imágenes:", " ".join(texto.split()))
+    if cuerpo.locator(".rc-doscaptcha-header").count():
+        print("⛔ Google dice que hay 'consultas automáticas' desde esta red: no deja resolverlo.")
+    ruta = os.path.join(salida, "captcha_reto.png")
+    reto.screenshot(path=ruta)
+    import base64
+    with open(ruta, "rb") as f:
+        print("CAPTCHA_PNG_BASE64_INICIO")
+        b = base64.b64encode(f.read()).decode()
+        for i in range(0, len(b), 4000):
+            print(b[i:i + 4000])
+        print("CAPTCHA_PNG_BASE64_FIN")
+    print("(Por ahora no hay forma de enviar la respuesta: me detengo aquí.)")
+    return False
 
 
 def _campos_post(req):
