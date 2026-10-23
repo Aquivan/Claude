@@ -96,7 +96,7 @@ def puntaje(q, c):
     cobertura = total / peso_total
     # palabras fuertes del padrón que no aparecen en lo buscado bajan un poco (otro titular más largo)
     sobran = sum(1 for j, x in enumerate(c) if j not in usadas and x not in DEBILES)
-    return max(0.0, min(100.0, 100 * cobertura - 4 * sobran))
+    return max(0.0, min(100.0, 100 * cobertura - 6 * sobran))
 
 
 def _una_letra(a, b):
