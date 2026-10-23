@@ -332,13 +332,6 @@ def captcha_google(pag, salida, foto):
         print("⛔ Google dice que hay 'consultas automáticas' desde esta red: no deja resolverlo.")
     ruta = os.path.join(salida, "captcha_reto.png")
     reto.screenshot(path=ruta)
-    import base64
-    with open(ruta, "rb") as f:
-        print("CAPTCHA_PNG_BASE64_INICIO")
-        b = base64.b64encode(f.read()).decode()
-        for i in range(0, len(b), 4000):
-            print(b[i:i + 4000])
-        print("CAPTCHA_PNG_BASE64_FIN")
     print("(Por ahora no hay forma de enviar la respuesta: me detengo aquí.)")
     return False
 

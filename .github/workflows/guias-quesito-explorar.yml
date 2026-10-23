@@ -29,7 +29,7 @@ on:
 run-name: "Explorar Quesito · ${{ inputs.ruc }} · ${{ inputs.serie }}-${{ inputs.numero }}"
 
 permissions:
-  contents: read
+  contents: write   # solo para dejar la imagen del captcha en la rama quesito-captcha
 
 jobs:
   explorar:
@@ -53,6 +53,14 @@ jobs:
           SERIE: ${{ inputs.serie }}
           NUMERO: ${{ inputs.numero }}
         run: python guias/scripts/quesito_explorar.py --serie "$SERIE" --numero "$NUMERO" --salida pantallas
+
+      - name: Dejar la imagen del captcha (si hubo) en la rama quesito-captcha
+        if: always() && hashFiles('pantallas/captcha_reto.png') != ''
+        run: |
+          mkdir -p /tmp/cap && cp pantallas/captcha_reto.png /tmp/cap/ && cd /tmp/cap
+          git init -q -b quesito-captcha && git add captcha_reto.png
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -q -m "Imagen del captcha de Quesito (temporal)"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" quesito-captcha
 
       - name: Subir fotos y estructura
         if: always()
