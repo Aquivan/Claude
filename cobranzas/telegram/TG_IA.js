@@ -26,6 +26,8 @@ var TG_SISTEMA_ = [
   '- retenciones_sunat {tipo:"emitidas"|"recibidas"|"detalle", empresa, contraparte, periodo:"AAAAMM", desde, hasta, buscar}: comprobantes de retención (CRE)',
   '  descargados de SUNAT. emitidas = la empresa retuvo a un proveedor; recibidas = un cliente agente de retención le retuvo; detalle = factura por factura.',
   '- honorarios {empresa, emisor, periodo, desde, hasta, pendientes:true, buscar}: recibos por honorarios RECIBIDOS (renta bruta, retención 4ta, neto, PDF).',
+  '- honorarios_conciliacion {tipo:"conciliacion"|"por_pagar"|"sin_recibo"|"retencion", empresa, emisor}: recibos por honorarios cruzados con los vouchers: ' +
+    'estado de cada recibo (pagado, por pagar, parcial, pagado sin descontar la retención), honorarios por pagar por emisor, pagos a personas sin recibo, retención de 4ta por mes de PAGO (PLAME).',
   '- sire_liquidacion {empresa, anio}: la Liquidación IGV del año de la empresa (hoja "Liquidacion IGV <RUC> - <año>" de SIRE): por mes ventas, compras, IGV,',
   '  saldo a favor, IGV por pagar, renta, etc. Úsala para "¿cuánto IGV pago?", "saldo a favor", "ventas del mes", "IR a cuenta".',
   '- leer_libro {libro:"notificaciones"|"retenciones"|"honorarios"|"detracciones"|"cobranzas"|"vouchers"|"sire" (con empresa y anio)|<ID o enlace de una Google Sheet>,',
