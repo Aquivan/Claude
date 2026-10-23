@@ -79,10 +79,14 @@ jobs:
             git push -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" quesito-captcha
           fi
 
-      - name: Instalar navegador
+      # Se usa el Chrome que ya trae GitHub (instalar el de Playwright a veces se queda colgado).
+      - name: Preparar navegador
+        timeout-minutes: 5
         run: |
           pip install playwright==1.47.0
-          python -m playwright install --with-deps chromium
+          CH=$(command -v google-chrome || command -v google-chrome-stable || true)
+          if [ -n "$CH" ]; then echo "CHROMIUM=$CH" >> "$GITHUB_ENV"; echo "Chrome: $($CH --version)"
+          else timeout 240 python -m playwright install --with-deps chromium; fi
 
       - name: Recorrer Quesito (solo mirar)
         env:
