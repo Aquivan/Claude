@@ -37,6 +37,9 @@ function TGW_doPost_(e) {
   try {
     var pu = JSON.parse((e.postData && e.postData.contents) || '{}')._pu;
     if (pu && /^https:\/\/script\.google\.com\//.test(pu) && props.getProperty('TGP_PROCESAR_URL') !== pu) props.setProperty('TGP_PROCESAR_URL', pu);
+    // Y su propia dirección, para mandarle avisos (🧩 captcha de Quesito, TG_Captcha.js).
+    var wu = JSON.parse((e.postData && e.postData.contents) || '{}')._wu;
+    if (wu && /^https:\/\/script\.google\.com\//.test(wu) && props.getProperty('TGW_WA_URL') !== wu) props.setProperty('TGW_WA_URL', wu);
   } catch (err) {}
   if (p.accion === 'boton') return TGW_json_(TGW_boton_(p.k, p.op, p.numero));
   if (p.accion === 'procesar' || p.accion === 'deshacer') {   // 🧾 Procesar documento · ↩️ Deshacer (TG_Procesar.js, TG_Deshacer.js)
@@ -85,6 +88,9 @@ function TGW_responder_(q) {
     origen: '📲 whatsapp ' + (q.nombre || q.numero), modelo: cfg.modelo || '', tg: { ctx: ctx, archivos: [], acciones: [], cfg: cfg }
   };
   var texto = String(q.texto || '').trim();
+  // 🧩 "1 6 9" mientras el robot de Quesito espera la respuesta de un captcha.
+  var capt = TGC_respuesta_(texto);
+  if (capt) return { ok: true, respuesta: capt, tablas: [], sugerencias: [], archivos: [], avisos: [] };
   // 🧾 "emitir" (lista de pendientes) o "emite la retención de F001-215" (o citando el mensaje): propuesta con botones.
   var cre = TGR_atajoWA_(ss, texto, q.citado);
   if (cre) return cre;

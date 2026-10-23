@@ -12,6 +12,7 @@
 function doPost(e) {
   try {
     var p = (e && e.parameter) || {};
+    if (p.canal === 'cob') return WA_desdeCobranzas_(e, p);   // 🧩 aviso que manda Cobranzas (WA_Api.js)
     var clave = WA_prop_('WA_GAS_TOKEN');
     if (!clave || p.token !== clave) return WA_ok_('Forbidden');
     WA_props_().setProperty('WA_ULTIMO', Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HH:mm:ss'));

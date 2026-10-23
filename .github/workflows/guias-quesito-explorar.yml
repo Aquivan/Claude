@@ -29,17 +29,55 @@ on:
 run-name: "Explorar Quesito · ${{ inputs.ruc }} · ${{ inputs.serie }}-${{ inputs.numero }}"
 
 permissions:
-  contents: write   # solo para dejar la imagen del captcha en la rama quesito-captcha
+  contents: write   # solo para dejar las fotos del captcha en la rama quesito-captcha
 
 jobs:
   explorar:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     environment: ${{ inputs.ruc }}
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: guias/scripts
+          sparse-checkout: |
+            guias/scripts
+            cobranzas/.clasp.json
+          sparse-checkout-cone-mode: false
+
+      # 🧩 Si Quesito pide captcha, el robot se lo manda a la persona por el bot de Telegram/WhatsApp
+      # (proyecto Cobranzas). Su dirección se lee con clasp y no se imprime.
+      - name: Dirección del bot (para el captcha)
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          [ -n "$CLASPRC_JSON" ] || { echo "Sin CLASPRC_JSON: el captcha no se podrá pedir."; exit 0; }
+          npm install -g @google/clasp@3.3.0 >/dev/null 2>&1
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"; chmod 600 "$HOME/.clasprc.json"
+          cd cobranzas
+          ID=$(clasp --json list-deployments 2>/dev/null | python3 -c "
+          import json,sys
+          t=sys.stdin.read()
+          try: d=json.loads(t[t.index('['):])
+          except Exception: d=[]
+          b=[x for x in d if (x.get('description') or '').startswith('Asistente Telegram')]
+          print(b[0]['deploymentId'] if b else '')")
+          rm -f "$HOME/.clasprc.json"
+          if [ -n "$ID" ]; then
+            echo "::add-mask::$ID"
+            echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
+            echo "Bot encontrado."
+          else
+            echo "No encontré la aplicación web del bot: el captcha no se podrá pedir."
+          fi
+
+      - name: Rama temporal para las fotos del captcha
+        run: |
+          if ! git ls-remote --exit-code --heads origin quesito-captcha >/dev/null 2>&1; then
+            mkdir -p /tmp/cap && cd /tmp/cap && git init -q -b quesito-captcha
+            echo "Fotos temporales del captcha de Quesito (las pide el robot de guías)." > README.md
+            git add README.md && git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -q -m "Rama del captcha"
+            git push -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" quesito-captcha
+          fi
 
       - name: Instalar navegador
         run: |
@@ -52,15 +90,9 @@ jobs:
           QUESITO_CLAVE: ${{ secrets.QUESITO_CLAVE }}
           SERIE: ${{ inputs.serie }}
           NUMERO: ${{ inputs.numero }}
+          GITHUB_TOKEN: ${{ github.token }}
+          EMPRESA: ${{ inputs.ruc == '20447623669' && 'M&D' || inputs.ruc == '20447968216' && 'DSM' || inputs.ruc }}
         run: python guias/scripts/quesito_explorar.py --serie "$SERIE" --numero "$NUMERO" --salida pantallas
-
-      - name: Dejar la imagen del captcha (si hubo) en la rama quesito-captcha
-        if: always() && hashFiles('pantallas/captcha_reto.png') != ''
-        run: |
-          mkdir -p /tmp/cap && cp pantallas/captcha_reto.png /tmp/cap/ && cd /tmp/cap
-          git init -q -b quesito-captcha && git add captcha_reto.png
-          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -q -m "Imagen del captcha de Quesito (temporal)"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" quesito-captcha
 
       - name: Subir fotos y estructura
         if: always()

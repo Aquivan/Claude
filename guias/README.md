@@ -39,3 +39,12 @@ Workflow **"Guías - explorar Quesito (solo mirar)"** (`guias-quesito-explorar.y
 REMISIÓN REMITENTE" desde una factura y anota todos los campos del formulario. No emite nada:
 no presiona "Crear Guía", bloquea los envíos de datos y rechaza las confirmaciones. Necesita los
 secretos `QUESITO_CORREO` y `QUESITO_CLAVE` en el Environment de la empresa (su RUC).
+
+### Captcha de Quesito (lo resuelve la persona)
+
+Al ingresar, Quesito muestra un reCAPTCHA de Google. El robot no lo resuelve: numera las casillas, deja
+la foto en la rama temporal `quesito-captcha` y el bot de Cobranzas (`cobranzas/telegram/TG_Captcha.js`)
+se la manda a los administradores de Telegram y a los números de WhatsApp. Se responde con los números
+(`1 6 9`), `0` si ya no queda ninguna, `otra` para cambiar la imagen o `cancelar`. El robot marca las
+casillas, pulsa Verificar y, si Google pide otra ronda, vuelve a preguntar. Solo se atiende a una
+ejecución de `guias-quesito-*.yml` que esté corriendo (lo comprueba el bot con su token de GitHub).
