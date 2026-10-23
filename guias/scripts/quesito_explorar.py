@@ -166,8 +166,20 @@ def main():
             clave_ = pag.locator("input[type=password]").first
             if not clave_.is_visible():
                 pag.locator("button:has-text('Continuar'):visible, input[type=submit][value*=Continuar i]:visible").first.click()
-                clave_.wait_for(state="visible", timeout=30000)
-                anotar("pide_contrasena")
+                try:
+                    pag.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
+                pag.wait_for_timeout(3000)
+                anotar("despues_de_continuar")
+                print("Campos visibles:", pag.evaluate("""() => [...document.querySelectorAll('input,button,select')].filter(e => e.offsetParent !== null)
+                    .map(e => e.tagName + ' ' + (e.type || '') + ' ' + (e.name || e.id || '') + ' ' + (e.innerText || e.value && e.type === 'submit' ? (e.innerText || e.value).trim().slice(0, 30) : ''))"""))
+                print("Mensajes:", pag.evaluate("""() => [...document.querySelectorAll('.alert,.error,.invalid-feedback,.help-block,.toast,.flash,[role=alert],.text-danger')]
+                    .filter(e => e.offsetParent !== null).map(e => e.innerText.trim()).filter(Boolean)"""))
+                print("Captcha visible:", pag.evaluate("() => [...document.querySelectorAll('iframe[src*=recaptcha], iframe[src*=hcaptcha], iframe[src*=turnstile]')].filter(f => f.offsetParent !== null).map(f => f.src.split('?')[0])"))
+                clave_ = pag.locator("input[type=password]:visible").first
+                if not clave_.count():
+                    sys.exit("❌ Después de 'Continuar' no apareció el campo de contraseña. Revise los datos de arriba.")
             clave_.fill(clave)
             pag.locator("button[type=submit]:visible, input[type=submit]:visible, button:has-text('Ingresar'):visible, button:has-text('Iniciar'):visible").first.click()
             pag.wait_for_load_state("networkidle", timeout=60000)
