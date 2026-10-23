@@ -1,0 +1,115 @@
+# Despliegue de "Guías de Remisión · Grupo" (carpeta guias/apps_script/)
+# ------------------------------------------------------------
+#   - crear-proyecto : crea la hoja "Guías de Remisión · Grupo" con su Apps Script (una sola vez)
+#                      y guarda guias/apps_script/.clasp.json en el repo. Al abrir la hoja se arma sola.
+#   - comparar       : diferencias entre el código de la hoja y el repo.
+#   - subir          : sube guias/apps_script/ a la hoja.
+# Al hacer push con cambios en guias/apps_script/ se sube solo (si ya existe su .clasp.json).
+# ------------------------------------------------------------
+
+name: Desplegar Guías de Remisión (hoja)
+
+on:
+  push:
+    branches:
+      - claude/python-codes-izve18
+      - claude/tender-wozniak-vnf3iq
+    paths:
+      - 'guias/apps_script/**'
+  workflow_dispatch:
+    inputs:
+      accion:
+        description: "crear-proyecto (una vez), comparar o subir"
+        required: true
+        default: "comparar"
+        type: choice
+        options:
+          - comparar
+          - subir
+          - crear-proyecto
+
+permissions:
+  contents: write
+
+concurrency:
+  group: appsscript-guias-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: guias/apps_script
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar clasp
+        run: npm install -g @google/clasp@3.3.0
+
+      - name: Escribir credenciales de clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then echo "::error::Falta el secret CLASPRC_JSON"; exit 1; fi
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+          clasp show-authorized-user
+
+      - name: Crear la hoja con su proyecto
+        if: github.event_name == 'workflow_dispatch' && inputs.accion == 'crear-proyecto'
+        run: |
+          if [ -f .clasp.json ]; then echo "::error::Ya existe guias/apps_script/.clasp.json; no se crea otra hoja."; exit 1; fi
+          # Se crea fuera del repo: dentro, clasp encuentra el .clasp.json de la raiz y no crea nada.
+          mkdir -p /tmp/nuevo && cd /tmp/nuevo
+          clasp create-script --type sheets --title "Guías de Remisión · Grupo" --rootDir .
+          test -f .clasp.json || { echo "::error::clasp no creo el proyecto"; exit 1; }
+          python3 - <<'PY' > "$GITHUB_WORKSPACE/guias/apps_script/.clasp.json"
+          import json
+          c = json.load(open('.clasp.json'))
+          p = c.get('parentId') or []
+          if isinstance(p, str): p = [p]
+          print(json.dumps({"scriptId": c["scriptId"], "rootDir": ".", "parentId": p}))
+          PY
+          cd "$GITHUB_WORKSPACE/guias/apps_script"
+          cat .clasp.json; echo
+          clasp push --force
+          HOJA=$(python3 -c "import json;print((json.load(open('.clasp.json')).get('parentId') or [''])[0])")
+          echo "::notice title=Hoja creada::https://docs.google.com/spreadsheets/d/$HOJA/edit"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .clasp.json
+          git commit -m "Guías de Remisión: hoja y proyecto Apps Script creados [skip ci]"
+          for i in 1 2 3 4; do git push && break; git pull --rebase; sleep $((i*3)); done
+
+      - name: Comparar codigo de la hoja vs repo
+        if: hashFiles('guias/apps_script/.clasp.json') != '' && !(github.event_name == 'workflow_dispatch' && inputs.accion == 'crear-proyecto')
+        run: |
+          SID=$(python3 -c "import json;print(json.load(open('.clasp.json'))['scriptId'])")
+          mkdir -p /tmp/actual
+          printf '{"scriptId":"%s","rootDir":"/tmp/actual"}' "$SID" > /tmp/actual/.clasp.json
+          (cd /tmp/actual && clasp pull) || echo "(proyecto vacio o sin acceso)"
+          for f in *.js *.html appsscript.json; do
+            r="/tmp/actual/$f"; [ -f "$r" ] || r="/tmp/actual/${f%.js}.gs"
+            if [ -f "$r" ]; then
+              if diff -q --strip-trailing-cr "$r" "$f" >/dev/null; then echo "IGUAL      $f"; else echo "DIFERENTE  $f"; fi
+            else echo "NUEVO      $f"; fi
+          done
+
+      - name: Subir el codigo a la hoja
+        if: hashFiles('guias/apps_script/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir')
+        run: |
+          clasp push --force
+          HOJA=$(python3 -c "import json;print((json.load(open('.clasp.json')).get('parentId') or [''])[0])")
+          echo "Código subido: https://docs.google.com/spreadsheets/d/$HOJA/edit"
+
+      - name: Limpiar credenciales
+        if: always()
+        run: rm -rf "$HOME/.clasprc.json" /tmp/nuevo /tmp/actual

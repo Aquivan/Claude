@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root { --gris:#37474f; --azul:#1565c0; --naranja:#e65100; --morado:#6a1b9a; --verde:#2e7d32; --teal:#00695c; --cian:#00838f; --cafe:#5d4037; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Google Sans', Roboto, Arial, sans-serif; font-size: 13px; color: #263238; margin: 0; background: #f4f6f8; }
+  .top { position: sticky; top: 0; z-index: 5; background: #fff; padding: 10px 12px; border-bottom: 1px solid #e0e0e0; }
+  .top h1 { font-size: 15px; margin: 0; }
+  .top .sub { color: #607d8b; font-size: 11px; margin-top: 2px; }
+  .card { background: #fff; margin: 10px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.12); overflow: hidden; }
+  .card h2 { margin: 0; padding: 7px 12px; font-size: 12px; letter-spacing: .4px; color: #fff; }
+  .card .in { padding: 8px 12px 10px; }
+  label { display: block; font-size: 11px; color: #546e7a; margin: 7px 0 2px; }
+  input, select, textarea { width: 100%; padding: 6px 8px; border: 1px solid #cfd8dc; border-radius: 6px; font: inherit; background: #fff; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: #1e88e5; box-shadow: 0 0 0 2px #bbdefb; }
+  .fila { display: flex; gap: 8px; } .fila > div { flex: 1; min-width: 0; } .f2 { flex: 2 !important; }
+  .seg { display: flex; border: 1px solid #cfd8dc; border-radius: 6px; overflow: hidden; }
+  .seg button { flex: 1; border: 0; background: #fff; padding: 7px 4px; cursor: pointer; font: inherit; color: #546e7a; }
+  .seg button.on { background: #1565c0; color: #fff; font-weight: 600; }
+  .ok { color: #2e7d32; font-size: 11px; } .mal { color: #c62828; font-size: 11px; }
+  .hint { color: #78909c; font-size: 11px; margin-top: 3px; }
+  .oculto { display: none; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 2px; vertical-align: top; }
+  .x { border: 0; background: none; color: #c62828; cursor: pointer; font-size: 15px; }
+  .mas { margin-top: 6px; border: 1px dashed #90a4ae; background: #fafafa; border-radius: 6px; padding: 6px; width: 100%; cursor: pointer; color: #37474f; }
+  .pie { position: sticky; bottom: 0; background: #fff; border-top: 1px solid #e0e0e0; padding: 10px 12px; }
+  .btn { border: 0; border-radius: 6px; padding: 9px 12px; font: inherit; font-weight: 600; cursor: pointer; }
+  .prim { background: #e65100; color: #fff; width: 100%; } .prim:disabled { background: #bdbdbd; }
+  .sec { background: #eceff1; color: #37474f; margin-top: 6px; width: 100%; }
+  #res { margin-top: 8px; padding: 8px; border-radius: 6px; font-size: 12px; display: none; white-space: pre-wrap; }
+  #res.lista { background: #e8f5e9; color: #1b5e20; display: block; } #res.borr { background: #fff8e1; color: #6d4c00; display: block; } #res.err { background: #ffebee; color: #b71c1c; display: block; }
+  .chip { display: inline-block; background: #eceff1; border-radius: 10px; padding: 1px 8px; font-size: 11px; margin: 2px 2px 0 0; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="top">
+  <h1 id="titulo">Nueva guía de remisión remitente</h1>
+  <div class="sub">Lo gris de la hoja no aplica. Al guardar se revisa todo y el Estado dice qué falta.</div>
+</div>
+
+<div class="card"><h2 style="background:var(--gris)">🆔 GUÍA</h2><div class="in">
+  <div class="fila"><div><label>Empresa (remitente)</label><select id="empresa"></select></div><div><label>N° cotización</label><input id="cotizacion" placeholder="opcional"></div></div>
+  <div class="fila"><div><label>Doc. relacionado</label><select id="docrel"></select></div><div><label>Serie</label><input id="serie" maxlength="4" placeholder="F001"></div><div><label>Número</label><input id="numero" inputmode="numeric"></div></div>
+  <div class="hint">Quesito genera la guía desde esta factura (trae cliente y productos).</div>
+</div></div>
+
+<div class="card"><h2 style="background:var(--azul)">👤 DESTINATARIO</h2><div class="in">
+  <div class="fila"><div><label>Tipo doc.</label><select id="tdest"></select></div><div class="f2"><label>N° documento</label><input id="ndest" inputmode="numeric"><div id="ndestOk"></div></div></div>
+  <label>Destinatario</label><input id="dest" placeholder="Razón social o nombre">
+</div></div>
+
+<div class="card"><h2 style="background:var(--naranja)">🚚 TRASLADO</h2><div class="in">
+  <label>Motivo de traslado</label><select id="motivo"></select>
+  <div id="motivoTxtBox" class="oculto"><label>Descripción del motivo (13 - Otros)</label><input id="motivoTxt"></div>
+  <label>Modalidad</label>
+  <div class="seg" id="modalidad"><button type="button" data-v="01 - Transporte público">🏢 Público</button><button type="button" data-v="02 - Transporte privado">🚗 Privado</button></div>
+  <div class="fila"><div><label>Fecha inicio traslado</label><input id="fecha" type="date"></div><div><label>¿Todo lo de la factura?</label><div class="seg" id="total"><button type="button" data-v="SI">Sí</button><button type="button" data-v="NO">Parcial</button></div></div></div>
+  <div class="fila"><div><label>Peso bruto</label><input id="peso" type="number" step="0.01" min="0"></div><div><label>Unidad</label><select id="upeso"></select></div><div><label>N° bultos</label><input id="bultos" type="number" step="1" min="0"></div></div>
+</div></div>
+
+<div class="card oculto" id="cardPub"><h2 style="background:var(--morado)">🏢 TRANSPORTISTA</h2><div class="in">
+  <label>RUC transportista</label><input id="truc" list="dlTra" inputmode="numeric" placeholder="escriba RUC o nombre"><div id="trucOk"></div>
+  <label>Razón social</label><input id="tnom">
+  <label>N° registro MTC</label><input id="mtc" placeholder="si lo tiene">
+</div></div>
+
+<div class="card oculto" id="cardPriv"><h2 style="background:var(--verde)">🚗 VEHÍCULO Y CONDUCTOR</h2><div class="in">
+  <label><input type="checkbox" id="m1" style="width:auto"> Vehículo M1 o L (auto, moto, mototaxi): no se piden placa ni conductor</label>
+  <div id="privDatos">
+    <div class="fila"><div><label>Placa principal</label><input id="placa" list="dlVeh" placeholder="ABC-123"></div><div><label>Placa secundaria</label><input id="placa2" placeholder="opcional"></div></div>
+    <label>DNI conductor</label><input id="cdni" list="dlCon" inputmode="numeric">
+    <div class="fila"><div><label>Nombres</label><input id="cnom"></div><div><label>Apellidos</label><input id="cape"></div></div>
+    <label>Licencia de conducir</label><input id="clic" placeholder="Q12345678">
+  </div>
+</div></div>
+
+<div class="card"><h2 style="background:var(--teal)">📍 PARTIDA</h2><div class="in">
+  <label>Distrito (ubigeo)</label><input id="pubi" list="dlUbi" placeholder="escriba el distrito">
+  <label>Dirección</label><input id="pdir">
+  <div class="estBox oculto"><label>Cód. local SUNAT</label><input id="pest" placeholder="0000"></div>
+</div></div>
+
+<div class="card"><h2 style="background:var(--cian)">🏁 LLEGADA</h2><div class="in">
+  <div id="llegadasConocidas"></div>
+  <label>Distrito (ubigeo)</label><input id="lubi" list="dlUbi" placeholder="escriba el distrito">
+  <label>Dirección</label><input id="ldir">
+  <div class="estBox oculto"><label>Cód. local SUNAT</label><input id="lest" placeholder="0000"></div>
+</div></div>
+
+<div class="card oculto" id="cardProd"><h2 style="background:#ef6c00">📦 PRODUCTOS DE ESTA GUÍA</h2><div class="in">
+  <div class="hint">Solo los que van en esta guía, con la cantidad que se traslada.</div>
+  <table id="tProd"></table>
+  <button type="button" class="mas" onclick="filaProd({})">＋ Agregar producto</button>
+</div></div>
+
+<div class="card"><h2 style="background:var(--cafe)">📝 OBSERVACIONES</h2><div class="in">
+  <textarea id="obs" rows="2" placeholder="Sale en la guía (ej. lotes, referencia)"></textarea>
+</div></div>
+
+<div class="pie">
+  <button class="btn prim" id="guardar" onclick="guardar(false)">💾 Guardar guía</button>
+  <button class="btn sec" id="guardarNueva" onclick="guardar(true)">💾 Guardar y empezar otra</button>
+  <div id="res"></div>
+</div>
+
+<datalist id="dlUbi"></datalist><datalist id="dlTra"></datalist><datalist id="dlVeh"></datalist><datalist id="dlCon"></datalist>
+
+<script>
+var ID = <?= idGuia ?>, D = null, seg = {};
+var $ = function (id) { return document.getElementById(id); };
+
+function rucOk(r) {
+  r = String(r || '').replace(/\D/g, '');
+  if (!/^(10|15|16|17|20)\d{9}$/.test(r)) return false;
+  var w = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2], s = 0;
+  for (var i = 0; i < 10; i++) s += Number(r[i]) * w[i];
+  var d = 11 - (s % 11); if (d === 10) d = 0; else if (d === 11) d = 1;
+  return d === Number(r[10]);
+}
+function opciones(sel, lista, vacio) { $(sel).innerHTML = (vacio ? '<option value="">' + vacio + '</option>' : '') + lista.map(function (v) { return '<option>' + esc(v) + '</option>'; }).join(''); }
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+function segmento(id, alCambiar) {
+  var el = $(id);
+  el.querySelectorAll('button').forEach(function (b) { b.onclick = function () { ponerSeg(id, b.dataset.v); if (alCambiar) alCambiar(); }; });
+}
+function ponerSeg(id, v) { seg[id] = v; $(id).querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === v); }); }
+
+function cargar(d) {
+  D = d;
+  opciones('empresa', d.empresas.map(function (e) { return e.nombre; }), '— elija —');
+  opciones('docrel', d.listas.docrel); opciones('tdest', d.listas.tipodoc); opciones('motivo', d.listas.motivos); opciones('upeso', d.listas.pesos);
+  $('dlUbi').innerHTML = d.ubigeos.map(function (u) { return '<option value="' + esc(u) + '">'; }).join('');
+  $('dlTra').innerHTML = d.tra.map(function (t) { return '<option value="' + t.ruc + '">' + esc(t.nom) + '</option>'; }).join('');
+  $('dlVeh').innerHTML = d.veh.map(function (v) { return '<option value="' + esc(v.placa) + '">' + esc(v.desc) + '</option>'; }).join('');
+  $('dlCon').innerHTML = d.con.map(function (c) { return '<option value="' + c.dni + '">' + esc(c.nom + ' ' + c.ape) + '</option>'; }).join('');
+  segmento('modalidad', vista); segmento('total', vista);
+  ['motivo', 'docrel'].forEach(function (k) { $(k).onchange = vista; });
+  $('m1').onchange = vista;
+  $('empresa').onchange = usarEmpresa;
+  $('ndest').oninput = buscarDest; $('truc').oninput = buscarTra; $('cdni').oninput = buscarCon; $('placa').onchange = buscarVeh;
+  var g = d.guia;
+  if (g) {
+    $('titulo').textContent = 'Guía ' + g.id + (g.estado ? ' · ' + g.estado.split(' · ')[0] : '');
+    ['empresa', 'cotizacion', 'docrel', 'serie', 'numero', 'tdest', 'ndest', 'dest', 'motivo', 'motivoTxt', 'fecha', 'peso', 'upeso', 'bultos', 'truc', 'tnom', 'mtc',
+     'placa', 'placa2', 'cdni', 'cnom', 'cape', 'clic', 'pubi', 'pdir', 'pest', 'lubi', 'ldir', 'lest', 'obs'].forEach(function (k) { if ($(k)) $(k).value = g[k] == null ? '' : g[k]; });
+    ponerSeg('modalidad', g.modalidad); ponerSeg('total', g.total || 'SI'); $('m1').checked = g.m1 === 'SI';
+    d.productos.forEach(filaProd);
+  } else {
+    ponerSeg('total', 'SI'); $('motivo').value = d.listas.motivos[0];
+    var h = new Date(); $('fecha').value = h.getFullYear() + '-' + ('0' + (h.getMonth() + 1)).slice(-2) + '-' + ('0' + h.getDate()).slice(-2);
+    if (d.empresas.length === 1) { $('empresa').value = d.empresas[0].nombre; usarEmpresa(); }
+  }
+  if (!$('tProd').rows.length) filaProd({});
+  buscarDest(); buscarTra(); vista();
+}
+
+function vista() {
+  var mod = String(seg.modalidad || '').slice(0, 2), mot = $('motivo').value.slice(0, 2), parcial = seg.total === 'NO' || $('docrel').value === 'Ninguno';
+  $('cardPub').classList.toggle('oculto', mod !== '01');
+  $('cardPriv').classList.toggle('oculto', mod !== '02');
+  $('privDatos').classList.toggle('oculto', $('m1').checked);
+  $('motivoTxtBox').classList.toggle('oculto', mot !== '13');
+  document.querySelectorAll('.estBox').forEach(function (b) { b.classList.toggle('oculto', mot !== '04'); });
+  $('cardProd').classList.toggle('oculto', !parcial);
+  ['serie', 'numero'].forEach(function (k) { $(k).disabled = $('docrel').value === 'Ninguno'; });
+}
+
+function usarEmpresa() {
+  var e = D.empresas.filter(function (x) { return x.nombre === $('empresa').value; })[0];
+  if (!e) return;
+  if (!$('pubi').value) $('pubi').value = e.ubi || '';
+  if (!$('pdir').value) $('pdir').value = e.dir || '';
+  if (!$('pest').value) $('pest').value = e.est || '';
+}
+
+function buscarDest() {
+  var n = $('ndest').value.replace(/\D/g, ''), box = $('ndestOk');
+  box.innerHTML = '';
+  if (n.length === 11) { box.innerHTML = rucOk(n) ? '<span class="ok">✔ RUC válido</span>' : '<span class="mal">✖ RUC inválido (revise los dígitos)</span>'; $('tdest').value = D.listas.tipodoc[0]; }
+  if (n.length === 8) $('tdest').value = D.listas.tipodoc[1];
+  var dirs = D.dir.filter(function (d) { return d.doc === n; });
+  if (dirs.length && !$('dest').value) $('dest').value = dirs[0].nom;
+  var lle = dirs.filter(function (d) { return /llegada|ambos/i.test(d.uso); });
+  $('llegadasConocidas').innerHTML = lle.length ? '<div class="hint">Direcciones conocidas de este cliente:</div>' +
+    lle.map(function (d, i) { return '<span class="chip" onclick="usarLlegada(' + i + ')">📍 ' + esc(String(d.ubi).split(' · ')[1] || d.ubi) + ' · ' + esc(String(d.dir).slice(0, 40)) + '</span>'; }).join('') : '';
+  window._lle = lle;
+  if (lle.length === 1 && !$('lubi').value && !$('ldir').value) usarLlegada(0);
+}
+function usarLlegada(i) { var d = window._lle[i]; $('lubi').value = d.ubi; $('ldir').value = d.dir; $('lest').value = d.est || ''; }
+
+function buscarTra() {
+  var n = $('truc').value.replace(/\D/g, ''), box = $('trucOk');
+  box.innerHTML = n.length === 11 ? (rucOk(n) ? '<span class="ok">✔ RUC válido</span>' : '<span class="mal">✖ RUC inválido (revise los dígitos)</span>') : '';
+  var t = D.tra.filter(function (x) { return x.ruc === n; })[0];
+  if (t) { if (!$('tnom').value) $('tnom').value = t.nom; if (!$('mtc').value) $('mtc').value = t.mtc || ''; }
+}
+function buscarCon() {
+  var c = D.con.filter(function (x) { return x.dni === $('cdni').value.replace(/\D/g, ''); })[0];
+  if (c) { if (!$('cnom').value) $('cnom').value = c.nom; if (!$('cape').value) $('cape').value = c.ape; if (!$('clic').value) $('clic').value = c.lic; }
+}
+function buscarVeh() {
+  var v = D.veh.filter(function (x) { return x.placa === $('placa').value.toUpperCase(); })[0];
+  if (v && v.m1) { $('m1').checked = true; vista(); }
+}
+
+function filaProd(p) {
+  var tr = $('tProd').insertRow();
+  tr.innerHTML = '<td style="width:44%"><input class="pd" placeholder="Producto (como en la factura)" value="' + esc(p.desc) + '"></td>' +
+    '<td style="width:22%"><select class="pu">' + D.listas.unidades.map(function (u) { return '<option' + (u === p.unidad ? ' selected' : '') + '>' + esc(u) + '</option>'; }).join('') + '</select></td>' +
+    '<td style="width:16%"><input class="pc" type="number" step="any" min="0" placeholder="Cant." value="' + esc(p.cant) + '"></td>' +
+    '<td style="width:15%"><input class="pl" placeholder="Lote" value="' + esc(p.lote) + '"></td>' +
+    '<td><button type="button" class="x" title="Quitar">✖</button></td>';
+  tr.querySelector('.x').onclick = function () { tr.remove(); };
+}
+
+function leer() {
+  var g = { id: ID };
+  ['empresa', 'cotizacion', 'docrel', 'serie', 'numero', 'tdest', 'ndest', 'dest', 'motivo', 'motivoTxt', 'fecha', 'peso', 'upeso', 'bultos', 'truc', 'tnom', 'mtc',
+   'placa', 'placa2', 'cdni', 'cnom', 'cape', 'clic', 'pubi', 'pdir', 'pest', 'lubi', 'ldir', 'lest', 'obs'].forEach(function (k) { g[k] = $(k).value.trim(); });
+  g.modalidad = seg.modalidad || ''; g.total = seg.total || 'SI'; g.m1 = $('m1').checked ? 'SI' : 'NO';
+  var mod = g.modalidad.slice(0, 2);
+  if (mod === '01') ['placa', 'placa2', 'cdni', 'cnom', 'cape', 'clic'].forEach(function (k) { g[k] = ''; });
+  if (mod === '02') ['truc', 'tnom', 'mtc'].forEach(function (k) { g[k] = ''; });
+  if (g.m1 === 'SI') ['placa', 'placa2', 'cdni', 'cnom', 'cape', 'clic'].forEach(function (k) { g[k] = ''; });
+  g.productos = [];
+  if (g.total === 'NO' || g.docrel === 'Ninguno') {
+    Array.prototype.forEach.call($('tProd').rows, function (tr) {
+      g.productos.push({ desc: tr.querySelector('.pd').value, unidad: tr.querySelector('.pu').value, cant: tr.querySelector('.pc').value, lote: tr.querySelector('.pl').value });
+    });
+  }
+  return g;
+}
+
+function guardar(otra) {
+  var b = [$('guardar'), $('guardarNueva')];
+  b.forEach(function (x) { x.disabled = true; });
+  var res = $('res'); res.className = ''; res.style.display = 'block'; res.textContent = 'Guardando…';
+  google.script.run.withSuccessHandler(function (r) {
+    b.forEach(function (x) { x.disabled = false; });
+    ID = otra ? '' : r.id;
+    var lista = r.estado.indexOf('✅') === 0;
+    res.className = lista ? 'lista' : 'borr';
+    res.textContent = (lista ? '✅ ' + r.id + ' guardada y lista para emitir.' : '✏️ ' + r.id + ' guardada como borrador.') + '\n' + r.estado.replace(/^\S+\s\S+(\s\S+)?\s·\s/, '');
+    if (otra) { google.script.run.withSuccessHandler(function (d) { $('tProd').innerHTML = ''; document.querySelectorAll('input:not([type=checkbox]),textarea').forEach(function (i) { i.value = ''; }); cargar(d); }).GR_datosFormulario(''); }
+    else $('titulo').textContent = 'Guía ' + r.id;
+  }).withFailureHandler(function (e) {
+    b.forEach(function (x) { x.disabled = false; });
+    res.className = 'err'; res.textContent = '⚠️ ' + e.message;
+  }).GR_guardarFormulario(leer());
+}
+
+google.script.run.withSuccessHandler(cargar).withFailureHandler(function (e) { $('res').className = 'err'; $('res').textContent = '⚠️ ' + e.message; }).GR_datosFormulario(ID);
+</script>
+</body>
+</html>
