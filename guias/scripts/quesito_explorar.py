@@ -488,7 +488,9 @@ def leer_sesion(texto):
         datos = json.loads(texto)
         datos = datos if isinstance(datos, list) else datos.get("cookies", [])
         for c in datos:
-            g = {"name": c["name"], "value": c["value"], "domain": c.get("domain") or ".quesito.pe", "path": c.get("path") or "/",
+            # Si al copiar/pegar el dominio quedó como enlace "[www.quesito.pe](https://…)", se limpia.
+            dom = re.sub(r"^\[([^\]]+)\]\(.*\)$", r"\1", str(c.get("domain") or ".quesito.pe").strip())
+            g = {"name": c["name"], "value": c["value"], "domain": dom, "path": c.get("path") or "/",
                  "httpOnly": bool(c.get("httpOnly")), "secure": bool(c.get("secure", True))}
             vence = c.get("expirationDate") or c.get("expires")
             if vence and float(vence) > 0:
