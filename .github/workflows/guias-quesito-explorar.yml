@@ -1,0 +1,63 @@
+# Proyecto "Guías de Remisión · Grupo" (carpeta guias/). Entra a Quesito.pe con
+# la cuenta de UNA empresa, abre "Generar GUIA DE REMISIÓN REMITENTE" desde una
+# factura y anota todos los campos del formulario. SOLO MIRA: no presiona
+# "Crear Guía", bloquea todo envío de datos desde el formulario y rechaza las
+# ventanas de confirmación. Fotos con campos y tablas tapados en "Artifacts"
+# (se borran solas a los 3 días). Nunca imprime claves.
+#
+# Secretos en el Environment de la empresa (Settings → Environments → <RUC>):
+#   QUESITO_CORREO  y  QUESITO_CLAVE
+
+name: Guías - explorar Quesito (solo mirar)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa (su Environment con QUESITO_CORREO y QUESITO_CLAVE)"
+        required: true
+        default: "20447623669"
+      serie:
+        description: "Serie de la factura"
+        required: true
+        default: "FQQ1"
+      numero:
+        description: "Número de la factura"
+        required: true
+        default: "3648"
+
+run-name: "Explorar Quesito · ${{ inputs.ruc }} · ${{ inputs.serie }}-${{ inputs.numero }}"
+
+permissions:
+  contents: read
+
+jobs:
+  explorar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: guias/scripts
+
+      - name: Instalar navegador
+        run: |
+          pip install playwright==1.47.0
+          python -m playwright install --with-deps chromium
+
+      - name: Recorrer Quesito (solo mirar)
+        env:
+          QUESITO_CORREO: ${{ secrets.QUESITO_CORREO }}
+          QUESITO_CLAVE: ${{ secrets.QUESITO_CLAVE }}
+          SERIE: ${{ inputs.serie }}
+          NUMERO: ${{ inputs.numero }}
+        run: python guias/scripts/quesito_explorar.py --serie "$SERIE" --numero "$NUMERO" --salida pantallas
+
+      - name: Subir fotos y estructura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quesito-${{ inputs.ruc }}-${{ inputs.serie }}-${{ inputs.numero }}
+          path: pantallas/
+          retention-days: 3
