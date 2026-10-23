@@ -88,6 +88,7 @@ function WA_procesarMensaje_(m, nombre) {
   if (m.type === 'text') {
     var cuerpo = ((m.text || {}).body || '').trim();
     WA_guardarTextoMsg_(m.id, cuerpo);   // por si después la persona cita su propio mensaje
+    if (WA_captcha_(de, cuerpo)) return;   // 🧩 "1 6 9" / "0" para el captcha de Quesito (WA_Api.js)
     if (WA_comando_(de, cuerpo)) return;
     if (WA_procesarNombre_(de, cuerpo)) return;   // 🧾 nombre pedido con "🏷 Cambiar nombre"
     // 🏷 ¿De quién son? — respuesta a la pregunta, o "de Edit" antes de reenviar.

@@ -50,6 +50,10 @@ function TGW_doPost_(e) {
     try { return TGW_json_(TGE_wa_(JSON.parse(e.postData.contents || '{}'))); }
     catch (err) { return TGW_json_({ ok: false, error: err.message }); }
   }
+  if (p.accion === 'captcha') {   // 🧩 respuesta al captcha de Quesito que la app de WhatsApp ya reconoció (TG_Captcha.js)
+    try { var tc = TGC_respuesta_(JSON.parse(e.postData.contents || '{}').texto); return TGW_json_(tc ? { ok: true, texto: tc } : { ok: false }); }
+    catch (err) { return TGW_json_({ ok: false, error: err.message }); }
+  }
   if (p.accion === 'resultado') {
     var listo = CacheService.getScriptCache().get('tgw_r_' + p.id);
     return TGW_json_(listo ? JSON.parse(listo) : { ok: false, pendiente: true });

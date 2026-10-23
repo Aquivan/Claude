@@ -75,6 +75,9 @@ function WA_desdeCobranzas_(e, p) {
   if (!clave || p.token !== clave) return WA_ok_('Forbidden');
   try {
     var q = JSON.parse((e.postData && e.postData.contents) || '{}'), media = '';
+    // Mientras haya un captcha esperando, las respuestas cortas ("1 6 9", "0") van directo a Cobranzas.
+    if (q.tipo === 'foto') WA_props_().setProperty('WA_CAPTCHA_HASTA', String(Date.now() + 10 * 60000));
+    else WA_props_().deleteProperty('WA_CAPTCHA_HASTA');
     if (q.tipo === 'foto' && q.base64) media = WA_subirImagen_(Utilities.newBlob(Utilities.base64Decode(q.base64), 'image/png', 'captcha.png'));
     WA_permitidos_().forEach(function (a) {
       if (media) {
@@ -98,4 +101,15 @@ function WA_subirImagen_(blob) {
   try { d = JSON.parse(r.getContentText() || '{}'); } catch (err) {}
   if (!d.id) throw new Error('Meta no aceptó la imagen (HTTP ' + r.getResponseCode() + ')');
   return d.id;
+}
+
+/** 🧩 Respuesta al captcha de Quesito ("1 6 9", "0", "otra", "cancelar"). true si la tomó Cobranzas. */
+function WA_captcha_(de, texto) {
+  if (Number(WA_prop_('WA_CAPTCHA_HASTA') || 0) < Date.now()) return false;
+  if (!/^\s*(\d{1,2}([\s,;y\-]+\d{1,2})*|0|ninguna?|ninguno|listo|verificar|otra|otro|cambiar|nueva|cancelar|parar)\s*\.?\s*$/i.test(texto)) return false;
+  var r;
+  try { r = WA_cobranzas_('captcha', { texto: texto }); } catch (e) { return false; }
+  if (!r || !r.ok || !r.texto) return false;
+  WA_enviarTexto_(de, r.texto);
+  return true;
 }
