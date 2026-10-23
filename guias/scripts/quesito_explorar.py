@@ -48,7 +48,7 @@ JS_NAVEGACION = """() => [...document.querySelectorAll('a,button,[role=button],[
 
 # Estructura del formulario: secciones (encabezados) y campos con su etiqueta, sin los valores escritos.
 JS_ESTRUCTURA = """() => {
-  const vis = e => e.offsetParent !== null || e.type === 'hidden' || e.tagName === 'SELECT' || /^despatch_advice\[/.test(e.name || '');
+  const vis = e => e.offsetParent !== null || e.type === 'hidden' || e.tagName === 'SELECT' || /^despatch_advice\\[/.test(e.name || '');
   const etiqueta = e => {
     if (e.id) { const l = document.querySelector('label[for="' + CSS.escape(e.id) + '"]'); if (l) return l.innerText.trim(); }
     const l2 = e.closest('label'); if (l2) return l2.innerText.trim();
