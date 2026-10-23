@@ -11,13 +11,23 @@ function onOpen() {
     .addSeparator()
     .addItem('🔍 Revisar todas las guías', 'GR_menuRevisar')
     .addItem('📦 Ver productos de la guía seleccionada', 'GR_menuProductos')
+    .addItem('🔎 Traer cliente y productos de la factura (seleccionadas)', 'GR_menuTraerFactura')
+    .addSeparator()
+    .addItem('📥 Importar datos (del Excel de guías)', 'GR_menuImportar')
+    .addItem('🔑 Token de GitHub (para leer facturas del SIRE)', 'GR_menuToken')
     .addSeparator()
     .addItem('🧰 Preparar / reparar la hoja', 'GR_menuPreparar')
     .addItem('📖 Ayuda', 'GR_menuAyuda')
     .addToUi();
   var ss = SpreadsheetApp.getActive();
+  // Si el código trae una versión nueva de la hoja (columnas, listas), se repara sola al abrir.
+  var props = PropertiesService.getDocumentProperties();
+  if (ss.getSheetByName(GR_HOJA_) && props.getProperty('GR_VERSION') !== String(GR_VERSION_)) {
+    try { GR_preparar_(ss); props.setProperty('GR_VERSION', String(GR_VERSION_)); ss.toast('La hoja se actualizó (columnas y listas nuevas). No se borró ningún dato.', '🚚 Guías', 8); }
+    catch (e) { ss.toast('Use 🚚 Guías → 🧰 Preparar / reparar la hoja. (' + e.message + ')', '🚚 Guías', 15); }
+  }
   if (!ss.getSheetByName(GR_HOJA_)) {
-    try { GR_preparar_(ss); ss.toast('La hoja quedó lista. Empiece por 🏢 Empresas (serie de guía y dirección de partida).', '🚚 Guías', 10); }
+    try { GR_preparar_(ss); props.setProperty('GR_VERSION', String(GR_VERSION_)); ss.toast('La hoja quedó lista. Empiece por 🏢 Empresas (serie de guía y dirección de partida).', '🚚 Guías', 10); }
     catch (e) { ss.toast('No se pudo armar sola: use 🚚 Guías → 🧰 Preparar / reparar la hoja. (' + e.message + ')', '🚚 Guías', 15); }
   }
 }
@@ -25,6 +35,7 @@ function onOpen() {
 function GR_menuPreparar() {
   var ss = SpreadsheetApp.getActive();
   GR_preparar_(ss);
+  PropertiesService.getDocumentProperties().setProperty('GR_VERSION', String(GR_VERSION_));
   GR_revisarTodo_(ss);
   ss.toast('Pestañas, listas y formatos al día. No se borró ningún dato.', '🚚 Guías', 6);
 }
@@ -72,9 +83,28 @@ function GR_letra_(n) {
 
 /* ============================================================ 🚚 Guías */
 
+/**
+ * Si los títulos cambiaron (columnas nuevas o en otro orden) y ya hay datos, los reacomoda por el título de
+ * su columna para que nada quede corrido. alias = {título viejo: título nuevo}.
+ */
+function GR_reacomodar_(sh, filaTit, titulos, alias) {
+  var ultC = sh.getLastColumn(), ultF = sh.getLastRow();
+  if (ultC < 1 || ultF <= filaTit) return;
+  var viejos = sh.getRange(filaTit, 1, 1, ultC).getValues()[0].map(function (t) { t = String(t).trim(); return (alias && alias[t]) || t; });
+  if (viejos.slice(0, titulos.length).join('|') === titulos.join('|')) return;
+  var datos = sh.getRange(filaTit + 1, 1, ultF - filaTit, ultC).getValues();
+  var nuevos = datos.map(function (f) {
+    return titulos.map(function (t) { var j = viejos.indexOf(t); return j >= 0 ? f[j] : ''; });
+  });
+  sh.getRange(filaTit + 1, 1, datos.length, ultC).clearContent();
+  if (sh.getMaxColumns() < titulos.length) sh.insertColumnsAfter(sh.getMaxColumns(), titulos.length - sh.getMaxColumns());
+  sh.getRange(filaTit + 1, 1, nuevos.length, titulos.length).setValues(nuevos);
+}
+
 function GR_hojaGuias_(ss) {
   var sh = GR_hoja_(ss, GR_HOJA_, '#e65100'), n = GR_COLS_.length;
   if (sh.getMaxColumns() < n) sh.insertColumnsAfter(sh.getMaxColumns(), n - sh.getMaxColumns());
+  GR_reacomodar_(sh, 2, GR_COLS_.map(function (c) { return c.t; }));
   if (sh.getMaxRows() < 500) sh.insertRowsAfter(sh.getMaxRows(), 500 - sh.getMaxRows());
   // Fila 1: bandas por grupo.
   sh.getRange(1, 1, 1, n).breakApart();
@@ -89,13 +119,16 @@ function GR_hojaGuias_(ss) {
   // Fila 2: títulos con su nota.
   sh.getRange(2, 1, 1, n).setValues([GR_COLS_.map(function (c) { return c.t; })])
     .setFontWeight('bold').setWrap(true).setVerticalAlignment('middle').setHorizontalAlignment('center').setFontColor('#263238');
+  // Se limpian formatos y listas de la zona de datos antes de aplicarlos: si cambió el orden de las columnas, nada queda corrido.
+  var zona = sh.getRange(GR_FILA1_, 1, sh.getMaxRows() - GR_FILA1_ + 1, n);
+  zona.clearDataValidations().setBackground(null).setFontColor(null).setFontSize(10).setWrap(false);
   GR_COLS_.forEach(function (c, j) {
     var col = GR_GRUPOS_[c.g][1];
     sh.getRange(2, j + 1).setBackground(GR_aclarar_(col, 0.82)).setNote(c.n || '')
       .setBorder(null, null, true, null, null, null, col, SpreadsheetApp.BorderStyle.SOLID_THICK);
     sh.setColumnWidth(j + 1, c.w);
     var datos = sh.getRange(GR_FILA1_, j + 1, sh.getMaxRows() - GR_FILA1_ + 1, 1);
-    if (c.f) datos.setNumberFormat(c.f);
+    datos.setNumberFormat(c.f || '@');
     if (c.g === 'res' || c.k === 'obsFinal' || c.k === 'productos') datos.setBackground('#f5f5f5').setFontColor('#37474f');
     if (c.k === 'obsFinal') datos.setWrap(true).setFontSize(9);
   });
@@ -144,7 +177,7 @@ function GR_formatoCondicional_(sh) {
 
 function GR_validacionesGuias_(ss, sh) {
   var filas = sh.getMaxRows() - GR_FILA1_ + 1;
-  var emp = ss.getSheetByName(GR_EMP_), ubi = ss.getSheetByName(GR_UBI_);
+  var emp = ss.getSheetByName(GR_EMP_), ubi = ss.getSheetByName(GR_UBI_), dir = ss.getSheetByName(GR_DIR_);
   GR_COLS_.forEach(function (c) {
     if (!c.v) return;
     var r = sh.getRange(GR_FILA1_, GR_col_(c.k), filas, 1), b = SpreadsheetApp.newDataValidation();
@@ -153,6 +186,7 @@ function GR_validacionesGuias_(ss, sh) {
     else if (c.v === 'ubigeo') b.requireValueInRange(ubi.getRange('E2:E'), true).setAllowInvalid(true)
       .setHelpText('Elija el distrito de la lista, o escriba su nombre (ej. "santa anita") o el código de 6 dígitos y se completa solo.');
     else if (c.v === 'fecha') b.requireDate().setAllowInvalid(false).setHelpText('Fecha, ej. 28/08/2026.');
+    else if (c.v === 'locales') b.requireValueInRange(dir.getRange('A2:A'), true).setAllowInvalid(true).setHelpText('Elija un local de 📍 Direcciones (o deje vacío y escriba la dirección).');
     r.setDataValidation(b.build());
   });
 }
@@ -161,18 +195,23 @@ function GR_validacionesGuias_(ss, sh) {
 
 function GR_hojaProductos_(ss) {
   var sh = GR_hoja_(ss, GR_PROD_, '#ef6c00');
-  var cols = [['ID guía', 85], ['N°', 40], ['Código', 90], ['Descripción del producto', 320], ['Unidad', 130], ['Cantidad', 85], ['Lote / detalle adicional', 220], ['Peso (opcional)', 90]];
+  var cols = [['ID guía', 85], ['N°', 40], ['Código', 90], ['Descripción del producto', 320], ['Unidad', 130], ['Cantidad', 85], ['Lote / detalle adicional', 220], ['Peso (opcional)', 90], ['Bultos (opcional)', 80], ['¿Completa?', 80]];
+  GR_reacomodar_(sh, 1, cols.map(function (c) { return c[0]; }));
   sh.getRange(1, 1, 1, cols.length).setValues([cols.map(function (c) { return c[0]; })]).setFontWeight('bold').setBackground('#ef6c00').setFontColor('#ffffff')
     .setHorizontalAlignment('center').setVerticalAlignment('middle').setWrap(true);
   cols.forEach(function (c, i) { sh.setColumnWidth(i + 1, c[1]); });
   sh.getRange(1, 1).setNote('Solo para guías PARCIALES (¿Todo lo de la factura? = NO) o sin factura: una fila por producto que va en esa guía.\n' +
     'ID guía = el ID de la fila en 🚚 Guías (ej. G-000012). En Quesito se dejan solo estos productos con estas cantidades.');
-  sh.getRange(1, 4).setNote('Escríbalo como figura en la factura / catálogo de Quesito: el robot busca la línea por este nombre.');
+  sh.getRange(1, 4).setNote('Como figura en la factura (🔎 Traer de la factura lo llena desde el SIRE): el robot busca la línea por este nombre.');
+  sh.getRange(1, 10).setNote('SI = va toda la cantidad de esa línea de la factura; NO = solo una parte (la cantidad de esta fila).');
+  sh.getRange(1, 8).setNote('Si todos los productos de la guía tienen peso (o bultos), la guía los suma sola.');
   sh.setRowHeight(1, 36); sh.setFrozenRows(1);
   if (sh.getMaxRows() < 300) sh.insertRowsAfter(sh.getMaxRows(), 300 - sh.getMaxRows());
   var n = sh.getMaxRows() - 1;
   sh.getRange(2, 6, n, 1).setNumberFormat('#,##0.###');
   sh.getRange(2, 8, n, 1).setNumberFormat('#,##0.00');
+  sh.getRange(2, 9, n, 1).setNumberFormat('#,##0.##');
+  sh.getRange(2, 10, n, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(GR_SINO_, true).setAllowInvalid(false).build());
   sh.getRange(2, 1, n, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInRange(ss.getSheetByName(GR_HOJA_).getRange('A' + GR_FILA1_ + ':A'), true)
     .setAllowInvalid(false).setHelpText('ID de la guía en 🚚 Guías.').build());
   sh.getRange(2, 5, n, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(GR_UNIDADES_, true).setAllowInvalid(false).build());
@@ -185,6 +224,7 @@ function GR_hojaProductos_(ss) {
 
 function GR_hojaCatalogo_(ss, nombre) {
   var d = GR_CATALOGOS_[nombre], sh = GR_hoja_(ss, nombre, d.color), n = d.cols.length;
+  GR_reacomodar_(sh, 1, d.cols.map(function (c) { return c[0]; }), { 'Nombre': 'Nombre (empresa o cliente)' });
   sh.getRange(1, 1, 1, n).setValues([d.cols.map(function (c) { return c[0]; })]).setFontWeight('bold').setBackground(d.color).setFontColor('#ffffff')
     .setHorizontalAlignment('center').setVerticalAlignment('middle').setWrap(true);
   d.cols.forEach(function (c, i) { sh.setColumnWidth(i + 1, c[1]); });
@@ -207,12 +247,23 @@ function GR_validacionesCatalogos_(ss) {
     sh.getRange(2, col, sh.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInRange(ubi, true).setAllowInvalid(true)
       .setHelpText('Elija el distrito o escriba su nombre / código de 6 dígitos.').build());
   };
+  Object.keys(GR_CATALOGOS_).forEach(function (nom) {
+    var sh = ss.getSheetByName(nom);
+    sh.getRange(2, 1, sh.getMaxRows() - 1, sh.getMaxColumns()).clearDataValidations();
+  });
   var e = ss.getSheetByName(GR_EMP_); ubigeo(e, 6); lista(e, 9, GR_SINO_);
+  e.getRange(2, 8, e.getMaxRows() - 1, 1).setNumberFormat('@');
   lista(ss.getSheetByName(GR_TRA_), 4, GR_SINO_);
   var v = ss.getSheetByName(GR_VEH_); lista(v, 3, GR_SINO_); lista(v, 5, GR_SINO_);
   v.getRange(2, 4, v.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInRange(e.getRange('A2:A'), true).setAllowInvalid(true).build());
   lista(ss.getSheetByName(GR_CON_), 5, GR_SINO_);
-  var d = ss.getSheetByName(GR_DIR_); lista(d, 3, ['Llegada', 'Partida', 'Ambos']); ubigeo(d, 4);
+  var d = ss.getSheetByName(GR_DIR_); lista(d, 4, ['Llegada', 'Partida', 'Ambos']); ubigeo(d, 5);
+  d.getRange(2, 2, d.getMaxRows() - 1, 1).setNumberFormat('@'); d.getRange(2, 7, d.getMaxRows() - 1, 1).setNumberFormat('@');
+  // Serie de factura por defecto (FQQ1) en las empresas que ya estaban sin ella.
+  if (e.getLastRow() > 1) e.getRange(2, 1, e.getLastRow() - 1, 10).getValues().forEach(function (f, i) {
+    if (String(f[0]).trim() && !String(f[9]).trim() && String(f[8]).toUpperCase() !== 'NO') e.getRange(i + 2, 10).setValue('FQQ1');
+    var cod = GR_codLocal_(f[7]); if (String(f[7]) !== '' && cod !== String(f[7])) e.getRange(i + 2, 8).setValue(cod);
+  });
 }
 
 /* ============================================================ 🗺️ Ubigeos, 🧾 Registro, 📖 Ayuda */

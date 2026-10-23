@@ -72,6 +72,7 @@
   <label><input type="checkbox" id="m1" style="width:auto"> Vehículo M1 o L (auto, moto, mototaxi): no se piden placa ni conductor</label>
   <div id="privDatos">
     <div class="fila"><div><label>Placa principal</label><input id="placa" list="dlVeh" placeholder="ABC-123"></div><div><label>Placa secundaria</label><input id="placa2" placeholder="opcional"></div></div>
+    <label>Cert. habilitación MTC</label><input id="mtcveh" placeholder="ej. 15M26029908E/15M26029906E">
     <label>DNI conductor</label><input id="cdni" list="dlCon" inputmode="numeric">
     <div class="fila"><div><label>Nombres</label><input id="cnom"></div><div><label>Apellidos</label><input id="cape"></div></div>
     <label>Licencia de conducir</label><input id="clic" placeholder="Q12345678">
@@ -79,6 +80,7 @@
 </div></div>
 
 <div class="card"><h2 style="background:var(--teal)">📍 PARTIDA</h2><div class="in">
+  <label>Local de partida (almacén)</label><select id="plocal"></select>
   <label>Distrito (ubigeo)</label><input id="pubi" list="dlUbi" placeholder="escriba el distrito">
   <label>Dirección</label><input id="pdir">
   <div class="estBox oculto"><label>Cód. local SUNAT</label><input id="pest" placeholder="0000"></div>
@@ -86,13 +88,14 @@
 
 <div class="card"><h2 style="background:var(--cian)">🏁 LLEGADA</h2><div class="in">
   <div id="llegadasConocidas"></div>
+  <label>Local de llegada</label><select id="llocal"></select>
   <label>Distrito (ubigeo)</label><input id="lubi" list="dlUbi" placeholder="escriba el distrito">
   <label>Dirección</label><input id="ldir">
   <div class="estBox oculto"><label>Cód. local SUNAT</label><input id="lest" placeholder="0000"></div>
 </div></div>
 
 <div class="card oculto" id="cardProd"><h2 style="background:#ef6c00">📦 PRODUCTOS DE ESTA GUÍA</h2><div class="in">
-  <div class="hint">Solo los que van en esta guía, con la cantidad que se traslada.</div>
+  <div class="hint">Solo los que van en esta guía, con la cantidad que se traslada (peso y bultos opcionales: si los pone, la guía los suma).</div>
   <table id="tProd"></table>
   <button type="button" class="mas" onclick="filaProd({})">＋ Agregar producto</button>
 </div></div>
@@ -132,6 +135,9 @@ function ponerSeg(id, v) { seg[id] = v; $(id).querySelectorAll('button').forEach
 function cargar(d) {
   D = d;
   opciones('empresa', d.empresas.map(function (e) { return e.nombre; }), '— elija —');
+  opciones('plocal', d.locales.filter(function (l) { return /partida|ambos/i.test(l.uso); }).map(function (l) { return l.local; }), '— dirección de la empresa —');
+  opciones('llocal', d.locales.filter(function (l) { return /llegada|ambos/i.test(l.uso); }).map(function (l) { return l.local; }), '— escribir la dirección —');
+  $('plocal').onchange = function () { usarLocal('p'); }; $('llocal').onchange = function () { usarLocal('l'); };
   opciones('docrel', d.listas.docrel); opciones('tdest', d.listas.tipodoc); opciones('motivo', d.listas.motivos); opciones('upeso', d.listas.pesos);
   $('dlUbi').innerHTML = d.ubigeos.map(function (u) { return '<option value="' + esc(u) + '">'; }).join('');
   $('dlTra').innerHTML = d.tra.map(function (t) { return '<option value="' + t.ruc + '">' + esc(t.nom) + '</option>'; }).join('');
@@ -146,7 +152,7 @@ function cargar(d) {
   if (g) {
     $('titulo').textContent = 'Guía ' + g.id + (g.estado ? ' · ' + g.estado.split(' · ')[0] : '');
     ['empresa', 'cotizacion', 'docrel', 'serie', 'numero', 'tdest', 'ndest', 'dest', 'motivo', 'motivoTxt', 'fecha', 'peso', 'upeso', 'bultos', 'truc', 'tnom', 'mtc',
-     'placa', 'placa2', 'cdni', 'cnom', 'cape', 'clic', 'pubi', 'pdir', 'pest', 'lubi', 'ldir', 'lest', 'obs'].forEach(function (k) { if ($(k)) $(k).value = g[k] == null ? '' : g[k]; });
+     'placa', 'placa2', 'mtcveh', 'cdni', 'cnom', 'cape', 'clic', 'plocal', 'pubi', 'pdir', 'pest', 'llocal', 'lubi', 'ldir', 'lest', 'obs'].forEach(function (k) { if ($(k)) $(k).value = g[k] == null ? '' : g[k]; });
     ponerSeg('modalidad', g.modalidad); ponerSeg('total', g.total || 'SI'); $('m1').checked = g.m1 === 'SI';
     d.productos.forEach(filaProd);
   } else {
@@ -190,6 +196,12 @@ function buscarDest() {
   window._lle = lle;
   if (lle.length === 1 && !$('lubi').value && !$('ldir').value) usarLlegada(0);
 }
+function usarLocal(x) {
+  var d = D.dir.filter(function (q) { return q.local === $(x + 'local').value; })[0];
+  if (!d) return;
+  $(x + 'ubi').value = d.ubi || ''; $(x + 'dir').value = d.dir || ''; $(x + 'est').value = d.est || '';
+  if (x === 'l' && d.doc && !$('ndest').value) { $('ndest').value = d.doc; if (!$('dest').value) $('dest').value = d.nom || ''; buscarDest(); }
+}
 function usarLlegada(i) { var d = window._lle[i]; $('lubi').value = d.ubi; $('ldir').value = d.dir; $('lest').value = d.est || ''; }
 
 function buscarTra() {
@@ -205,32 +217,39 @@ function buscarCon() {
 function buscarVeh() {
   var v = D.veh.filter(function (x) { return x.placa === $('placa').value.toUpperCase(); })[0];
   if (v && v.m1) { $('m1').checked = true; vista(); }
+  if (v && v.mtc && !$('mtcveh').value) $('mtcveh').value = v.mtc;
 }
 
 function filaProd(p) {
   var tr = $('tProd').insertRow();
-  tr.innerHTML = '<td style="width:44%"><input class="pd" placeholder="Producto (como en la factura)" value="' + esc(p.desc) + '"></td>' +
-    '<td style="width:22%"><select class="pu">' + D.listas.unidades.map(function (u) { return '<option' + (u === p.unidad ? ' selected' : '') + '>' + esc(u) + '</option>'; }).join('') + '</select></td>' +
-    '<td style="width:16%"><input class="pc" type="number" step="any" min="0" placeholder="Cant." value="' + esc(p.cant) + '"></td>' +
-    '<td style="width:15%"><input class="pl" placeholder="Lote" value="' + esc(p.lote) + '"></td>' +
-    '<td><button type="button" class="x" title="Quitar">✖</button></td>';
-  tr.querySelector('.x').onclick = function () { tr.remove(); };
+  tr.innerHTML = '<td colspan="4"><input class="pd" placeholder="Producto (como en la factura)" value="' + esc(p.desc) + '"></td><td><button type="button" class="x" title="Quitar">✖</button></td>';
+  var tr2 = $('tProd').insertRow();
+  tr2.innerHTML = '<td><select class="pu">' + D.listas.unidades.map(function (u) { return '<option' + (u === p.unidad ? ' selected' : '') + '>' + esc(u) + '</option>'; }).join('') + '</select></td>' +
+    '<td><input class="pc" type="number" step="any" min="0" placeholder="Cant." value="' + esc(p.cant) + '"></td>' +
+    '<td><input class="pp" type="number" step="any" min="0" placeholder="Peso" value="' + esc(p.peso) + '"></td>' +
+    '<td><input class="pb" type="number" step="any" min="0" placeholder="Bultos" value="' + esc(p.bultos) + '"></td>' +
+    '<td><input class="pl" type="hidden" value="' + esc(p.lote) + '"><input class="pk" type="hidden" value="' + esc(p.cod) + '"><input class="pz" type="hidden" value="' + esc(p.completa) + '"></td>';
+  tr2.style.borderBottom = '1px solid #eceff1';
+  tr.querySelector('.x').onclick = function () { tr.remove(); tr2.remove(); };
 }
 
 function leer() {
   var g = { id: ID };
   ['empresa', 'cotizacion', 'docrel', 'serie', 'numero', 'tdest', 'ndest', 'dest', 'motivo', 'motivoTxt', 'fecha', 'peso', 'upeso', 'bultos', 'truc', 'tnom', 'mtc',
-   'placa', 'placa2', 'cdni', 'cnom', 'cape', 'clic', 'pubi', 'pdir', 'pest', 'lubi', 'ldir', 'lest', 'obs'].forEach(function (k) { g[k] = $(k).value.trim(); });
+   'placa', 'placa2', 'mtcveh', 'cdni', 'cnom', 'cape', 'clic', 'plocal', 'pubi', 'pdir', 'pest', 'llocal', 'lubi', 'ldir', 'lest', 'obs'].forEach(function (k) { g[k] = $(k).value.trim(); });
   g.modalidad = seg.modalidad || ''; g.total = seg.total || 'SI'; g.m1 = $('m1').checked ? 'SI' : 'NO';
   var mod = g.modalidad.slice(0, 2);
-  if (mod === '01') ['placa', 'placa2', 'cdni', 'cnom', 'cape', 'clic'].forEach(function (k) { g[k] = ''; });
+  if (mod === '01') ['placa', 'placa2', 'mtcveh', 'cdni', 'cnom', 'cape', 'clic'].forEach(function (k) { g[k] = ''; });
   if (mod === '02') ['truc', 'tnom', 'mtc'].forEach(function (k) { g[k] = ''; });
-  if (g.m1 === 'SI') ['placa', 'placa2', 'cdni', 'cnom', 'cape', 'clic'].forEach(function (k) { g[k] = ''; });
+  if (g.m1 === 'SI') ['placa', 'placa2', 'mtcveh', 'cdni', 'cnom', 'cape', 'clic'].forEach(function (k) { g[k] = ''; });
   g.productos = [];
   if (g.total === 'NO' || g.docrel === 'Ninguno') {
-    Array.prototype.forEach.call($('tProd').rows, function (tr) {
-      g.productos.push({ desc: tr.querySelector('.pd').value, unidad: tr.querySelector('.pu').value, cant: tr.querySelector('.pc').value, lote: tr.querySelector('.pl').value });
-    });
+    var filas = $('tProd').rows;
+    for (var i = 0; i + 1 < filas.length; i += 2) {
+      var a = filas[i], b = filas[i + 1];
+      g.productos.push({ desc: a.querySelector('.pd').value, unidad: b.querySelector('.pu').value, cant: b.querySelector('.pc').value, peso: b.querySelector('.pp').value,
+        bultos: b.querySelector('.pb').value, lote: b.querySelector('.pl').value, cod: b.querySelector('.pk').value, completa: b.querySelector('.pz').value });
+    }
   }
   return g;
 }

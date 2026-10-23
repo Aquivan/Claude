@@ -28,6 +28,7 @@ function GR_datosFormulario(id) {
     veh: Object.keys(ctx.veh).map(function (k) { return { placa: k, desc: ctx.veh[k].desc, m1: ctx.veh[k].m1 }; }),
     con: Object.keys(ctx.con).map(function (k) { return { dni: k, nom: ctx.con[k].nom, ape: ctx.con[k].ape, lic: ctx.con[k].lic }; }),
     dir: ctx.dir,
+    locales: ctx.dir.map(function (d) { return { local: d.local, uso: d.uso, doc: d.doc, nom: d.nom }; }),
     ubigeos: GR_UBIGEOS_.map(GR_etiquetaUbigeo_),
     guia: null, productos: [],
   };
@@ -38,7 +39,10 @@ function GR_datosFormulario(id) {
       if (r.fecha instanceof Date) r.fecha = Utilities.formatDate(r.fecha, 'America/Lima', 'yyyy-MM-dd');
       GR_COLS_.forEach(function (c) { if (r[c.k] instanceof Date) r[c.k] = Utilities.formatDate(r[c.k], 'America/Lima', 'dd/MM/yyyy HH:mm'); });
       out.guia = r;
-      out.productos = (ctx.prod[id] || []).map(function (p) { return { desc: p.desc, unidad: GR_UNIDADES_.filter(function (u) { return u.indexOf(p.unidad + ' ') === 0; })[0] || p.unidad, cant: p.cant, lote: p.lote }; });
+      out.productos = (ctx.prod[id] || []).map(function (p) {
+        return { cod: p.cod, desc: p.desc, unidad: GR_UNIDADES_.filter(function (u) { return u.indexOf(p.unidad + ' ') === 0; })[0] || p.unidad, cant: p.cant, lote: p.lote,
+          peso: p.peso || '', bultos: p.bultos || '', completa: p.completa };
+      });
     }
   }
   return out;
@@ -105,12 +109,15 @@ function GR_guardarProductos_(ss, id, productos) {
     for (var i = v.length - 1; i >= 0; i--) if (String(v[i][0]) === id) p.deleteRow(i + 2);
   }
   var filas = productos.filter(function (x) { return String(x.desc || '').trim() || Number(x.cant) > 0; })
-    .map(function (x, i) { return [id, i + 1, '', String(x.desc || '').trim(), x.unidad || GR_UNIDADES_[0], Number(x.cant) || '', String(x.lote || '').trim(), '']; });
+    .map(function (x, i) {
+      return [id, i + 1, String(x.cod || '').trim(), String(x.desc || '').trim(), x.unidad || GR_UNIDADES_[0], Number(x.cant) || '', String(x.lote || '').trim(),
+        Number(x.peso) || '', Number(x.bultos) || '', x.completa || ''];
+    });
   if (filas.length) {
     var desde = 2;
     var col = p.getLastRow() > 1 ? p.getRange(2, 1, p.getLastRow() - 1, 1).getValues() : [];
     while (desde - 2 < col.length && String(col[desde - 2][0]).trim()) desde++;
-    p.getRange(desde, 1, filas.length, 8).setValues(filas);
+    p.getRange(desde, 1, filas.length, 10).setValues(filas);
   }
 }
 
