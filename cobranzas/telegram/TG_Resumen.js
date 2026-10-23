@@ -294,6 +294,17 @@ function TG_enviarHonorarios_(ctx, empresa) {
     (pend.length ? '\n\n⏳ <b>Pendientes de pago: ' + pend.length + ' · S/ ' + TG_num_(s(pend, jPend)) + '</b>\n' + pend.slice(0, 8).map(function (f) {
       return '• ' + TG_esc_(String(f[jEm]).slice(0, 30)) + ' (' + TG_esc_(f[jE]) + '): S/ ' + TG_num_(aNumero_(f[jPend]));
     }).join('\n') : '\n\n✅ Sin recibos pendientes de pago.');
+  // 🤝 Si ya se concilió con los vouchers, lo pendiente sale de ahí (más exacto que el dato de SUNAT).
+  try {
+    var pp = TGH_.honorarios_conciliacion(c, { tipo: 'por_pagar', empresa: empresa, max: 300 });
+    if (pp.filas.length) {
+      var kE = TG_col_(pp.columnas, 'Emisor'), kN = TG_col_(pp.columnas, 'Neto pendiente'), kD = TG_col_(pp.columnas, 'Días');
+      html += '\n\n💸 <b>Por pagar según los vouchers: S/ ' + TG_num_(s(pp.filas, kN)) + '</b> (' + pp.filas.length + ' emisor(es))\n' +
+        pp.filas.slice(0, 8).map(function (f) { return '• ' + TG_esc_(String(f[kE]).slice(0, 30)) + ': S/ ' + TG_num_(aNumero_(f[kN])) + (f[kD] !== '' ? ' · ' + f[kD] + ' días' : ''); }).join('\n');
+    }
+    var sr = TGH_.honorarios_conciliacion(c, { tipo: 'sin_recibo', empresa: empresa, max: 300 });
+    if (sr.filas.length) html += '\n❓ ' + sr.filas.length + ' pago(s) a personas sin recibo por honorarios.';
+  } catch (e) {}
   TG_enviar_(ctx.chatId, html);
 }
 

@@ -48,3 +48,19 @@ workflow queda como **respaldo**: las corridas diarias se llaman igual
 ("… · diario"), van en fila (`concurrency`) y si una ya corrió, la otra no
 descarga nada.
 
+
+## 🤝 Conciliar con Vouchers (pagos, por pagar y retención por mes de pago)
+
+Menú 🧑‍💼 Honorarios → 🤝 Conciliar con Vouchers (`apps_script/Conciliar.js`). Lee (solo lectura) la hoja
+"Sistema de Vouchers" (Config → "ID hoja de Vouchers"; si está vacío la busca en Drive) y cruza cada recibo
+no revertido con los pagos de la misma empresa a esa persona (por RUC 10, DNI o nombre), entre 15 días antes
+y 180 días después de la emisión. Espera la RENTA NETA (bruta − retención de 4ta):
+
+1. el voucher menciona el recibo (E001-68) · 2. un voucher por el neto exacto · 3. un voucher que paga varios
+recibos del mismo emisor · 4. varios vouchers que pagan un recibo · 5. un voucher por la renta BRUTA
+(⚠️ pagado sin descontar la retención) · 6. pago parcial. Lo que solo coincide por nombre queda 💡 sugerido.
+
+Pestañas: 🤝 Conciliación (✔ / ✖ y 💾 Guardar confirmaciones, guardadas en `_Decisiones honorarios`),
+💸 Por pagar (cuentas por pagar por emisor), ❓ Pagos sin recibo (¿falta el RHE?) y 🧾 Retención por pago
+(la retención de 4ta por MES DE PAGO, que es la que va a la PLAME / 0621).
+El bot de Telegram/WhatsApp (`/honorarios` y la herramienta `honorarios_conciliacion` de la IA) muestra lo por pagar.

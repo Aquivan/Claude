@@ -38,6 +38,18 @@ var TGH_ = {
     return TG_limitar_(res, a.max);
   },
 
+  // 🤝 Conciliación de honorarios con los vouchers (Honorarios · Grupo → Conciliar.js)
+  honorarios_conciliacion: function (c, a) {
+    var tab = /pagar|pendien|deud/i.test(a.tipo || '') ? '💸 Por pagar' : /sin|recibo/i.test(a.tipo || '') ? '❓ Pagos sin recibo' :
+      /reten|plame|0621/i.test(a.tipo || '') ? '🧾 Retención por pago' : '🤝 Conciliación';
+    var t;
+    try { t = TG_tablaLibro_(c, 'honorarios', tab); }
+    catch (e) { return { columnas: [], filas: [], nota: 'Aún no hay conciliación: en Honorarios · Grupo use 🧑‍💼 Honorarios → 🤝 Conciliar con Vouchers.' }; }
+    var res = TG_filtrar_(c, t, a, { contraparte: ['RUC emisor', /^Emisor|^Beneficiario/], contraArg: a.emisor || a.contraparte, quitar: /^clave$|^✔|^✖/ });
+    res.nota = 'Pestaña ' + tab + ' de Honorarios · Grupo';
+    return TG_limitar_(res, a.max);
+  },
+
   sire_liquidacion: function (c, a) {
     var anio = parseInt(a.anio || a.año, 10) || new Date().getFullYear();
     var rucs = a.empresa ? [ANA_empresa_(c, a.empresa)] : c.cfg.grupo;
