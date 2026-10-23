@@ -57,7 +57,9 @@ function TGC_avisar_(ss, cfg, run, q) {
   var ronda = Number(q.ronda) || 1, foto = TGC_foto_(cfg, run, ronda);
   var titulo = '🧩 Quesito pide un captcha' + (q.empresa ? ' (' + q.empresa + ')' : '') + (ronda > 1 ? ' · ronda ' + ronda : '');
   var pregunta = String(q.pregunta || '').replace(/\s+/g, ' ').trim();
-  var ayuda = 'Responda con los números de las casillas, por ejemplo 1 6 9. Si ya no queda ninguna: 0. Para otra imagen: otra. Tiene unos 2 minutos.';
+  var ayuda = 'Responda con los números de las casillas, por ejemplo 1 6 9. Si ya no queda ninguna: 0. Para otra imagen: otra. Tiene unos 2 minutos.' +
+    (Number(q.casillas) === 16 ? '\nEs una sola foto partida en 16: marque TODAS las casillas donde se vea aunque sea un pedacito (bordes incluidos).' : '');
+  if (q.aviso) ayuda = '⚠️ Google dijo: ' + String(q.aviso).slice(0, 150) + '\n' + ayuda;
   CacheService.getScriptCache().put('tgc_act', JSON.stringify({ run: run, ronda: ronda }), 600);
   var enviados = 0;
   TG_admins_(ss).forEach(function (a) {
