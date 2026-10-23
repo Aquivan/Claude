@@ -23,6 +23,7 @@ nunca se imprime.
 Uso:  python quesito_explorar.py --serie FQQ1 --numero 3648 [--salida pantallas]
 """
 import argparse
+import datetime
 import json
 import os
 import re
@@ -90,7 +91,7 @@ def main():
     ap.add_argument("--salida", default="pantallas")
     a = ap.parse_args()
     correo, clave = os.environ.get("QUESITO_CORREO", ""), os.environ.get("QUESITO_CLAVE", "")
-    if not (correo and clave):
+    if not (correo and clave) and not os.environ.get("QUESITO_SESION", "").strip():
         sys.exit("Faltan los secretos QUESITO_CORREO / QUESITO_CLAVE en el Environment de la empresa.")
     os.makedirs(a.salida, exist_ok=True)
     n, red, informe = [0], [], {"pasos": []}
@@ -148,60 +149,91 @@ def main():
             return None
 
         try:
-            # 1) Ingreso
-            pag.goto(INICIO, wait_until="networkidle", timeout=60000)
-            anotar("pantalla_ingreso")
-            cap = pag.evaluate("""() => ({
-                casilla: [...document.querySelectorAll('iframe[src*=recaptcha]')].some(f => /anchor/.test(f.src) && f.offsetParent !== null && !/size=invisible/.test(f.src)),
-                invisible: !!document.querySelector('.grecaptcha-badge, iframe[src*="size=invisible"], script[src*="recaptcha/api.js?render="]'),
-                imagen: !!document.querySelector('img[src*=captcha i]') })""")
-            informe["captcha"] = cap
-            print("\nCaptcha en el ingreso:", cap)
-            if cap["casilla"] or cap["imagen"]:
-                print("⚠️ Hay un captcha visible (casilla 'No soy un robot' o imagen). Me detengo aquí (no intento resolverlo).")
-                sys.exit(1)
-            # Ingreso en dos pasos: correo → "Continuar" → contraseña
-            campo = pag.locator("input[type=email]:visible, input[name*=mail i]:visible, input[name*=correo i]:visible, input[name*=usuario i]:visible, input[name*=user i]:visible").first
-            campo.fill(correo)
-            clave_ = pag.locator("input[type=password]").first
-            if not clave_.is_visible():
-                pag.locator("button:has-text('Continuar'):visible, input[type=submit][value*=Continuar i]:visible").first.click()
-                try:
-                    pag.wait_for_load_state("networkidle", timeout=15000)
-                except Exception:
-                    pass
-                pag.wait_for_timeout(3000)
-                anotar("despues_de_continuar")
-                print("Campos visibles:", pag.evaluate("""() => [...document.querySelectorAll('input,button,select')].filter(e => e.offsetParent !== null)
-                    .map(e => e.tagName + ' ' + (e.type || '') + ' ' + (e.name || e.id || '') + ' ' + (e.innerText || e.value && e.type === 'submit' ? (e.innerText || e.value).trim().slice(0, 30) : ''))"""))
-                print("Mensajes:", pag.evaluate("""() => [...document.querySelectorAll('.alert,.error,.invalid-feedback,.help-block,.toast,.flash,[role=alert],.text-danger')]
-                    .filter(e => e.offsetParent !== null).map(e => e.innerText.trim()).filter(Boolean)"""))
-                print("Captcha visible:", pag.evaluate("() => [...document.querySelectorAll('iframe[src*=recaptcha], iframe[src*=hcaptcha], iframe[src*=turnstile]')].filter(f => f.offsetParent !== null).map(f => f.src.split('?')[0])"))
-                clave_ = pag.locator("input[type=password]:visible").first
-                if not clave_.count() and pag.locator("iframe[src*='api2/anchor']").count():
-                    if not captcha_google(pag, a.salida, foto):
-                        sys.exit(1)
+            sesion = os.environ.get("QUESITO_SESION", "").strip()
+            if sesion:
+                # 🍪 Sesión guardada: se entra con la sesión que la persona abrió en su Chrome (sin captcha).
+                galletas = leer_sesion(sesion)
+                ctx.add_cookies(galletas)
+                print("\n🍪 Entrando con la sesión guardada (" + str(len(galletas)) + " cookies). Vencen:")
+                for g in galletas:
+                    vence = g.get("expires", -1)
+                    print("   ·", g["name"], "→", "al cerrar el navegador (sesión)" if not vence or vence < 0 else datetime.datetime.utcfromtimestamp(vence).strftime("%d/%m/%Y %H:%M UTC"))
+                # /login lleva al escritorio si la sesión vale; si no, se prueban direcciones típicas del panel.
+                dentro = False
+                for ruta in ["", "/escritorio", "/dashboard", "/panel", "/comprobantes"]:
+                    try:
+                        resp = pag.goto(INICIO.rsplit("/login", 1)[0] + ruta if ruta else INICIO, wait_until="networkidle", timeout=60000)
+                    except Exception:
+                        continue
+                    pag.wait_for_timeout(1500)
+                    en_login = "/login" in pag.url or pag.locator("input[type=password]:visible, input[name='user[email]']:visible").count()
+                    del_panel = pag.get_by_text(re.compile(r"Comprobantes|Escritorio|Cerrar sesi[oó]n", re.I)).count()
+                    if not en_login and resp and resp.status < 400 and del_panel and urlsplit(pag.url).path not in ("", "/"):
+                        dentro = True
+                        break
+                if not dentro:
+                    anotar("sesion_vencida")
+                    msg = "La sesión guardada de Quesito ya no sirve (venció o se cerró). Entre a Quesito en su Chrome y vuelva a copiarla en QUESITO_SESION."
+                    print("❌ " + msg)
+                    if os.environ.get("BOT_URL") and os.environ.get("GITHUB_RUN_ID"):
+                        _bot(os.environ["BOT_URL"], {"accion": "fin", "run": os.environ["GITHUB_RUN_ID"], "ok": False, "texto": msg})
+                    sys.exit(1)
+                print("✅ La sesión guardada funciona: entré sin captcha.")
+            else:
+                # 1) Ingreso
+                pag.goto(INICIO, wait_until="networkidle", timeout=60000)
+                anotar("pantalla_ingreso")
+                cap = pag.evaluate("""() => ({
+                    casilla: [...document.querySelectorAll('iframe[src*=recaptcha]')].some(f => /anchor/.test(f.src) && f.offsetParent !== null && !/size=invisible/.test(f.src)),
+                    invisible: !!document.querySelector('.grecaptcha-badge, iframe[src*="size=invisible"], script[src*="recaptcha/api.js?render="]'),
+                    imagen: !!document.querySelector('img[src*=captcha i]') })""")
+                informe["captcha"] = cap
+                print("\nCaptcha en el ingreso:", cap)
+                if cap["casilla"] or cap["imagen"]:
+                    print("⚠️ Hay un captcha visible (casilla 'No soy un robot' o imagen). Me detengo aquí (no intento resolverlo).")
+                    sys.exit(1)
+                # Ingreso en dos pasos: correo → "Continuar" → contraseña
+                campo = pag.locator("input[type=email]:visible, input[name*=mail i]:visible, input[name*=correo i]:visible, input[name*=usuario i]:visible, input[name*=user i]:visible").first
+                campo.fill(correo)
+                clave_ = pag.locator("input[type=password]").first
+                if not clave_.is_visible():
+                    pag.locator("button:has-text('Continuar'):visible, input[type=submit][value*=Continuar i]:visible").first.click()
+                    try:
+                        pag.wait_for_load_state("networkidle", timeout=15000)
+                    except Exception:
+                        pass
                     pag.wait_for_timeout(3000)
-                    if not pag.locator("input[type=password]:visible").count():
-                        seguir = pag.locator("button:has-text('Continuar'):visible, input[type=submit][value*=Continuar i]:visible")
-                        if seguir.count():
-                            seguir.first.click()
-                            pag.wait_for_timeout(3000)
-                    anotar("despues_del_captcha")
+                    anotar("despues_de_continuar")
+                    print("Campos visibles:", pag.evaluate("""() => [...document.querySelectorAll('input,button,select')].filter(e => e.offsetParent !== null)
+                        .map(e => e.tagName + ' ' + (e.type || '') + ' ' + (e.name || e.id || '') + ' ' + (e.innerText || e.value && e.type === 'submit' ? (e.innerText || e.value).trim().slice(0, 30) : ''))"""))
+                    print("Mensajes:", pag.evaluate("""() => [...document.querySelectorAll('.alert,.error,.invalid-feedback,.help-block,.toast,.flash,[role=alert],.text-danger')]
+                        .filter(e => e.offsetParent !== null).map(e => e.innerText.trim()).filter(Boolean)"""))
+                    print("Captcha visible:", pag.evaluate("() => [...document.querySelectorAll('iframe[src*=recaptcha], iframe[src*=hcaptcha], iframe[src*=turnstile]')].filter(f => f.offsetParent !== null).map(f => f.src.split('?')[0])"))
                     clave_ = pag.locator("input[type=password]:visible").first
-                if not clave_.count():
-                    sys.exit("❌ Después de 'Continuar' no apareció el campo de contraseña. Revise los datos de arriba.")
-            clave_.fill(clave)
-            pag.locator("button[type=submit]:visible, input[type=submit]:visible, button:has-text('Ingresar'):visible, button:has-text('Iniciar'):visible").first.click()
-            pag.wait_for_load_state("networkidle", timeout=60000)
-            pag.wait_for_timeout(2000)
-            if pag.locator("input[type=password]").count() and pag.locator("input[type=password]").first.is_visible():
-                anotar("sigue_en_ingreso")
-                avisos = pag.evaluate("""() => [...document.querySelectorAll('.alert,.error,.invalid-feedback,.help-block,.toast,.flash,[role=alert]')]
-                    .filter(e => e.offsetParent !== null).map(e => e.innerText.trim()).filter(Boolean)""")
-                print("Mensajes en pantalla:", avisos)
-                print("Captcha después de 'Continuar':", pag.evaluate("() => [...document.querySelectorAll('iframe[src*=recaptcha]')].filter(f => f.offsetParent !== null).map(f => f.src.split('?')[0])"))
-                sys.exit("❌ No pude entrar: sigue la pantalla de ingreso (¿clave, correo o captcha?). Revise la foto.")
+                    if not clave_.count() and pag.locator("iframe[src*='api2/anchor']").count():
+                        if not captcha_google(pag, a.salida, foto):
+                            sys.exit(1)
+                        pag.wait_for_timeout(3000)
+                        if not pag.locator("input[type=password]:visible").count():
+                            seguir = pag.locator("button:has-text('Continuar'):visible, input[type=submit][value*=Continuar i]:visible")
+                            if seguir.count():
+                                seguir.first.click()
+                                pag.wait_for_timeout(3000)
+                        anotar("despues_del_captcha")
+                        clave_ = pag.locator("input[type=password]:visible").first
+                    if not clave_.count():
+                        sys.exit("❌ Después de 'Continuar' no apareció el campo de contraseña. Revise los datos de arriba.")
+                clave_.fill(clave)
+                pag.locator("button[type=submit]:visible, input[type=submit]:visible, button:has-text('Ingresar'):visible, button:has-text('Iniciar'):visible").first.click()
+                pag.wait_for_load_state("networkidle", timeout=60000)
+                pag.wait_for_timeout(2000)
+                if pag.locator("input[type=password]").count() and pag.locator("input[type=password]").first.is_visible():
+                    anotar("sigue_en_ingreso")
+                    avisos = pag.evaluate("""() => [...document.querySelectorAll('.alert,.error,.invalid-feedback,.help-block,.toast,.flash,[role=alert]')]
+                        .filter(e => e.offsetParent !== null).map(e => e.innerText.trim()).filter(Boolean)""")
+                    print("Mensajes en pantalla:", avisos)
+                    print("Captcha después de 'Continuar':", pag.evaluate("() => [...document.querySelectorAll('iframe[src*=recaptcha]')].filter(f => f.offsetParent !== null).map(f => f.src.split('?')[0])"))
+                    sys.exit("❌ No pude entrar: sigue la pantalla de ingreso (¿clave, correo o captcha?). Revise la foto.")
             anotar("escritorio")
 
             # 2) Comprobantes
@@ -444,6 +476,37 @@ def _subir_foto(repo, tok, ruta_repo, archivo):
     with open(archivo, "rb") as f:
         contenido = base64.b64encode(f.read()).decode()
     llamar("PUT", f"/contents/{ruta_repo}", {"message": "Captcha de Quesito (temporal)", "content": contenido, "branch": "quesito-captcha"})
+
+
+def leer_sesion(texto):
+    """Cookies de Quesito copiadas del Chrome de la persona. Acepta el JSON que exporta la extensión
+    Cookie-Editor ([{name, value, domain, path, expirationDate, httpOnly, secure, sameSite}, …]) o el texto
+    "nombre=valor; nombre2=valor2". Los valores nunca se imprimen."""
+    texto = texto.strip()
+    out = []
+    if texto.startswith("[") or texto.startswith("{"):
+        datos = json.loads(texto)
+        datos = datos if isinstance(datos, list) else datos.get("cookies", [])
+        for c in datos:
+            g = {"name": c["name"], "value": c["value"], "domain": c.get("domain") or ".quesito.pe", "path": c.get("path") or "/",
+                 "httpOnly": bool(c.get("httpOnly")), "secure": bool(c.get("secure", True))}
+            vence = c.get("expirationDate") or c.get("expires")
+            if vence and float(vence) > 0:
+                g["expires"] = float(vence)
+            ss = str(c.get("sameSite") or "").lower()
+            g["sameSite"] = {"strict": "Strict", "lax": "Lax", "no_restriction": "None", "none": "None"}.get(ss, "Lax")
+            if g["sameSite"] == "None":
+                g["secure"] = True
+            out.append(g)
+    else:
+        for par in texto.split(";"):
+            if "=" in par:
+                n, v = par.strip().split("=", 1)
+                out.append({"name": n.strip(), "value": v.strip(), "domain": "www.quesito.pe", "path": "/", "secure": True, "sameSite": "Lax"})
+    out = [g for g in out if "quesito" in g["domain"] or os.environ.get("QUESITO_URL")]
+    if not out:
+        sys.exit("❌ QUESITO_SESION no trae cookies de quesito.pe. Vuelva a copiarla (ver guias/README.md).")
+    return out
 
 
 def _campos_post(req):

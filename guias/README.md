@@ -48,3 +48,15 @@ se la manda a los administradores de Telegram y a los números de WhatsApp. Se r
 (`1 6 9`), `0` si ya no queda ninguna, `otra` para cambiar la imagen o `cancelar`. El robot marca las
 casillas, pulsa Verificar y, si Google pide otra ronda, vuelve a preguntar. Solo se atiende a una
 ejecución de `guias-quesito-*.yml` que esté corriendo (lo comprueba el bot con su token de GitHub).
+
+### Sesión guardada (sin captcha) — `QUESITO_SESION`
+
+Desde GitHub, Google no deja pasar el captcha. Por eso el robot entra con la sesión que la persona abre en su Chrome:
+1. En Chrome (PC) instalar la extensión **Cookie-Editor** (de cookie-editor.com).
+2. Entrar a Quesito de la empresa como siempre. Con la sesión abierta, pulsar el ícono de Cookie-Editor →
+   **Export** → **JSON** (queda copiado).
+3. GitHub → Settings → Environments → `<RUC>` → **Add secret**: nombre `QUESITO_SESION`, valor: pegar.
+4. No pulsar "Cerrar sesión" en Quesito (eso la anula); basta cerrar la pestaña.
+
+El robot muestra en el registro cuándo vence cada cookie (no sus valores). Si la sesión ya no sirve, avisa por
+Telegram/WhatsApp y hay que repetir los pasos 2 y 3.
