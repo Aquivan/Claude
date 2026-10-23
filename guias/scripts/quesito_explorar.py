@@ -258,8 +258,21 @@ def main():
                     e.fill(str(a.numero))
             if not serie_ok and entradas.count() >= 2:
                 entradas.nth(0).fill(a.serie); entradas.nth(1).fill(str(a.numero))
-            boton = caja.locator("button:has-text('Buscar'), input[type=submit], button[type=submit]").last
-            boton.click()
+            # Cómo es la ventanita (sin valores), para el robot de emisión.
+            print("Ventana 'Buscar Documento':", pag.evaluate("""() => [...document.querySelectorAll('input,select,button,a.btn')].filter(e => e.offsetParent !== null && e.closest('.modal,[role=dialog]'))
+                .map(e => e.tagName + ' ' + (e.type || '') + ' name=' + (e.name || e.id || '') + ' ' + ((e.innerText || (e.type === 'submit' || e.type === 'button' ? e.value : '') || e.placeholder || '').trim().slice(0, 25)))"""))
+            botones = caja.locator("button:visible, a.btn:visible, input[type=submit]:visible, input[type=button]:visible")
+            boton = None
+            for i in range(botones.count()):
+                b_ = botones.nth(i)
+                t_ = ((b_.inner_text() or "") + " " + (b_.get_attribute("value") or "")).strip()
+                if re.search(r"buscar|consultar|filtrar", t_, re.I) and not re.search(r"documento", t_, re.I):
+                    boton = b_
+            if boton is not None:
+                boton.click()
+            else:   # sin botón reconocible: Enter en el número
+                print("(No reconocí el botón de buscar: pruebo con Enter)")
+                caja.locator("input:visible").last.press("Enter")
             pag.wait_for_timeout(2500)
             anotar("resultado_busqueda")
 
