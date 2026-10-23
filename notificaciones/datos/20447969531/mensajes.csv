@@ -1,4 +1,7 @@
 empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,etiqueta,leido,urgente,destacado,remitente,dependencia,adjuntos,archivos,nota_pdf,revision
+20447969531,Mensaje,1103087068,23/10/2026 03:07:17,23/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
+20447969531,Mensaje,1102802827,23/10/2026 00:23:15,23/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,1,,,
+20447969531,Mensaje,1102651418,22/10/2026 18:18:37,22/10/2026,Comunicación de GRE - Remitente EG07-79 emitida por RUC N° 20614694263,Otro,20614694263,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1102592444,22/10/2026 17:06:18,22/10/2026,Comunicación de GRE - Remitente EG07-68 emitida por RUC N° 20606001763,Otro,20606001763,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1102265193,22/10/2026 10:35:03,22/10/2026,Emisión Factura Electronica No. E001-3018,Otro,,,NO,,,SUNAT,,0,,,
 20447969531,Mensaje,1101679792,21/10/2026 21:15:10,21/10/2026,Comunicación de GRE - Remitente EG07-67 emitida por RUC N° 20606001763,Otro,20606001763,,NO,,,SUNAT,0211,0,,,
@@ -22,7 +25,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20447969531,Mensaje,1093522202,12/10/2026 08:01:28,12/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,1,,,
 20447969531,Mensaje,1093157625,11/10/2026 02:22:45,11/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1092218497,09/10/2026 02:43:33,09/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
-20447969531,Mensaje,1092073053,08/10/2026 22:10:39,08/10/2026,REPORTE DE TUS RETENCIONES IGV,Otro,,,NO,,,SUNAT,0211,1,,,
 20447969531,Mensaje,1091820196,08/10/2026 02:45:18,08/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1091684931,08/10/2026 00:12:42,08/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,1,,,
 20447969531,Mensaje,1091655384,07/10/2026 20:56:53,07/10/2026,Comunicación de GRE - Remitente EG07-66 emitida por RUC N° 20606001763,Otro,20606001763,,NO,,,SUNAT,0211,0,,,
@@ -39,7 +41,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20447969531,Mensaje,1085108360,26/09/2026 01:56:22,26/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1084571755,25/09/2026 04:16:32,25/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1083882884,24/09/2026 03:20:49,24/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
-20447969531,Mensaje,1082774600,23/09/2026 02:19:16,23/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1082063648,22/09/2026 07:30:52,22/09/2026,Comunicación de GRE - Remitente EG07-151 emitida por RUC N° 20605062670,Otro,20605062670,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1081805717,21/09/2026 18:56:29,21/09/2026,Comunicación de GRE - Remitente EG07-64 emitida por RUC N° 20606001763,Otro,20606001763,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1078559147,17/09/2026 12:08:00,17/09/2026,Guía de Referencia para acreditar Instrumentos Financieros Derivados,Otro,,,NO,,,9248,,1,,,

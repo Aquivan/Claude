@@ -1,4 +1,5 @@
 empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,etiqueta,leido,urgente,destacado,remitente,dependencia,adjuntos,archivos,nota_pdf,revision
+20447623669,Mensaje,1102910335,23/10/2026 01:48:14,23/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
 20447623669,Mensaje,1101600458,21/10/2026 18:58:08,21/10/2026,Generación de Registro RVIE Y RCE del período 202609,Otro,,,NO,,,SUNAT,0211,2,,,
 20447623669,Mensaje,1101600039,21/10/2026 18:57:26,21/10/2026,Inicio de generación de RVIE Y RCE período 202609,Otro,,,NO,,,SUNAT,0211,0,,,
 20447623669,Mensaje,1100690449,21/10/2026 01:44:55,21/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,SI,,,SUNAT,0211,0,,,
@@ -49,7 +50,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20447623669,Mensaje,1083729854,24/09/2026 01:42:35,24/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
 20447623669,Mensaje,1083071104,23/09/2026 11:15:10,23/09/2026,Baja de Guía de Remisión Remitente - Electrónica EG07 - 477,Otro,,,NO,,,SUNAT,0021,0,,,
 20447623669,Mensaje,1083022316,23/09/2026 10:25:13,23/09/2026,Comunicación de GRE - Remitente EG07-4614 emitida por RUC N° 20447969531,Otro,20447969531,,NO,,,SUNAT,0021,0,,,
-20447623669,Mensaje,1082772967,23/09/2026 02:18:13,23/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
 20447623669,Mensaje,1082639776,22/09/2026 21:40:00,22/09/2026,Comunicación Obligado a la presentación FV 621 período 08-2026,Otro,,,NO,,,9188,,1,,,
 20447623669,Mensaje,1082404653,22/09/2026 16:07:11,22/09/2026,Baja de Guía de Remisión Remitente - Electrónica EG07 - 472,Otro,,,NO,,,SUNAT,0021,0,,,
 20447623669,Mensaje,1082193818,22/09/2026 10:32:08,22/09/2026,Autorización de Trámites a Terceros - Número de Autorización 0021000060943672,Otro,0021000060943672,,NO,,,SUNAT,,0,,,

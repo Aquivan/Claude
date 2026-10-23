@@ -1,4 +1,5 @@
 empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,etiqueta,leido,urgente,destacado,remitente,dependencia,adjuntos,archivos,nota_pdf,revision
+20447968216,Mensaje,1103092174,23/10/2026 03:10:04,23/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
 20447968216,Mensaje,1102175397,22/10/2026 08:05:30,22/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,1,,,
 20447968216,Mensaje,1101589812,21/10/2026 18:47:04,21/10/2026,Generación de Registro RVIE Y RCE del período 202609,Otro,,,NO,,,SUNAT,0021,2,,,
 20447968216,Mensaje,1101575620,21/10/2026 18:32:46,21/10/2026,Inicio de generación de RVIE Y RCE período 202609,Otro,,,NO,,,SUNAT,0021,0,,,
@@ -21,7 +22,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20447968216,Mensaje,1093525365,12/10/2026 08:04:17,12/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,1,,,
 20447968216,Mensaje,1093254547,11/10/2026 03:16:48,11/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
 20447968216,Mensaje,1092179675,09/10/2026 02:20:48,09/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
-20447968216,Mensaje,1092056452,08/10/2026 20:22:27,08/10/2026,REPORTE DE TUS RETENCIONES IGV,Otro,,,NO,,,SUNAT,0021,1,,,
 20447968216,Mensaje,1091844140,08/10/2026 02:59:11,08/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
 20447968216,Mensaje,1091422498,07/10/2026 08:05:13,07/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,1,,,
 20447968216,Mensaje,1091313321,07/10/2026 02:30:01,07/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
@@ -32,7 +32,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20447968216,Mensaje,1086179525,29/09/2026 01:50:16,29/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,SI,,,SUNAT,0021,0,,,
 20447968216,Mensaje,1085534654,27/09/2026 02:36:27,27/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
 20447968216,Mensaje,1084429864,25/09/2026 02:03:28,25/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
-20447968216,Mensaje,1082774566,23/09/2026 02:19:14,23/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
 20447968216,Mensaje,1078559147,17/09/2026 12:08:00,17/09/2026,Guía de Referencia para acreditar Instrumentos Financieros Derivados,Otro,,,NO,,,9248,,1,,,
 20447968216,Mensaje,1063733931,24/08/2026 20:45:00,24/08/2026,Comunicación Obligado a la presentación FV 621 período 07-2026,Otro,,,NO,,,9188,,1,,,
 20447968216,Mensaje,1063317236,24/08/2026 12:09:02,24/08/2026,Creación de Expediente Electrónico de Reclamos,Otro,,,NO,,,SUNAT,0021,0,,,
