@@ -43,8 +43,8 @@ function GR_procesarFilas_(ss, f0, f1, cambiadas) {
   var filas = GR_leerGuias_(sh, f0, f1);
   filas.forEach(function (x) {
     var r = x.r;
-    var vacia = GR_COLS_.every(function (c) { return c.k === 'estado' || c.k === 'id' || r[c.k] === '' || r[c.k] === null; });
-    if (vacia) { if (r.id || r.estado) { r.id = ''; r.estado = ''; } }
+    var vacia = GR_COLS_.every(function (c) { return ['estado', 'id', 'obsFinal', 'productos'].indexOf(c.k) >= 0 || r[c.k] === '' || r[c.k] === null; });
+    if (vacia) { r.id = ''; r.estado = ''; r.obsFinal = ''; r.productos = ''; }
     else {
       if (!r.id) { r.id = GR_nuevoId_(); GR_valoresIniciales_(r); }
       GR_autollenar_(r, cambiadas, ctx);
@@ -172,6 +172,26 @@ function GR_autollenar_(r, cambiadas, ctx) {
   });
   // Productos de 📦 (resumen)
   r.productos = GR_resumenProductos_(ctx.prod[r.id] || []);
+  r.obsFinal = GR_observaciones_(r);
+}
+
+/**
+ * Texto completo de Observaciones de la guía: lo escrito + los datos que Quesito no tiene como campo
+ * (cotización, MTC, placas, conductor). Ej.: "Lote L-0828. Cotización N° 2780. N° Registro MTC: 1234567CNG.
+ * Placa N°1: ABC-123. Conductor: JUAN PEREZ QUISPE, DNI 42424242, Licencia Q42424242."
+ */
+function GR_observaciones_(r) {
+  var t = function (k) { return String(r[k] == null ? '' : r[k]).trim(); }, p = [];
+  if (t('obs')) p.push(t('obs').replace(/\.\s*$/, ''));
+  if (t('cotizacion')) p.push('Cotización N° ' + t('cotizacion'));
+  var mod = t('modalidad').slice(0, 2);
+  if (mod === '01' && t('mtc')) p.push('N° Registro MTC: ' + t('mtc'));
+  if (mod === '02' && t('m1') !== 'SI') {
+    if (t('placa')) p.push('Placa N°1: ' + t('placa'));
+    if (t('placa2')) p.push('Placa N°2: ' + t('placa2'));
+    if (t('cnom') || t('cape')) p.push('Conductor: ' + (t('cnom') + ' ' + t('cape')).trim() + (t('cdni') ? ', DNI ' + t('cdni') : '') + (t('clic') ? ', Licencia ' + t('clic') : ''));
+  }
+  return p.length ? p.join('. ') + '.' : '';
 }
 
 function GR_resumenProductos_(ps) {
@@ -250,6 +270,7 @@ function GR_validar_(r, ctx) {
     if (txt(x + 'dir').length < 5) F.push('dirección ' + nom);
     if (mot === '04' && !/^\d{4}$/.test(txt(x + 'est'))) F.push('cód. local ' + nom + ' (motivo 04)');
   });
+  if (txt('obsFinal').length > 500) A.push('observaciones muy largas (' + txt('obsFinal').length + ' caracteres)');
   if (GR_codUbigeo_(txt('pubi')) && GR_codUbigeo_(txt('pubi')) === GR_codUbigeo_(txt('lubi')) && GR_norm_(txt('pdir')) === GR_norm_(txt('ldir'))) F.push('partida y llegada son iguales');
   return { faltas: F, avisos: A };
 }
