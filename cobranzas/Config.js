@@ -62,6 +62,9 @@ function onOpen() {
     .addItem('✍️ Registrar cobro/pago manual (efectivo, compensación…)', 'menuNuevoRegistroManual')
     .addItem('🔁 Reasignar una retención a otra factura', 'menuReasignarRetencion')
     .addItem('🧾 Actualizar padrones SUNAT (agentes de retención, buenos contribuyentes, SSCO)', 'menuActualizarPadrones')
+    .addSubMenu(ui.createMenu('🔎 RUC por nombre (vouchers sin RUC)')
+      .addItem('🔎 Buscar los RUC que faltan', 'menuBuscarRucPorNombre')
+      .addItem('💾 Guardar RUC confirmados (✔) como alias', 'menuGuardarRucConfirmados'))
 
     .addSubMenu(ui.createMenu('♻️ Respaldos de datos manuales')
       .addItem('💾 Guardar respaldo ahora', 'menuRespaldarAhora')

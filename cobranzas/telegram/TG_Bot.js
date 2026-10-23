@@ -88,6 +88,8 @@ function TG_manejar_(u) {
   // 🧩 "1 6 9" mientras el robot de Quesito espera la respuesta de un captcha.
   var capt = m.text && TGC_respuesta_(texto);
   if (capt) return TG_enviar_(chatId, capt);
+  // 🔎 "ruc CORPORACION GRANIX": RUC por nombre (tus facturas y el padrón de SUNAT, RucPorNombre.js).
+  if (m.text && /^ruc\s+(de\s+|del\s+)?[a-záéíóúñ&]/i.test(texto)) return TG_enviar_(chatId, RPN_consulta_(ss, texto, { origen: 'tg', chat: chatId }));
 
   // Archivos: fotos, documentos, notas de voz y audios.
   if (m.photo || m.document || m.voice || m.audio || m.video_note) return TG_alArchivo_(ctx, m, texto);
@@ -189,6 +191,7 @@ function TG_comando_(ctx, texto) {
     case 'estado': return TG_enviarEstado_(ctx);
     case 'descargar': return TG_asistenteDescarga_(ctx, null);
     case 'sire': return TGS_comandoTG_(ctx, arg);   // ⚡ SIRE solo reporte (rápido): /sire granix 202601-202609
+    case 'ruc': return TG_enviar_(chatId, RPN_consulta_(ctx.ss, arg, { origen: 'tg', chat: chatId }));   // 🔎 RUC por nombre
     case 'actualizar': return TG_actualizarCobranzas_(ctx);
     case 'tc': case 'cambio': return TG_enviarTipoCambio_(ctx);
     case 'recordatorios': return TG_enviarRecordatorios_(ctx);

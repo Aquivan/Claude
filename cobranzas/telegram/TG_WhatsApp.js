@@ -95,6 +95,12 @@ function TGW_responder_(q) {
   // 🧩 "1 6 9" mientras el robot de Quesito espera la respuesta de un captcha.
   var capt = TGC_respuesta_(texto);
   if (capt) return { ok: true, respuesta: capt, tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  // 🔎 "ruc CORPORACION GRANIX": RUC por nombre (tus facturas y el padrón de SUNAT, RucPorNombre.js).
+  if (/^\/?ruc\b/i.test(texto) && !/^\/?ruc\s+\d/i.test(texto)) {
+    var rr;
+    try { rr = RPN_consulta_(ss, texto, { origen: 'wa', chat: clave }); } catch (err) { rr = '⚠️ ' + err.message; }
+    return { ok: true, respuesta: rr, tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  }
   // 🧾 "emitir" (lista de pendientes) o "emite la retención de F001-215" (o citando el mensaje): propuesta con botones.
   var cre = TGR_atajoWA_(ss, texto, q.citado);
   if (cre) return cre;
