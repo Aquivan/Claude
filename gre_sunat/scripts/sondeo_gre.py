@@ -202,6 +202,41 @@ def llenar_prueba(fr, pag, actual):
             print("   (llegada de prueba no se pudo:", str(e).splitlines()[0][:100], ")")
             cerrar_ventana(fr, pag)
         print("   Pantalla 5 tras la prueba:", sin_datos(fr.inner_text("body")[:700]).replace("\n", " / "))
+    if actual.startswith("6."):
+        def ventanas(titulo):
+            ag = fr.locator("button:visible", has_text=re.compile(r"^\s*Agregar\s*$"))
+            for j in range(ag.count()):
+                try:
+                    fr.locator("button:visible", has_text=re.compile(r"^\s*Agregar\s*$")).nth(j).click(timeout=4000)
+                    pag.wait_for_timeout(2000)
+                    cerrar_avisos(fr, pag)
+                    print(f"\n>>> {titulo} · ventana Agregar {j + 1}:")
+                    print("   Campos:", fr.evaluate("""() => [...document.querySelectorAll('.modal input, .modal select, .modal textarea, .modal ng-select')]
+                        .filter(e => e.offsetParent !== null).map(e => (e.getAttribute('formcontrolname') || e.name || e.id || e.type) +
+                        (e.type === 'radio' || e.type === 'checkbox' ? '(' + (e.parentElement.innerText || '').trim().slice(0, 40) + ')' : ''))"""))
+                    print("   Texto:", sin_datos(fr.evaluate("() => [...document.querySelectorAll('.modal')].filter(m => m.offsetParent !== null).map(m => m.innerText).join(' || ')")).replace("\n", " / ")[:900])
+                    sels = fr.locator(".modal ng-select:visible")
+                    for k in range(sels.count()):
+                        try:
+                            sels.nth(k).click(timeout=3000)
+                            pag.wait_for_timeout(1200)
+                            print(f"   Lista {sels.nth(k).get_attribute('formcontrolname')}:", " / ".join(sin_datos(x) for x in dict.fromkeys(fr.evaluate(JS_LISTA)))[:700])
+                            pag.keyboard.press("Escape")
+                        except Exception:
+                            pass
+                except Exception as e:
+                    print(f"   ({titulo}: Agregar {j + 1} no abrió:", str(e).splitlines()[0][:80], ")")
+                cerrar_ventana(fr, pag)
+        for modo in ("Transporte Público", "Transporte Privado"):
+            try:
+                fr.get_by_text(modo, exact=True).first.click(timeout=4000)
+                pag.wait_for_timeout(2500)
+                cerrar_avisos(fr, pag)
+                print(f"\n######## {modo}")
+                volcar(fr)
+                ventanas(modo)
+            except Exception as e:
+                print(f"   ({modo} no se pudo:", str(e).splitlines()[0][:100], ")")
 
 
 def recorrer(fr, pag, maximo=8):
