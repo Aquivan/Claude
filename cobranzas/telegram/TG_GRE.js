@@ -94,8 +94,9 @@ var TGG_SISTEMA_ = [
   '   "la mitad", "200 de la línea 3") aplícalo; "total" o nada = todas. Si el ticket coincide con la factura, es el total: no preguntes.',
   '6. peso_kg = peso bruto total (TOTAL GENERAL del ticket/balanza en kg) o el que diga la persona. bultos = total de paquetes/unidades del ticket.',
   '7. Tarjeta del transportista → público: RUC, razón social, TODAS las constancias/registros MTC, placas EN ORDEN (primero el tracto o',
-  '   principal, luego la carreta; si una placa está tachada y corregida a mano, usa la corregida; 0 y O: las placas peruanas son 3 letras +',
-  '   3 números, ej. AON949), y el chofer con su licencia (letra + 8 dígitos, ej. D00516821). Si no aparece el DNI, el DNI son esos 8 dígitos.',
+  '   principal, luego la carreta; si una placa está tachada y corregida a mano, usa la corregida; las placas peruanas tienen 3 caracteres +',
+  '   3 números y el 2.º carácter puede ser letra o NÚMERO, ej. A0N949 con cero, F1A123: copia cero/O tal como se ve; si la persona',
+  '   escribe la placa, usa EXACTAMENTE la suya), y el chofer con su licencia (letra + 8 dígitos, ej. D00516821). Si no aparece el DNI, el DNI son esos 8 dígitos.',
   '   registrar_vehiculos = true si hay placas y chofer, salvo que la persona diga "sin vehículo". Sin transportista y con placas → privado.',
   '8. fecha: la que diga la persona; si no, la de hoy.',
   '9. Si el ÚLTIMO mensaje no tiene que ver con la guía (otra consulta), responde {"no_es_para_la_guia": true} y nada más.',
@@ -175,6 +176,12 @@ function TGG_analizar_(ss, c) {
   t.ruc = dig(t.ruc);
   t.modo = /priv/i.test(t.modo || '') || !t.ruc ? 'privado' : 'publico';
   t.placas = (t.placas || []).map(function (x) { return String(x).toUpperCase().replace(/[^A-Z0-9]/g, ''); }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+  // La placa que escribió la persona manda tal cual (O y 0 se confunden fácil: A0N949 ≠ AON949).
+  (c.mensajes || []).join(' ').toUpperCase().replace(/[^A-Z0-9\s]/g, '').split(/\s+/).forEach(function (w) {
+    if (!/^[A-Z][A-Z0-9]{2}\d{3}$/.test(w)) return;
+    var igual = function (x) { return x.replace(/0/g, 'O') === w.replace(/0/g, 'O'); };
+    t.placas = t.placas.map(function (x) { return igual(x) ? w : x; });
+  });
   t.constancias = (t.constancias || []).map(dig).filter(function (x) { return x.length >= 5; });
   t.mtc = String(t.mtc || t.constancias[0] || '').trim();
   t.sin_mtc = t.sin_mtc === true;
