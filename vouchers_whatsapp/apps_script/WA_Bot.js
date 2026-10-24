@@ -91,10 +91,10 @@ function WA_procesarMensaje_(m, nombre) {
     if (WA_captcha_(de, cuerpo)) return;   // 🧩 "1 6 9" / "0" para el captcha de Quesito (WA_Api.js)
     if (WA_comando_(de, cuerpo)) return;
     if (WA_procesarNombre_(de, cuerpo)) return;   // 🧾 nombre pedido con "🏷 Cambiar nombre"
+    if (WA_greTexto_(m, de, nombre, cuerpo)) return;   // 🚚 "guía …": las fotos juntadas o las que esperan nombre (WA_Gre.js)
     // 🏷 ¿De quién son? — respuesta a la pregunta, o "de Edit" antes de reenviar.
     if (WA_respuestaNombre_(de, cuerpo).tomado) return;
     if (WA_esEtiqueta_(cuerpo) && WA_etiquetaPrevia_(de, cuerpo)) return;
-    if (WA_greTexto_(m, de, nombre, cuerpo)) return;   // 🚚 "guía …" con las fotos ya juntadas (WA_Gre.js)
     WA_preguntarIA_(m, de, nombre, cuerpo);
     return;
   }

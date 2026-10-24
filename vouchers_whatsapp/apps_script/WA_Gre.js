@@ -37,10 +37,16 @@ function WA_greArchivo_(m, de, media, caption, mime, esPdf) {
   return true;
 }
 
-/** Texto "guía …" con archivos juntados: se manda todo a Cobranzas. true si lo tomó. */
+/**
+ * Texto "guía …": se manda a Cobranzas con los archivos juntados. Si no hay (p. ej. se REENVIARON las fotos, y
+ * WhatsApp no deja poner comentario al reenviar), se toman los archivos que quedaron en Espera de "¿De quién son?"
+ * y salen de vouchers. true si lo tomó.
+ */
 function WA_greTexto_(m, de, nombre, cuerpo) {
+  if (!WA_GRE_RX_.test(cuerpo)) return false;
   var t = WA_greTanda_(de);
-  if (!t || !t.ids.length || !WA_GRE_RX_.test(cuerpo)) return false;
+  if (!t || !t.ids.length) t = WA_greDesdeEspera_(de);
+  if (!t || !t.ids.length) return false;
   WA_props_().deleteProperty('WA_GRE_' + de);
   var adjuntos = [];
   t.ids.forEach(function (id) {
@@ -52,7 +58,20 @@ function WA_greTexto_(m, de, nombre, cuerpo) {
   });
   var texto = /^\s*\/?gu[ií]a\b/i.test(cuerpo) ? cuerpo : 'guía ' + cuerpo;
   if (t.textos.length) texto += ' · ' + t.textos.join(' · ');
-  WA_enviarTexto_(de, '🚚 Leyendo ' + adjuntos.length + ' archivo(s) para la guía…');
+  WA_enviarTexto_(de, '🚚 Leyendo ' + adjuntos.length + ' archivo(s) para la guía (no se registran como vouchers)…');
   WA_preguntarIA_(m, de, nombre, texto, adjuntos);
   return true;
+}
+
+/** Archivos de este número que esperan "¿De quién son?": pasan a la guía (la fila queda como "Guía"). */
+function WA_greDesdeEspera_(de) {
+  var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues(), filas = WA_filasEspera_(datos, de);
+  if (!filas.length) return null;
+  var t = { ids: [], textos: [], ultimo: Date.now() };
+  filas.forEach(function (i) {
+    if (datos[i][9]) t.ids.push(String(datos[i][9]));
+    hoja.getRange(i + 1, 7, 1, 2).setValues([['Guía', '🚚 usado para guía de remisión']]);
+  });
+  WA_props_().deleteProperty('WA_PREG_' + de);   // ya no se pregunta de quién son
+  return t;
 }
