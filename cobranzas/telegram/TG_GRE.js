@@ -80,7 +80,7 @@ var TGG_SISTEMA_ = [
   ' "bienes": [{"descripcion","unidad":"código SUNAT","cantidad":número}], "peso_kg": número, "bultos": número o null,',
   ' "partida": {"ruc":"RUC del dueño del local o vacío","direccion"}, "llegada": {"ruc","direccion"},',
   ' "transporte": {"modo":"publico|privado","ruc","nombre","mtc","constancias":["231800409","231800410"],"registrar_vehiculos":true,',
-  '   "placas":["AON949","VFY983"],"conductores":[{"nombre","dni","licencia"}]},',
+  '   "placas":["AON949","VFY983"],"conductores":[{"nombre","dni","licencia"}],"sin_mtc":false},',
   ' "fecha": "dd/mm/aaaa", "preguntas": ["solo lo que de verdad falta"]}',
   'REGLAS:',
   '1. Lee TODO antes de decidir. Lo que la persona escribe manda sobre los documentos. Si dice "está en la imagen", "ya te dije", "revisa bien",',
@@ -100,6 +100,8 @@ var TGG_SISTEMA_ = [
   '8. fecha: la que diga la persona; si no, la de hoy.',
   '9. Si el ÚLTIMO mensaje no tiene que ver con la guía (otra consulta), responde {"no_es_para_la_guia": true} y nada más.',
   '10. No inventes datos. Nunca incluyas teléfonos ni correos.',
+  '11. Si el robot falló en SUNAT (te lo digo abajo), la persona puede responder cómo seguir: "deja el MTC vacío" → transporte.sin_mtc = true;',
+  '   "el local 7", "usa la dirección X" → ese dato. Entiende lo que quiere decir aunque esté mal escrito y aplícalo; no preguntes de nuevo.',
   'Unidades SUNAT: NIU unidad, PK paquete (PQT), BX caja, BG bolsa, SA saco, KGM kilogramo, TNE tonelada, LTR litro, GLL galón, DZN docena,',
   ' CT cartones, DR tambor, BJ balde, BO botellas, CA latas, MLL millar, SET juego, PR par, ZZ otros.'
 ].join('\n');
@@ -144,6 +146,7 @@ function TGG_analizar_(ss, c) {
     Object.keys(empresas).map(function (r) { return r + ' → ' + empresas[r]; }).join('; ') +
     '\n\nMensajes de la persona, en orden:\n' + ((c.mensajes || []).map(function (m, i) { return (i + 1) + ') ' + m; }).join('\n') || '(ninguno)') +
     (c.bienes ? '\n\nBorrador actual (corrígelo con lo que dicen los archivos y los mensajes):\n' + TGG_paraRobot_(c) : '') +
+    (c.ultimo_error ? '\n\nEl último intento del robot en SUNAT falló: ' + c.ultimo_error : '') +
     (c.opciones ? '\n\nSUNAT no encontró el punto de ' + c.opciones.cual + ' y mostró estos locales del RUC ' + ((c[c.opciones.cual] || {}).ruc || '') +
       ' (si la persona elige uno, pon en ' + c.opciones.cual + '.direccion ese domicilio tal cual):\n' +
       c.opciones.lista.map(function (o, i) { return (i + 1) + ') ' + o.fila; }).join('\n') : '') +
@@ -174,6 +177,7 @@ function TGG_analizar_(ss, c) {
   t.placas = (t.placas || []).map(function (x) { return String(x).toUpperCase().replace(/[^A-Z0-9]/g, ''); }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
   t.constancias = (t.constancias || []).map(dig).filter(function (x) { return x.length >= 5; });
   t.mtc = String(t.mtc || t.constancias[0] || '').trim();
+  t.sin_mtc = t.sin_mtc === true;
   t.conductores = (t.conductores || []).filter(function (x) { return x && (x.dni || x.licencia); }).map(function (x) {
     var lic = String(x.licencia || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     return { dni: dig(x.dni) || dig(lic).slice(-8), licencia: lic, nombre: String(x.nombre || '') };
@@ -194,13 +198,15 @@ function TGG_editar_(ss, c, texto, pregunta) {
     var o = op.lista[Number(n[1]) - 1];
     c.mensajes = (c.mensajes || []).concat(['Para ' + op.cual + ' elegí el local ' + n[1] + ') ' + o.fila]).slice(-25);
     c[op.cual] = { ruc: (c[op.cual] || {}).ruc || '', direccion: o.direccion, fila: o.fila };
-    c.opciones = null; c.relanzar = true; c.estado = 'Propuesta';
+    c.opciones = null; c.relanzar = true; c.estado = 'Propuesta'; c.ultimo_error = '';
     return true;
   }
   c.mensajes = (c.mensajes || []).concat([(pregunta ? 'Respondiendo a «' + pregunta.q + '»: ' : '') + String(texto).slice(0, 1500)]).slice(-25);
+  var fallo = c.estado === 'No emitida' && c.ultimo_error;
   var ok = TGG_analizar_(ss, c);
   if (!ok) { c.mensajes.pop(); return ok; }
-  if (op && JSON.stringify(c[op.cual] || {}) !== antes) { c.opciones = null; c.relanzar = !TGG_preguntas_(c).length; }   // ya respondió lo que pidió SUNAT
+  if (op && JSON.stringify(c[op.cual] || {}) !== antes) c.opciones = null;
+  if (fallo && !TGG_preguntas_(c).length) { c.relanzar = true; c.ultimo_error = ''; }   // respondió al fallo del robot: sigue solo
   return ok;
 }
 
@@ -330,11 +336,12 @@ function TGG_gh_(q) {
       TGG_avisar_(c, '✅ Guía de remisión emitida: ' + c.gre + '\n' + (c.empresa || '') + ' · ' + c.motivo + ' · caso ' + c.id, q.imagen, false);
     } else {
       c.estado = q.dudoso ? 'Revisar en SOL' : 'No emitida';
-      c.intentos = (c.intentos || 0) + 1;   // permite volver a pedir la vista previa aunque la guía no cambie
+      c.intentos = (c.intentos || 0) + 1;
+      c.ultimo_error = String(q.texto || '').slice(0, 1500);   // permite volver a pedir la vista previa aunque la guía no cambie
       c.opciones = q.opciones && (q.opciones.lista || []).length ? { cual: String(q.opciones.cual), lista: q.opciones.lista.slice(0, 20) } : null;
       if (c.opciones) TGG_seguirConversacion_(String(c.chat || ''), c);   // lo que responda (el número) va a esta guía
       TGG_guardar_(ss, c);
-      TGG_avisar_(c, (q.dudoso ? '⚠️ ' : '⛔ ') + 'Guía caso ' + c.id + ': ' + String(q.texto || 'el robot falló') + (q.dudoso ? '' : c.opciones ? '\nNo se emitió nada.' : '\nNo se emitió nada. Corríjalo y vuelva a pedir la vista previa.'), q.imagen, false);
+      TGG_avisar_(c, (q.dudoso ? '⚠️ ' : '⛔ ') + 'Guía caso ' + c.id + ': ' + String(q.texto || 'el robot falló') + (q.dudoso ? '' : c.opciones ? '\nNo se emitió nada.' : '\nNo se emitió nada. Escríbame o dícteme cómo seguir y continúo solo.'), q.imagen, false);
     }
     return { ok: true };
   }

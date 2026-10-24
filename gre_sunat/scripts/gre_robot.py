@@ -134,7 +134,8 @@ def modal(fr):
 
 
 def boton_agregar_modal(fr):
-    return modal(fr).locator("button:visible", has_text=AGREGAR).last
+    """Botón que confirma la ventana: SUNAT lo llama «Agregar» en unas y «Aceptar» en otras (transportista)."""
+    return modal(fr).locator("button:visible", has_text=re.compile(r"^\s*(Agregar|Aceptar)\s*$")).last
 
 
 def combo(fr, pag, etiqueta, elegir, dentro=None):
@@ -425,8 +426,9 @@ def p6_transporte(fr, pag, c):
         m.locator("[formcontrolname=nroRuc]").fill(re.sub(r"\D", "", t["ruc"]))
         m.locator("[formcontrolname=nroRuc]").press("Tab")
         esperar(pag, 3500)
-        if t.get("mtc"):
-            m.locator("[formcontrolname=nroRegistroMTC]").fill(t["mtc"])
+        mtc = m.locator("[formcontrolname=nroRegistroMTC]").first
+        if t.get("mtc") and not t.get("sin_mtc") and not (mtc.input_value() or "").strip():   # si SUNAT ya lo trae, se deja
+            llenar(mtc, t["mtc"])
         boton_agregar_modal(fr).click(timeout=5000)
         esperar(pag, 2000)
         avisos = cerrar_avisos(fr, pag)
@@ -610,8 +612,7 @@ def main():
                 img = base64.b64encode(foto(pag, fr)).decode() if fr else ""
             except Exception:
                 img = ""
-            fin(False, f"El robot no pudo seguir en «{PASO_ACTUAL[0]}». No se emitió nada. Le mando la foto de dónde quedó; "
-                       "ya lo estoy revisando.", imagen=img)
+            fin(False, f"El robot no pudo seguir en «{PASO_ACTUAL[0]}». Le mando la foto de dónde quedó.", imagen=img)
             raise
 
 
