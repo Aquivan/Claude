@@ -56,7 +56,7 @@ function TGG_leer_(ss, id) {
 /** Lo que recibe el robot (texto exacto: su huella es la clave para emitir). */
 function TGG_paraRobot_(c) {
   return JSON.stringify({ id: c.id, empresa_ruc: c.empresa_ruc, motivo: c.motivo, contraparte: c.contraparte, documento: c.documento,
-    bienes: c.bienes, peso_kg: c.peso_kg, partida: c.partida, llegada: c.llegada, transporte: c.transporte, fecha: c.fecha });
+    bienes: c.bienes, peso_kg: c.peso_kg, bultos: c.bultos || null, partida: c.partida, llegada: c.llegada, transporte: c.transporte, fecha: c.fecha });
 }
 
 function TGG_huella_(c) {
@@ -77,7 +77,8 @@ var TGG_SISTEMA_LEER_ = [
   'Unidades SUNAT: NIU unidad, PK paquete, BX caja, BG bolsa, SA saco, KGM kilogramo, TNE tonelada, LTR litro, GLL galón, DZN docena,',
   ' CJ conos, CT cartones, DR tambor, BJ balde, BO botellas, CA latas, MLL millar, SET juego, PR par, ZZ servicio/otros. PQT o PK = PK.',
   'En tickets de despacho o balanza toma el peso total ("TOTAL GENERAL", "peso neto/bruto") y los pesos por línea si los hay.',
-  'En la tarjeta del transportista: RUC, razón social, constancia/registro MTC, placas (tracto y carreta) y chofer con su licencia.',
+  'En la tarjeta del transportista: RUC, razón social, constancia/registro MTC (TODOS los números, ej. "231800409-231800410"), placas EN ORDEN',
+  ' (primero el tracto/vehículo principal, luego la carreta/semirremolque; si una placa está tachada y corregida a mano, usa la corregida) y chofer con su licencia.',
   'Licencia peruana: letra + 8 dígitos (ej. D00516821); el DNI suelen ser esos 8 dígitos si no aparece aparte.',
   'Nunca devuelvas números de teléfono ni correos.'
 ].join('\n');
@@ -121,6 +122,7 @@ function TGG_armar_(lecturas, empresas, chat) {
   c.peso_origen = pesoTicket ? 'ticket' : pesoLineas ? 'suma de líneas' : '';
   if (!c.peso_kg) c.avisos.push('No encontré el peso: escríbamelo (ej. "peso 30258.5").');
   var tk = tickets[0] || {};
+  c.bultos = Number(tk.bultos) || null;
   var dirEm = (fac.emisor || {}).direccion || '', dirRe = (fac.receptor || {}).direccion || '';
   if (c.motivo === 'Compra') {
     c.partida = { ruc: c.contraparte.ruc, direccion: [tk.punto_partida || fac.punto_partida, dirEm].filter(Boolean).join(' · ') };
@@ -133,6 +135,7 @@ function TGG_armar_(lecturas, empresas, chat) {
   var tieneDoc = function (x) { return x && (x.dni || x.licencia); };
   var cond = tieneDoc(trans.conductor) ? trans.conductor : tieneDoc(tk.conductor) ? tk.conductor : null;
   c.transporte = { modo: ruc(t) ? 'publico' : 'privado', ruc: ruc(t), nombre: t.nombre || '', mtc: String(t.mtc || '').split(/[\s,\/-]+/)[0] || '',
+    constancias: String(t.mtc || '').split(/[\s,\/-]+/).filter(function (x) { return /\d{5,}/.test(x); }),
     registrar_vehiculos: true, placas: placas.map(function (p) { return String(p).toUpperCase().replace(/[^A-Z0-9]/g, ''); })
       .filter(function (p, i, a) { return p && a.indexOf(p) === i; }),
     conductores: cond && (cond.dni || cond.licencia) ? [{ dni: String(cond.dni || String(cond.licencia || '').replace(/\D/g, '')).replace(/\D/g, ''), licencia: String(cond.licencia || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), nombre: cond.nombre || '' }] : [] };
@@ -155,6 +158,7 @@ function TGG_armar_(lecturas, empresas, chat) {
 var TGG_SISTEMA_EDITAR_ = [
   'Corriges el borrador de una guía de remisión de Perú (JSON). Aplica EXACTAMENTE lo que pide la persona y devuelve el JSON completo con el mismo esquema.',
   'Ejemplos: "peso 30258.5" → peso_kg; "solo líneas 1 a 5" → deja solo esos bienes (numerados desde 1); "la mitad de cada uno" → cantidad/2;',
+  '"placas AON949 y VFY983" → transporte.placas en ese orden (la primera es la principal); "constancias 231800409 231800410" → transporte.constancias;',
   '"privado" / "público" → transporte.modo; "registrar vehículo" → transporte.registrar_vehiculos=true; "sin vehículo" → false; "placa ABC123" → transporte.placas;',
   '"chofer Juan Pérez DNI 12345678 licencia Q12345678" → transporte.conductores; "fecha 25/10/2026" → fecha (dd/mm/aaaa);',
   '"venta" / "compra" → motivo (y si cambia, intercambia partida.ruc/llegada.ruc según quién es el tercero); "partida …" / "llegada …" → dirección.',
@@ -236,13 +240,16 @@ function TGG_texto_(c, html) {
   var bs = c.bienes || [];
   L.push('Bienes (' + bs.length + '):\n' + bs.slice(0, 25).map(function (x, i) { return '  ' + (i + 1) + ') ' + e(String(x.descripcion).slice(0, 50)) + ' · ' + x.cantidad + ' ' + x.unidad; }).join('\n') +
     (bs.length > 25 ? '\n  … y ' + (bs.length - 25) + ' más' : ''));
+  if (c.bultos) L.push('Bultos: ' + TG_num_(c.bultos));
   L.push('Peso bruto: ' + (c.peso_kg ? TG_num_(c.peso_kg, 2) + ' kg' + (c.peso_origen ? ' (' + e(c.peso_origen) + ')' : '') : '¿?'));
   L.push('Partida: ' + e(((c.partida || {}).direccion || '¿?').slice(0, 90)));
   L.push('Llegada: ' + e(((c.llegada || {}).direccion || '¿?').slice(0, 90)));
   if (t.modo === 'publico') L.push('Transporte público: ' + e(t.nombre || '') + ' RUC ' + e(t.ruc || '¿?') + (t.mtc ? ' · MTC ' + e(t.mtc) : '') +
     (t.registrar_vehiculos ? ' · con vehículo y chofer (diga "sin vehículo" si los pone el transportista)' : ' · vehículo y chofer los pone el transportista en su guía'));
   else L.push('Transporte privado');
-  if (t.modo === 'privado' || t.registrar_vehiculos) L.push('Vehículo: ' + e((t.placas || []).join(' / ') || '¿?') + ' · Chofer: ' +
+  if (t.modo === 'privado' || t.registrar_vehiculos) L.push('Vehículo principal: ' + e((t.placas || [])[0] || '¿?') +
+    ((t.placas || []).length > 1 ? ' · Secundario(s): ' + e(t.placas.slice(1).join(', ')) : '') +
+    ((t.constancias || []).length > 1 ? ' · Constancias MTC: ' + e(t.constancias.join(' / ')) : '') + '\nChofer: ' +
     e((t.conductores || []).map(function (x) { return (x.nombre || '') + ' lic. ' + (x.licencia || '¿?'); }).join(', ') || '¿?'));
   L.push('Fecha de traslado: ' + e(c.fecha || '¿?'));
   var otros = (c.avisos || []).filter(function (a) { return !/^(Falta|No encontré)/.test(a); });
