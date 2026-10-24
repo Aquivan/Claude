@@ -418,6 +418,23 @@ def main():
             marcos = [f for pg in ctx.pages for f in pg.frames]   # la aplicación puede abrirse en otra pestaña
             print(f"   Pestañas: {len(ctx.pages)} · marcos: {len(marcos)} ·",
                   ", ".join(sin_datos(f.url.split("?")[0])[-60:] for f in marcos))
+            for fr in marcos:   # pantallas antiguas (consultagre.do): todo lo que tiene, sin valores
+                if "consulta" not in fr.url:
+                    continue
+                try:
+                    d = fr.evaluate("""() => ({
+                      campos: [...document.querySelectorAll('input, select, textarea')].map(e => [e.tagName, e.type, e.name, e.id,
+                        (e.closest('tr') ? e.closest('tr').innerText : (e.labels && e.labels[0] ? e.labels[0].innerText : '')).replace(/\\s+/g, ' ').slice(0, 80),
+                        e.tagName === 'SELECT' ? [...e.options].map(o => o.text).slice(0, 15).join(' / ') : '']),
+                      botones: [...document.querySelectorAll('button, input[type=button], input[type=submit], a')].map(e => (e.innerText || e.value || '').trim() + ' {' + (e.getAttribute('onclick') || e.getAttribute('href') || '').slice(0, 60) + '}').filter(t => t.length > 3).slice(0, 40),
+                      texto: document.body ? document.body.innerText.slice(0, 1500) : ''})""")
+                    print(f"\n--- Consulta {sin_datos(fr.url.split('?')[0])}")
+                    for c_ in d["campos"]:
+                        print("   ·", " | ".join(sin_datos(x) for x in c_))
+                    print("   Botones:", " ; ".join(sin_datos(x) for x in d["botones"]))
+                    print("   Texto:", sin_datos(d["texto"]).replace("\n", " / "))
+                except Exception as e:
+                    print("   consulta: no pude leer", type(e).__name__)
             for fr in marcos:
                 try:
                     est = fr.evaluate(JS_ESTRUCTURA)
