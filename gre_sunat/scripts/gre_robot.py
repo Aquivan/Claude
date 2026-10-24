@@ -191,13 +191,33 @@ def combo(fr, pag, etiqueta, elegir, dentro=None):
     esperar(pag, 700)
 
 
+def campos_faltantes(fr):
+    """Nombres (la etiqueta que se ve en pantalla) de los campos que SUNAT marca como inválidos o vacíos obligatorios."""
+    try:
+        return fr.evaluate("""() => {
+          const vis = e => e && e.offsetParent !== null;
+          const etiqueta = e => { let p = e; for (let i = 0; i < 4 && p; i++, p = p.parentElement) {
+              const l = p.querySelector('label'); if (l && l.innerText.trim()) return l.innerText.trim(); }
+            return e.getAttribute('formcontrolname') || e.name || e.id || '?'; };
+          const malos = [...document.querySelectorAll('input.ng-invalid, ng-select.ng-invalid, select.ng-invalid, textarea.ng-invalid')]
+            .filter(vis).filter(e => !e.closest('.modal'));
+          const modal = [...document.querySelectorAll('.modal')].filter(vis).map(m => 'ventana abierta: ' + (m.innerText || '').trim().split('\\n')[0]);
+          return [...new Set(malos.map(etiqueta).concat(modal))].slice(0, 8);
+        }""")
+    except Exception:
+        return []
+
+
 def siguiente(fr, pag):
     actual = pantalla(fr)
     b = fr.get_by_text("Siguiente", exact=True).first
     try:
         b.click(timeout=8000)
     except Exception:
-        raise Alto(f"SUNAT no deja pasar de «{actual}»: falta un dato obligatorio")
+        faltan = campos_faltantes(fr)
+        paso(f"   campos que SUNAT marca como faltantes: {[sin_datos(x) for x in faltan]}")
+        raise Alto(f"SUNAT no deja pasar de «{actual}»: falta un dato obligatorio" +
+                   (f" ({', '.join(faltan)[:300]})" if faltan else ""))
     esperar(pag, 3000)
     for _ in range(4):   # "No se ha registrado ningún … ¿Desea continuar?" → SI · avisos → Entendido
         if pantalla(fr) != actual:
