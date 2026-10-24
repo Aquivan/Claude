@@ -86,8 +86,10 @@ def cerrar_avisos(fr, pag):
 def cerrar_ventana(fr, pag):
     """Cierra la ventana abierta con su ×."""
     try:
-        x = fr.locator(".modal.show button.close:visible, .modal.show [aria-label=Close]:visible, button:visible:has-text('×')")
-        if x.count():
+        x = fr.locator("button.close:visible, [aria-label=Close]:visible, .close:visible").or_(fr.get_by_text("×", exact=True))
+        n = x.count()
+        print(f"   (cerrar ventana: {n} botones ×)")
+        if n:
             x.last.click(timeout=3000)
     except Exception:
         pag.keyboard.press("Escape")
@@ -100,6 +102,53 @@ def pantalla(fr):
         return fr.evaluate("() => (document.body.innerText.match(/\\d\\. [^\\n]+/) || [''])[0]")
     except Exception:
         return ""
+
+
+JS_MARCAR = """([t, m]) => {   // marca el campo que está junto a la etiqueta t (para hacer clic en él)
+  const x = [...document.querySelectorAll('label,span,div,p,legend')].filter(e => e.offsetParent !== null && e.children.length < 3
+    && e.innerText && e.innerText.trim().startsWith(t)).pop();
+  if (!x) return 'sin etiqueta';
+  let p = x; for (let i = 0; i < 4 && p; i++, p = p.parentElement) {
+    const c = p.querySelector('input[type=text],textarea,select'); if (c) { c.setAttribute('data-sondeo', m);
+      return (c.closest('[class]') || c).className.toString().slice(0, 80) + ' | ' + p.outerHTML.replace(/\\s+/g, ' ').slice(0, 700); } }
+  return 'sin campo';
+}"""
+
+
+def combo(fr, pag, etiqueta, elegir=None):
+    """Abre la lista junto a la etiqueta, anota sus opciones y (si se pide) elige una."""
+    marca = "c" + str(abs(hash(etiqueta)) % 10000)
+    info = fr.evaluate(JS_MARCAR, [etiqueta, marca])
+    print(f"   [{etiqueta}] {sin_datos(info)[:800]}")
+    try:
+        fr.locator(f"[data-sondeo={marca}]").click(timeout=4000)
+        pag.wait_for_timeout(1200)
+        ops = list(dict.fromkeys(fr.evaluate(JS_LISTA)))
+        print(f"   Opciones [{etiqueta}]:", " / ".join(sin_datos(x) for x in ops)[:2000])
+        if elegir:
+            fr.locator('li,[role=option],.dropdown-item,.p-dropdown-item,mat-option,.ng-option').filter(has_text=elegir).first.click(timeout=4000)
+            pag.wait_for_timeout(800)
+    except Exception as e:
+        print(f"   (lista [{etiqueta}] no respondió:", str(e).splitlines()[0][:80], ")")
+
+
+def llenar_prueba(fr, pag, actual):
+    """Solo en el formulario (no se envía nada): lo mínimo para ver la pantalla siguiente."""
+    if actual.startswith("4."):
+        try:
+            fr.get_by_role("button", name="Agregar").first.click(timeout=4000)
+            pag.wait_for_timeout(2000)
+            fr.locator("#descBien").fill("BIEN DE PRUEBA SONDEO")
+            combo(fr, pag, "Unidad de medida del bien", "UNIDAD")
+            fr.locator("input[name=cantidad]").fill("1")
+            fr.locator("button:visible", has_text="Agregar").last.click(timeout=4000)
+            pag.wait_for_timeout(2000)
+            combo(fr, pag, "Unidad de medida de peso bruto", "KILOGRAM")
+            fr.locator("input[name=pesoBruto]").fill("1")
+            print("   (bien de prueba puesto en el formulario)")
+        except Exception as e:
+            print("   (no pude poner el bien de prueba:", str(e).splitlines()[0][:100], ")")
+        cerrar_avisos(fr, pag)
 
 
 def recorrer(fr, pag, maximo=8):
@@ -128,6 +177,7 @@ def recorrer(fr, pag, maximo=8):
             except Exception as e:
                 print("   (no abrió Agregar:", str(e).splitlines()[0][:80], ")")
             cerrar_ventana(fr, pag)
+        llenar_prueba(fr, pag, actual)
         try:
             fr.get_by_text("Siguiente", exact=True).first.click(timeout=6000)
         except Exception as e:
