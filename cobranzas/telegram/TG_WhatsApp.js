@@ -102,6 +102,9 @@ function TGW_responder_(q) {
     return { ok: true, respuesta: rr, tablas: [], sugerencias: [], archivos: [], avisos: [] };
   }
   // 🧾 "emitir" (lista de pendientes) o "emite la retención de F001-215" (o citando el mensaje): propuesta con botones.
+  // 🚚 "guía" con fotos, ✏️ corrección pendiente o "emitir guía <caso>" (TG_GRE.js).
+  var gre = TGG_atajoWA_(ss, q, clave);
+  if (gre) return gre;
   var cre = TGR_atajoWA_(ss, texto, q.citado);
   if (cre) return cre;
   // ⚡ "sire granix 202601-202609": bajar solo el reporte del SIRE (se confirma con el botón 🚀).
@@ -179,7 +182,8 @@ function TGW_archivo_(blob, titulo) {
 /** Botón 🚀 Sí, descargar / ✖ Cancelar tocado en WhatsApp. */
 function TGW_boton_(k, op, numero) {
   var acc = TG_leerBoton_(k);
-  if (acc && acc.t === 'cre') return TGR_botonWA_(acc, k, op, numero);   // 🧾 comprobante de retención (TG_Retener.js)
+  if (acc && acc.t === 'cre') return TGR_botonWA_(acc, k, op, numero);
+  if (acc && acc.t === 'gre') return TGG_botonWA_(acc, k, op, numero);   // 🚚 guía de remisión (TG_GRE.js)   // 🧾 comprobante de retención (TG_Retener.js)
   if (!acc || acc.t !== 'descarga') return { ok: true, respuesta: 'Ese botón ya venció (duran 6 horas). Pídamelo de nuevo.' };
   if (TG_yaVisto_('wadesc' + k)) return { ok: true, respuesta: 'Esa descarga ya se pidió.' };
   if (op !== 'si') return { ok: true, respuesta: 'Listo, no pedí nada.' };

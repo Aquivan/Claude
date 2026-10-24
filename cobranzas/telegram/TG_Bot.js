@@ -106,6 +106,7 @@ function TG_manejar_(u) {
   if (texto.charAt(0) === '/') return TG_comando_(ctx, texto);
   var atajo = TG_ATAJOS_[texto];
   if (atajo) return TG_comando_(ctx, atajo);
+  if (TGG_atajoTG_(ctx, texto)) return;   // 🚚 "emite la guía de remisión" (con las fotos que mandó)
   if (TGR_atajoTG_(ctx, texto)) return;   // 🧾 "emite la retención de F001-215" (o citando el mensaje)
   TG_preguntar_(ctx, texto, []);
 }
@@ -187,6 +188,7 @@ function TG_comando_(ctx, texto) {
     case 'retenciones': return TG_enviarRetenciones_(ctx, arg);
     case 'emitir': case 'retener': case 'cre': return TGR_comandoTG_(ctx);   // 🧾 comprobantes de retención por emitir
     case 'emitirwa': return TGR_emitirWA_(ctx, arg);
+    case 'guia': case 'gre': return TGG_atajoTG_(ctx, '/guia ' + arg);   // 🚚 guía de remisión por SUNAT
     case 'honorarios': return TG_enviarHonorarios_(ctx, arg);
     case 'estado': return TG_enviarEstado_(ctx);
     case 'descargar': return TG_asistenteDescarga_(ctx, null);
@@ -243,6 +245,7 @@ function TG_alEsperado_(ctx, ses, texto) {
   if (e.tipo === 'pregunta_adj') return TG_preguntar_(ctx, texto, e.adj || []);
   if (e.tipo === 'entrega') return TGE_alTextoTG_(ctx, e, texto);
   if (e.tipo === 'procnombre') return TGP_alNombreTG_(ctx, e, texto);
+  if (e.tipo === 'gre') return TGG_editarTG_(ctx, e.id, texto);   // 🚚 ✏️ corregir la guía
   return TG_preguntar_(ctx, texto, []);
 }
 
@@ -282,6 +285,7 @@ function TG_alArchivo_(ctx, m, texto) {
   ses.adj = (ses.adj || []).concat([adj]);
   TG_guardarSesion_(chatId, ses);
 
+  if (texto && TGG_PIDE_RX_.test(texto)) return TGG_desdeAdjTG_(ctx, TG_adjDelGrupo_(ctx.ss, grupo, adj), texto);   // 🚚 fotos + "guía"
   if (texto) return TG_preguntar_(ctx, texto, TG_adjDelGrupo_(ctx.ss, grupo, adj));
   // Sin pregunta: se pregunta qué hacer (una sola vez por álbum de fotos).
   if (m.media_group_id && TG_yaVisto_('album' + m.media_group_id)) return;
@@ -290,6 +294,7 @@ function TG_alArchivo_(ctx, m, texto) {
     [{ text: '🧾 Procesar documento (registrar y completar factura)', callback_data: 'k:' + k + ':proc' }],
     [{ text: '🔎 Analizar y cruzar con las hojas', callback_data: 'k:' + k + ':ana' }],
     [{ text: '📥 Registrar como voucher', callback_data: 'k:' + k + ':vou' }],
+    [{ text: '🚚 Guía de remisión (SUNAT)', callback_data: 'k:' + k + ':gre' }],
     [{ text: '✍️ Le escribo mi pregunta', callback_data: 'k:' + k + ':preg' }],
   ], { responderA: ctx.msgId });
 }
@@ -406,6 +411,7 @@ function TG_alBoton_(ss, q) {
       }
       if (op === 'vou') return TGE_preguntarTG_(ctx, adjs);   // 🏷 primero: ¿de quién son?
       if (op === 'proc') return TGP_iniciarTG_(ctx, adjs);
+      if (op === 'gre') return TGG_desdeAdjTG_(ctx, adjs, '');
       if (op === 'preg') {
         var ses = TG_sesion_(chatId); ses.esperando = { tipo: 'pregunta_adj', adj: adjs }; TG_guardarSesion_(chatId, ses);
         return TG_enviar_(chatId, '✍️ Escriba (o diga 🎤) su pregunta sobre ' + (adjs.length > 1 ? 'esos ' + adjs.length + ' archivos' : 'ese archivo') + '.');
@@ -421,6 +427,7 @@ function TG_alBoton_(ss, q) {
     case 'procesar': return TGP_alBotonTG_(ctx, op, partes[1]);
     case 'deshacer2': return TGU_alBotonTG_(ctx, datos, op);
     case 'cre': return TGR_alBotonTG_(ctx, datos, op, partes[1]);   // 🧾 emitir comprobante de retención
+    case 'gre': return TGG_alBotonTG_(ctx, datos, op);   // 🚚 guía de remisión por SUNAT
     case 'rerun': return TG_reintentarRun_(ctx, datos);
     case 'recq': return TG_quitarRecordatorio_(ctx, datos.id);
     case 'excel': return TG_mandarExcel_(ctx, datos);

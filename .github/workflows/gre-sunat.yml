@@ -1,0 +1,87 @@
+# 🚚 Guía de Remisión Electrónica (GRE) Remitente en SUNAT SOL, pedida por el bot (Telegram / WhatsApp).
+#   modo vista  = llena todo y se detiene antes de "Emitir"; la foto va directo al chat (no a GitHub).
+#   modo emitir = emite, solo con la huella de ESE caso (la pone el bot cuando la persona aprueba).
+# Los datos del caso (contraparte, bienes, chofer, placas) NO van aquí: el robot se los pide al bot con
+# el número de corrida (el repositorio es público). Solo a pedido; una corrida a la vez por empresa.
+name: GRE - SUNAT (Remitente)
+run-name: "GRE ${{ inputs.modo }} · ${{ inputs.ruc }}"
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa remitente (su Environment con claves SOL)"
+        required: true
+      caso:
+        description: "Código del caso en el bot (pestaña 🚚 Guías SUNAT)"
+        required: true
+      modo:
+        description: "vista (no emite) o emitir"
+        required: true
+        default: vista
+        type: choice
+        options: [vista, emitir]
+      confirmar:
+        description: "Huella de confirmación (la pone el bot). Obligatoria para emitir."
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: gre-${{ inputs.ruc }}
+  cancel-in-progress: false
+jobs:
+  gre:
+    name: "GRE ${{ inputs.modo }} (${{ inputs.ruc }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            gre_sunat/scripts
+            cobranzas/.clasp.json
+          sparse-checkout-cone-mode: false
+      - name: Dirección del bot
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          [ -n "$CLASPRC_JSON" ] || { echo "::error::Falta CLASPRC_JSON: no puedo hablar con el bot."; exit 1; }
+          npm install -g @google/clasp@3.3.0 >/dev/null 2>&1
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"; chmod 600 "$HOME/.clasprc.json"
+          cd cobranzas
+          ID=$(clasp --json list-deployments 2>/dev/null | python3 -c "
+          import json,sys
+          t=sys.stdin.read()
+          try: d=json.loads(t[t.index('['):])
+          except Exception: d=[]
+          b=[x for x in d if (x.get('description') or '').startswith('Asistente Telegram')]
+          print(b[0]['deploymentId'] if b else '')")
+          rm -f "$HOME/.clasprc.json"
+          [ -n "$ID" ] || { echo "::error::No encontré la aplicación web del bot."; exit 1; }
+          echo "::add-mask::$ID"
+          echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
+      - name: Preparar navegador
+        timeout-minutes: 5
+        run: |
+          pip install -q playwright==1.47.0
+          CH=$(command -v google-chrome || command -v google-chrome-stable || true)
+          if [ -n "$CH" ]; then echo "CHROMIUM=$CH" >> "$GITHUB_ENV"; else timeout 240 python -m playwright install --with-deps chromium; fi
+      - name: GRE ${{ inputs.modo }}
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          CASO: ${{ inputs.caso }}
+          MODO: ${{ inputs.modo }}
+          CONFIRMAR: ${{ inputs.confirmar }}
+        run: python gre_sunat/scripts/gre_robot.py
+      - name: Avisar si el robot se cayó
+        if: failure()
+        env:
+          CASO: ${{ inputs.caso }}
+        run: |
+          [ -n "$BOT_URL" ] || exit 0
+          curl -sSL -o /dev/null -H 'Content-Type: application/json' \
+            -d "{\"accion\":\"gre_fin\",\"run\":\"$GITHUB_RUN_ID\",\"caso\":\"$CASO\",\"ok\":false,\"cayo\":true,\"texto\":\"El robot se detuvo antes de terminar. No se emitió nada (salvo que el aviso anterior diga lo contrario).\"}" \
+            "$BOT_URL?canal=gh" || true

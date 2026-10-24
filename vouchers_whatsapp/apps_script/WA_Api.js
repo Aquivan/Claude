@@ -77,9 +77,13 @@ function WA_desdeCobranzas_(e, p) {
     var q = JSON.parse((e.postData && e.postData.contents) || '{}'), media = '';
     // Mientras haya un captcha esperando, las respuestas cortas ("1 6 9", "0") van directo a Cobranzas.
     if (q.tipo === 'foto') WA_props_().setProperty('WA_CAPTCHA_HASTA', String(Date.now() + 10 * 60000));
-    else WA_props_().deleteProperty('WA_CAPTCHA_HASTA');
+    else if (!q.numero) WA_props_().deleteProperty('WA_CAPTCHA_HASTA');   // un aviso a un solo número no corta un captcha
     if (q.tipo === 'foto' && q.base64) media = WA_subirImagen_(Utilities.newBlob(Utilities.base64Decode(q.base64), 'image/png', 'captcha.png'));
-    WA_permitidos_().forEach(function (a) {
+    // 🚚 'imagen' (p. ej. vista previa de una guía): sin captcha; con q.numero va solo a ese número autorizado.
+    if (q.tipo === 'imagen' && q.base64) media = WA_subirImagen_(Utilities.newBlob(Utilities.base64Decode(q.base64), q.mime || 'image/jpeg', 'imagen.jpg'));
+    var destinos = WA_permitidos_();
+    if (q.numero) destinos = destinos.filter(function (a) { return String(a).replace(/\D/g, '') === String(q.numero).replace(/\D/g, ''); });
+    destinos.forEach(function (a) {
       if (media) {
         var r = WA_graph_('POST', WA_prop_('WA_PHONE_ID') + '/messages', {
           messaging_product: 'whatsapp', to: a, type: 'image', image: { id: media, caption: String(q.texto || '').slice(0, 1000) } });
