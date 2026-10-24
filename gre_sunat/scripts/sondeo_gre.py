@@ -67,6 +67,7 @@ def main():
         pag.click("#btnAceptar")
         pag.wait_for_load_state("networkidle", timeout=60000)
         print("Ingreso a SOL: OK")
+        inicio = pag.url
 
         # 1) Opciones del menú que hablan de guías de remisión
         opciones = []
@@ -96,14 +97,24 @@ def main():
         # 2) Cada opción de emisión: estructura del formulario (sin valores)
         for cod in codigos[:5]:
             print(f"\n================ Opción {cod}")
+            # Como una persona: clic en el menú nivel por nivel (nivel1_62 → … → nivel4_62_1_1_1_1)
             try:
-                pag.goto(f"{MENU}?action=execute&code={cod}", wait_until="networkidle", timeout=60000)
+                pag.goto(inicio, wait_until="networkidle", timeout=60000)
             except Exception as e:
-                # ERR_ABORTED suele ser solo que el menú redirige a la aplicación: se espera y se mira igual
-                print("   Aviso al abrir:", str(e).splitlines()[0][:120])
+                print("   Aviso al volver al menú:", str(e).splitlines()[0][:100])
+            p_ = cod.split(".")
+            ids = [f"nivel1_{p_[0]}", f"nivel2_{'_'.join(p_[:2])}", f"nivel3_{'_'.join(p_[:3])}", f"nivel4_{'_'.join(p_)}"]
+            for i in ids:
+                r = pag.evaluate("""i => { const e = document.getElementById(i); if (!e) return 'no existe';
+                    const a = e.querySelector('a') || e; a.click();
+                    return (e.getAttribute('onclick') || a.getAttribute('onclick') || a.getAttribute('href') || '').slice(0, 120); }""", i)
+                print(f"   clic {i}: {sin_datos(r)}")
+                pag.wait_for_timeout(1500)
             pag.wait_for_timeout(15000)
+            print("   Dirección:", sin_datos(pag.url.split("?")[0]))
             marcos = [f for pg in ctx.pages for f in pg.frames]   # la aplicación puede abrirse en otra pestaña
-            print(f"   Pestañas: {len(ctx.pages)} · marcos: {len(marcos)}")
+            print(f"   Pestañas: {len(ctx.pages)} · marcos: {len(marcos)} ·",
+                  ", ".join(sin_datos(f.url.split("?")[0])[-60:] for f in marcos))
             for fr in marcos:
                 try:
                     est = fr.evaluate(JS_ESTRUCTURA)
