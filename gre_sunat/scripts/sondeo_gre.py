@@ -151,6 +151,52 @@ def llenar_prueba(fr, pag, actual):
         except Exception as e:
             print("   (no pude poner el bien de prueba:", str(e).splitlines()[0][:100], ")")
         cerrar_avisos(fr, pag)
+    if actual.startswith("5."):
+        agregar = fr.locator("button:visible", has_text=re.compile(r"^\s*Agregar\s*$"))
+        # Partida de prueba: "Otra dirección" (se anotan sus campos y listas)
+        try:
+            agregar.nth(0).click(timeout=4000)
+            pag.wait_for_timeout(2000)
+            fr.get_by_text("Otra dirección", exact=True).last.click(timeout=4000)
+            pag.wait_for_timeout(2000)
+            print("\n>>> Partida · Otra dirección:")
+            volcar(fr)
+            selects = fr.locator("ng-select:visible")
+            for j in range(selects.count()):   # departamento → provincia → distrito (o ubigeo): la primera opción
+                sel = selects.nth(j)
+                try:
+                    ident = sel.get_attribute("formcontrolname") or sel.get_attribute("id") or str(j)
+                    sel.click(timeout=3000)
+                    pag.wait_for_timeout(1500)
+                    ops = list(dict.fromkeys(fr.evaluate(JS_LISTA)))
+                    print(f"   Lista {ident}: {len(ops)} opciones, p. ej.:", " / ".join(sin_datos(x) for x in ops[:8]))
+                    fr.locator(".ng-dropdown-panel .ng-option:visible").first.click(timeout=3000)
+                    pag.wait_for_timeout(1500)
+                except Exception as e:
+                    print(f"   (lista {j} no respondió:", str(e).splitlines()[0][:80], ")")
+            vacios = fr.locator(".modal input[type=text]:visible, .modal textarea:visible")
+            for j in range(vacios.count()):
+                c = vacios.nth(j)
+                if not c.input_value() and not c.get_attribute("aria-autocomplete"):
+                    c.fill("DIRECCION DE PRUEBA SONDEO")
+            fr.locator("button:visible", has_text=re.compile(r"^\s*Agregar\s*$")).last.click(timeout=4000)
+            pag.wait_for_timeout(2500)
+            cerrar_avisos(fr, pag)
+        except Exception as e:
+            print("   (partida de prueba no se pudo:", str(e).splitlines()[0][:100], ")")
+            cerrar_ventana(fr, pag)
+        # Llegada de prueba: primer establecimiento del remitente
+        try:
+            fr.locator("button:visible", has_text=re.compile(r"^\s*Agregar\s*$")).last.click(timeout=4000)
+            pag.wait_for_timeout(2000)
+            fr.locator(".modal input[type=radio][name=name]").first.check(timeout=4000)
+            fr.locator("button:visible", has_text=re.compile(r"^\s*Agregar\s*$")).last.click(timeout=4000)
+            pag.wait_for_timeout(2500)
+            cerrar_avisos(fr, pag)
+        except Exception as e:
+            print("   (llegada de prueba no se pudo:", str(e).splitlines()[0][:100], ")")
+            cerrar_ventana(fr, pag)
+        print("   Pantalla 5 tras la prueba:", sin_datos(fr.inner_text("body")[:700]).replace("\n", " / "))
 
 
 def recorrer(fr, pag, maximo=8):
