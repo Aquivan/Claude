@@ -33,7 +33,7 @@ jobs:
   gre:
     name: "GRE ${{ inputs.modo }} (${{ inputs.ruc }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment: ${{ inputs.ruc }}
     steps:
       - uses: actions/checkout@v4
