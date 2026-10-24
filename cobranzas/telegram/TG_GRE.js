@@ -114,7 +114,7 @@ function TGG_clave_() {
 }
 
 /** Una sola llamada con el texto y TODOS los archivos (fotos y PDF). */
-function TGG_gemini_(texto, archivos) {
+function TGG_gemini_(texto, archivos, sistema) {
   var partes = [{ text: texto }];
   (archivos || []).slice(0, 10).forEach(function (a, i) {
     try {
@@ -128,7 +128,7 @@ function TGG_gemini_(texto, archivos) {
   for (var i = 0; i < TGG_MODELOS_.length; i++) {
     var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + TGG_MODELOS_[i] + ':generateContent', {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': clave },
-      payload: JSON.stringify({ systemInstruction: { parts: [{ text: TGG_SISTEMA_ }] }, contents: [{ role: 'user', parts: partes }],
+      payload: JSON.stringify({ systemInstruction: { parts: [{ text: sistema || TGG_SISTEMA_ }] }, contents: [{ role: 'user', parts: partes }],
         generationConfig: { temperature: 0.1, maxOutputTokens: 16000, responseMimeType: 'application/json' } }) });
     if (r.getResponseCode() === 200) {
       var cand = (JSON.parse(r.getContentText()).candidates || [])[0];
@@ -314,6 +314,32 @@ function TGG_pedir_(ss, c, modo) {
     ruc: c.empresa_ruc, caso: c.id, modo: modo, confirmar: modo === 'emitir' ? c.huella : '' } });
 }
 
+var TGG_SISTEMA_LOCAL_ = [
+  'Eres quien llena una Guía de Remisión en SUNAT. SUNAT muestra la lista de establecimientos (locales) registrados de un RUC y hay que',
+  'elegir el punto de partida o de llegada correcto. Usa TODO: lo que la persona escribió o dictó (manda sobre lo demás, aunque esté',
+  'abreviado o mal escrito: PQUE = PARQUE, Z.I. = ZONA INDUSTRIAL, MZ-E = MANZANA E, LT-4 = LOTE 4), la dirección del borrador, la',
+  'ciudad del ticket de despacho o de la factura (ej. "C.D. TACNA") y los archivos. Compara por sentido, no letra por letra.',
+  'Devuelve SOLO JSON: {"numero": número de la lista o 0, "seguro": true|false, "candidatos": [hasta 5 números, el mejor primero],',
+  ' "motivo": "1 frase"}. seguro = true solo si un local corresponde claramente; si dudas entre varios, seguro = false y ordénalos.'
+].join('\n');
+
+/** El robot pide a la IA elegir el local de partida/llegada entre los que SUNAT tiene para ese RUC. */
+function TGG_elegirLocal_(c, cual, lista) {
+  if (!/^(partida|llegada)$/.test(cual) || !lista.length) return { ok: false, error: 'datos' };
+  var p = c[cual] || {};
+  var txt = 'Hay que elegir el punto de ' + cual.toUpperCase() + ' (motivo ' + (c.motivo || '?') + ', ' +
+    (cual === 'partida' && c.motivo === 'Compra' ? 'sale del almacén del proveedor ' : '') + 'RUC del dueño del local ' + (p.ruc || c.empresa_ruc || '') + ').\n' +
+    'Dirección en el borrador: ' + (p.direccion || '(vacía)') + '\n' +
+    (c.entendido ? 'Resumen: ' + c.entendido + '\n' : '') +
+    'Mensajes de la persona, en orden:\n' + ((c.mensajes || []).slice(-15).map(function (m, i) { return (i + 1) + ') ' + m; }).join('\n') || '(ninguno)') +
+    '\n\nLocales que SUNAT muestra (' + lista.length + '):\n' + lista.slice(0, 80).map(function (t, i) { return (i + 1) + ') ' + String(t).slice(0, 200); }).join('\n');
+  try {
+    var r = TGG_gemini_(txt, c.archivos, TGG_SISTEMA_LOCAL_), n = Number(r.numero) || 0;
+    var cand = (r.candidatos || []).map(Number).filter(function (x) { return x >= 1 && x <= lista.length; });
+    return { ok: true, numero: n >= 1 && n <= lista.length ? n : 0, seguro: r.seguro === true, candidatos: cand, motivo: String(r.motivo || '').slice(0, 200) };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
 /** doPost ?canal=gh con accion gre_* (lo llama gre_robot.py). La corrida debe ser de gre-sunat.yml y estar en curso. */
 function TGG_gh_(q) {
   var ss = TG_ss_(), cfg = TG_cfg_(ss), run = String(q.run || '').replace(/\D/g, '');
@@ -321,6 +347,7 @@ function TGG_gh_(q) {
   var c = TGG_leer_(ss, String(q.caso || ''));
   if (!c) return { ok: false, error: 'caso desconocido' };
   if (q.accion === 'gre_caso') return { ok: true, datos: TGG_paraRobot_(c) };
+  if (q.accion === 'gre_elegir') return TGG_elegirLocal_(c, String(q.cual || ''), q.lista || []);
   var cache = CacheService.getScriptCache();
   if (q.accion === 'gre_vista') {
     c.estado = 'Vista previa lista';

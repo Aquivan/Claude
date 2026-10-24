@@ -386,9 +386,16 @@ def elegir_fila(fr, pag, p, alerta, cual):
     textos = [" · ".join(x) for x in celdas]
     n = len(textos)
     paso(f"   {cual}: SUNAT tiene {n} local(es)")
-    elegido = None
+    elegido, ia = None, {}
     if p.get("fila"):
         elegido = next((i for i in range(n) if simple(textos[i]) == simple(p["fila"])), None)
+    if elegido is None and n > 1:   # la IA elige con todo el contexto (lo que dijo la persona, ticket, factura)
+        ia = bot({"accion": "gre_elegir", "cual": cual, "lista": textos[:80]})
+        if ia.get("ok") and ia.get("seguro") and 1 <= int(ia.get("numero") or 0) <= n:
+            elegido = int(ia["numero"]) - 1
+            paso(f"   la IA eligió el local {elegido + 1} de {n}")
+        else:
+            paso(f"   la IA no está segura ({'ok' if ia.get('ok') else 'sin respuesta'}): uso la comparación de palabras")
     if elegido is None:
         pts = [puntaje(p["direccion"], t) for t in textos]
         mejor = max(range(n), key=lambda i: pts[i])
@@ -397,7 +404,8 @@ def elegir_fila(fr, pag, p, alerta, cual):
         # Basta una palabra ("Mártires") si solo un local la tiene; si empatan, hacen falta 2 o más y ganar.
         if n > 1 and not (pts[mejor] >= 1 and unico):
             # Primero los más parecidos a lo que dijo la persona (hasta 25); el número que responda es de ESTA lista.
-            orden = sorted(range(n), key=lambda i: -pts[i])[:25]
+            sugeridos = [int(x) - 1 for x in (ia.get("candidatos") or []) if 1 <= int(x) <= n]
+            orden = (sugeridos + [i for i in sorted(range(n), key=lambda i: -pts[i]) if i not in sugeridos])[:25]
             lista = "\n".join(f"{k + 1}) " + re.sub(r"\s+", " ", textos[i]).strip()[:85] for k, i in enumerate(orden))
             raise Alto(alerta + ": no hay un local que coincida claramente con «" + str(p["direccion"])[:60] + "».",
                        f"SUNAT tiene {n} locales; estos son los más parecidos:\n{lista}\n\n"
