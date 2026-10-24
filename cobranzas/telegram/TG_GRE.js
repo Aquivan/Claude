@@ -141,6 +141,14 @@ function TGG_armar_(lecturas, empresas, chat) {
   if (c.transporte.modo === 'privado' && !c.transporte.placas.length) c.avisos.push('Falta el transporte: mande la tarjeta del transportista o diga la placa y el chofer.');
   c.fecha = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy');
   if (!c.bienes.length) c.avisos.push('No encontré los bienes: mande la factura o escríbalos.');
+  // ❓ Dudas que se le preguntan a la persona (una por vez) antes de la vista previa.
+  c.dudas = [];
+  var cantFac = c.bienes.reduce(function (s, b) { return s + (Number(b.cantidad) || 0); }, 0), cantTk = Number(tk.bultos) || 0;
+  if (c.bienes.length && !(cantTk && Math.abs(cantTk - cantFac) < 0.01))
+    c.dudas.push({ k: 'parte', q: '¿La guía es por el TOTAL de la factura (' + TG_num_(cantFac) + ' en ' + c.bienes.length + ' línea(s))' +
+      (cantTk ? ' o solo por lo que dice el ticket (' + TG_num_(cantTk) + ')' : '') + ', o por una parte? Ej.: "total", "solo líneas 1 a 5", "la mitad", "200 de la línea 3".' });
+  if (!ruc(t) && !c.transporte.placas.length)
+    c.dudas.push({ k: 'transporte', q: '¿Cómo se traslada? Con una empresa de transporte (público: deme su RUC) o en vehículo propio (privado: placa, y chofer con DNI y licencia).' });
   return c;
 }
 
@@ -150,13 +158,15 @@ var TGG_SISTEMA_EDITAR_ = [
   '"privado" / "público" → transporte.modo; "registrar vehículo" → transporte.registrar_vehiculos=true; "sin vehículo" → false; "placa ABC123" → transporte.placas;',
   '"chofer Juan Pérez DNI 12345678 licencia Q12345678" → transporte.conductores; "fecha 25/10/2026" → fecha (dd/mm/aaaa);',
   '"venta" / "compra" → motivo (y si cambia, intercambia partida.ruc/llegada.ruc según quién es el tercero); "partida …" / "llegada …" → dirección.',
+  '"total" → deja todos los bienes como están; "200 de la línea 3" → esa línea con cantidad 200 (y las demás igual salvo que diga "solo").',
   'Si la persona da un dato que no entiendes o no cabe, no lo inventes: déjalo como estaba. No borres campos que no te pidieron cambiar.'
 ].join('\n');
 
-function TGG_editar_(c, texto) {
+function TGG_editar_(c, texto, pregunta) {
   var base = TGG_paraRobot_(c);
   var r = IA_llamar_({ proveedor: 'Gemini (Google)', clave: TGG_clave_(), maxTokens: 6000, sistema: TGG_SISTEMA_EDITAR_,
-    texto: 'Borrador:\n' + base + '\n\nPedido de la persona: ' + texto });
+    texto: 'Borrador:\n' + base + (pregunta ? '\n\nLe preguntamos: ' + pregunta.q + '\nRespondió: ' + texto : '\n\nPedido de la persona: ' + texto) });
+  if (pregunta) c.dudas = (c.dudas || []).filter(function (d) { return d.k !== pregunta.k; });   // ya contestó (aunque sea "total")
   if (!r || !Array.isArray(r.bienes) || !r.transporte) throw new Error('no entendí el cambio; escríbalo de otra forma.');
   ['motivo', 'contraparte', 'documento', 'bienes', 'peso_kg', 'partida', 'llegada', 'transporte', 'fecha'].forEach(function (k) { if (r[k] !== undefined) c[k] = r[k]; });
   c.peso_origen = /peso/i.test(texto) ? 'indicado por usted' : c.peso_origen;
@@ -176,6 +186,43 @@ function TGG_faltan_(c) {
   if (t.modo === 'publico' && !t.ruc) f.push('Falta el RUC del transportista.');
   if ((t.modo === 'privado' || t.registrar_vehiculos) && (!(t.placas || []).length || !(t.conductores || []).length)) f.push('Faltan la placa y el chofer (DNI y licencia).');
   return f;
+}
+
+/** Lo que falta o hay que aclarar, como preguntas: [{k, q}]. La primera se le hace a la persona. */
+function TGG_preguntas_(c) {
+  var t = c.transporte || {}, p = [];
+  if (!c.empresa_ruc) p.push({ k: 'empresa', q: '¿Qué empresa del grupo emite la guía? (nombre o RUC)' });
+  if (!(c.bienes || []).length) p.push({ k: 'bienes', q: '¿Qué bienes se trasladan? Escríbalos con cantidad y unidad (ej. "3050 paquetes de fideos").' });
+  (c.dudas || []).forEach(function (d) { p.push(d); });
+  if (!(Number(c.peso_kg) > 0)) p.push({ k: 'peso', q: '¿Cuál es el peso bruto total en kg?' });
+  if (!c.partida || !c.partida.direccion) p.push({ k: 'partida', q: '¿Desde qué dirección o almacén sale la carga?' });
+  if (!c.llegada || !c.llegada.direccion) p.push({ k: 'llegada', q: '¿A qué dirección o almacén llega?' });
+  if (t.modo === 'publico' && !t.ruc) p.push({ k: 'ruc_trans', q: '¿Cuál es el RUC de la empresa de transporte?' });
+  if ((t.modo === 'privado' || t.registrar_vehiculos) && !(t.placas || []).length) p.push({ k: 'placa', q: '¿Cuál es la placa del vehículo (y de la carreta, si tiene)?' });
+  if ((t.modo === 'privado' || t.registrar_vehiculos) && (t.placas || []).length && !(t.conductores || []).length) p.push({ k: 'chofer', q: '¿Quién maneja? Nombre, DNI y licencia.' });
+  return p.filter(function (x, i, a) { return a.map(function (y) { return y.k; }).indexOf(x.k) === i; });
+}
+
+/** Deja la conversación lista: si hay una pregunta, la próxima respuesta se aplica a la guía. */
+function TGG_seguirConversacion_(clave, c) {
+  var ses = TG_sesion_(clave), p = TGG_preguntas_(c)[0];
+  ses.gre = c.id; ses.greT = Date.now();
+  ses.esperando = p ? { tipo: 'gre', id: c.id, pregunta: p } : (ses.esperando && ses.esperando.tipo === 'gre' ? null : ses.esperando);
+  TG_guardarSesion_(clave, ses);
+}
+
+// Datos de guía escritos sueltos mientras hay una guía abierta ("es privado", "peso 30000", "placa ABC123"…).
+var TGG_DATO_RX_ = /(peso|kg|kilos?|toneladas?|privad[oa]|p[uú]blic[oa]|placa|chofer|conductor|dni|licencia|llegada|partida|almac[eé]n|fecha|l[ií]neas?|solo|mitad|total|cantidad|bultos|paquetes|vehículo|vehiculo|transportista|carreta|motivo|venta|compra|traslado)\b/i;
+
+/** ¿Este texto es para la guía abierta? Devuelve {c, pregunta} o null. */
+function TGG_paraGuia_(ss, clave, texto) {
+  var ses = TG_sesion_(clave);
+  if (!ses.gre || !ses.greT || Date.now() - ses.greT > 3 * 3600000 || !texto || texto.charAt(0) === '/') return null;
+  if (/^\s*\/?gu[ií]a\b|\b(emit|emite|emita|genera|haz)\w*\b.*\bgu[ií]a\b/i.test(texto)) return null;   // pide OTRA guía o emitir
+  if (!TGG_DATO_RX_.test(texto) && !(ses.esperando && ses.esperando.tipo === 'gre')) return null;
+  var c = TGG_leer_(ss, ses.gre);
+  if (!c || /Emitida|Descartada|Emitiendo/.test(c.estado || '')) return null;
+  return { c: c, pregunta: ses.esperando && ses.esperando.tipo === 'gre' ? ses.esperando.pregunta : null };
 }
 
 /* ============================================================ texto de la propuesta */
@@ -198,10 +245,12 @@ function TGG_texto_(c, html) {
   if (t.modo === 'privado' || t.registrar_vehiculos) L.push('Vehículo: ' + e((t.placas || []).join(' / ') || '¿?') + ' · Chofer: ' +
     e((t.conductores || []).map(function (x) { return (x.nombre || '') + ' lic. ' + (x.licencia || '¿?'); }).join(', ') || '¿?'));
   L.push('Fecha de traslado: ' + e(c.fecha || '¿?'));
-  var f = TGG_faltan_(c).concat((c.avisos || []).filter(function (a) { return TGG_faltan_(c).indexOf(a) < 0 && !/^(Falta|No encontré)/.test(a); }));
-  if (f.length) L.push('⚠️ ' + e(f.join(' ')));
-  L.push(html ? '<i>✏️ Corregir: escríbame el cambio ("peso 30258.5", "solo líneas 1 a 5", "registrar vehículo", "fecha 25/10/2026"). 👁 Vista previa llena la guía en SUNAT sin emitir.</i>'
-    : '_✏️ Para corregir, toque Corregir y escriba el cambio. 👁 Vista previa la llena en SUNAT sin emitir._');
+  var otros = (c.avisos || []).filter(function (a) { return !/^(Falta|No encontré)/.test(a); });
+  if (otros.length) L.push('⚠️ ' + e(otros.join(' ')));
+  var preg = TGG_preguntas_(c);
+  if (preg.length) L.push('\n❓ ' + b(e(preg[0].q)) + (preg.length > 1 ? ' (después le pregunto ' + (preg.length - 1) + ' cosa(s) más)' : ''));
+  else L.push('\n✅ ' + (html ? '<i>Tengo todo. Puede seguir agregando o cambiando datos con solo escribirlos ("es privado", "peso 30000", "llegada Av. Mártires"). Cuando esté conforme: 👁 Vista previa.</i>'
+    : '_Tengo todo. Puede seguir cambiando datos con solo escribirlos. Cuando esté conforme: 👁 Vista previa._'));
   return L.join('\n');
 }
 
@@ -308,7 +357,7 @@ function TGG_desdeAdjTG_(ctx, adjs, texto) {
   TG_enviar_(ctx.chatId, '🚚 Leyendo ' + adjs.length + ' archivo(s) para la guía de remisión…');
   var c;
   try { c = TGG_crear_(ctx.ss, adjs, texto, ctx.chatId); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ No pude armar la guía: ' + TG_esc_(e.message)); }
-  var ses = TG_sesion_(ctx.chatId); ses.gre = c.id; TG_guardarSesion_(ctx.chatId, ses);
+  TGG_seguirConversacion_(ctx.chatId, c);
   TG_enviar_(ctx.chatId, TGG_texto_(c, true), TGG_botonesTG_(c));
 }
 
@@ -347,7 +396,7 @@ function TGG_alBotonTG_(ctx, datos, op) {
   if (op === 'ver') return TG_enviar_(ctx.chatId, TGG_texto_(c, true), TGG_botonesTG_(c));
   if (op === 'no') { c.estado = 'Descartada'; TGG_guardar_(ctx.ss, c); return TG_editarOEnviar_(ctx, '🗑 Guía caso ' + c.id + ' descartada. No se emitió nada.', null); }
   if (op === 'ed') {
-    var ses = TG_sesion_(ctx.chatId); ses.esperando = { tipo: 'gre', id: c.id }; ses.gre = c.id; TG_guardarSesion_(ctx.chatId, ses);
+    var ses = TG_sesion_(ctx.chatId); ses.esperando = { tipo: 'gre', id: c.id }; ses.gre = c.id; ses.greT = Date.now(); TG_guardarSesion_(ctx.chatId, ses);
     return TG_enviar_(ctx.chatId, '✏️ Escríbame (o díctelo 🎤) qué cambio en la guía caso ' + c.id + '.');
   }
   if (op === 'em') {
@@ -373,13 +422,22 @@ function TGG_alBotonTG_(ctx, datos, op) {
 }
 
 /** Respuesta a ✏️ Corregir. */
-function TGG_editarTG_(ctx, id, texto) {
+function TGG_editarTG_(ctx, id, texto, pregunta) {
   var c = TGG_leer_(ctx.ss, id);
   if (!c) return TG_enviar_(ctx.chatId, 'No encontré ese caso de guía.');
   TG_accion_(ctx.chatId, 'typing');
-  try { TGG_editar_(c, texto); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message), TGG_botonesTG_(c)); }
+  try { TGG_editar_(c, texto, pregunta); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message), TGG_botonesTG_(c)); }
   TGG_guardar_(ctx.ss, c);
+  TGG_seguirConversacion_(ctx.chatId, c);
   TG_enviar_(ctx.chatId, TGG_texto_(c, true), TGG_botonesTG_(c));
+}
+
+/** Telegram: texto suelto con datos de la guía abierta (o la respuesta a su pregunta). true si lo tomó. */
+function TGG_datoTG_(ctx, texto) {
+  var x = TGG_paraGuia_(ctx.ss, ctx.chatId, texto);
+  if (!x) return false;
+  TGG_editarTG_(ctx, x.c.id, texto, x.pregunta);
+  return true;
 }
 
 /* ============================================================ WhatsApp */
@@ -394,12 +452,12 @@ function TGG_respWA_(texto, c) {
 /** WhatsApp: corrección pendiente, "guía" con fotos, "emitir guía <caso>". null si no es de guías. */
 function TGG_atajoWA_(ss, q, clave) {
   var texto = String(q.texto || '').trim(), ses = TG_sesion_(clave);
-  if (ses.esperando && ses.esperando.tipo === 'gre' && texto) {
-    var id0 = ses.esperando.id; ses.esperando = null; TG_guardarSesion_(clave, ses);
-    var c0 = TGG_leer_(ss, id0);
-    if (!c0) return TGG_respWA_('No encontré ese caso de guía.');
-    try { TGG_editar_(c0, texto); } catch (e) { return TGG_respWA_('⚠️ ' + e.message, c0); }
+  var dato = !(q.adjuntos || []).length && TGG_paraGuia_(ss, clave, texto);   // respuesta a su pregunta o dato suelto
+  if (dato && !/^\s*(emitir|emite)\b/i.test(texto)) {
+    var c0 = dato.c;
+    try { TGG_editar_(c0, texto, dato.pregunta); } catch (e) { return TGG_respWA_('⚠️ ' + e.message, c0); }
     TGG_guardar_(ss, c0);
+    TGG_seguirConversacion_(clave, c0);
     return TGG_respWA_(TGG_texto_(c0, false), c0);
   }
   if (!(/^\/?gu[ií]a\b/i.test(texto) || (TGG_PIDE_RX_.test(texto) && /\b(emit|hac|haz|gener|sac|arm|necesit|quiero)/i.test(texto)))) return null;
@@ -410,7 +468,7 @@ function TGG_atajoWA_(ss, q, clave) {
     'Puede agregar: "peso 30258.5", "solo líneas 1 a 5", "compra". Yo armo la propuesta y nada se emite sin su confirmación.');
   var c;
   try { c = TGG_crear_(ss, adjs, texto, clave); } catch (e) { return { ok: false, error: 'No pude armar la guía: ' + e.message }; }
-  ses = TG_sesion_(clave); ses.gre = c.id; TG_guardarSesion_(clave, ses);
+  TGG_seguirConversacion_(clave, c);
   return TGG_respWA_(TGG_texto_(c, false), c);
 }
 
@@ -419,7 +477,7 @@ function TGG_botonWA_(acc, k, op, numero) {
   if (!c) return TGG_respWA_('No encontré ese caso de guía.');
   if (op === 'ver') return TGG_respWA_(TGG_texto_(c, false), c);
   if (op === 'ed') {
-    var ses = TG_sesion_(clave); ses.esperando = { tipo: 'gre', id: c.id }; ses.gre = c.id; TG_guardarSesion_(clave, ses);
+    var ses = TG_sesion_(clave); ses.esperando = { tipo: 'gre', id: c.id }; ses.gre = c.id; ses.greT = Date.now(); TG_guardarSesion_(clave, ses);
     return TGG_respWA_('✏️ Escríbame qué cambio en la guía caso ' + c.id + ' (ej. "peso 30258.5", "solo líneas 1 a 5", "registrar vehículo").');
   }
   if (op === 'x') return TGG_respWA_('✖ No se emitió nada.');

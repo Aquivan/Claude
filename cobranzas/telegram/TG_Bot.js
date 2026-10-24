@@ -106,6 +106,7 @@ function TG_manejar_(u) {
   if (texto.charAt(0) === '/') return TG_comando_(ctx, texto);
   var atajo = TG_ATAJOS_[texto];
   if (atajo) return TG_comando_(ctx, atajo);
+  if (TGG_datoTG_(ctx, texto)) return;   // 🚚 dato suelto para la guía abierta ("es privado", "peso 30000")
   if (TGG_atajoTG_(ctx, texto)) return;   // 🚚 "emite la guía de remisión" (antes o después de las fotos) · "listo"
   if (TGR_atajoTG_(ctx, texto)) return;   // 🧾 "emite la retención de F001-215" (o citando el mensaje)
   TG_preguntar_(ctx, texto, []);
@@ -245,7 +246,7 @@ function TG_alEsperado_(ctx, ses, texto) {
   if (e.tipo === 'pregunta_adj') return TG_preguntar_(ctx, texto, e.adj || []);
   if (e.tipo === 'entrega') return TGE_alTextoTG_(ctx, e, texto);
   if (e.tipo === 'procnombre') return TGP_alNombreTG_(ctx, e, texto);
-  if (e.tipo === 'gre') return TGG_editarTG_(ctx, e.id, texto);   // 🚚 ✏️ corregir la guía
+  if (e.tipo === 'gre') return TGG_editarTG_(ctx, e.id, texto, e.pregunta);   // 🚚 ✏️ corregir la guía
   return TG_preguntar_(ctx, texto, []);
 }
 
