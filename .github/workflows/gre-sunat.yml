@@ -82,6 +82,7 @@ jobs:
           CASO: ${{ inputs.caso }}
         run: |
           [ -n "$BOT_URL" ] || exit 0
+          [ ! -f "$RUNNER_TEMP/gre_avisado" ] || exit 0
           curl -sSL -o /dev/null -H 'Content-Type: application/json' \
             -d "{\"accion\":\"gre_fin\",\"run\":\"$GITHUB_RUN_ID\",\"caso\":\"$CASO\",\"ok\":false,\"cayo\":true,\"texto\":\"El robot se detuvo antes de terminar. No se emitió nada (salvo que el aviso anterior diga lo contrario).\"}" \
             "$BOT_URL?canal=gh" || true
