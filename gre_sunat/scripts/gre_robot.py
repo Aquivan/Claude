@@ -257,11 +257,29 @@ def siguiente(fr, pag):
 COMUNES = {"av", "jr", "cal", "mz", "lt", "lote", "nro", "urb", "de", "la", "el", "los", "las", "del", "y"}
 
 
+ABREV = {"pque": "parque", "pq": "parque", "prq": "parque", "ind": "industrial", "indust": "industrial", "mza": "mz",
+         "manzana": "mz", "lte": "lt", "lote": "lt", "lot": "lt", "avenida": "av", "jiron": "jr", "calle": "cal",
+         "carretera": "carr", "car": "carr", "km": "km"}
+
+
+def fichas(t):
+    """Palabras de una dirección, con abreviaturas unificadas (PQUE = PARQUE, Z.I. = ZONA INDUSTRIAL) y manzana/lote
+    pegados a su valor (MZ-E → mz:e, LT-4 Y 14 → lt:4, 14)."""
+    t = re.sub(r"\bz\s*\.?\s*i\b\.?", " zona industrial ", simple(t))
+    w = [ABREV.get(x, x) for x in re.findall(r"[a-z0-9]+", t)]
+    out = set()
+    for i, x in enumerate(w):
+        if x in ("mz", "lt", "km") and i + 1 < len(w):
+            out.add(f"{x}:{w[i + 1]}")
+        elif (len(x) > 1 or x.isdigit()) and x not in COMUNES:
+            out.add(x)
+    return out
+
+
 def puntaje(a, b):
-    """Coincidencia entre dos direcciones: palabras en común (sin las de siempre: av, mz, lote…)."""
-    pa = {w for w in re.findall(r"[a-z0-9]+", simple(a)) if len(w) > 1 and w not in COMUNES}
-    pb = {w for w in re.findall(r"[a-z0-9]+", simple(b)) if len(w) > 1 and w not in COMUNES}
-    return len(pa & pb)
+    """Coincidencia entre dos direcciones: palabras en común (sin las de siempre: av, de, la…); manzana y lote valen doble."""
+    comun = fichas(a) & fichas(b)
+    return sum(2 if ":" in x else 1 for x in comun)
 
 
 PAGINAR_JS = """([m, hacia]) => {
@@ -378,10 +396,13 @@ def elegir_fila(fr, pag, p, alerta, cual):
         unico = len({palabras(textos[i]) for i in range(n) if pts[i] == pts[mejor]}) == 1   # empate de la misma dirección: vale la primera
         # Basta una palabra ("Mártires") si solo un local la tiene; si empatan, hacen falta 2 o más y ganar.
         if n > 1 and not (pts[mejor] >= 1 and unico):
-            lista = "\n".join(f"{i + 1}) " + re.sub(r"\s+", " ", t).strip()[:85] for i, t in enumerate(textos[:40]))
-            raise Alto(alerta + ": ninguna dirección registrada coincide con la del caso (o hay varias iguales).",
-                       f"Los {n} locales que SUNAT tiene registrados:\n{lista}\n\nResponda solo con el número (ej. «7») y vuelvo a preparar la vista previa.",
-                       {"cual": cual, "lista": [{"fila": textos[i], "direccion": (celdas[i] or [""])[-1]} for i in range(min(n, 40))]})
+            # Primero los más parecidos a lo que dijo la persona (hasta 25); el número que responda es de ESTA lista.
+            orden = sorted(range(n), key=lambda i: -pts[i])[:25]
+            lista = "\n".join(f"{k + 1}) " + re.sub(r"\s+", " ", textos[i]).strip()[:85] for k, i in enumerate(orden))
+            raise Alto(alerta + ": no hay un local que coincida claramente con «" + str(p["direccion"])[:60] + "».",
+                       f"SUNAT tiene {n} locales; estos son los más parecidos:\n{lista}\n\n"
+                       "Responda solo con el número (ej. «3») y vuelvo a preparar la vista previa. Si no está, dígame otra parte de la dirección.",
+                       {"cual": cual, "lista": [{"fila": textos[i], "direccion": (celdas[i] or [""])[-1]} for i in orden]})
         elegido = mejor
     if not marcar_fila(fr, pag, celdas[elegido]):
         raise Alto(alerta + ": encontré el local pero SUNAT no me dejó marcarlo.")
