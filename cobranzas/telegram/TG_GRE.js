@@ -234,8 +234,8 @@ function TGG_texto_(c, html) {
   L.push('Emite: ' + e(c.empresa || c.empresa_ruc || '¿?') + (c.motivo === 'Compra' ? ' (compra a ' : ' (para ') + e((c.contraparte || {}).nombre || (c.contraparte || {}).ruc || '¿?') + ')');
   if (c.documento) L.push('Documento: ' + e(c.documento.tipo + ' ' + c.documento.numero));
   var bs = c.bienes || [];
-  L.push('Bienes (' + bs.length + '): ' + bs.slice(0, 6).map(function (x, i) { return (i + 1) + ') ' + e(String(x.descripcion).slice(0, 40)) + ' · ' + x.cantidad + ' ' + x.unidad; }).join('; ') +
-    (bs.length > 6 ? '; … y ' + (bs.length - 6) + ' más' : ''));
+  L.push('Bienes (' + bs.length + '):\n' + bs.slice(0, 25).map(function (x, i) { return '  ' + (i + 1) + ') ' + e(String(x.descripcion).slice(0, 50)) + ' · ' + x.cantidad + ' ' + x.unidad; }).join('\n') +
+    (bs.length > 25 ? '\n  … y ' + (bs.length - 25) + ' más' : ''));
   L.push('Peso bruto: ' + (c.peso_kg ? TG_num_(c.peso_kg, 2) + ' kg' + (c.peso_origen ? ' (' + e(c.peso_origen) + ')' : '') : '¿?'));
   L.push('Partida: ' + e(((c.partida || {}).direccion || '¿?').slice(0, 90)));
   L.push('Llegada: ' + e(((c.llegada || {}).direccion || '¿?').slice(0, 90)));
@@ -249,8 +249,8 @@ function TGG_texto_(c, html) {
   if (otros.length) L.push('⚠️ ' + e(otros.join(' ')));
   var preg = TGG_preguntas_(c);
   if (preg.length) L.push('\n❓ ' + b(e(preg[0].q)) + (preg.length > 1 ? ' (después le pregunto ' + (preg.length - 1) + ' cosa(s) más)' : ''));
-  else L.push('\n✅ ' + (html ? '<i>Tengo todo. Puede seguir agregando o cambiando datos con solo escribirlos ("es privado", "peso 30000", "llegada Av. Mártires"). Cuando esté conforme: 👁 Vista previa.</i>'
-    : '_Tengo todo. Puede seguir cambiando datos con solo escribirlos. Cuando esté conforme: 👁 Vista previa._'));
+  else L.push('\n' + b('¿Está todo bien?') + ' Toque ✅ Está bien y la lleno en SUNAT para que vea la vista previa (no se emite). ' +
+    'Si quiere cambiar algo, toque ✏️ Modificar algo o escríbalo directo ("es privado", "peso 30000", "llegada Av. Mártires").');
   return L.join('\n');
 }
 
@@ -346,10 +346,12 @@ function TGG_crear_(ss, adjs, texto, chat) {
 
 /* ============================================================ Telegram */
 
+/** Antes de la vista previa: ¿está bien o modifica algo? (✅ Emitir recién aparece con la foto de la vista previa). */
 function TGG_botonesTG_(c) {
   var k = TG_guardarBoton_({ t: 'gre', id: c.id });
-  return [[{ text: '👁 Vista previa', callback_data: 'k:' + k + ':vp' }, { text: '✅ Emitir', callback_data: 'k:' + k + ':em' }],
-    [{ text: '✏️ Corregir', callback_data: 'k:' + k + ':ed' }, { text: '🗑 Descartar', callback_data: 'k:' + k + ':no' }]];
+  if (TGG_preguntas_(c).length) return [[{ text: '✏️ Modificar algo', callback_data: 'k:' + k + ':ed' }, { text: '🗑 Descartar', callback_data: 'k:' + k + ':no' }]];
+  return [[{ text: '✅ Está bien → ver vista previa', callback_data: 'k:' + k + ':vp' }],
+    [{ text: '✏️ Modificar algo', callback_data: 'k:' + k + ':ed' }, { text: '🗑 Descartar', callback_data: 'k:' + k + ':no' }]];
 }
 
 function TGG_desdeAdjTG_(ctx, adjs, texto) {
@@ -444,8 +446,9 @@ function TGG_datoTG_(ctx, texto) {
 
 function TGG_respWA_(texto, c) {
   var r = { ok: true, respuesta: texto, tablas: [], sugerencias: [], archivos: [], avisos: [] };
-  if (c) r.botones = [{ k: TG_guardarBoton_({ t: 'gre', id: c.id }), texto: 'Guía caso ' + c.id,
-    opciones: [{ op: 'vp', titulo: '👁 Vista previa' }, { op: 'em', titulo: '✅ Emitir' }, { op: 'ed', titulo: '✏️ Corregir' }] }];
+  if (c) r.botones = [{ k: TG_guardarBoton_({ t: 'gre', id: c.id }), texto: TGG_preguntas_(c).length ? 'Responda la pregunta o:' : '¿Está todo bien?',
+    opciones: TGG_preguntas_(c).length ? [{ op: 'ed', titulo: '✏️ Modificar algo' }, { op: 'no', titulo: '🗑 Descartar' }]
+      : [{ op: 'vp', titulo: '✅ Está bien' }, { op: 'ed', titulo: '✏️ Modificar algo' }, { op: 'no', titulo: '🗑 Descartar' }] }];
   return r;
 }
 
@@ -481,6 +484,7 @@ function TGG_botonWA_(acc, k, op, numero) {
     return TGG_respWA_('✏️ Escríbame qué cambio en la guía caso ' + c.id + ' (ej. "peso 30258.5", "solo líneas 1 a 5", "registrar vehículo").');
   }
   if (op === 'x') return TGG_respWA_('✖ No se emitió nada.');
+  if (op === 'no') { c.estado = 'Descartada'; TGG_guardar_(ss, c); return TGG_respWA_('🗑 Guía caso ' + c.id + ' descartada. No se emitió nada.'); }
   if (op === 'em') {
     if (c.estado === 'Emitida') return TGG_respWA_('Esa guía ya se emitió: ' + c.gre);
     var f = TGG_faltan_(c);
