@@ -1012,25 +1012,29 @@ def consultar_pdf(fr, pag, numero):
     paso(f"   pantalla «{sin_datos(pantalla(fr))}» · campos: {[(c['n'], c['l']) for c in campos]}")
     botones = [b.strip() for b in fr.locator("button:visible").all_inner_texts() if b.strip()]
     paso(f"   botones: {botones[:15]}")
-    for c in campos:   # tipo de guía (si lo pide): Remitente
-        if re.search(r"tipo", c["l"], re.I) and c["t"] in ("ng-select", "NG-SELECT", "select-one", "text") and not re.search(r"serie|n[uú]mero", c["l"], re.I):
-            try:
-                combo(fr, pag, c["l"], "Remitente")
-            except Exception:
-                pass
-    for c in campos:
-        if not c["n"]:
-            continue
-        campo = fr.locator(f"[formcontrolname={c['n']}], [name={c['n']}], #{c['n']}").first
-        if re.search(r"serie", c["n"] + " " + c["l"], re.I):
-            llenar(campo, serie)
-        elif re.search(r"n[uú]mero|numero|correlativo|nro", c["n"] + " " + c["l"], re.I) and not re.search(r"ruc|doc", c["n"] + " " + c["l"], re.I):
-            llenar(campo, corr)
-    for t in (r"^\s*Buscar\s*$", r"^\s*Consultar\s*$", r"^\s*Siguiente\s*$"):
-        b = fr.locator("button:visible", has_text=re.compile(t, re.I))
-        if b.count() and b.first.is_enabled():
-            b.first.click(timeout=5000)
-            break
+    # 2. Criterios de búsqueda: tipo de GRE (radio «GRE - Remitente»), serie y número.
+    try:
+        fr.get_by_text("GRE - Remitente", exact=True).first.click(timeout=5000)
+        esperar(pag, 600)
+    except Exception:
+        paso("   no encontré «GRE - Remitente»")
+    for num in (corr, corr.zfill(8)):
+        llenar(fr.locator("[formcontrolname=serie]").first, serie)
+        llenar(fr.locator("[formcontrolname=numero]").first, num)
+        fr.locator("[formcontrolname=numero]").first.press("Tab")
+        esperar(pag, 800)
+        b = fr.get_by_text("Siguiente", exact=True).first
+        for _ in range(10):
+            if b.is_enabled():
+                break
+            pag.wait_for_timeout(500)
+        if b.is_enabled():
+            b.click(timeout=5000)
+            esperar(pag, 2500)
+            esperar_carga(fr, pag)
+            if "2. Criterios" not in pantalla(fr):
+                break
+        paso(f"   SUNAT no aceptó el número con {len(num)} dígitos")
     esperar(pag, 3000)
     esperar_carga(fr, pag)
     cerrar_avisos(fr, pag)
