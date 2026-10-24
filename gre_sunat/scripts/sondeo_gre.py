@@ -75,15 +75,22 @@ def asistente(fr, pag):
     """Emisión de GRE paso a paso, sin emitir. PASOS = acciones separadas por ";":
        texto → clic en ese texto · #id → clic en ese elemento · lista:texto → abrir y anotar opciones
        elegir:texto → elegir esa opción de la lista abierta. Cualquier botón de emitir/guardar se salta."""
-    pasos = os.environ.get("PASOS") or "Remitente;#rdNo;lista:Seleccione;elegir:Compra;Siguiente;Siguiente"
+    pasos = os.environ.get("PASOS") or ("Remitente;#rdNo;html:Motivo de traslado;lista:css=input[type=text]:visible;"
+                                        "elegir:Compra;Siguiente;Siguiente")
     for paso in pasos.split(";"):
         paso = paso.strip()
         if not paso or PROHIBIDO.search(paso.split(":", 1)[-1]):
             continue
-        tipo, _, val = paso.partition(":") if paso.startswith(("lista:", "elegir:")) else ("clic", "", paso)
+        tipo, _, val = paso.partition(":") if paso.startswith(("lista:", "elegir:", "html:")) else ("clic", "", paso)
+        if tipo == "html":   # código del control que está junto a ese texto (para saber cómo manejarlo)
+            h = fr.evaluate("""t => { const x = [...document.querySelectorAll('label,span,div,p')].find(e => e.children.length < 3 && e.innerText && e.innerText.trim().startsWith(t));
+                if (!x) return 'no encontrado'; let p = x.parentElement; for (let i = 0; i < 2 && p && p.outerHTML.length < 600; i++) p = p.parentElement;
+                return (p || x).outerHTML; }""", val)
+            print(f"\n>>> HTML junto a «{val}»:", sin_datos(re.sub(r"\s+", " ", h))[:3000])
+            continue
         try:
-            if val.startswith("#"):
-                fr.locator(val).first.click(timeout=8000)
+            if val.startswith(("#", "css=")):
+                fr.locator(val[4:] if val.startswith("css=") else val).first.click(timeout=8000)
             elif tipo == "elegir":
                 fr.locator('li,[role=option],.dropdown-item,.p-dropdown-item,mat-option,.ng-option') \
                   .filter(has_text=val).first.click(timeout=8000)
