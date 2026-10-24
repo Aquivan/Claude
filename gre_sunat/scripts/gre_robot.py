@@ -44,9 +44,10 @@ OPCION = ".ng-dropdown-panel .ng-option:visible, [role=option]:visible, li:visib
 
 class Alto(Exception):
     """Motivo para no seguir. `detalle` va solo al chat (p. ej. la lista de locales), nunca al registro de la corrida."""
-    def __init__(self, texto, detalle=""):
+    def __init__(self, texto, detalle="", opciones=None):
         super().__init__(texto)
         self.detalle = detalle
+        self.opciones = opciones   # locales para que la persona elija con un número (van solo al bot)
 
 
 def simple(t):
@@ -199,23 +200,39 @@ def puntaje(a, b):
     return len(pa & pb)
 
 
-def elegir_fila(fr, pag, texto_buscado, alerta):
-    """En la tabla de la ventana abierta marca la fila más parecida al texto (dirección o RUC)."""
-    filas = modal(fr).locator("table tbody tr")
+def elegir_fila(fr, pag, p, alerta, cual):
+    """En la tabla de la ventana abierta marca el local del caso: el que la persona eligió (fila exacta) o el más parecido."""
+    m = modal(fr)
+    filas = m.locator("table tbody tr")
+    buscar = m.locator("input[type=search], label:has-text('Buscar') input").first
+    if p.get("fila") and buscar.count():   # la tabla puede tener varias páginas: se filtra por la dirección elegida
+        buscar.fill(p["direccion"][:40])
+        esperar(pag, 1200)
     n = filas.count()
-    if not n or "No hay registros" in (filas.first.inner_text() or ""):
-        raise Alto(alerta)
-    textos = [filas.nth(i).inner_text() for i in range(n)]
-    pts = [puntaje(texto_buscado, t) for t in textos]
+    if not n or "No hay registros" in (filas.first.inner_text() or "") or "ningún" in simple(filas.first.inner_text() or ""):
+        if p.get("fila") and buscar.count():
+            buscar.fill("")
+            esperar(pag, 1000)
+            n = filas.count()
+        if not n:
+            raise Alto(alerta)
+    celdas = [filas.nth(i).evaluate("f => [...f.querySelectorAll('td')].map(t => t.innerText.trim()).filter(Boolean)") for i in range(n)]
+    textos = [" · ".join(x) for x in celdas]
+    if p.get("fila"):
+        exacta = [i for i in range(n) if simple(textos[i]) == simple(p["fila"])]
+        if exacta:
+            filas.nth(exacta[0]).locator("input[type=radio]").first.check(timeout=4000)
+            return exacta[0]
+    pts = [puntaje(p["direccion"], t) for t in textos]
     mejor = max(range(n), key=lambda i: pts[i])
     palabras = lambda t: frozenset(w for w in re.findall(r"[a-z]+", simple(t)) if len(w) > 1 and w not in COMUNES | {"domicilio", "fiscal"})
     unico = len({palabras(textos[i]) for i in range(n) if pts[i] == pts[mejor]}) == 1   # empate de la misma dirección: vale la primera
     # Basta una palabra ("Mártires") si solo un local la tiene; si empatan, hacen falta 2 o más y ganar.
     if n > 1 and not (pts[mejor] >= 1 and unico):
-        lista = "\n".join(f"{i + 1}) " + re.sub(r"\s+", " ", t).strip()[:110] for i, t in enumerate(textos[:15]))
+        lista = "\n".join(f"{i + 1}) " + re.sub(r"\s+", " ", t).strip()[:110] for i, t in enumerate(textos[:20]))
         raise Alto(alerta + ": ninguna dirección registrada coincide con la del caso (o hay varias iguales).",
-                   "Locales que SUNAT tiene registrados:\n" + lista +
-                   "\n\nToque ✏️ Corregir y escriba, por ejemplo: «llegada » + palabras de uno de ellos.")
+                   f"Locales que SUNAT tiene registrados:\n{lista}\n\nResponda solo con el número (ej. «7») y vuelvo a preparar la vista previa.",
+                   {"cual": cual, "lista": [{"fila": textos[i], "direccion": (celdas[i] or [""])[-1]} for i in range(min(n, 20))]})
     filas.nth(mejor).locator("input[type=radio]").first.check(timeout=4000)
     return mejor
 
@@ -371,7 +388,7 @@ def punto(fr, pag, n, p, cual):
         if i is not None:
             radios.nth(i).check()
             esperar(pag, 2000)
-    elegir_fila(fr, pag, p["direccion"], f"no encontré el establecimiento de {cual} en SUNAT")
+    elegir_fila(fr, pag, p, f"no encontré el establecimiento de {cual} en SUNAT", cual)
     boton_agregar_modal(fr).click(timeout=5000)
     esperar(pag, 2500)
     cerrar_avisos(fr, pag)
@@ -585,7 +602,7 @@ def main():
                 img = base64.b64encode(foto(pag, fr)).decode() if fr else ""
             except Exception:
                 img = ""
-            fin(False, str(e) + ("\n\n" + e.detalle if e.detalle else ""), imagen=img)
+            fin(False, str(e) + ("\n\n" + e.detalle if e.detalle else ""), imagen=img, opciones=e.opciones)
             sys.exit(1)
         except Exception as e:   # error inesperado: se avisa al chat con la foto de dónde quedó (nada se emitió)
             print(f"::error title=GRE robot::{type(e).__name__} en {sin_datos(PASO_ACTUAL[0])}")
