@@ -67,21 +67,38 @@ def volcar(fr):
     print("Texto visible:", sin_datos(fr.inner_text("body")[:2500]).replace("\n", " / "))
 
 
+JS_LISTA = """() => [...document.querySelectorAll('li,[role=option],.dropdown-item,.p-dropdown-item,mat-option,option,.ng-option')]
+  .filter(e => e.offsetParent !== null).map(e => e.innerText.replace(/\\s+/g, ' ').trim()).filter(t => t && t.length < 120)"""
+
+
 def asistente(fr, pag):
-    """Emisión de GRE: elegir Remitente y pasar con Siguiente, anotando cada pantalla. Nunca emite."""
-    for paso in os.environ.get("PASOS", "Remitente,Siguiente").split(","):
+    """Emisión de GRE paso a paso, sin emitir. PASOS = acciones separadas por ";":
+       texto → clic en ese texto · #id → clic en ese elemento · lista:texto → abrir y anotar opciones
+       elegir:texto → elegir esa opción de la lista abierta. Cualquier botón de emitir/guardar se salta."""
+    pasos = os.environ.get("PASOS") or "Remitente;#rdNo;lista:Seleccione;elegir:Compra;Siguiente;Siguiente"
+    for paso in pasos.split(";"):
         paso = paso.strip()
-        if not paso or PROHIBIDO.search(paso):
+        if not paso or PROHIBIDO.search(paso.split(":", 1)[-1]):
             continue
-        b = fr.get_by_text(paso, exact=True).first
+        tipo, _, val = paso.partition(":") if paso.startswith(("lista:", "elegir:")) else ("clic", "", paso)
         try:
-            b.click(timeout=8000)
+            if val.startswith("#"):
+                fr.locator(val).first.click(timeout=8000)
+            elif tipo == "elegir":
+                fr.locator('li,[role=option],.dropdown-item,.p-dropdown-item,mat-option,.ng-option') \
+                  .filter(has_text=val).first.click(timeout=8000)
+            else:
+                fr.get_by_text(val, exact=True).first.click(timeout=8000)
         except Exception as e:
-            print(f"\n>>> No pude pulsar «{paso}»:", str(e).splitlines()[0][:100])
-            break
-        pag.wait_for_timeout(5000)
+            print(f"\n>>> No pude «{paso}»:", str(e).splitlines()[0][:100])
+            if tipo != "lista":
+                break
+        pag.wait_for_timeout(3000)
         print(f"\n>>> Después de «{paso}»")
-        volcar(fr)
+        if tipo == "lista":
+            print("Opciones de la lista:", " / ".join(sin_datos(x) for x in dict.fromkeys(fr.evaluate(JS_LISTA)))[:2500])
+        else:
+            volcar(fr)
 
 
 def main():
@@ -130,7 +147,7 @@ def main():
                     and not re.search(r"masiva|transportista|complementaria|eventos", o["t"], re.I) and cod not in codigos:
                 codigos.append(cod)
         extra = [c.strip() for c in os.environ.get("CODIGOS", "").split(",") if c.strip()]
-        codigos = extra + [c for c in codigos if c not in extra]
+        codigos = extra or codigos
         print("\nCódigos de emisión a revisar:", codigos[:5] or "ninguno (pase CODIGOS en el workflow)")
 
         # 2) Cada opción de emisión: estructura del formulario (sin valores)
