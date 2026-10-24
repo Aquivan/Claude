@@ -1,4 +1,5 @@
 empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,etiqueta,leido,urgente,destacado,remitente,dependencia,adjuntos,archivos,nota_pdf,revision
+20609309793,Mensaje,1103731573,24/10/2026 03:07:00,24/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1103068499,23/10/2026 02:55:33,23/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1102177323,22/10/2026 08:07:02,22/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,1,,,
 20609309793,Mensaje,1102002678,22/10/2026 04:16:29,22/10/2026,Comunicación de GRE - Remitente EG07-75 emitida por RUC N° 20615404056,Otro,20615404056,,NO,,,SUNAT,0023,0,,,
@@ -47,9 +48,7 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20609309793,Mensaje,1085265579,26/09/2026 04:01:39,26/09/2026,Documento Anexado a Expediente de Devoluciones,Devolución,,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1084422337,25/09/2026 01:58:15,25/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1084375818,25/09/2026 00:17:08,25/09/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,1,,,
-20609309793,Mensaje,1083933297,24/09/2026 08:06:28,24/09/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,1,,,
 20609309793,Mensaje,1083912930,24/09/2026 06:15:08,24/09/2026,Comunicación de GRE - Remitente EG07-195 emitida por RUC N° 20604305773,Otro,20604305773,,NO,,,SUNAT,0023,0,,,
-20609309793,Mensaje,1083735241,24/09/2026 01:45:48,24/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1083022314,23/09/2026 10:25:13,23/09/2026,Comunicación de GRE - Remitente EG07-4614 emitida por RUC N° 20447969531,Otro,20447969531,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1081723396,21/09/2026 16:59:43,21/09/2026,Baja de Guía de Remisión Remitente - Electrónica TQQ1 - 743,Otro,,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1081686776,21/09/2026 16:42:30,21/09/2026,Comunicación de GRE - Remitente EG07-150 emitida por RUC N° 20605062670,Otro,20605062670,,NO,,,SUNAT,0023,0,,,
