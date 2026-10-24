@@ -209,7 +209,7 @@ function TGG_editar_(ss, c, texto, pregunta) {
     return true;
   }
   c.mensajes = (c.mensajes || []).concat([(pregunta ? 'Respondiendo a «' + pregunta.q + '»: ' : '') + String(texto).slice(0, 1500)]).slice(-25);
-  var fallo = c.estado === 'No emitida' && c.ultimo_error;
+  var fallo = (c.estado === 'No emitida' && c.ultimo_error) || c.estado === 'Vista previa lista';   // tras un fallo o una vista previa: sigue solo
   var ok = TGG_analizar_(ss, c);
   if (!ok) { c.mensajes.pop(); return ok; }
   if (op && JSON.stringify(c[op.cual] || {}) !== antes) c.opciones = null;
@@ -328,7 +328,7 @@ function TGG_gh_(q) {
     var notas = (q.notas || []).map(String).filter(Boolean).slice(0, 5);
     TGG_avisar_(c, '👁 Vista previa en SUNAT (no se emitió nada) · caso ' + c.id +
       (notas.length ? '\nAvisos de SUNAT que acepté (no impiden la guía):\n· ' + notas.join('\n· ') : '') +
-      '\nRevise la foto. Si está bien, toque ✅ Emitir.', q.imagen, true);
+      '\nRevise la foto. Si está bien, toque ✅ Emitir (le pido confirmar antes).', q.imagen, true);
     return { ok: true };
   }
   if (q.accion === 'gre_fin') {
@@ -362,10 +362,12 @@ function TGG_gh_(q) {
 function TGG_avisar_(c, texto, imagenB64, conEmitir) {
   var chat = String(c.chat || ''), blob = imagenB64 ? Utilities.newBlob(Utilities.base64Decode(imagenB64), 'image/jpeg', 'gre.jpg') : null;
   if (chat.indexOf('wa') === 0) {
-    var extra = conEmitir ? '\n\nPara emitirla escriba: *emitir guía ' + c.id + '*' : '';
+    var extra = conEmitir ? '\n\nTambién puede escribirme o dictarme cualquier cambio y vuelvo a preparar la vista previa.' : '';
+    var botones = conEmitir ? { k: TG_guardarBoton_({ t: 'gre', id: c.id }), texto: '¿Qué hago con la guía caso ' + c.id + '?',
+      opciones: [{ op: 'em', titulo: '✅ Emitir' }, { op: 'ed', titulo: '✏️ Modificar algo' }, { op: 'no', titulo: '🗑 Descartar' }] } : null;
     try {
-      if (blob) TGC_wa_({ tipo: 'imagen', numero: chat.slice(2), mime: 'image/jpeg', base64: imagenB64, texto: texto + extra });
-      else TGC_wa_({ tipo: 'texto', numero: chat.slice(2), texto: texto + extra });
+      if (blob) TGC_wa_({ tipo: 'imagen', numero: chat.slice(2), mime: 'image/jpeg', base64: imagenB64, texto: texto + extra, botones: botones });
+      else TGC_wa_({ tipo: 'texto', numero: chat.slice(2), texto: texto + extra, botones: botones });
     } catch (e) { console.error('GRE aviso WhatsApp: ' + e.message); }
     if (c.pdf) try { TGC_wa_({ tipo: 'texto', numero: chat.slice(2), texto: '📄 PDF: ' + DriveApp.getFileById(c.pdf).getUrl() }); } catch (e) {}
     return;
