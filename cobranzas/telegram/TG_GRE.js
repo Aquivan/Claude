@@ -314,15 +314,27 @@ function TGG_desdeAdjTG_(ctx, adjs, texto) {
 
 /** Texto que pide una guía ("emite la guía", "/guia", "guía con estas fotos"). true si lo atendió. */
 function TGG_atajoTG_(ctx, texto) {
-  var t = String(texto || '');
-  if (!(/^\/?gu[ií]a\b/i.test(t) || (TGG_PIDE_RX_.test(t) && /\b(emit|hac|haz|gener|sac|arm|necesit|quiero)/i.test(t)))) return false;
-  var m = t.match(/\b([0-9a-f]{8})\b/), ses = TG_sesion_(ctx.chatId);
+  var t = String(texto || ''), ses = TG_sesion_(ctx.chatId);
+  var esp = ses.greEsp && Date.now() - ses.greEsp < 10 * 60000;
+  // "listo" después de "emite guía" + fotos: se arma con lo que llegó desde entonces y lo que escribió al pedirla.
+  if (esp && /^\s*(listo|ya|eso es todo|termin[eé]|arma(la)?)\s*[.!]*\s*$/i.test(t)) {
+    var nuevos = (ses.adj || []).filter(function (a) { return (a.t || 0) >= ses.greEsp; });
+    var pedido = ses.greTexto || 'guía';
+    ses.greEsp = null; ses.greTexto = ''; TG_guardarSesion_(ctx.chatId, ses);
+    if (!nuevos.length) { TG_enviar_(ctx.chatId, '🚚 No me llegaron archivos para la guía. Escriba de nuevo <i>emite guía</i> y mándelos.'); return true; }
+    TGG_desdeAdjTG_(ctx, nuevos, pedido);
+    return true;
+  }
+  if (!(/^\/?gu[ií]a\b/i.test(t) || (TGG_PIDE_RX_.test(t) && /\b(emit|hac|haz|gener|sac|arm|crea|necesit|quiero)/i.test(t)))) return false;
+  var m = t.match(/\b([0-9a-f]{8})\b/);
   var id = (m && m[1]) || (/^\/?emitir\b/i.test(t) && ses.gre);
   if (id && TGG_leer_(ctx.ss, id)) { TGG_alBotonTG_(ctx, { id: id }, /emit/i.test(t) ? 'em' : 'ver'); return true; }
-  var adjs = (ses.adj || []).slice(-4);
+  // Archivos recién mandados (últimos 15 min): se arma ya. Si no, se espera a que los mande y escriba "listo".
+  var adjs = (ses.adj || []).filter(function (a) { return a.t && Date.now() - a.t < 15 * 60000; }).slice(-6);
   if (!adjs.length) {
-    TG_enviar_(ctx.chatId, '🚚 <b>Guía de remisión por SUNAT</b>\nMándeme las fotos o PDF (factura, ticket de despacho/balanza, tarjeta del transportista) con el texto <i>guía</i>. ' +
-      'Puede agregar lo que sepa: <i>"peso 30258.5"</i>, <i>"solo líneas 1 a 5"</i>, <i>"compra"</i>. Yo armo la propuesta y nada se emite sin su ✅.');
+    ses.greEsp = Date.now(); ses.greTexto = t; TG_guardarSesion_(ctx.chatId, ses);
+    TG_enviar_(ctx.chatId, '🚚 <b>Guía de remisión por SUNAT</b>\nMande (o reenvíe) ahora la factura, el ticket y la tarjeta del transportista, y al final escriba <b>listo</b>. ' +
+      'Nada se emite sin su ✅.');
     return true;
   }
   TGG_desdeAdjTG_(ctx, adjs, t);

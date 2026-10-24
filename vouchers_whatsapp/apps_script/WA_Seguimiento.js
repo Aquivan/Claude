@@ -15,6 +15,7 @@ var WA_MAX_SEGUIR_MS_ = 24 * 60 * 60 * 1000; // un "⏳ Revisar" se sigue mirand
 
 function WA_cadaMinuto() {
   var props = WA_props_().getProperties(), ahora = Date.now();
+  try { WA_greCadaMinuto_(props); } catch (e) { console.error('Guías: ' + e.message); }   // 🚚 WA_Gre.js
   var tandas = Object.keys(props).filter(function (k) { return k.indexOf('WA_TANDA_') === 0 && ahora - Number(props[k]) >= WA_ESPERA_TANDA_MS_; });
   var hayCola = props.WA_HAY_COLA === '1';
   if (props.WA_HAY_IA === '1') {
