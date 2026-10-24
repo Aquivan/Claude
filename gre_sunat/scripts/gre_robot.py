@@ -909,18 +909,96 @@ def leer_numero(pag, fr):
 
 
 def bajar_pdf(pag, fr):
-    for rx in (r"PDF", r"Descargar", r"Imprimir"):
+    """PDF de la guía recién emitida. SUNAT primero muestra «Atención Contribuyente… Entendido» y el botón «Descargar PDF»
+    puede bajar el archivo o abrirlo en otra pestaña: se acepta cualquiera de las dos y también la respuesta PDF misma."""
+    try:
+        for _ in range(3):   # avisos informativos (sin tocar nada más)
+            b = fr.locator(".modal button:visible", has_text=re.compile(r"^\s*(Entendido|Aceptar)\s*$"))
+            if not b.count():
+                break
+            b.last.click(timeout=3000)
+            esperar(pag, 800)
+    except Exception:
+        pass
+    ctx = pag.context
+    for rx in (r"^\s*Descargar PDF\s*$", r"\bPDF\b", r"Imprimir"):
         b = fr.locator("button:visible, a:visible", has_text=re.compile(rx, re.I))
         if not b.count():
             continue
+        capturado = {}
+
+        def al_responder(r):
+            try:
+                if "pdf" in (r.headers.get("content-type") or "").lower() and "pdf" not in capturado:
+                    capturado["pdf"] = r.body()
+            except Exception:
+                pass
+
+        def al_bajar(d):
+            try:
+                capturado["dl"] = d.path()
+            except Exception:
+                pass
+
+        ctx.on("response", al_responder)
+        pag.on("download", al_bajar)
+        paginas = len(ctx.pages)
         try:
-            with pag.expect_download(timeout=30000) as d:
-                b.first.click()
-            with open(d.value.path(), "rb") as f:
-                return base64.b64encode(f.read()).decode()
+            b.first.click(timeout=5000)
         except Exception:
             continue
+        for _ in range(40):   # hasta 20 s
+            pag.wait_for_timeout(500)
+            if capturado:
+                break
+            if len(ctx.pages) > paginas:   # se abrió en otra pestaña
+                nueva = ctx.pages[-1]
+                try:
+                    nueva.wait_for_load_state("load", timeout=15000)
+                    nueva.on("download", al_bajar)
+                    if nueva.url.startswith("http"):
+                        r = ctx.request.get(nueva.url)
+                        if "pdf" in (r.headers.get("content-type") or "").lower():
+                            capturado["pdf"] = r.body()
+                    elif nueva.url.startswith("blob:"):
+                        datos = nueva.evaluate("""async u => { const b = await (await fetch(u)).blob();
+                            return await new Promise(ok => { const f = new FileReader(); f.onload = () => ok(f.result.split(',')[1]); f.readAsDataURL(b); }); }""", nueva.url)
+                        if datos:
+                            return datos
+                except Exception:
+                    pass
+                pag.wait_for_timeout(1500)
+                if capturado:
+                    break
+        try:
+            ctx.remove_listener("response", al_responder)
+            pag.remove_listener("download", al_bajar)
+        except Exception:
+            pass
+        if capturado.get("pdf"):
+            return base64.b64encode(capturado["pdf"]).decode()
+        if capturado.get("dl"):
+            with open(capturado["dl"], "rb") as f:
+                return base64.b64encode(f.read()).decode()
+    paso("   no pude bajar el PDF")
     return ""
+
+
+ESPERA_MIN = 12   # minutos que la vista previa queda abierta esperando ✅ Emitir
+
+
+def esperar_decision(huella):
+    """Pregunta al bot cada pocos segundos si la persona aprobó (emitir) o cambió algo (cerrar). True = emitir esta misma guía."""
+    hasta = time.time() + ESPERA_MIN * 60
+    while time.time() < hasta:
+        r = bot({"accion": "gre_espera", "hasta": int(hasta * 1000)})
+        if r.get("decision") == "emitir":
+            return r.get("confirmar") == huella
+        if r.get("decision") == "cerrar":
+            return False
+        time.sleep(8)
+    r = bot({"accion": "gre_espera", "fin": True})   # último aviso: si justo aprobó, se emite igual
+    return r.get("decision") == "emitir" and r.get("confirmar") == huella
 
 
 def main():
@@ -983,7 +1061,11 @@ def main():
             if modo != "emitir":
                 bot({"accion": "gre_vista", "imagen": img, "huella": huella, "notas": OBSERVACIONES[:5]})
                 print("::notice title=GRE vista::Vista previa enviada al chat. No se emitió nada.")
-                return
+                # La pantalla queda abierta unos minutos: si la persona aprueba, se emite aquí mismo (sin volver a llenar).
+                if not esperar_decision(huella):
+                    paso("Nadie aprobó a tiempo (o pidieron cambios): cierro sin emitir")
+                    return
+                paso("La persona aprobó la emisión: emito en la misma pantalla de la vista previa")
             # ===== EMITIR (aprobado por la persona con la huella de este caso) =====
             paso("Tocando Emitir…")
             emitir.click()

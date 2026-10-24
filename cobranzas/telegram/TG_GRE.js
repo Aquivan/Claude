@@ -200,6 +200,7 @@ function TGG_analizar_(ss, c) {
 
 /** Suma un mensaje de la persona (o su respuesta a la pregunta) y vuelve a analizar. false si no era para la guía. */
 function TGG_editar_(ss, c, texto, pregunta) {
+  if (c.espera_run) c.decision = 'cerrar';   // cambió algo: la vista previa abierta se cierra sin emitir
   var op = c.opciones, n = op && String(texto).match(/^\s*(?:(?:el|la|n[uú]mero|nro\.?|n°|#|opci[oó]n|seleccion[eao]?|elij[oa]|escoj[oa]|us[ae]|marc[ao]|marque|pon(?:ga)?|es|local|establecimiento|de|del)\s*)*(\d{1,2})\s*[).]?\s*$/i), antes = op && JSON.stringify(c[op.cual] || {});
   if (n && op.lista[Number(n[1]) - 1]) {   // "7", "el 7", "seleccione el 7": el local de la lista que mostró SUNAT
     var o = op.lista[Number(n[1]) - 1];
@@ -307,6 +308,21 @@ function TGG_texto_(c, html) {
 function TGG_pedir_(ss, c, modo) {
   var cfg = TG_cfg_(ss);
   if (TGG_faltan_(c).length) throw new Error(TGG_faltan_(c).join(' '));
+  // ⚡ La vista previa sigue abierta en SUNAT esperando: se emite ahí mismo (sin volver a llenar). Si no, corrida nueva.
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var v = TGG_leer_(ss, c.id) || c;
+    if (v.espera_run && Number(v.espera_hasta || 0) > Date.now() + 15000) {
+      if (modo === 'emitir' && v.estado === 'Vista previa lista') {
+        c.espera_run = v.espera_run; c.espera_hasta = v.espera_hasta;
+        c.decision = 'emitir'; c.confirmar = TGG_huella_(c); c.estado = 'Emitiendo'; c.huella = c.confirmar;
+        TGG_guardar_(ss, c);
+        return 'misma';
+      }
+      c.decision = 'cerrar';   // pidió otra vista previa: la que espera se cierra sin emitir
+    }
+  } finally { lock.releaseLock(); }
   c.estado = modo === 'emitir' ? 'Emitiendo' : 'Vista previa…';
   c.huella = TGG_huella_(c);
   TGG_guardar_(ss, c);
@@ -372,6 +388,19 @@ function TGG_gh_(q) {
   if (!c) return { ok: false, error: 'caso desconocido' };
   if (q.accion === 'gre_caso') return { ok: true, datos: TGG_paraRobot_(c) };
   if (q.accion === 'gre_elegir') return TGG_elegirLocal_(c, String(q.cual || ''), q.lista || []);
+  if (q.accion === 'gre_espera') {   // la vista previa abierta pregunta si ya aprobaron
+    var lk = LockService.getScriptLock();
+    lk.waitLock(20000);
+    try {
+      var e = TGG_leer_(ss, c.id) || c;
+      if (e.espera_run !== run) { e.espera_run = run; e.decision = ''; e.confirmar = ''; }
+      if (q.hasta) e.espera_hasta = Number(q.hasta);
+      var d = { ok: true, decision: e.decision || '', confirmar: e.decision === 'emitir' ? e.confirmar : '' };
+      if (q.fin || d.decision) { e.espera_run = ''; e.espera_hasta = 0; if (d.decision !== 'emitir') e.decision = ''; }
+      TGG_guardar_(ss, e);
+      return d;
+    } finally { lk.releaseLock(); }
+  }
   if (q.accion === 'gre_aviso') { TGG_avisar_(c, String(q.texto || '').slice(0, 500) + ' · caso ' + c.id, null, false); return { ok: true }; }
   var cache = CacheService.getScriptCache();
   if (q.accion === 'gre_vista') {
@@ -556,9 +585,10 @@ function TGG_alBotonTG_(ctx, datos, op) {
     var modo = op === 'ok' ? 'emitir' : 'vista';
     if (TG_yaVisto_('gre' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0))) return TG_enviar_(ctx.chatId, 'Eso ya se pidió.');
     if (op === 'ok') TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
-    try { c.chat = ctx.chatId; TGG_pedir_(ctx.ss, c, modo); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message)); }
+    var como;
+    try { c.chat = ctx.chatId; como = TGG_pedir_(ctx.ss, c, modo); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message)); }
     return TG_enviar_(ctx.chatId, (modo === 'emitir' ? '🚚 <b>Emitiendo</b> la guía en SUNAT' : '👁 <b>Preparando la vista previa</b> en SUNAT (no se emite)') +
-      ' · caso ' + c.id + '\nTarda 2–4 minutos; le mando aquí la foto o el resultado.');
+      ' · caso ' + c.id + (como === 'misma' ? '\nEn la misma pantalla de la vista previa: en menos de un minuto le mando el resultado.' : '\nTarda 2–4 minutos; le mando aquí la foto o el resultado.'));
   }
 }
 
@@ -687,7 +717,8 @@ function TGG_botonWA_(acc, k, op, numero) {
   if (op !== 'ok' && op !== 'vp') return TGG_respWA_('No entendí ese botón.');
   var modo = op === 'ok' ? 'emitir' : 'vista';
   if (TG_yaVisto_('gre' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0))) return TGG_respWA_('Eso ya se pidió.');
-  try { c.chat = clave; TGG_pedir_(ss, c, modo); } catch (e) { return TGG_respWA_('⚠️ ' + e.message, c); }
+  var como;
+  try { c.chat = clave; como = TGG_pedir_(ss, c, modo); } catch (e) { return TGG_respWA_('⚠️ ' + e.message, c); }
   return TGG_respWA_((modo === 'emitir' ? '🚚 *Emitiendo* la guía en SUNAT' : '👁 *Preparando la vista previa* en SUNAT (no se emite)') +
-    ' · caso ' + c.id + '\nTarda 2–4 minutos; le mando aquí la foto o el resultado.');
+    ' · caso ' + c.id + (como === 'misma' ? '\nEn la misma pantalla de la vista previa: en menos de un minuto le mando el resultado.' : '\nTarda 2–4 minutos; le mando aquí la foto o el resultado.'));
 }
