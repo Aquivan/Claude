@@ -626,10 +626,28 @@ def vehiculos_conductores(fr, pag, t):
         m = modal(fr)
         campos = m.evaluate("m => [...m.querySelectorAll('input')].filter(e => e.offsetParent !== null).map(e => e.getAttribute('formcontrolname') || e.name || e.id)")
         paso(f"   vehículo {n + 1} ({'principal' if n == 0 else 'secundario'}) · campos: {campos}")
-        # Si SUNAT pide la constancia/TUC/certificado del vehículo, va la que corresponde a esa placa (en el mismo orden).
-        for nombre in campos:
-            if re.search(r"tuc|certific|habilit|constanc|inscrip", nombre or "", re.I) and n < len(constancias):
-                m.locator(f"[formcontrolname={nombre}]").first.fill(constancias[n])
+        # Constancia MTC de esa placa (en el mismo orden). SUNAT suele traer sola la TUCE; si está vacía se pone la constancia,
+        # y si trae otra (p. ej. la carreta: TUCE 23M… y constancia 231800410) la constancia va como autorización especial del MTC.
+        if n < len(constancias):
+            cons = constancias[n]
+            tarjeta = m.locator("[formcontrolname=nroTarjeta]").first
+            actual = (tarjeta.input_value() or "").strip() if tarjeta.count() else ""
+            if tarjeta.count() and not actual:
+                llenar(tarjeta, cons)
+            elif actual and re.sub(r"\W", "", actual) != re.sub(r"\W", "", cons):
+                elegido = False
+                for op in ("MTC", "MINISTERIO DE TRANSPORTES"):
+                    try:
+                        combo(fr, pag, "Entidad emisora", op)
+                        elegido = True
+                        break
+                    except Alto:
+                        continue
+                aut = m.locator("[formcontrolname=nroAutorizacion]").first
+                if elegido and llenar(aut, cons):
+                    paso(f"   vehículo {n + 1}: autorización especial MTC puesta")
+                else:
+                    paso(f"   vehículo {n + 1}: no pude poner la autorización MTC (entidad {'ok' if elegido else 'no encontrada'})")
         boton_agregar_modal(fr).click(timeout=5000)
         esperar(pag, 2000)
         avisos = cerrar_avisos(fr, pag)

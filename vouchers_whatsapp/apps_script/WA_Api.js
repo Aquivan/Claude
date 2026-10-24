@@ -89,7 +89,10 @@ function WA_desdeCobranzas_(e, p) {
           messaging_product: 'whatsapp', to: a, type: 'image', image: { id: media, caption: String(q.texto || '').slice(0, 1000) } });
         if (!r.ok) console.error('Foto para ' + a + ': ' + r.error);
       } else if (q.texto) WA_enviarTexto_(a, q.texto);
-      if (q.botones && (q.botones.opciones || []).length) WA_ofrecerBotones_(a, q.botones);   // p. ej. ✅ Emitir · ✏️ Modificar · 🗑 Descartar
+      if (q.botones && (q.botones.opciones || []).length) {   // p. ej. ✅ Emitir · ✏️ Modificar · 🗑 Descartar
+        try { WA_ofrecerBotones_(a, q.botones); }
+        catch (eb) { console.error('Botones de Cobranzas: ' + eb.message); WA_enviarTexto_(a, '⚠️ No pude mostrar los botones: ' + eb.message); }
+      }
     });
   } catch (err) {
     console.error('Aviso de Cobranzas: ' + (err && err.stack || err));

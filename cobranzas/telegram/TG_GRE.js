@@ -362,7 +362,8 @@ function TGG_gh_(q) {
 function TGG_avisar_(c, texto, imagenB64, conEmitir) {
   var chat = String(c.chat || ''), blob = imagenB64 ? Utilities.newBlob(Utilities.base64Decode(imagenB64), 'image/jpeg', 'gre.jpg') : null;
   if (chat.indexOf('wa') === 0) {
-    var extra = conEmitir ? '\n\nTambién puede escribirme o dictarme cualquier cambio y vuelvo a preparar la vista previa.' : '';
+    var extra = conEmitir ? '\n\nPara emitirla escriba: *emitir guía ' + c.id + '*. Para cambiar algo, escríbame o dícteme el cambio ' +
+      '(ej. "en el secundario pon autorización MTC 231800410") y vuelvo a preparar la vista previa.' : '';
     var botones = conEmitir ? { k: TG_guardarBoton_({ t: 'gre', id: c.id }), texto: '¿Qué hago con la guía caso ' + c.id + '?',
       opciones: [{ op: 'em', titulo: '✅ Emitir' }, { op: 'ed', titulo: '✏️ Modificar algo' }, { op: 'no', titulo: '🗑 Descartar' }] } : null;
     try {
