@@ -1,18 +1,18 @@
 /**
- * 🚚 Guía de remisión por SUNAT desde WhatsApp: junta las fotos/PDF de UNA guía y se los manda a Cobranzas
- * (cobranzas/telegram/TG_GRE.js), que arma la propuesta con sus botones. Tres formas:
+ * 🚚 Guía de remisión por SUNAT desde WhatsApp: junta las fotos/PDF y lo que la persona escribe para UNA guía y se
+ * lo manda todo junto a Cobranzas (cobranzas/telegram/TG_GRE.js), donde la IA lo analiza de una vez.
  *
- *   1. ANTES: "emite guía" (y lo que sepa: "llegada Av. Mártires", "peso 30258.5") → luego manda o REENVÍA las
- *      fotos. Un minuto después del último archivo se arma sola (o al escribir "listo").
- *   2. CON COMENTARIO: foto/PDF con "guía" → lo que llegue en los 5 minutos siguientes se suma; al final "guía …".
+ *   1. ANTES: "emite guía" (y lo que sepa) → luego manda o REENVÍA las fotos y escribe lo que quiera ("compra",
+ *      "partida Tacna", "llegada Av. Mártires"). Un minuto después del último mensaje se arma sola (o con "listo").
+ *   2. CON COMENTARIO: foto/PDF con "guía" → igual que 1.
  *   3. DESPUÉS: reenvió las fotos (quedaron en "¿De quién son?") y escribe "guía …" → salen de vouchers.
- * Mientras hay una guía abierta, los archivos de ese número NO van a vouchers. Esperan en una carpeta aparte y se
- * borran al mandarlos.
+ * Mientras la guía está abierta, los archivos y textos de ese número NO van a vouchers ni a la IA general.
+ * Cada archivo y cada texto se guarda en su propia propiedad: varios reenvíos que llegan a la vez no se pisan.
  */
 
 var WA_GRE_RX_ = /\b(gu[ií]a(s)?|gre|remisi[oó]n)\b/i;
-var WA_GRE_MIN_ = 5;          // la guía abierta espera archivos hasta 5 min
-var WA_GRE_SOLA_MS_ = 60000;  // modo 1: se arma sola 1 min después del último archivo
+var WA_GRE_MIN_ = 5;          // la guía abierta espera hasta 5 min sin mensajes
+var WA_GRE_SOLA_MS_ = 60000;  // se arma sola 1 min después del último mensaje (si ya hay archivos)
 
 function WA_greCarpeta_() {
   var id = WA_prop_('WA_GRE_CARPETA');
@@ -22,60 +22,93 @@ function WA_greCarpeta_() {
   return f;
 }
 
+/** Estado de la guía abierta de este número: {abierta, ultimo, nombre, ids:[...], textos:[...]} o null. */
 function WA_greTanda_(de) {
-  try { return JSON.parse(WA_prop_('WA_GRE_' + de) || 'null'); } catch (e) { return null; }
-}
-
-function WA_greGuardar_(de, t) {
-  WA_props_().setProperty('WA_GRE_' + de, JSON.stringify(t));
+  var p = WA_props_().getProperties(), meta = null;
+  try { meta = JSON.parse(p['WA_GRE_' + de] || 'null'); } catch (e) {}
+  if (!meta) return null;
+  var arch = Object.keys(p).filter(function (k) { return k.indexOf('WA_GREA_' + de + '_') === 0; }).sort();
+  var txt = Object.keys(p).filter(function (k) { return k.indexOf('WA_GRET_' + de + '_') === 0; }).sort();
+  meta.ids = arch.map(function (k) { return p[k]; });
+  meta.textos = txt.map(function (k) { return p[k]; });
+  meta.claves = arch.concat(txt);
+  var ult = Math.max.apply(null, [meta.ultimo || 0].concat(meta.claves.map(function (k) { var x = k.split('_'); return Number(x[x.length - 2]) || 0; })));
+  meta.ultimo = ult;
+  return meta;
 }
 
 function WA_greVigente_(t) {
   return t && Date.now() - t.ultimo < WA_GRE_MIN_ * 60000;
 }
 
-/** ¿Este archivo es para una guía? Si es así lo guarda y responde. true si lo tomó. */
+function WA_greAbrir_(de, nombre) {
+  WA_props_().setProperty('WA_GRE_' + de, JSON.stringify({ ultimo: Date.now(), nombre: nombre || '' }));
+}
+
+function WA_greAnotarTexto_(de, texto) {
+  WA_props_().setProperty('WA_GRET_' + de + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000), String(texto).slice(0, 1500));
+}
+
+/** 🎤 Nota de voz con la guía abierta: se guarda como archivo de la guía (la IA la escucha junto con todo). true si la tomó. */
+function WA_greAudio_(de, m) {
+  if (!WA_greVigente_(WA_greTanda_(de))) return false;
+  var blob = WA_bajarMedia_(m.audio.id).setName('nota de voz ' + m.id + '.ogg');
+  WA_props_().setProperty('WA_GREA_' + de + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000), WA_greCarpeta_().createFile(blob).getId());
+  WA_enviarTexto_(de, '🎤 Escuchado: lo tomo para la guía.');
+  return true;
+}
+
+/** ¿Este archivo es para una guía? Si es así lo guarda (sin pisar a otros) y responde. true si lo tomó. */
 function WA_greArchivo_(m, de, media, caption, mime, esPdf) {
   var t = WA_greTanda_(de), vigente = WA_greVigente_(t);
   if (!WA_GRE_RX_.test(caption) && !vigente) return false;
-  if (!vigente) t = { ids: [], textos: [], ultimo: 0, nombre: '' };
+  if (!vigente) WA_greAbrir_(de, '');
   var blob = WA_bajarMedia_(media.id).setName(media.filename || ('guia ' + m.id + (esPdf ? '.pdf' : '.jpg')));
-  t.ids.push(WA_greCarpeta_().createFile(blob).getId());
-  if (caption) t.textos.push(caption);
-  t.ultimo = Date.now();
-  WA_greGuardar_(de, t);
-  if (t.ids.length === 1) WA_enviarTexto_(de, t.sola
-    ? '🚚 Recibiendo los archivos de la guía… Cuando termine de mandarlos la armo sola (o escriba *listo*).'
-    : '🚚 Recibí el archivo para la *guía de remisión*. Mande los demás (factura, ticket, tarjeta del transportista) y luego escriba *guía* con lo que sepa (ej. "guía llegada Av. Mártires").');
+  var id = WA_greCarpeta_().createFile(blob).getId();
+  WA_props_().setProperty('WA_GREA_' + de + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000), id);
+  if (caption && !/^\s*gu[ií]a\s*$/i.test(caption)) WA_greAnotarTexto_(de, caption);
+  if (!t || !t.ids || !t.ids.length) WA_enviarTexto_(de, '🚚 Recibiendo los archivos de la guía… Puede escribirme o dictarme lo que quiera agregar. ' +
+    'Un minuto después de su último mensaje armo la propuesta (o escriba *listo*).');
   return true;
 }
 
 /**
  * Textos de guía. true si lo tomó:
- *   · "listo" o "guía …" con archivos juntados (o en Espera de "¿De quién son?") → se manda todo a Cobranzas;
- *   · "emite guía …" sin archivos → abre la guía y espera las fotos (modo 1).
+ *   · con la guía abierta: CUALQUIER texto se anota para la guía ("listo" la manda ya);
+ *   · "guía …" con archivos en Espera de "¿De quién son?" → salen de vouchers y se manda;
+ *   · "emite guía …" sin archivos → abre la guía y espera las fotos.
  */
 function WA_greTexto_(m, de, nombre, cuerpo) {
   var t = WA_greTanda_(de), vigente = WA_greVigente_(t);
   var listo = /^\s*(listo|ya|eso es todo|termin[eé]|env[ií]a(la)?|arma(la)?)\s*[.!]*\s*$/i.test(cuerpo);
-  if (!(WA_GRE_RX_.test(cuerpo) || (listo && vigente))) return false;
-  if (vigente && WA_GRE_RX_.test(cuerpo) && !listo) t.textos.push(cuerpo);
-  if (!vigente || !t.ids.length) {
-    var esp = WA_greDesdeEspera_(de);
-    if (esp && esp.ids.length) { t = esp; if (!listo) t.textos.push(cuerpo); }
+  if (vigente) {
+    if (!listo) WA_greAnotarTexto_(de, cuerpo);
+    t = WA_greTanda_(de);
+    if (listo && t.ids.length) { WA_greMandar_(de, nombre, t, m.id); return true; }
+    if (listo) { WA_enviarTexto_(de, '🚚 Todavía no me llegó ningún archivo para la guía. Mándelos (o reenvíelos) y escriba *listo*.'); return true; }
+    if (!t.ids.length) {
+      var esp0 = WA_greDesdeEspera_(de);   // ¿las fotos ya habían llegado y esperaban nombre?
+      if (esp0) { WA_greMandar_(de, nombre, WA_greTanda_(de), m.id); return true; }
+    }
+    WA_enviarTexto_(de, '📝 Anotado para la guía.');
+    return true;
   }
-  if (t && t.ids.length) { WA_greMandar_(de, nombre, t, m.id); return true; }
-  if (listo || !(/^\s*\/?gu[ií]a\b/i.test(cuerpo) || /\b(emit|emite|hac|haz|gener|sac|arm|crea|necesit|quiero)/i.test(cuerpo))) return false;
-  // Sin archivos todavía: se abre la guía y se esperan las fotos.
-  WA_greGuardar_(de, { ids: [], textos: [cuerpo], ultimo: Date.now(), sola: true, nombre: nombre });
-  WA_enviarTexto_(de, '🚚 *Guía de remisión*: mande (o reenvíe) ahora la factura, el ticket y la tarjeta del transportista. ' +
-    'Cuando terminen de llegar armo la propuesta sola (o escriba *listo*). Nada se emite sin su confirmación.');
+  if (!WA_GRE_RX_.test(cuerpo)) return false;
+  WA_greAbrir_(de, nombre);
+  WA_greAnotarTexto_(de, cuerpo);
+  if (WA_greDesdeEspera_(de)) { WA_greMandar_(de, nombre, WA_greTanda_(de), m.id); return true; }
+  if (!(/^\s*\/?gu[ií]a\b/i.test(cuerpo) || /\b(emit|emite|hac|haz|gener|sac|arm|crea|necesit|quiero)/i.test(cuerpo))) {
+    WA_props_().getKeys().filter(function (k) { return k === 'WA_GRE_' + de || k.indexOf('WA_GRET_' + de + '_') === 0; }).forEach(function (k) { WA_props_().deleteProperty(k); });
+    return false;   // habla de guías pero no pide una: va a la IA general
+  }
+  WA_enviarTexto_(de, '🚚 *Guía de remisión*: mande (o reenvíe) la factura, el ticket y la tarjeta del transportista, y escríbame o dícteme lo que sepa. ' +
+    'Un minuto después de su último mensaje armo la propuesta (o escriba *listo*). Nada se emite sin su confirmación.');
   return true;
 }
 
-/** Manda los archivos juntados (y lo que se escribió) a Cobranzas. */
+/** Manda los archivos y TODO lo escrito a Cobranzas (la IA lo analiza junto). */
 function WA_greMandar_(de, nombre, t, idMsg) {
-  WA_props_().deleteProperty('WA_GRE_' + de);
+  (t.claves || []).concat(['WA_GRE_' + de]).forEach(function (k) { WA_props_().deleteProperty(k); });
   var adjuntos = [];
   t.ids.forEach(function (id) {
     try {
@@ -84,36 +117,34 @@ function WA_greMandar_(de, nombre, t, idMsg) {
       f.setTrashed(true);
     } catch (e) {}
   });
-  var texto = t.textos.filter(Boolean).join(' · ');
-  if (!/^\s*\/?gu[ií]a\b/i.test(texto)) texto = 'guía ' + texto;
-  WA_enviarTexto_(de, '🚚 Leyendo ' + adjuntos.length + ' archivo(s) para la guía (no se registran como vouchers)…');
+  var texto = t.textos.filter(Boolean).join('\n');
+  if (!/^\s*\/?gu[ií]a\b/i.test(texto)) texto = 'guía\n' + texto;
+  WA_enviarTexto_(de, '🚚 Analizando ' + adjuntos.length + ' archivo(s) y lo que me escribió (no se registran como vouchers)…');
   WA_preguntarIA_({ id: idMsg || ('gre' + Date.now()) }, de, nombre || t.nombre || '', texto, adjuntos);
 }
 
-/** Archivos de este número que esperan "¿De quién son?": pasan a la guía (la fila queda como "Guía"). */
+/** Archivos de este número que esperan "¿De quién son?": pasan a la guía abierta (la fila queda como "Guía"). true si había. */
 function WA_greDesdeEspera_(de) {
   var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues(), filas = WA_filasEspera_(datos, de);
-  if (!filas.length) return null;
-  var t = { ids: [], textos: [], ultimo: Date.now() };
-  filas.forEach(function (i) {
-    if (datos[i][9]) t.ids.push(String(datos[i][9]));
+  if (!filas.length) return false;
+  filas.forEach(function (i, n) {
+    if (datos[i][9]) WA_props_().setProperty('WA_GREA_' + de + '_' + Date.now() + '_' + n, String(datos[i][9]));
     hoja.getRange(i + 1, 7, 1, 2).setValues([['Guía', '🚚 usado para guía de remisión']]);
   });
   WA_props_().deleteProperty('WA_PREG_' + de);   // ya no se pregunta de quién son
-  return t;
+  return true;
 }
 
-/** WA_cadaMinuto: arma las guías abiertas con "emite guía" cuando dejaron de llegar archivos; avisa las vencidas. */
+/** WA_cadaMinuto: arma las guías abiertas cuando la persona dejó de mandar; avisa las vencidas sin archivos. */
 function WA_greCadaMinuto_(props) {
-  Object.keys(props).filter(function (k) { return k.indexOf('WA_GRE_') === 0 && k !== 'WA_GRE_CARPETA'; }).forEach(function (k) {
-    var de = k.slice('WA_GRE_'.length), t;
-    try { t = JSON.parse(props[k]); } catch (e) { return; }
+  Object.keys(props).filter(function (k) { return /^WA_GRE_\d+$/.test(k); }).forEach(function (k) {
+    var de = k.slice('WA_GRE_'.length), t = WA_greTanda_(de);
+    if (!t) return;
     var quieto = Date.now() - t.ultimo;
-    if (t.sola && t.ids.length && quieto >= WA_GRE_SOLA_MS_) return WA_greMandar_(de, t.nombre, t);
+    if (t.ids.length && quieto >= WA_GRE_SOLA_MS_) return WA_greMandar_(de, t.nombre, t);
     if (quieto >= WA_GRE_MIN_ * 60000) {
-      WA_props_().deleteProperty(k);
-      if (t.ids.length) WA_greMandar_(de, t.nombre, t);
-      else WA_enviarTexto_(de, '⌛ No llegaron archivos para la guía. Cuando quiera, escriba de nuevo *emite guía*.');
+      t.claves.concat([k]).forEach(function (x) { WA_props_().deleteProperty(x); });
+      WA_enviarTexto_(de, '⌛ No llegaron archivos para la guía. Cuando quiera, escriba de nuevo *emite guía*.');
     }
   });
 }

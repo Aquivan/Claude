@@ -246,7 +246,7 @@ function TG_alEsperado_(ctx, ses, texto) {
   if (e.tipo === 'pregunta_adj') return TG_preguntar_(ctx, texto, e.adj || []);
   if (e.tipo === 'entrega') return TGE_alTextoTG_(ctx, e, texto);
   if (e.tipo === 'procnombre') return TGP_alNombreTG_(ctx, e, texto);
-  if (e.tipo === 'gre') return TGG_editarTG_(ctx, e.id, texto, e.pregunta);   // 🚚 ✏️ corregir la guía
+  if (e.tipo === 'gre') { if (TGG_editarTG_(ctx, e.id, texto, e.pregunta)) return; return TG_preguntar_(ctx, texto, []); }   // 🚚 ✏️ corregir la guía
   return TG_preguntar_(ctx, texto, []);
 }
 
@@ -270,6 +270,7 @@ function TG_alArchivo_(ctx, m, texto) {
     var ses0 = TG_sesion_(chatId);
     if (ses0.esperando) return TG_alEsperado_(ctx, ses0, dicho);
     if (TG_ATAJOS_[dicho]) return TG_comando_(ctx, TG_ATAJOS_[dicho]);
+    if (TGG_datoTG_(ctx, dicho)) return;   // 🚚 lo dicho es para la guía abierta
     return TG_preguntar_(ctx, dicho, []);
   }
 
@@ -301,7 +302,8 @@ function TG_alArchivo_(ctx, m, texto) {
     [{ text: '🧾 Procesar documento (registrar y completar factura)', callback_data: 'k:' + k + ':proc' }],
     [{ text: '🔎 Analizar y cruzar con las hojas', callback_data: 'k:' + k + ':ana' }],
     [{ text: '📥 Registrar como voucher', callback_data: 'k:' + k + ':vou' }],
-    [{ text: '🚚 Guía de remisión (SUNAT)', callback_data: 'k:' + k + ':gre' }],
+    TGG_abierta_(chatId) ? [{ text: '🚚 Agregar a la guía ' + TGG_abierta_(chatId), callback_data: 'k:' + k + ':grea' }, { text: '🚚 Guía nueva', callback_data: 'k:' + k + ':gre' }]
+      : [{ text: '🚚 Guía de remisión (SUNAT)', callback_data: 'k:' + k + ':gre' }],
     [{ text: '✍️ Le escribo mi pregunta', callback_data: 'k:' + k + ':preg' }],
   ], { responderA: ctx.msgId });
 }
@@ -419,6 +421,7 @@ function TG_alBoton_(ss, q) {
       if (op === 'vou') return TGE_preguntarTG_(ctx, adjs);   // 🏷 primero: ¿de quién son?
       if (op === 'proc') return TGP_iniciarTG_(ctx, adjs);
       if (op === 'gre') return TGG_desdeAdjTG_(ctx, adjs, '');
+      if (op === 'grea') return TGG_agregarTG_(ctx, adjs);
       if (op === 'preg') {
         var ses = TG_sesion_(chatId); ses.esperando = { tipo: 'pregunta_adj', adj: adjs }; TG_guardarSesion_(chatId, ses);
         return TG_enviar_(chatId, '✍️ Escriba (o diga 🎤) su pregunta sobre ' + (adjs.length > 1 ? 'esos ' + adjs.length + ' archivos' : 'ese archivo') + '.');

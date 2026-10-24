@@ -64,23 +64,44 @@ function TGG_huella_(c) {
     .map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('').slice(0, 10);
 }
 
-/* ============================================================ lectura con IA */
+/* ============================================================ IA: analiza TODO junto */
 
-var TGG_SISTEMA_LEER_ = [
-  'Eres experto en comprobantes de Perú. Lee la imagen o PDF y devuelve SOLO un JSON con lo que se ve (no inventes; si no está, null).',
-  'Esquema: {"tipo":"factura|boleta|guia|ticket_despacho|ticket_balanza|transportista|otro",',
-  ' "emisor":{"ruc","nombre","direccion"}, "receptor":{"ruc","nombre","direccion"},',
-  ' "documento":{"tipo":"Factura|Boleta de Venta","serie","numero","fecha":"dd/mm/aaaa","total"},',
-  ' "bienes":[{"descripcion","unidad":"código SUNAT","cantidad":número,"peso_kg":número|null}],',
-  ' "peso_total_kg":número|null, "bultos":número|null, "punto_partida":texto|null, "punto_llegada":texto|null,',
-  ' "transportista":{"ruc","nombre","mtc"}, "placas":["AON949",...], "conductor":{"nombre","dni","licencia"}}',
-  'Unidades SUNAT: NIU unidad, PK paquete, BX caja, BG bolsa, SA saco, KGM kilogramo, TNE tonelada, LTR litro, GLL galón, DZN docena,',
-  ' CJ conos, CT cartones, DR tambor, BJ balde, BO botellas, CA latas, MLL millar, SET juego, PR par, ZZ servicio/otros. PQT o PK = PK.',
-  'En tickets de despacho o balanza toma el peso total ("TOTAL GENERAL", "peso neto/bruto") y los pesos por línea si los hay.',
-  'En la tarjeta del transportista: RUC, razón social, constancia/registro MTC (TODOS los números, ej. "231800409-231800410"), placas EN ORDEN',
-  ' (primero el tracto/vehículo principal, luego la carreta/semirremolque; si una placa está tachada y corregida a mano, usa la corregida) y chofer con su licencia.',
-  'Licencia peruana: letra + 8 dígitos (ej. D00516821); el DNI suelen ser esos 8 dígitos si no aparece aparte.',
-  'Nunca devuelvas números de teléfono ni correos.'
+// Un modelo que lee bien fotos y PDF; si no responde, el liviano.
+var TGG_MODELOS_ = ['gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+
+var TGG_SISTEMA_ = [
+  'Eres el asistente que prepara Guías de Remisión Electrónica Remitente (SUNAT, Perú) para un grupo de empresas.',
+  'Recibes TODOS los archivos (facturas, tickets de despacho o balanza, tarjetas del transportista, fotos), TODOS los mensajes de la persona',
+  '(texto o notas de voz transcritas) y el borrador actual. Devuelve SOLO un JSON con la guía completa y corregida:',
+  '{"no_es_para_la_guia": false, "entendido": "1 frase de lo que tomaste o cambiaste",',
+  ' "motivo": "Compra|Venta|Traslado entre establecimientos de la misma empresa|Devolución|Consignación|Otros",',
+  ' "empresa_ruc": "RUC de la empresa del grupo que emite", "contraparte": {"ruc","nombre"},',
+  ' "documento": {"tipo":"Factura|Boleta de Venta","numero":"F251-00056475","ruc_emisor"} o null,',
+  ' "bienes": [{"descripcion","unidad":"código SUNAT","cantidad":número}], "peso_kg": número, "bultos": número o null,',
+  ' "partida": {"ruc":"RUC del dueño del local o vacío","direccion"}, "llegada": {"ruc","direccion"},',
+  ' "transporte": {"modo":"publico|privado","ruc","nombre","mtc","constancias":["231800409","231800410"],"registrar_vehiculos":true,',
+  '   "placas":["AON949","VFY983"],"conductores":[{"nombre","dni","licencia"}]},',
+  ' "fecha": "dd/mm/aaaa", "preguntas": ["solo lo que de verdad falta"]}',
+  'REGLAS:',
+  '1. Lee TODO antes de decidir. Lo que la persona escribe manda sobre los documentos. Si dice "está en la imagen", "ya te dije", "revisa bien",',
+  '   vuelve a buscar en TODOS los archivos y mensajes y úsalo. Nunca vuelvas a preguntar algo que está en un archivo o en un mensaje.',
+  '2. "preguntas": máximo 2, cortas y concretas, SOLO si el dato no está en ningún lado o hay una contradicción real. Si todo está, [].',
+  '3. Compra: la factura es PARA una empresa del grupo → empresa_ruc = comprador, contraparte = proveedor. Venta: la emite el grupo.',
+  '4. Compra: partida = almacén del PROVEEDOR desde donde SALE la carga (el ticket de despacho dice el centro, ej. "C.D. TACNA"; si la',
+  '   factura trae varias direcciones del proveedor, usa la de esa ciudad, NO la oficina principal); partida.ruc = RUC del proveedor.',
+  '   llegada = dirección del comprador o la que diga la persona (ej. "Av. Mártires"); llegada.ruc = "". En Venta al revés.',
+  '5. Bienes: las líneas de la factura, en su orden, con unidad SUNAT y cantidad. Si la persona pide una parte ("solo líneas 1 a 5",',
+  '   "la mitad", "200 de la línea 3") aplícalo; "total" o nada = todas. Si el ticket coincide con la factura, es el total: no preguntes.',
+  '6. peso_kg = peso bruto total (TOTAL GENERAL del ticket/balanza en kg) o el que diga la persona. bultos = total de paquetes/unidades del ticket.',
+  '7. Tarjeta del transportista → público: RUC, razón social, TODAS las constancias/registros MTC, placas EN ORDEN (primero el tracto o',
+  '   principal, luego la carreta; si una placa está tachada y corregida a mano, usa la corregida; 0 y O: las placas peruanas son 3 letras +',
+  '   3 números, ej. AON949), y el chofer con su licencia (letra + 8 dígitos, ej. D00516821). Si no aparece el DNI, el DNI son esos 8 dígitos.',
+  '   registrar_vehiculos = true si hay placas y chofer, salvo que la persona diga "sin vehículo". Sin transportista y con placas → privado.',
+  '8. fecha: la que diga la persona; si no, la de hoy.',
+  '9. Si el ÚLTIMO mensaje no tiene que ver con la guía (otra consulta), responde {"no_es_para_la_guia": true} y nada más.',
+  '10. No inventes datos. Nunca incluyas teléfonos ni correos.',
+  'Unidades SUNAT: NIU unidad, PK paquete (PQT), BX caja, BG bolsa, SA saco, KGM kilogramo, TNE tonelada, LTR litro, GLL galón, DZN docena,',
+  ' CT cartones, DR tambor, BJ balde, BO botellas, CA latas, MLL millar, SET juego, PR par, ZZ otros.'
 ].join('\n');
 
 function TGG_clave_() {
@@ -89,94 +110,81 @@ function TGG_clave_() {
   return k;
 }
 
-function TGG_leerUno_(a) {
-  var x = ANX_blob_(a), mime = x.mime || x.blob.getContentType();
-  if (!/^image\/|pdf/i.test(mime)) return null;
-  return IA_llamar_({ proveedor: 'Gemini (Google)', clave: TGG_clave_(), maxTokens: 6000, sistema: TGG_SISTEMA_LEER_,
-    texto: 'Lee este documento para una guía de remisión.', adjunto: { mime: /pdf/i.test(mime) ? 'application/pdf' : mime, base64: Utilities.base64Encode(x.blob.getBytes()) } });
-}
-
-/** Junta lo leído de cada archivo en un caso. empresas = {ruc: nombre} del grupo. */
-function TGG_armar_(lecturas, empresas, chat) {
-  var fac = lecturas.filter(function (l) { return l && /factura|boleta|guia/.test(l.tipo) && l.emisor; })[0] || {};
-  var tickets = lecturas.filter(function (l) { return l && /ticket/.test(l.tipo); });
-  var trans = lecturas.filter(function (l) { return l && l.transportista && l.transportista.ruc; })[0] || {};
-  var ruc = function (p) { return String((p && p.ruc) || '').replace(/\D/g, ''); };
-  var c = { id: Utilities.getUuid().replace(/-/g, '').slice(0, 8), creado: new Date().toISOString(), chat: chat, estado: 'Propuesta', avisos: [] };
-  var em = ruc(fac.emisor), re = ruc(fac.receptor);
-  if (empresas[re]) { c.motivo = 'Compra'; c.empresa_ruc = re; c.contraparte = { ruc: em, nombre: (fac.emisor || {}).nombre || '' }; }
-  else if (empresas[em]) { c.motivo = 'Venta'; c.empresa_ruc = em; c.contraparte = { ruc: re, nombre: (fac.receptor || {}).nombre || '' }; }
-  else { c.motivo = 'Compra'; c.empresa_ruc = ''; c.contraparte = { ruc: em, nombre: (fac.emisor || {}).nombre || '' }; c.avisos.push('La factura no es de ni para una empresa del grupo: dígame cuál emite la guía.'); }
-  c.empresa = empresas[c.empresa_ruc] || '';
-  var d = fac.documento || {};
-  c.documento = d.serie ? { tipo: /boleta/i.test(d.tipo || '') ? 'Boleta de Venta' : 'Factura', numero: String(d.serie).toUpperCase() + '-' + String(d.numero || '').replace(/\D/g, ''),
-    ruc_emisor: em, fecha: d.fecha || '', total: d.total || '' } : null;
-  c.bienes = (fac.bienes || []).filter(function (b) { return b && b.descripcion; }).map(function (b) {
-    return { descripcion: String(b.descripcion).trim(), unidad: String(b.unidad || 'NIU').toUpperCase(), cantidad: Number(b.cantidad) || 1, peso_kg: b.peso_kg || null };
+/** Una sola llamada con el texto y TODOS los archivos (fotos y PDF). */
+function TGG_gemini_(texto, archivos) {
+  var partes = [{ text: texto }];
+  (archivos || []).slice(0, 10).forEach(function (a, i) {
+    try {
+      var x = ANX_blob_(a), mime = x.mime || x.blob.getContentType();
+      if (!/^image\/|pdf|^audio\//i.test(mime)) return;
+      partes.push({ text: (/^audio\//i.test(mime) ? 'Nota de voz de la persona (escúchala: es un mensaje más) ' : 'Archivo ') + (i + 1) + ' (' + (x.nombre || 'sin nombre') + '):' });
+      partes.push({ inline_data: { mime_type: /pdf/i.test(mime) ? 'application/pdf' : /^audio\//i.test(mime) ? 'audio/ogg' : mime, data: Utilities.base64Encode(x.blob.getBytes()) } });
+    } catch (e) { partes.push({ text: 'Archivo ' + (i + 1) + ': no se pudo abrir.' }); }
   });
-  // Peso: ticket (total) → suma de pesos por línea.
-  var pesoTicket = tickets.map(function (t) { return Number(t.peso_total_kg) || 0; }).filter(Boolean)[0];
-  if (!pesoTicket) tickets.forEach(function (t) { (t.bienes || []).forEach(function (b) { pesoTicket = (pesoTicket || 0) + (Number(b.peso_kg) || 0); }); });
-  var pesoLineas = c.bienes.reduce(function (s, b) { return s + (Number(b.peso_kg) || 0); }, 0);
-  c.peso_kg = pesoTicket || pesoLineas || null;
-  c.peso_origen = pesoTicket ? 'ticket' : pesoLineas ? 'suma de líneas' : '';
-  if (!c.peso_kg) c.avisos.push('No encontré el peso: escríbamelo (ej. "peso 30258.5").');
-  var tk = tickets[0] || {};
-  c.bultos = Number(tk.bultos) || null;
-  var dirEm = (fac.emisor || {}).direccion || '', dirRe = (fac.receptor || {}).direccion || '';
-  if (c.motivo === 'Compra') {
-    c.partida = { ruc: c.contraparte.ruc, direccion: [tk.punto_partida || fac.punto_partida, dirEm].filter(Boolean).join(' · ') };
-    c.llegada = { ruc: '', direccion: fac.punto_llegada || dirRe };
-  } else {
-    c.partida = { ruc: '', direccion: fac.punto_partida || tk.punto_partida || dirEm };
-    c.llegada = { ruc: c.contraparte.ruc, direccion: fac.punto_llegada || dirRe };
+  var clave = TGG_clave_(), ultimo = '';
+  for (var i = 0; i < TGG_MODELOS_.length; i++) {
+    var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + TGG_MODELOS_[i] + ':generateContent', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': clave },
+      payload: JSON.stringify({ systemInstruction: { parts: [{ text: TGG_SISTEMA_ }] }, contents: [{ role: 'user', parts: partes }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 16000, responseMimeType: 'application/json' } }) });
+    if (r.getResponseCode() === 200) {
+      var cand = (JSON.parse(r.getContentText()).candidates || [])[0];
+      var t = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
+      if (t) return IA_extraerJson_(t);
+    }
+    ultimo = r.getResponseCode() + ' ' + r.getContentText().slice(0, 150);
   }
-  var t = trans.transportista || {}, placas = (trans.placas || []).concat(tk.placas || []);
-  var tieneDoc = function (x) { return x && (x.dni || x.licencia); };
-  var cond = tieneDoc(trans.conductor) ? trans.conductor : tieneDoc(tk.conductor) ? tk.conductor : null;
-  c.transporte = { modo: ruc(t) ? 'publico' : 'privado', ruc: ruc(t), nombre: t.nombre || '', mtc: String(t.mtc || '').split(/[\s,\/-]+/)[0] || '',
-    constancias: String(t.mtc || '').split(/[\s,\/-]+/).filter(function (x) { return /\d{5,}/.test(x); }),
-    registrar_vehiculos: true, placas: placas.map(function (p) { return String(p).toUpperCase().replace(/[^A-Z0-9]/g, ''); })
-      .filter(function (p, i, a) { return p && a.indexOf(p) === i; }),
-    conductores: cond && (cond.dni || cond.licencia) ? [{ dni: String(cond.dni || String(cond.licencia || '').replace(/\D/g, '')).replace(/\D/g, ''), licencia: String(cond.licencia || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), nombre: cond.nombre || '' }] : [] };
-  // Se registran vehículo y chofer si llegaron (la persona puede decir "sin vehículo" para dejárselo al transportista).
-  if (!c.transporte.placas.length || !c.transporte.conductores.length) c.transporte.registrar_vehiculos = c.transporte.modo === 'privado';
-  if (c.transporte.modo === 'privado' && !c.transporte.placas.length) c.avisos.push('Falta el transporte: mande la tarjeta del transportista o diga la placa y el chofer.');
-  c.fecha = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy');
-  if (!c.bienes.length) c.avisos.push('No encontré los bienes: mande la factura o escríbalos.');
-  // ❓ Dudas que se le preguntan a la persona (una por vez) antes de la vista previa.
-  c.dudas = [];
-  var cantFac = c.bienes.reduce(function (s, b) { return s + (Number(b.cantidad) || 0); }, 0), cantTk = Number(tk.bultos) || 0;
-  if (c.bienes.length && !(cantTk && Math.abs(cantTk - cantFac) < 0.01))
-    c.dudas.push({ k: 'parte', q: '¿La guía es por el TOTAL de la factura (' + TG_num_(cantFac) + ' en ' + c.bienes.length + ' línea(s))' +
-      (cantTk ? ' o solo por lo que dice el ticket (' + TG_num_(cantTk) + ')' : '') + ', o por una parte? Ej.: "total", "solo líneas 1 a 5", "la mitad", "200 de la línea 3".' });
-  if (!ruc(t) && !c.transporte.placas.length)
-    c.dudas.push({ k: 'transporte', q: '¿Cómo se traslada? Con una empresa de transporte (público: deme su RUC) o en vehículo propio (privado: placa, y chofer con DNI y licencia).' });
-  return c;
+  throw new Error('la IA no respondió (' + ultimo + '). Intente de nuevo en un momento.');
 }
 
-var TGG_SISTEMA_EDITAR_ = [
-  'Corriges el borrador de una guía de remisión de Perú (JSON). Aplica EXACTAMENTE lo que pide la persona y devuelve el JSON completo con el mismo esquema.',
-  'Ejemplos: "peso 30258.5" → peso_kg; "solo líneas 1 a 5" → deja solo esos bienes (numerados desde 1); "la mitad de cada uno" → cantidad/2;',
-  '"placas AON949 y VFY983" → transporte.placas en ese orden (la primera es la principal); "constancias 231800409 231800410" → transporte.constancias;',
-  '"privado" / "público" → transporte.modo; "registrar vehículo" → transporte.registrar_vehiculos=true; "sin vehículo" → false; "placa ABC123" → transporte.placas;',
-  '"chofer Juan Pérez DNI 12345678 licencia Q12345678" → transporte.conductores; "fecha 25/10/2026" → fecha (dd/mm/aaaa);',
-  '"venta" / "compra" → motivo (y si cambia, intercambia partida.ruc/llegada.ruc según quién es el tercero); "partida …" / "llegada …" → dirección.',
-  '"total" → deja todos los bienes como están; "200 de la línea 3" → esa línea con cantidad 200 (y las demás igual salvo que diga "solo").',
-  'Si la persona da un dato que no entiendes o no cabe, no lo inventes: déjalo como estaba. No borres campos que no te pidieron cambiar.'
-].join('\n');
-
-function TGG_editar_(c, texto, pregunta) {
-  var base = TGG_paraRobot_(c);
-  var r = IA_llamar_({ proveedor: 'Gemini (Google)', clave: TGG_clave_(), maxTokens: 6000, sistema: TGG_SISTEMA_EDITAR_,
-    texto: 'Borrador:\n' + base + (pregunta ? '\n\nLe preguntamos: ' + pregunta.q + '\nRespondió: ' + texto : '\n\nPedido de la persona: ' + texto) });
-  if (pregunta) c.dudas = (c.dudas || []).filter(function (d) { return d.k !== pregunta.k; });   // ya contestó (aunque sea "total")
-  if (!r || !Array.isArray(r.bienes) || !r.transporte) throw new Error('no entendí el cambio; escríbalo de otra forma.');
-  ['motivo', 'contraparte', 'documento', 'bienes', 'peso_kg', 'partida', 'llegada', 'transporte', 'fecha'].forEach(function (k) { if (r[k] !== undefined) c[k] = r[k]; });
-  c.peso_origen = /peso/i.test(texto) ? 'indicado por usted' : c.peso_origen;
-  c.avisos = TGG_faltan_(c);
+/** Vuelve a analizar el caso con TODO (archivos + mensajes + borrador). false si el último mensaje no era para la guía. */
+function TGG_analizar_(ss, c) {
+  var empresas = TGG_empresas_(ss);
+  var txt = 'Hoy: ' + Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy') + '\nEmpresas del grupo (RUC → nombre): ' +
+    Object.keys(empresas).map(function (r) { return r + ' → ' + empresas[r]; }).join('; ') +
+    '\n\nMensajes de la persona, en orden:\n' + ((c.mensajes || []).map(function (m, i) { return (i + 1) + ') ' + m; }).join('\n') || '(ninguno)') +
+    (c.bienes ? '\n\nBorrador actual (corrígelo con lo que dicen los archivos y los mensajes):\n' + TGG_paraRobot_(c) : '') +
+    '\n\nArchivos adjuntos: ' + (c.archivos || []).length + '.';
+  var r = TGG_gemini_(txt, c.archivos);
+  if (r.no_es_para_la_guia && c.bienes) return false;
+  ['motivo', 'contraparte', 'documento', 'bienes', 'peso_kg', 'bultos', 'partida', 'llegada', 'transporte', 'fecha'].forEach(function (k) { if (r[k] !== undefined) c[k] = r[k]; });
+  var dig = function (x) { return String(x || '').replace(/\D/g, ''); };
+  c.empresa_ruc = dig(r.empresa_ruc || c.empresa_ruc);
+  if (!empresas[c.empresa_ruc]) c.empresa_ruc = '';
+  c.empresa = empresas[c.empresa_ruc] || '';
+  c.contraparte = { ruc: dig((c.contraparte || {}).ruc), nombre: String((c.contraparte || {}).nombre || '') };
+  if (c.documento && !c.documento.numero) c.documento = null;
+  c.bienes = (c.bienes || []).filter(function (b) { return b && b.descripcion; }).map(function (b) {
+    return { descripcion: String(b.descripcion).trim().slice(0, 250), unidad: String(b.unidad || 'NIU').toUpperCase(), cantidad: Number(b.cantidad) || 1 };
+  });
+  c.peso_kg = Number(c.peso_kg) || null;
+  c.bultos = Number(c.bultos) || null;
+  ['partida', 'llegada'].forEach(function (k) { var p = c[k] || {}; c[k] = { ruc: dig(p.ruc), direccion: String(p.direccion || '') }; });
+  var t = c.transporte || {};
+  t.ruc = dig(t.ruc);
+  t.modo = /priv/i.test(t.modo || '') || !t.ruc ? 'privado' : 'publico';
+  t.placas = (t.placas || []).map(function (x) { return String(x).toUpperCase().replace(/[^A-Z0-9]/g, ''); }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+  t.constancias = (t.constancias || []).map(dig).filter(function (x) { return x.length >= 5; });
+  t.mtc = String(t.mtc || t.constancias[0] || '').trim();
+  t.conductores = (t.conductores || []).filter(function (x) { return x && (x.dni || x.licencia); }).map(function (x) {
+    var lic = String(x.licencia || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return { dni: dig(x.dni) || dig(lic).slice(-8), licencia: lic, nombre: String(x.nombre || '') };
+  });
+  t.registrar_vehiculos = t.modo === 'privado' || t.registrar_vehiculos !== false && !!(t.placas.length && t.conductores.length);
+  c.transporte = t;
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(c.fecha || '')) c.fecha = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy');
+  c.preguntas_ia = (r.preguntas || []).map(String).filter(function (x) { return x.trim(); }).slice(0, 2);
+  c.entendido = String(r.entendido || '').slice(0, 300);
   c.estado = 'Propuesta';
-  return c;
+  return true;
+}
+
+/** Suma un mensaje de la persona (o su respuesta a la pregunta) y vuelve a analizar. false si no era para la guía. */
+function TGG_editar_(ss, c, texto, pregunta) {
+  c.mensajes = (c.mensajes || []).concat([(pregunta ? 'Respondiendo a «' + pregunta.q + '»: ' : '') + String(texto).slice(0, 1500)]).slice(-25);
+  var ok = TGG_analizar_(ss, c);
+  if (!ok) c.mensajes.pop();
+  return ok;
 }
 
 function TGG_faltan_(c) {
@@ -192,22 +200,17 @@ function TGG_faltan_(c) {
   return f;
 }
 
-/** Lo que falta o hay que aclarar, como preguntas: [{k, q}]. La primera se le hace a la persona. */
+/** Lo que hay que preguntar: lo que la IA no encontró en ningún lado; si no dijo nada pero falta un dato obligatorio, ese. */
 function TGG_preguntas_(c) {
-  var t = c.transporte || {}, p = [];
-  if (!c.empresa_ruc) p.push({ k: 'empresa', q: '¿Qué empresa del grupo emite la guía? (nombre o RUC)' });
-  if (!(c.bienes || []).length) p.push({ k: 'bienes', q: '¿Qué bienes se trasladan? Escríbalos con cantidad y unidad (ej. "3050 paquetes de fideos").' });
-  (c.dudas || []).forEach(function (d) { p.push(d); });
-  if (!(Number(c.peso_kg) > 0)) p.push({ k: 'peso', q: '¿Cuál es el peso bruto total en kg?' });
-  if (!c.partida || !c.partida.direccion) p.push({ k: 'partida', q: '¿Desde qué dirección o almacén sale la carga?' });
-  if (!c.llegada || !c.llegada.direccion) p.push({ k: 'llegada', q: '¿A qué dirección o almacén llega?' });
-  if (t.modo === 'publico' && !t.ruc) p.push({ k: 'ruc_trans', q: '¿Cuál es el RUC de la empresa de transporte?' });
-  if ((t.modo === 'privado' || t.registrar_vehiculos) && !(t.placas || []).length) p.push({ k: 'placa', q: '¿Cuál es la placa del vehículo (y de la carreta, si tiene)?' });
-  if ((t.modo === 'privado' || t.registrar_vehiculos) && (t.placas || []).length && !(t.conductores || []).length) p.push({ k: 'chofer', q: '¿Quién maneja? Nombre, DNI y licencia.' });
-  return p.filter(function (x, i, a) { return a.map(function (y) { return y.k; }).indexOf(x.k) === i; });
+  if ((c.preguntas_ia || []).length) return c.preguntas_ia.map(function (q, i) { return { k: 'ia' + i, q: q }; });
+  var mapa = { 'Falta la empresa que emite la guía.': '¿Qué empresa del grupo emite la guía?', 'Faltan los bienes.': '¿Qué bienes se trasladan (con cantidad)?',
+    'Falta el peso.': '¿Cuál es el peso bruto total en kg?', 'Falta el punto de partida.': '¿Desde qué dirección o almacén sale la carga?',
+    'Falta el punto de llegada.': '¿A qué dirección o almacén llega?', 'Falta el RUC del transportista.': '¿Cuál es el RUC de la empresa de transporte?',
+    'Faltan la placa y el chofer (DNI y licencia).': '¿Placa(s) del vehículo y chofer (nombre, DNI y licencia)?' };
+  return TGG_faltan_(c).map(function (f, i) { return { k: 'f' + i, q: mapa[f] || f }; });
 }
 
-/** Deja la conversación lista: si hay una pregunta, la próxima respuesta se aplica a la guía. */
+/** Deja la conversación lista: lo que escriba después (o responda) va a esta guía. */
 function TGG_seguirConversacion_(clave, c) {
   var ses = TG_sesion_(clave), p = TGG_preguntas_(c)[0];
   ses.gre = c.id; ses.greT = Date.now();
@@ -215,15 +218,16 @@ function TGG_seguirConversacion_(clave, c) {
   TG_guardarSesion_(clave, ses);
 }
 
-// Datos de guía escritos sueltos mientras hay una guía abierta ("es privado", "peso 30000", "placa ABC123"…).
-var TGG_DATO_RX_ = /(peso|kg|kilos?|toneladas?|privad[oa]|p[uú]blic[oa]|placa|chofer|conductor|dni|licencia|llegada|partida|almac[eé]n|fecha|l[ií]neas?|solo|mitad|total|cantidad|bultos|paquetes|vehículo|vehiculo|transportista|carreta|motivo|venta|compra|traslado)\b/i;
+// Pasada la hora de la última respuesta, solo se toman como datos de la guía los textos que lo parecen.
+var TGG_DATO_RX_ = /(peso|kg|kilos?|toneladas?|privad[oa]|p[uú]blic[oa]|placa|chofer|conductor|dni|licencia|llegada|partida|almac[eé]n|fecha|l[ií]neas?|solo|mitad|total|cantidad|bultos|paquetes|veh[ií]culo|transportista|carreta|motivo|venta|compra|traslado|imagen|foto|pdf|adjunt)/i;
 
-/** ¿Este texto es para la guía abierta? Devuelve {c, pregunta} o null. */
+/** ¿Este texto es para la guía abierta? {c, pregunta} o null. */
 function TGG_paraGuia_(ss, clave, texto) {
   var ses = TG_sesion_(clave);
-  if (!ses.gre || !ses.greT || Date.now() - ses.greT > 3 * 3600000 || !texto || texto.charAt(0) === '/') return null;
+  if (!ses.gre || !ses.greT || !texto || texto.charAt(0) === '/') return null;
+  var edad = Date.now() - ses.greT;
+  if (edad > 3 * 3600000 || (edad > 3600000 && !TGG_DATO_RX_.test(texto) && !(ses.esperando && ses.esperando.tipo === 'gre'))) return null;
   if (/^\s*\/?gu[ií]a\b|\b(emit|emite|emita|genera|haz)\w*\b.*\bgu[ií]a\b/i.test(texto)) return null;   // pide OTRA guía o emitir
-  if (!TGG_DATO_RX_.test(texto) && !(ses.esperando && ses.esperando.tipo === 'gre')) return null;
   var c = TGG_leer_(ss, ses.gre);
   if (!c || /Emitida|Descartada|Emitiendo/.test(c.estado || '')) return null;
   return { c: c, pregunta: ses.esperando && ses.esperando.tipo === 'gre' ? ses.esperando.pregunta : null };
@@ -235,6 +239,7 @@ function TGG_texto_(c, html) {
   var e = html ? TG_esc_ : String, b = function (s) { return html ? '<b>' + s + '</b>' : '*' + s + '*'; };
   var t = c.transporte || {}, L = [];
   L.push('🚚 ' + b('Guía de remisión · ' + e(c.motivo || '?')) + ' · caso ' + c.id);
+  if (c.entendido) L.push('🧠 ' + (html ? '<i>' + e(c.entendido) + '</i>' : '_' + c.entendido + '_'));
   L.push('Emite: ' + e(c.empresa || c.empresa_ruc || '¿?') + (c.motivo === 'Compra' ? ' (compra a ' : ' (para ') + e((c.contraparte || {}).nombre || (c.contraparte || {}).ruc || '¿?') + ')');
   if (c.documento) L.push('Documento: ' + e(c.documento.tipo + ' ' + c.documento.numero));
   var bs = c.bienes || [];
@@ -252,8 +257,6 @@ function TGG_texto_(c, html) {
     ((t.constancias || []).length > 1 ? ' · Constancias MTC: ' + e(t.constancias.join(' / ')) : '') + '\nChofer: ' +
     e((t.conductores || []).map(function (x) { return (x.nombre || '') + ' lic. ' + (x.licencia || '¿?'); }).join(', ') || '¿?'));
   L.push('Fecha de traslado: ' + e(c.fecha || '¿?'));
-  var otros = (c.avisos || []).filter(function (a) { return !/^(Falta|No encontré)/.test(a); });
-  if (otros.length) L.push('⚠️ ' + e(otros.join(' ')));
   var preg = TGG_preguntas_(c);
   if (preg.length) L.push('\n❓ ' + b(e(preg[0].q)) + (preg.length > 1 ? ' (después le pregunto ' + (preg.length - 1) + ' cosa(s) más)' : ''));
   else L.push('\n' + b('¿Está todo bien?') + ' Toque ✅ Está bien y la lleno en SUNAT para que vea la vista previa (no se emite). ' +
@@ -340,13 +343,28 @@ function TGG_empresas_(ss) {
   return out;
 }
 
-/** Lee los archivos, arma el caso, aplica lo que la persona escribió y lo guarda. */
+/** Guarda los archivos (Drive, carpeta temporal), analiza todo junto con lo que escribió y guarda el caso. */
 function TGG_crear_(ss, adjs, texto, chat) {
-  var lecturas = [];
-  adjs.slice(0, 6).forEach(function (a) { try { lecturas.push(TGG_leerUno_(a)); } catch (e) { lecturas.push(null); } });
-  var c = TGG_armar_(lecturas, TGG_empresas_(ss), chat);
-  var pedido = String(texto || '').replace(TGG_PIDE_RX_, '').replace(/\b(emite|emitir|emita|haz|hazme|genera|generar|sacar|saca|por favor|la|una|de|esta|este)\b/gi, '').trim();
-  if (pedido.length > 3) { try { TGG_editar_(c, texto); } catch (e) { c.avisos.push('No pude aplicar "' + String(texto).slice(0, 60) + '": ' + e.message); } }
+  var archivos = adjs.slice(0, 10).map(function (a) {
+    if (a.id) return { id: a.id, nombre: a.nombre || '', mime: a.mime || '' };
+    var f = IMP_carpeta_(ss).createFile(Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'application/octet-stream', 'guia ' + (a.nombre || 'archivo')));
+    return { id: f.getId(), nombre: a.nombre || '', mime: a.mime || '' };
+  });
+  var c = { id: Utilities.getUuid().replace(/-/g, '').slice(0, 8), creado: new Date().toISOString(), chat: chat, estado: 'Propuesta',
+    archivos: archivos, mensajes: String(texto || '').trim() ? [String(texto).trim()] : [] };
+  TGG_analizar_(ss, c);
+  TGG_guardar_(ss, c);
+  return c;
+}
+
+/** Más fotos/PDF para la guía abierta: se suman y se analiza todo de nuevo. */
+function TGG_agregarArchivos_(ss, c, adjs) {
+  adjs.slice(0, 6).forEach(function (a) {
+    if (a.id) c.archivos.push({ id: a.id, nombre: a.nombre || '', mime: a.mime || '' });
+    else c.archivos.push({ id: IMP_carpeta_(ss).createFile(Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'application/octet-stream', 'guia ' + (a.nombre || 'archivo'))).getId() });
+  });
+  c.mensajes = (c.mensajes || []).concat(['(mandé ' + adjs.length + ' archivo(s) más)']);
+  TGG_analizar_(ss, c);
   TGG_guardar_(ss, c);
   return c;
 }
@@ -435,18 +453,36 @@ function TGG_editarTG_(ctx, id, texto, pregunta) {
   var c = TGG_leer_(ctx.ss, id);
   if (!c) return TG_enviar_(ctx.chatId, 'No encontré ese caso de guía.');
   TG_accion_(ctx.chatId, 'typing');
-  try { TGG_editar_(c, texto, pregunta); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message), TGG_botonesTG_(c)); }
+  var ok;
+  try { ok = TGG_editar_(ctx.ss, c, texto, pregunta); } catch (e) { TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message), TGG_botonesTG_(c)); return true; }
+  if (!ok) return false;   // no era para la guía: lo responde la IA general
   TGG_guardar_(ctx.ss, c);
+  TGG_seguirConversacion_(ctx.chatId, c);
+  TG_enviar_(ctx.chatId, TGG_texto_(c, true), TGG_botonesTG_(c));
+  return true;
+}
+
+/** Telegram: lo que escribe o dice 🎤 con una guía abierta va a la IA de la guía (con todos sus archivos). true si lo tomó. */
+function TGG_datoTG_(ctx, texto) {
+  var x = TGG_paraGuia_(ctx.ss, ctx.chatId, texto);
+  if (!x) return false;
+  return TGG_editarTG_(ctx, x.c.id, texto, x.pregunta);
+}
+
+/** Telegram: más fotos/PDF para la guía abierta. */
+function TGG_agregarTG_(ctx, adjs) {
+  var ses = TG_sesion_(ctx.chatId), c = ses.gre && TGG_leer_(ctx.ss, ses.gre);
+  if (!c || /Emitida|Descartada/.test(c.estado || '')) return TGG_desdeAdjTG_(ctx, adjs, '');
+  TG_accion_(ctx.chatId, 'typing');
+  try { TGG_agregarArchivos_(ctx.ss, c, adjs); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message)); }
   TGG_seguirConversacion_(ctx.chatId, c);
   TG_enviar_(ctx.chatId, TGG_texto_(c, true), TGG_botonesTG_(c));
 }
 
-/** Telegram: texto suelto con datos de la guía abierta (o la respuesta a su pregunta). true si lo tomó. */
-function TGG_datoTG_(ctx, texto) {
-  var x = TGG_paraGuia_(ctx.ss, ctx.chatId, texto);
-  if (!x) return false;
-  TGG_editarTG_(ctx, x.c.id, texto, x.pregunta);
-  return true;
+/** ¿Hay una guía abierta en este chat (para ofrecer "agregar a la guía")? */
+function TGG_abierta_(clave) {
+  var ses = TG_sesion_(clave);
+  return ses.gre && ses.greT && Date.now() - ses.greT < 3 * 3600000 ? ses.gre : '';
 }
 
 /* ============================================================ WhatsApp */
@@ -462,13 +498,29 @@ function TGG_respWA_(texto, c) {
 /** WhatsApp: corrección pendiente, "guía" con fotos, "emitir guía <caso>". null si no es de guías. */
 function TGG_atajoWA_(ss, q, clave) {
   var texto = String(q.texto || '').trim(), ses = TG_sesion_(clave);
-  var dato = !(q.adjuntos || []).length && TGG_paraGuia_(ss, clave, texto);   // respuesta a su pregunta o dato suelto
+  // 🎤 Nota de voz con una guía abierta: se transcribe aquí para que vaya a la guía.
+  if (!texto && q.audio && q.audio.base64 && TGG_abierta_(clave)) {
+    try { texto = TG_transcribir_(ss, Utilities.newBlob(Utilities.base64Decode(q.audio.base64), q.audio.mime || 'audio/ogg', 'voz.ogg')); } catch (e) {}
+  }
+  // Fotos/PDF con una guía abierta y que hablan de la guía: se suman a ella.
+  var abierta = TGG_abierta_(clave);
+  if ((q.adjuntos || []).length && abierta && !/^\s*\/?gu[ií]a\b|emit\w*\s+gu[ií]a/i.test(texto) && TGG_PIDE_RX_.test(texto + ' ' + (q.citado || ''))) {
+    var ca = TGG_leer_(ss, abierta);
+    if (ca && !/Emitida|Descartada/.test(ca.estado || '')) {
+      try { TGG_agregarArchivos_(ss, ca, q.adjuntos); } catch (e) { return TGG_respWA_('⚠️ ' + e.message, ca); }
+      TGG_seguirConversacion_(clave, ca);
+      return TGG_respWA_(TGG_texto_(ca, false), ca);
+    }
+  }
+  var dato = !(q.adjuntos || []).length && TGG_paraGuia_(ss, clave, texto);   // todo lo que escribe va a la IA de la guía
   if (dato && !/^\s*(emitir|emite)\b/i.test(texto)) {
-    var c0 = dato.c;
-    try { TGG_editar_(c0, texto, dato.pregunta); } catch (e) { return TGG_respWA_('⚠️ ' + e.message, c0); }
-    TGG_guardar_(ss, c0);
-    TGG_seguirConversacion_(clave, c0);
-    return TGG_respWA_(TGG_texto_(c0, false), c0);
+    var c0 = dato.c, ok;
+    try { ok = TGG_editar_(ss, c0, texto, dato.pregunta); } catch (e) { return TGG_respWA_('⚠️ ' + e.message, c0); }
+    if (ok) {
+      TGG_guardar_(ss, c0);
+      TGG_seguirConversacion_(clave, c0);
+      return TGG_respWA_(TGG_texto_(c0, false), c0);
+    }
   }
   if (!(/^\/?gu[ií]a\b/i.test(texto) || (TGG_PIDE_RX_.test(texto) && /\b(emit|hac|haz|gener|sac|arm|necesit|quiero)/i.test(texto)))) return null;
   var m = texto.match(/\b([0-9a-f]{8})\b/), id = (m && m[1]) || (/^\/?emitir\b/i.test(texto) && ses.gre);
