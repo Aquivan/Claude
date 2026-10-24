@@ -190,6 +190,7 @@ function TG_comando_(ctx, texto) {
     case 'emitir': case 'retener': case 'cre': return TGR_comandoTG_(ctx);   // 🧾 comprobantes de retención por emitir
     case 'emitirwa': return TGR_emitirWA_(ctx, arg);
     case 'guia': case 'gre': return TGG_atajoTG_(ctx, '/guia ' + arg);   // 🚚 guía de remisión por SUNAT
+    case 'pdf': if (TGG_atajoTG_(ctx, '/pdf guía ' + arg)) return; break;   // 📄 PDF de una guía emitida
     case 'honorarios': return TG_enviarHonorarios_(ctx, arg);
     case 'estado': return TG_enviarEstado_(ctx);
     case 'descargar': return TG_asistenteDescarga_(ctx, null);

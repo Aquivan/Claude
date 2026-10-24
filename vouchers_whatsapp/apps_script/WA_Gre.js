@@ -79,6 +79,7 @@ function WA_greArchivo_(m, de, media, caption, mime, esPdf) {
  *   · "emite guía …" sin archivos → abre la guía y espera las fotos.
  */
 function WA_greTexto_(m, de, nombre, cuerpo) {
+  if (/^\s*\/?(pdf|m[aá]nd[ae]me el pdf|env[ií]a(me)? el pdf|reenv[ií]a(me)? el pdf)\b/i.test(cuerpo)) return false;   // lo contesta Cobranzas
   var t = WA_greTanda_(de), vigente = WA_greVigente_(t);
   var listo = /^\s*(listo|ya|eso es todo|termin[eé]|env[ií]a(la)?|arma(la)?)\s*[.!]*\s*$/i.test(cuerpo);
   if (vigente) {
@@ -93,7 +94,7 @@ function WA_greTexto_(m, de, nombre, cuerpo) {
     WA_enviarTexto_(de, '📝 Anotado para la guía.');
     return true;
   }
-  if (!WA_GRE_RX_.test(cuerpo)) return false;
+  if (!WA_GRE_RX_.test(cuerpo) || /\bpdf\b/i.test(cuerpo)) return false;   // "pdf guía …" lo contesta Cobranzas con el archivo
   WA_greAbrir_(de, nombre);
   WA_greAnotarTexto_(de, cuerpo);
   if (WA_greDesdeEspera_(de)) { WA_greMandar_(de, nombre, WA_greTanda_(de), m.id); return true; }

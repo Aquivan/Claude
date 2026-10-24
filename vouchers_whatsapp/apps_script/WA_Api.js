@@ -82,6 +82,14 @@ function WA_desdeCobranzas_(e, p) {
     // 🚚 'imagen' (p. ej. vista previa de una guía): sin captcha; con q.numero va solo a ese número autorizado.
     if (q.tipo === 'imagen' && q.base64) media = WA_subirImagen_(Utilities.newBlob(Utilities.base64Decode(q.base64), q.mime || 'image/jpeg', 'imagen.jpg'));
     var destinos = WA_permitidos_();
+    // 📄 'documento' (p. ej. el PDF de una guía emitida): va adjunto, a un solo número autorizado.
+    if (q.tipo === 'documento' && q.base64 && q.numero) {
+      destinos.filter(function (a) { return String(a).replace(/\D/g, '') === String(q.numero).replace(/\D/g, ''); }).forEach(function (a) {
+        try { WA_enviarArchivo_(a, { base64: q.base64, mime: q.mime || 'application/pdf', nombre: q.nombre || 'documento.pdf', titulo: q.texto || '' }); }
+        catch (ed) { console.error('Documento de Cobranzas: ' + ed.message); WA_enviarTexto_(a, '⚠️ No pude adjuntar ' + (q.nombre || 'el archivo') + ': ' + ed.message); }
+      });
+      return WA_ok_('OK');
+    }
     if (q.numero) destinos = destinos.filter(function (a) { return String(a).replace(/\D/g, '') === String(q.numero).replace(/\D/g, ''); });
     destinos.forEach(function (a) {
       if (media) {
