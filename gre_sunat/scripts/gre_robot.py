@@ -321,6 +321,9 @@ def p4_bienes(fr, pag, c):
             raise Alto(f"SUNAT no aceptó un bien: {sin_datos(' '.join(avisos))[:200]}")
     combo(fr, pag, "Unidad de medida de peso bruto", "KILOGRAMO")
     fr.locator("[formcontrolname=pesoBruto], input[name=pesoBruto]").first.fill(f"{float(c['peso_kg']):.3f}".rstrip("0").rstrip("."))
+    bultos = fr.locator("[formcontrolname*=ulto]:visible, input[name*=ulto]:visible")   # "Número de bultos", si SUNAT lo pide
+    if c.get("bultos") and bultos.count():
+        bultos.first.fill(str(int(c["bultos"])))
     siguiente(fr, pag)
 
 
@@ -415,12 +418,24 @@ def vehiculos_conductores(fr, pag, t):
         fr.evaluate("() => document.querySelectorAll('[data-robot=ag]').forEach(e => e.removeAttribute('data-robot'))")
         esperar(pag, 1500)
         cerrar_avisos(fr, pag)
-    for placa in t.get("placas") or []:
+    constancias = t.get("constancias") or []
+    for n, placa in enumerate(t.get("placas") or []):   # en orden: la primera es el vehículo principal
         abrir("Datos de vehículos")
-        modal(fr).locator("[formcontrolname=placaVehiculo]").fill(re.sub(r"[^A-Z0-9]", "", placa.upper()))
+        m = modal(fr)
+        m.locator("[formcontrolname=placaVehiculo]").fill(re.sub(r"[^A-Z0-9]", "", placa.upper()))
+        m.locator("[formcontrolname=placaVehiculo]").press("Tab")
+        esperar(pag, 2500)
+        campos = m.evaluate("m => [...m.querySelectorAll('input')].filter(e => e.offsetParent !== null).map(e => e.getAttribute('formcontrolname') || e.name || e.id)")
+        paso(f"   vehículo {n + 1} ({'principal' if n == 0 else 'secundario'}) · campos: {campos}")
+        # Si SUNAT pide la constancia/TUC/certificado del vehículo, va la que corresponde a esa placa (en el mismo orden).
+        for nombre in campos:
+            if re.search(r"tuc|certific|habilit|constanc|inscrip", nombre or "", re.I) and n < len(constancias):
+                m.locator(f"[formcontrolname={nombre}]").first.fill(constancias[n])
         boton_agregar_modal(fr).click(timeout=5000)
         esperar(pag, 2000)
-        cerrar_avisos(fr, pag)
+        avisos = cerrar_avisos(fr, pag)
+        if fr.locator("[formcontrolname=placaVehiculo]:visible").count():
+            raise Alto(f"SUNAT no aceptó la placa del vehículo {n + 1}: {sin_datos(' '.join(avisos))[:200]}")
     for cd in t.get("conductores") or []:
         abrir("Datos de conductores")
         m = modal(fr)
