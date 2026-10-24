@@ -507,16 +507,29 @@ def vehiculos_conductores(fr, pag, t):
     for cd in t.get("conductores") or []:
         abrir("Datos de conductores")
         m = modal(fr)
-        combo(fr, pag, "Tipo de documento", "DOCUMENTO NACIONAL")
-        m.locator("[formcontrolname=nroDocIdentidad]").fill(cd["dni"])
-        m.locator("[formcontrolname=nroDocIdentidad]").press("Tab")
-        esperar(pag, 3000)
+        # SUNAT pide primero la licencia: con ella completa sola el tipo de documento, el DNI y el nombre (y los bloquea).
+        lic = m.locator("[formcontrolname=nroLicencia]").first
+        llenar(lic, cd.get("licencia", ""))
+        lic.press("Tab")
+        esperar(pag, 3500)
         seguir_observacion(fr, pag)
         m = modal(fr)
-        m.locator("[formcontrolname=nroLicencia]").fill(cd.get("licencia", ""))
-        nom = m.locator("[formcontrolname=nombreApellidos]")
-        if nom.count() and not nom.input_value().strip():
-            nom.fill(cd.get("nombre", ""))
+        doc = m.locator("[formcontrolname=nroDocIdentidad]").first
+        if doc.count() and doc.is_enabled() and not (doc.input_value() or "").strip():   # SUNAT no lo encontró: se escribe a mano
+            try:
+                combo(fr, pag, "Tipo de documento", "DOCUMENTO NACIONAL")
+            except Exception:
+                pass
+            esperar(pag, 800)
+            if llenar(doc, cd["dni"]):
+                doc.press("Tab")
+                esperar(pag, 3000)
+                seguir_observacion(fr, pag)
+        m = modal(fr)
+        llenar(m.locator("[formcontrolname=nombreApellidos]").first, cd.get("nombre", "")) if not (
+            m.locator("[formcontrolname=nombreApellidos]").first.input_value() or "").strip() else None
+        paso(f"   conductor · licencia {'ok' if (lic.input_value() or '').strip() else 'vacía'} · documento "
+             f"{'ok' if (doc.input_value() or '').strip() else 'vacío'}")
         boton_agregar_modal(fr).click(timeout=5000)
         esperar(pag, 2000)
         cerrar_avisos(fr, pag)
