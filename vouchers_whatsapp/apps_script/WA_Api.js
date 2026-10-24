@@ -89,6 +89,7 @@ function WA_desdeCobranzas_(e, p) {
           messaging_product: 'whatsapp', to: a, type: 'image', image: { id: media, caption: String(q.texto || '').slice(0, 1000) } });
         if (!r.ok) console.error('Foto para ' + a + ': ' + r.error);
       } else if (q.texto) WA_enviarTexto_(a, q.texto);
+      if (q.botones && (q.botones.opciones || []).length) WA_ofrecerBotones_(a, q.botones);   // p. ej. ✅ Emitir · ✏️ Modificar · 🗑 Descartar
     });
   } catch (err) {
     console.error('Aviso de Cobranzas: ' + (err && err.stack || err));

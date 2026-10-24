@@ -408,9 +408,73 @@ def p3_documentos(fr, pag, c):
     siguiente(fr, pag)
 
 
+def clave_bien(t):
+    return re.sub(r"[^a-z0-9]", "", simple(t))
+
+
+def filas_bienes(fr):
+    """Filas que ya tiene la tabla de bienes (SUNAT las trae solas de la factura electrónica relacionada)."""
+    return fr.evaluate("""() => {
+      const vis = e => e && e.offsetParent !== null;
+      const t = [...document.querySelectorAll('table')].filter(vis).filter(t => !t.closest('.modal'))
+        .find(t => /descripci/i.test(t.innerText) && /cantidad/i.test(t.innerText));
+      if (!t) return [];
+      return [...t.querySelectorAll('tbody tr')].filter(vis).map((r, i) => {
+        const c = [...r.querySelectorAll('td')].map(x => x.innerText.trim());
+        const nums = c.filter(x => /^[\\d.,]+$/.test(x)).map(x => parseFloat(x.replace(/,/g, '')));
+        const desc = c.filter(x => /[a-zA-Z]{3}/.test(x)).sort((a, b) => b.length - a.length)[0] || '';
+        return {i, desc, cant: nums.length ? nums[nums.length - 1] : null};
+      }).filter(f => f.desc);
+    }""")
+
+
+def quitar_fila_bien(fr, pag, i):
+    """Quita la fila i de la tabla de bienes (botón ×/papelera de la fila) y confirma si SUNAT pregunta."""
+    ok = fr.evaluate("""i => {
+      const vis = e => e && e.offsetParent !== null;
+      const t = [...document.querySelectorAll('table')].filter(vis).filter(t => !t.closest('.modal'))
+        .find(t => /descripci/i.test(t.innerText) && /cantidad/i.test(t.innerText));
+      const r = t && [...t.querySelectorAll('tbody tr')].filter(vis)[i];
+      if (!r) return false;
+      const b = [...r.querySelectorAll('button, a, i, span')].reverse()
+        .find(e => /^\\s*[×xX✕]\\s*$/.test(e.innerText || '') || /trash|delete|remove|close|elimin|times/i.test(e.className + ' ' + (e.title || '')));
+      if (!b) return false;
+      b.click(); return true;
+    }""", i)
+    if not ok:
+        return False
+    esperar(pag, 1000)
+    conf = fr.locator(".modal:visible").filter(has_text=re.compile(r"elimin|quitar|borrar|desea", re.I))
+    if conf.count():
+        conf.last.locator("button:visible", has_text=re.compile(r"^\s*(SI|Sí|Si|Aceptar|Eliminar)\s*$")).last.click(timeout=4000)
+        esperar(pag, 1000)
+    return True
+
+
 def p4_bienes(fr, pag, c):
     paso(f"4. Bienes a transportar ({len(c['bienes'])})")
-    for b in c["bienes"]:
+    esperar(pag, 1500)
+    cerrar_avisos(fr, pag)
+    # Con una factura electrónica relacionada, SUNAT ya trae sus líneas: no se vuelven a agregar (antes salían duplicadas).
+    # Se quitan las que la guía no lleva (o con otra cantidad) y se agregan solo las que falten.
+    pendientes = list(c["bienes"])
+    traidas = filas_bienes(fr)
+    if traidas:
+        quitar = []
+        for f in traidas:
+            k = clave_bien(f["desc"])
+            j = next((n for n, b in enumerate(pendientes) if clave_bien(b["descripcion"]) == k
+                      or (len(k) > 8 and (clave_bien(b["descripcion"]).startswith(k) or k.startswith(clave_bien(b["descripcion"]))))), None)
+            if j is not None and f["cant"] is not None and abs(float(f["cant"]) - float(pendientes[j]["cantidad"])) < 0.001:
+                pendientes.pop(j)   # ya está, con la misma cantidad
+            else:
+                quitar.append(f["i"])
+        paso(f"   SUNAT trajo {len(traidas)} línea(s) de la factura · quedan {len(traidas) - len(quitar)} · a quitar {len(quitar)} · a agregar {len(pendientes)}")
+        for i in sorted(quitar, reverse=True):
+            if not quitar_fila_bien(fr, pag, i):
+                raise Alto("SUNAT trajo las líneas de la factura y no pude quitar las que la guía no lleva. "
+                           "Dígame si la guía va por el total de la factura.")
+    for b in pendientes:
         fr.locator("button:visible", has_text=AGREGAR).first.click(timeout=5000)
         esperar(pag, 1500)
         fr.locator("#descBien").fill(str(b["descripcion"])[:250])
