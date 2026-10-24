@@ -71,17 +71,75 @@ JS_LISTA = """() => [...document.querySelectorAll('li,[role=option],.dropdown-it
   .filter(e => e.offsetParent !== null).map(e => e.innerText.replace(/\\s+/g, ' ').trim()).filter(t => t && t.length < 120)"""
 
 
+def cerrar_avisos(fr, pag):
+    """Un aviso (Aceptar / Entendido) se cierra para poder seguir mirando."""
+    for t in ("Entendido", "Aceptar"):
+        try:
+            b = fr.locator("button:visible", has_text=t)
+            if b.count():
+                b.first.click(timeout=3000)
+                pag.wait_for_timeout(1000)
+        except Exception:
+            pass
+
+
+def pantalla(fr):
+    try:
+        return fr.evaluate("() => (document.body.innerText.match(/\\d\\. [^\\n]+/) || [''])[0]")
+    except Exception:
+        return ""
+
+
+def recorrer(fr, pag, maximo=8):
+    """Avanza pantalla por pantalla: anota, abre cada "Agregar" (y lo cierra), y pulsa Siguiente."""
+    for _ in range(maximo):
+        cerrar_avisos(fr, pag)
+        actual = pantalla(fr)
+        print(f"\n######## Pantalla: {sin_datos(actual)}")
+        volcar(fr)
+        agregar = fr.locator("button:visible", has_text="Agregar")
+        for i in range(min(agregar.count(), 3)):
+            try:
+                agregar.nth(i).click(timeout=5000)
+                pag.wait_for_timeout(2500)
+                print(f"\n>>> Ventana «Agregar» n.º {i + 1}:")
+                volcar(fr)
+                print("Opciones de listas abiertas:", " / ".join(sin_datos(x) for x in dict.fromkeys(fr.evaluate(JS_LISTA)))[:1500])
+            except Exception as e:
+                print("   (no abrió Agregar:", str(e).splitlines()[0][:80], ")")
+            pag.keyboard.press("Escape")
+            pag.wait_for_timeout(1000)
+            cerrar_avisos(fr, pag)
+        try:
+            fr.get_by_text("Siguiente", exact=True).first.click(timeout=6000)
+        except Exception as e:
+            print("\n>>> Siguiente no disponible:", str(e).splitlines()[0][:80])
+            break
+        pag.wait_for_timeout(4000)
+        if pantalla(fr) == actual:
+            print("\n>>> SUNAT no deja pasar sin datos en esta pantalla. Mensaje:")
+            try:
+                print("   ", sin_datos(fr.inner_text("body")[-600:]).replace("\n", " / "))
+            except Exception:
+                pass
+            cerrar_avisos(fr, pag)
+            break
+
+
 def asistente(fr, pag):
     """Emisión de GRE paso a paso, sin emitir. PASOS = acciones separadas por ";":
        texto → clic en ese texto · #id → clic en ese elemento · lista:texto → abrir y anotar opciones
        elegir:texto → elegir esa opción de la lista abierta. Cualquier botón de emitir/guardar se salta."""
     pasos = os.environ.get("PASOS") or ("Remitente;#rdNo;lista:css=input[type=text]:visible;elegir:Compra;Siguiente;"
-                                        "Agregar;tecla:Escape;#descTipoActor_2_0;Siguiente;Siguiente;Siguiente;Siguiente")
+                                        "#descTipoActor_2_0;Siguiente;auto")
     for paso in pasos.split(";"):
         paso = paso.strip()
         if not paso or PROHIBIDO.search(paso.split(":", 1)[-1]):
             continue
         tipo, _, val = paso.partition(":") if paso.startswith(("lista:", "elegir:", "html:")) else ("clic", "", paso)
+        if paso == "auto":
+            recorrer(fr, pag)
+            continue
         if paso.startswith("tecla:"):
             pag.keyboard.press(paso[6:])
             pag.wait_for_timeout(1500)
@@ -110,12 +168,7 @@ def asistente(fr, pag):
             print("Opciones de la lista:", " / ".join(sin_datos(x) for x in dict.fromkeys(fr.evaluate(JS_LISTA)))[:2500])
         else:
             volcar(fr)
-            try:   # un aviso de error se cierra con Aceptar para poder seguir mirando
-                ok = fr.locator("button:visible", has_text="Aceptar")
-                if ok.count():
-                    ok.first.click(timeout=3000)
-            except Exception:
-                pass
+            cerrar_avisos(fr, pag)
 
 
 def main():
