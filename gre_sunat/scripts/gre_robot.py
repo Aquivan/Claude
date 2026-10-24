@@ -465,38 +465,42 @@ def p5_puntos(fr, pag, c):
     siguiente(fr, pag)
 
 
-def fecha(fr, pag, nombre, valor):
-    """Fecha en el calendario de SUNAT (ngbDatepicker de solo lectura): se escribe quitando el bloqueo y, si no la toma,
-    se elige en el calendario (mes, año y día)."""
+def fecha(fr, pag, nombre, valor, obligatoria=True):
+    """Fecha en el calendario de SUNAT (ngbDatepicker bloqueado para escribir): se elige con el botón 📅 (mes, año y día),
+    como una persona. Si el calendario no abre, se intenta escribirla quitando el bloqueo."""
     f = fr.locator(f"input[name={nombre}]").first
-    if not f.count() or not f.is_visible() or not f.is_enabled() or (f.input_value() or "").strip() == valor:
+    if not f.count() or not f.is_visible():
         return
-    f.evaluate("e => { e.removeAttribute('readonly'); e.readOnly = false; }")
+    if (f.input_value() or "").strip() == valor:
+        return
+    d, mes, a = (int(x) for x in valor.split("/"))
     try:
-        f.fill(valor, timeout=4000)
-        f.dispatch_event("input")
-        f.dispatch_event("change")
-        f.press("Tab")
-    except Exception:
-        pass
-    esperar(pag, 800)
-    if (f.input_value() or "").strip() != valor:   # con el calendario, como una persona
-        d, mes, a = (int(x) for x in valor.split("/"))
-        boton = f.locator("xpath=following::button[1]").first
-        (boton if boton.count() else f).click(timeout=4000)
-        esperar(pag, 800)
+        boton = f.locator("xpath=ancestor::*[.//button][1]//button").first
+        boton.click(timeout=4000)
+        esperar(pag, 900)
         cal = fr.locator("ngb-datepicker:visible").last
+        cal.wait_for(timeout=4000)
         sel = cal.locator("select")
         if sel.count() >= 2:
             sel.nth(0).select_option(str(mes))
             sel.nth(1).select_option(str(a))
-            esperar(pag, 400)
-        dia = cal.locator(".ngb-dp-day:not(.disabled) div:not(.outside)", has_text=re.compile(rf"^\s*{d}\s*$")).first
-        dia.click(timeout=4000)
+            esperar(pag, 500)
+        cal.locator(".ngb-dp-day:not(.disabled) > div:not(.outside)", has_text=re.compile(rf"^\s*{d}\s*$")).first.click(timeout=4000)
+        esperar(pag, 900)
+    except Exception as e:
+        paso(f"   calendario de {nombre}: {type(e).__name__}; pruebo escribiendo")
+        try:
+            f.evaluate("e => { e.removeAttribute('readonly'); e.readOnly = false; e.disabled = false; }")
+            f.fill(valor, timeout=4000)
+            f.press("Tab")
+        except Exception:
+            pass
         esperar(pag, 800)
     pag.keyboard.press("Escape")
-    if (f.input_value() or "").strip() != valor:
-        raise Alto("SUNAT no aceptó la fecha del traslado")
+    ok = (f.input_value() or "").strip() == valor
+    paso(f"   fecha {nombre}: {'puesta' if ok else 'NO quedó'}")
+    if not ok and obligatoria:
+        raise Alto("SUNAT no aceptó la fecha del traslado (" + ("entrega al transportista" if nombre == "d1" else "inicio de traslado") + ")")
 
 
 def p6_transporte(fr, pag, c):
@@ -527,7 +531,7 @@ def p6_transporte(fr, pag, c):
             esperar(pag, 2000)
             vehiculos_conductores(fr, pag, t)
         fecha(fr, pag, "d1", c["fecha"])   # entrega de bienes al transportista
-        fecha(fr, pag, "d2", c["fecha"])   # inicio de traslado (si SUNAT la muestra)
+        fecha(fr, pag, "d2", c["fecha"])   # inicio de traslado (SUNAT la muestra también en público)
     else:
         vehiculos_conductores(fr, pag, t)
         fecha(fr, pag, "d2", c["fecha"])
