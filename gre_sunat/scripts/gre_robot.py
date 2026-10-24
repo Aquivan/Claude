@@ -427,13 +427,36 @@ def p5_puntos(fr, pag, c):
 
 
 def fecha(fr, pag, nombre, valor):
+    """Fecha en el calendario de SUNAT (ngbDatepicker de solo lectura): se escribe quitando el bloqueo y, si no la toma,
+    se elige en el calendario (mes, año y día)."""
     f = fr.locator(f"input[name={nombre}]").first
-    f.click()
-    f.fill(valor)
-    f.press("Enter")
-    esperar(pag, 600)
+    if not f.count() or not f.is_visible():
+        return
+    f.evaluate("e => { e.removeAttribute('readonly'); e.readOnly = false; }")
+    try:
+        f.fill(valor, timeout=4000)
+        f.dispatch_event("input")
+        f.dispatch_event("change")
+        f.press("Tab")
+    except Exception:
+        pass
+    esperar(pag, 800)
+    if (f.input_value() or "").strip() != valor:   # con el calendario, como una persona
+        d, mes, a = (int(x) for x in valor.split("/"))
+        boton = f.locator("xpath=following::button[1]").first
+        (boton if boton.count() else f).click(timeout=4000)
+        esperar(pag, 800)
+        cal = fr.locator("ngb-datepicker:visible").last
+        sel = cal.locator("select")
+        if sel.count() >= 2:
+            sel.nth(0).select_option(str(mes))
+            sel.nth(1).select_option(str(a))
+            esperar(pag, 400)
+        dia = cal.locator(".ngb-dp-day:not(.disabled) div:not(.outside)", has_text=re.compile(rf"^\s*{d}\s*$")).first
+        dia.click(timeout=4000)
+        esperar(pag, 800)
     pag.keyboard.press("Escape")
-    if f.input_value().strip() != valor:
+    if (f.input_value() or "").strip() != valor:
         raise Alto("SUNAT no aceptó la fecha del traslado")
 
 
@@ -464,7 +487,8 @@ def p6_transporte(fr, pag, c):
             fr.get_by_text("Registrar vehículos y conductores del transportista").first.click()
             esperar(pag, 2000)
             vehiculos_conductores(fr, pag, t)
-        fecha(fr, pag, "d1", c["fecha"])
+        fecha(fr, pag, "d1", c["fecha"])   # entrega de bienes al transportista
+        fecha(fr, pag, "d2", c["fecha"])   # inicio de traslado (si SUNAT la muestra)
     else:
         vehiculos_conductores(fr, pag, t)
         fecha(fr, pag, "d2", c["fecha"])
