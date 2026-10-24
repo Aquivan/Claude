@@ -153,37 +153,42 @@ def llenar_prueba(fr, pag, actual):
         cerrar_avisos(fr, pag)
     if actual.startswith("5."):
         agregar = fr.locator("button:visible", has_text=re.compile(r"^\s*Agregar\s*$"))
-        # Partida de prueba: "Otra dirección" (se anotan sus campos y listas)
+        # Partida de prueba: establecimiento de un tercero (RUC público de la propia SUNAT) → elegir local
         try:
             agregar.nth(0).click(timeout=4000)
             pag.wait_for_timeout(2000)
-            fr.get_by_text("Otra dirección", exact=True).last.click(timeout=4000)
-            pag.wait_for_timeout(2000)
-            print("\n>>> Partida · Otra dirección:")
-            volcar(fr)
-            selects = fr.locator("ng-select:visible")
-            for j in range(selects.count()):   # departamento → provincia → distrito (o ubigeo): la primera opción
-                sel = selects.nth(j)
-                try:
-                    ident = sel.get_attribute("formcontrolname") or sel.get_attribute("id") or str(j)
-                    sel.click(timeout=3000)
-                    pag.wait_for_timeout(1500)
-                    ops = list(dict.fromkeys(fr.evaluate(JS_LISTA)))
-                    print(f"   Lista {ident}: {len(ops)} opciones, p. ej.:", " / ".join(sin_datos(x) for x in ops[:8]))
-                    fr.locator(".ng-dropdown-panel .ng-option:visible").first.click(timeout=3000)
-                    pag.wait_for_timeout(1500)
-                except Exception as e:
-                    print(f"   (lista {j} no respondió:", str(e).splitlines()[0][:80], ")")
-            vacios = fr.locator(".modal input[type=text]:visible, .modal textarea:visible")
-            for j in range(vacios.count()):
-                c = vacios.nth(j)
-                if not c.input_value() and not c.get_attribute("aria-autocomplete"):
-                    c.fill("DIRECCION DE PRUEBA SONDEO")
+            ruc = fr.locator(".modal [formcontrolname=ruc], .modal input[name=ruc]").first
+            ruc.fill("20131312955")
+            ruc.press("Enter")
+            pag.wait_for_timeout(1500)
+            ruc.press("Tab")
+            pag.wait_for_timeout(4000)
+            filas = fr.locator(".modal table tbody tr")
+            print(f"\n>>> Partida · tercero: {filas.count()} locales; primero:",
+                  sin_datos(filas.first.inner_text()).replace("\t", " | ")[:200] if filas.count() else "-")
+            print("   Botones de la ventana:", fr.evaluate("() => [...document.querySelectorAll('.modal button')].filter(b => b.offsetParent !== null).map(b => b.innerText.trim())"))
+            fr.locator(".modal table tbody input[type=radio]").first.check(timeout=4000)
             fr.locator("button:visible", has_text=re.compile(r"^\s*Agregar\s*$")).last.click(timeout=4000)
             pag.wait_for_timeout(2500)
             cerrar_avisos(fr, pag)
         except Exception as e:
             print("   (partida de prueba no se pudo:", str(e).splitlines()[0][:100], ")")
+            cerrar_ventana(fr, pag)
+        # Partida "Otra dirección": solo anotar sus campos (después de lo anterior, si quedó la ventana libre)
+        try:
+            agregar2 = fr.locator("button:visible", has_text=re.compile(r"^\s*Agregar\s*$"))
+            if agregar2.count() >= 2:
+                agregar2.nth(0).click(timeout=4000)
+                pag.wait_for_timeout(1500)
+                fr.locator(".modal input[type=radio]").nth(1).check(timeout=4000)
+                pag.wait_for_timeout(2000)
+                print("\n>>> Partida · Otra dirección:")
+                volcar(fr)
+                sels = fr.locator(".modal ng-select")
+                print("   Listas:", [sels.nth(j).get_attribute("formcontrolname") for j in range(sels.count())])
+                cerrar_ventana(fr, pag)
+        except Exception as e:
+            print("   (otra dirección no se pudo ver:", str(e).splitlines()[0][:100], ")")
             cerrar_ventana(fr, pag)
         # Llegada de prueba: primer establecimiento del remitente
         try:
