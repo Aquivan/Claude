@@ -106,7 +106,7 @@ function TG_manejar_(u) {
   if (texto.charAt(0) === '/') return TG_comando_(ctx, texto);
   var atajo = TG_ATAJOS_[texto];
   if (atajo) return TG_comando_(ctx, atajo);
-  if (TGG_atajoTG_(ctx, texto)) return;   // 🚚 "emite la guía de remisión" (con las fotos que mandó)
+  if (TGG_atajoTG_(ctx, texto)) return;   // 🚚 "emite la guía de remisión" (antes o después de las fotos) · "listo"
   if (TGR_atajoTG_(ctx, texto)) return;   // 🧾 "emite la retención de F001-215" (o citando el mensaje)
   TG_preguntar_(ctx, texto, []);
 }
@@ -280,10 +280,16 @@ function TG_alArchivo_(ctx, m, texto) {
   var grupo = m.media_group_id ? 'g' + m.media_group_id : 'm' + m.message_id;
   var marca = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HHmm');
   var f = IMP_carpeta_(ctx.ss).createFile(blob.setName('telegram ' + grupo + ' ' + marca + ' - ' + nombre));
-  var adj = { id: f.getId(), nombre: nombre, mime: mime, grupo: grupo, foto: !!m.photo };
+  var adj = { id: f.getId(), nombre: nombre, mime: mime, grupo: grupo, foto: !!m.photo, t: Date.now() };
   var ses = TG_sesion_(chatId);
   ses.adj = (ses.adj || []).concat([adj]);
   TG_guardarSesion_(chatId, ses);
+  // 🚚 Antes escribió "emite guía": los archivos se juntan para la guía (sin preguntar qué hacer) hasta "listo".
+  if (ses.greEsp && Date.now() - ses.greEsp < 10 * 60000 && !texto) {
+    if (!m.media_group_id || !TG_yaVisto_('albumgre' + m.media_group_id))
+      TG_enviar_(chatId, '📎 Recibido para la guía. Cuando termine de mandar todo escriba <b>listo</b>.', null, { silencioso: true });
+    return;
+  }
 
   if (texto && TGG_PIDE_RX_.test(texto)) return TGG_desdeAdjTG_(ctx, TG_adjDelGrupo_(ctx.ss, grupo, adj), texto);   // 🚚 fotos + "guía"
   if (texto) return TG_preguntar_(ctx, texto, TG_adjDelGrupo_(ctx.ss, grupo, adj));
