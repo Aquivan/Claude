@@ -83,6 +83,18 @@ def cerrar_avisos(fr, pag):
             pass
 
 
+def cerrar_ventana(fr, pag):
+    """Cierra la ventana abierta con su ×."""
+    try:
+        x = fr.locator(".modal.show button.close:visible, .modal.show [aria-label=Close]:visible, button:visible:has-text('×')")
+        if x.count():
+            x.last.click(timeout=3000)
+    except Exception:
+        pag.keyboard.press("Escape")
+    pag.wait_for_timeout(1200)
+    cerrar_avisos(fr, pag)
+
+
 def pantalla(fr):
     try:
         return fr.evaluate("() => (document.body.innerText.match(/\\d\\. [^\\n]+/) || [''])[0]")
@@ -104,12 +116,18 @@ def recorrer(fr, pag, maximo=8):
                 pag.wait_for_timeout(2500)
                 print(f"\n>>> Ventana «Agregar» n.º {i + 1}:")
                 volcar(fr)
-                print("Opciones de listas abiertas:", " / ".join(sin_datos(x) for x in dict.fromkeys(fr.evaluate(JS_LISTA)))[:1500])
+                listas = fr.locator(".modal.show input[type=text]:not([name]), [role=dialog] input[type=text]:not([name])")
+                for j in range(min(listas.count(), 4)):   # listas desplegables de la ventana
+                    try:
+                        listas.nth(j).click(timeout=3000)
+                        pag.wait_for_timeout(1200)
+                        print(f"   Lista {j + 1}:", " / ".join(sin_datos(x) for x in dict.fromkeys(fr.evaluate(JS_LISTA)))[:1500])
+                        pag.keyboard.press("Escape")
+                    except Exception:
+                        pass
             except Exception as e:
                 print("   (no abrió Agregar:", str(e).splitlines()[0][:80], ")")
-            pag.keyboard.press("Escape")
-            pag.wait_for_timeout(1000)
-            cerrar_avisos(fr, pag)
+            cerrar_ventana(fr, pag)
         try:
             fr.get_by_text("Siguiente", exact=True).first.click(timeout=6000)
         except Exception as e:
