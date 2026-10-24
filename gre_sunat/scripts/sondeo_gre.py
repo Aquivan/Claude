@@ -50,6 +50,40 @@ def sin_datos(t):
     return re.sub(r"[\w.+-]+@[\w-]+\.[\w.]+", "***@***", t)
 
 
+PROHIBIDO = re.compile(r"emitir|guardar|grabar|enviar|firmar|confirmar|aceptar", re.I)
+
+
+def volcar(fr):
+    est = fr.evaluate(JS_ESTRUCTURA)
+    print("Secciones:", " | ".join(sin_datos(t) for t in dict.fromkeys(est["titulos"])))
+    for c in est["campos"]:
+        linea = f"   - {sin_datos(c['etiqueta']) or '(sin etiqueta)'}  <{c['tag']} {c['tipo']} id={c['id']} name={c['name']}>"
+        if c["obligatorio"]:
+            linea += " (obligatorio)"
+        print(linea)
+        if c.get("opciones"):
+            print("       opciones:", " / ".join(sin_datos(x) for x in c["opciones"][:25]))
+    print("Botones:", " | ".join(sin_datos(b) for b in dict.fromkeys(est["botones"])))
+    print("Texto visible:", sin_datos(fr.inner_text("body")[:2500]).replace("\n", " / "))
+
+
+def asistente(fr, pag):
+    """Emisión de GRE: elegir Remitente y pasar con Siguiente, anotando cada pantalla. Nunca emite."""
+    for paso in os.environ.get("PASOS", "Remitente,Siguiente").split(","):
+        paso = paso.strip()
+        if not paso or PROHIBIDO.search(paso):
+            continue
+        b = fr.get_by_text(paso, exact=True).first
+        try:
+            b.click(timeout=8000)
+        except Exception as e:
+            print(f"\n>>> No pude pulsar «{paso}»:", str(e).splitlines()[0][:100])
+            break
+        pag.wait_for_timeout(5000)
+        print(f"\n>>> Después de «{paso}»")
+        volcar(fr)
+
+
 def main():
     ruc, usuario, clave = (os.environ.get(k, "") for k in ["SUNAT_RUC", "SUNAT_USUARIO", "SUNAT_CLAVE"])
     if not (ruc and usuario and clave):
@@ -147,6 +181,8 @@ def main():
                     if c.get("opciones"):
                         print("       opciones:", " / ".join(sin_datos(x) for x in c["opciones"][:25]))
                 print("Botones:", " | ".join(sin_datos(b) for b in dict.fromkeys(est["botones"])))
+                if "emitir-gre" in est["url"]:
+                    asistente(fr, pag)
         nav.close()
 
 
