@@ -60,7 +60,12 @@ def sin_datos(t):
     return re.sub(r"[\w.+-]+@[\w-]+\.[\w.]+", "***@***", t)
 
 
+PASO_ACTUAL = [""]
+
+
 def paso(texto):
+    if not texto.startswith(" "):
+        PASO_ACTUAL[0] = texto
     print(f"• {texto}", flush=True)
 
 
@@ -82,9 +87,19 @@ def bot(cuerpo):
 
 def fin(ok, texto, **extra):
     bot(dict({"accion": "gre_fin", "ok": ok, "texto": texto}, **extra))
+    open(os.path.join(os.environ.get("RUNNER_TEMP", "/tmp"), "gre_avisado"), "w").close()   # el paso "se cayó" no repite el aviso
 
 
 # ============================================================ ayudas de pantalla
+
+def llenar(campo, valor):
+    """Escribe solo si el campo está habilitado y no tiene ya ese valor (SUNAT bloquea los que completa sola)."""
+    if not campo.count() or not campo.is_enabled() or not campo.is_editable():
+        return False
+    if (campo.input_value() or "").strip() != str(valor):
+        campo.fill(str(valor), timeout=8000)
+    return True
+
 
 def esperar(pag, ms=1500):
     pag.wait_for_timeout(ms)
@@ -210,6 +225,7 @@ def elegir_fila(fr, pag, texto_buscado, alerta):
 def ingresar(nav, ruc, usuario, clave):
     ctx = nav.new_context(viewport={"width": 1366, "height": 1000}, locale="es-PE", user_agent=UA)
     pag = ctx.new_page()
+    pag.set_default_timeout(15000)
     pag.on("dialog", lambda d: d.dismiss())
     pag.goto(f"{SEC}/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl={ORIG}&state={STATE}",
              wait_until="networkidle", timeout=60000)
@@ -294,10 +310,15 @@ def p3_documentos(fr, pag, c):
         m = modal(fr)
         nombres = m.evaluate("m => [...m.querySelectorAll('input')].filter(e => e.offsetParent !== null).map(e => e.getAttribute('formcontrolname') || e.name || e.id)")
         paso(f"   campos del documento: {nombres}")
-        m.locator("#nroDocumento, [formcontrolname=nroDocumento]").first.fill(d["numero"])
-        for n in nombres:   # el documento de un tercero pide el RUC de quien lo emitió
-            if re.search(r"ruc|emisor", n or "", re.I) and d.get("ruc_emisor"):
-                m.locator(f"[formcontrolname={n}], #{n}").first.fill(d["ruc_emisor"])
+        numero = str(d["numero"]).strip().upper()
+        serie = re.match(r"^\s*([A-Z0-9]{1,4})\s*-\s*0*(\d+)\s*$", numero)
+        if "serieDocumento" in nombres and serie:   # SUNAT pide serie y número por separado: F251 · 56475
+            llenar(m.locator("[formcontrolname=serieDocumento], #serieDocumento").first, serie.group(1))
+            numero = serie.group(2)
+        llenar(m.locator("[formcontrolname=nroDocumento], #nroDocumento").first, numero)
+        for n in nombres:   # el documento de un tercero pide el RUC de quien lo emitió (a veces SUNAT ya lo trae y lo bloquea)
+            if n and re.search(r"ruc|emisor", n, re.I) and d.get("ruc_emisor"):
+                llenar(m.locator(f"[formcontrolname={n}]").first, d["ruc_emisor"])
         boton_agregar_modal(fr).click(timeout=5000)
         esperar(pag, 2000)
         avisos = cerrar_avisos(fr, pag)
@@ -566,6 +587,15 @@ def main():
                 img = ""
             fin(False, str(e) + ("\n\n" + e.detalle if e.detalle else ""), imagen=img)
             sys.exit(1)
+        except Exception as e:   # error inesperado: se avisa al chat con la foto de dónde quedó (nada se emitió)
+            print(f"::error title=GRE robot::{type(e).__name__} en {sin_datos(PASO_ACTUAL[0])}")
+            try:
+                img = base64.b64encode(foto(pag, fr)).decode() if fr else ""
+            except Exception:
+                img = ""
+            fin(False, f"El robot no pudo seguir en «{PASO_ACTUAL[0]}». No se emitió nada. Le mando la foto de dónde quedó; "
+                       "ya lo estoy revisando.", imagen=img)
+            raise
 
 
 if __name__ == "__main__":
