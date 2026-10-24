@@ -911,7 +911,7 @@ def leer_numero(pag, fr):
     return ""
 
 
-def bajar_pdf(pag, fr):
+def bajar_pdf(pag, fr, boton=None):
     """PDF de la guía recién emitida. SUNAT primero muestra «Atención Contribuyente… Entendido» y el botón «Descargar PDF»
     puede bajar el archivo o abrirlo en otra pestaña: se acepta cualquiera de las dos y también la respuesta PDF misma."""
     try:
@@ -924,8 +924,8 @@ def bajar_pdf(pag, fr):
     except Exception:
         pass
     ctx = pag.context
-    for rx in (r"^\s*Descargar PDF\s*$", r"\bPDF\b", r"Imprimir"):
-        b = fr.locator("button:visible, a:visible", has_text=re.compile(rx, re.I))
+    for rx in ([None] if boton is not None else (r"^\s*Descargar PDF\s*$", r"\bPDF\b", r"Imprimir")):
+        b = boton if boton is not None else fr.locator("button:visible, a:visible", has_text=re.compile(rx, re.I))
         if not b.count():
             continue
         capturado = {}
@@ -1039,7 +1039,21 @@ def consultar_pdf(fr, pag, numero):
     esperar_carga(fr, pag)
     cerrar_avisos(fr, pag)
     paso(f"   resultado: «{sin_datos(pantalla(fr))}» · botones: {[b.strip() for b in fr.locator('button:visible, a:visible').all_inner_texts() if b.strip()][:20]}")
-    pdf = bajar_pdf(pag, fr)
+    # 3. Resultado: tabla con íconos sin texto; el PDF es la columna «Descargar representación».
+    marcado = fr.evaluate("""() => {
+      const t = [...document.querySelectorAll('table')].find(x => x.offsetParent !== null && /representaci/i.test(x.innerText));
+      if (!t) return false;
+      const ths = [...t.querySelectorAll('thead th, tr:first-child th')];
+      const i = ths.findIndex(h => /representaci/i.test(h.innerText));
+      const fila = t.querySelector('tbody tr');
+      if (i < 0 || !fila) return false;
+      const celda = fila.querySelectorAll('td')[i];
+      const b = celda && (celda.querySelector('a, button, i, span, img') || celda);
+      if (!b) return false;
+      b.setAttribute('data-robot', 'pdf'); return true; }""")
+    pdf = bajar_pdf(pag, fr, fr.locator("[data-robot=pdf]").first) if marcado else ""
+    if not pdf:
+        pdf = bajar_pdf(pag, fr)
     if not pdf:   # resultado en tabla: abrir la fila de esa guía
         fila = fr.locator("table tbody tr", has_text=re.compile(serie + r"\s*-\s*0*" + corr + r"\b")).first
         if fila.count():
