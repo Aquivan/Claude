@@ -126,7 +126,7 @@ def combo(fr, pag, etiqueta, elegir=None):
         ops = list(dict.fromkeys(fr.evaluate(JS_LISTA)))
         print(f"   Opciones [{etiqueta}]:", " / ".join(sin_datos(x) for x in ops)[:2000])
         if elegir:
-            fr.locator('li,[role=option],.dropdown-item,.p-dropdown-item,mat-option,.ng-option').filter(has_text=elegir).first.click(timeout=4000)
+            fr.locator(".ng-dropdown-panel .ng-option:visible, [role=option]:visible").filter(has_text=elegir).first.click(timeout=4000)
             pag.wait_for_timeout(800)
     except Exception as e:
         print(f"   (lista [{etiqueta}] no respondió:", str(e).splitlines()[0][:80], ")")
@@ -146,6 +146,8 @@ def llenar_prueba(fr, pag, actual):
             combo(fr, pag, "Unidad de medida de peso bruto", "KGM")
             fr.locator("[formcontrolname=pesoBruto], input[name=pesoBruto]").first.fill("1")
             print("   (bien de prueba puesto en el formulario)")
+            print("   Tabla de bienes:", sin_datos(fr.evaluate("() => (document.querySelector('table') || {innerText: '-'}).innerText")).replace("\n", " / ")[:600])
+            print("   Ventanas abiertas:", fr.evaluate("() => [...document.querySelectorAll('.modal')].filter(m => m.offsetParent !== null || getComputedStyle(m).display !== 'none').map(m => (m.innerText || '').trim().slice(0, 60))"))
         except Exception as e:
             print("   (no pude poner el bien de prueba:", str(e).splitlines()[0][:100], ")")
         cerrar_avisos(fr, pag)
@@ -181,7 +183,7 @@ def recorrer(fr, pag, maximo=8):
         try:
             fr.get_by_text("Siguiente", exact=True).first.click(timeout=6000)
         except Exception as e:
-            print("\n>>> Siguiente no disponible:", str(e).splitlines()[0][:80])
+            print("\n>>> Siguiente no disponible:", " | ".join(str(e).splitlines()[:8])[:900])
             break
         pag.wait_for_timeout(4000)
         for _i in range(3):   # avisos al pasar: "¿Desea continuar?" → SI; "Atención…" → Entendido
