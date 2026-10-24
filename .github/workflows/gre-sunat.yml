@@ -15,11 +15,11 @@ on:
         description: "Código del caso en el bot (pestaña 🚚 Guías SUNAT)"
         required: true
       modo:
-        description: "vista (no emite) o emitir"
+        description: "vista (no emite), emitir o pdf (baja el PDF de una guía ya emitida)"
         required: true
         default: vista
         type: choice
-        options: [vista, emitir]
+        options: [vista, emitir, pdf]
       confirmar:
         description: "Huella de confirmación (la pone el bot). Obligatoria para emitir."
         required: false

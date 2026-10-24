@@ -372,12 +372,36 @@ function TGG_pedidoPdf_(ss, texto, clave) {
   if (!TGG_PDF_RX_.test(t) || !/gu[ií]a|\b[0-9a-f]{8}\b|\b(EG\d{2}|T\d{3})-?\d+/i.test(t)) return null;
   var m = t.match(/\b([0-9a-f]{8})\b/), g = t.match(/\b(EG\d{2}|T\d{3})\s*-\s*(\d+)/i), c = null;
   if (m) c = TGG_leer_(ss, m[1]);
+  var mismo = function (x) { var k = String(x || '').toUpperCase().match(/(EG\d{2}|T\d{3})\s*-\s*0*(\d+)/); return k && g && k[1] === g[1].toUpperCase() && k[2] === String(Number(g[2])); };
   if (!c && g) {
     var hoja = ss.getSheetByName(TGG_HOJA_), datos = hoja ? hoja.getDataRange().getValues() : [];
-    for (var i = datos.length - 1; i > 0 && !c; i--) if (String(datos[i][10]).toUpperCase().replace(/\s/g, '') === (g[1] + '-' + g[2]).toUpperCase()) c = TGG_leer_(ss, String(datos[i][1]));
+    for (var i = datos.length - 1; i > 0 && !c; i--) if (mismo(datos[i][10])) c = TGG_leer_(ss, String(datos[i][1]));
+  }
+  if (!c && g) {   // guía que no salió de este bot: se registra solo para bajar su PDF (¿de qué empresa?)
+    var emp = TGG_empresas_(ss), rucs = Object.keys(emp), dig = t.replace(/\D/g, ' ');
+    var r = rucs.filter(function (x) { return dig.indexOf(x) >= 0 || simpleNombre_(t).indexOf(simpleNombre_(emp[x]).split(' ')[0]) >= 0 && simpleNombre_(emp[x]).split(' ')[0].length > 2; });
+    var ult = TG_sesion_(clave).gre && TGG_leer_(ss, TG_sesion_(clave).gre);
+    var ruc = r.length === 1 ? r[0] : (rucs.length === 1 ? rucs[0] : (ult && ult.empresa_ruc) || '');
+    if (!ruc) return { c: null, falta: 'empresa' };
+    c = { id: Utilities.getUuid().replace(/-/g, '').slice(0, 8), creado: new Date().toISOString(), chat: clave, estado: 'Emitida', solo_pdf: true,
+      empresa_ruc: ruc, empresa: emp[ruc] || '', motivo: '', gre: g[1].toUpperCase() + '-' + ('00000000' + Number(g[2])).slice(-8) };
+    TGG_guardar_(ss, c);
   }
   if (!c && TG_sesion_(clave).gre) c = TGG_leer_(ss, TG_sesion_(clave).gre);
   return { c: c };
+}
+
+function simpleNombre_(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+
+/** Sin PDF guardado: si la guía está emitida, el robot lo baja de SUNAT (Consulta de GRE). Texto para la persona. */
+function TGG_pedirPdfSunat_(ss, c, clave) {
+  if (!c.gre || c.estado !== 'Emitida') return 'La guía caso ' + c.id + ' aún no tiene PDF (todavía no se emitió).';
+  c.chat = clave; TGG_guardar_(ss, c);
+  var cfg = TG_cfg_(ss);
+  try {
+    TG_gh_(cfg, '/actions/workflows/' + TGG_WF_ + '/dispatches', 'post', { ref: cfg.rama, inputs: { ruc: c.empresa_ruc, caso: c.id, modo: 'pdf', confirmar: '' } });
+  } catch (e) { return '⚠️ No pude pedir el PDF a SUNAT: ' + e.message; }
+  return '📄 Bajo el PDF de la guía ' + c.gre + ' desde SUNAT (Consulta de GRE). En 2–3 minutos se lo mando aquí.';
 }
 
 /** doPost ?canal=gh con accion gre_* (lo llama gre_robot.py). La corrida debe ser de gre-sunat.yml y estar en curso. */
@@ -386,7 +410,17 @@ function TGG_gh_(q) {
   if (!run || !TGC_runValido_(cfg, run, /(^|\/)gre-sunat\.ya?ml$/)) return { ok: false, error: 'Forbidden' };
   var c = TGG_leer_(ss, String(q.caso || ''));
   if (!c) return { ok: false, error: 'caso desconocido' };
-  if (q.accion === 'gre_caso') return { ok: true, datos: TGG_paraRobot_(c) };
+  if (q.accion === 'gre_caso') return { ok: true, datos: TGG_paraRobot_(c), gre: c.gre || '' };
+  if (q.accion === 'gre_pdf') {   // modo pdf: el PDF de una guía ya emitida (nunca cambia su estado)
+    if (q.ok && q.pdf) {
+      try {
+        var fp = IMP_carpeta_(ss).createFile(Utilities.newBlob(Utilities.base64Decode(q.pdf), 'application/pdf', 'GRE ' + (c.gre || c.id) + '.pdf'));
+        c.pdf = fp.getId(); TGG_guardar_(ss, c);
+        TGG_avisar_(c, '📄 PDF de la guía ' + (c.gre || c.id) + ' (bajado de SUNAT).', null, false);
+      } catch (e) { TGG_avisar_(c, '⚠️ Bajé el PDF pero no lo pude guardar: ' + e.message, null, false); }
+    } else TGG_avisar_(c, '📄 Guía ' + (c.gre || c.id) + ': ' + String(q.texto || 'no pude bajar el PDF.'), q.imagen, false);
+    return { ok: true };
+  }
   if (q.accion === 'gre_elegir') return TGG_elegirLocal_(c, String(q.cual || ''), q.lista || []);
   if (q.accion === 'gre_espera') {   // la vista previa abierta pregunta si ya aprobaron
     var lk = LockService.getScriptLock();
@@ -415,6 +449,10 @@ function TGG_gh_(q) {
   if (q.accion === 'gre_fin') {
     if (q.cayo && cache.get('tgg_fin_' + run)) return { ok: true };   // ya avisó el robot
     cache.put('tgg_fin_' + run, '1', 21600);
+    if (!q.ok && c.estado === 'Emitida') {   // una corrida posterior falló: la guía sigue emitida
+      TGG_avisar_(c, '⚠️ Guía ' + (c.gre || c.id) + ': ' + String(q.texto || 'el robot falló'), q.imagen, false);
+      return { ok: true };
+    }
     if (q.ok) {
       c.estado = 'Emitida'; c.gre = String(q.numero || '');
       if (q.pdf) {
@@ -529,8 +567,8 @@ function TGG_atajoTG_(ctx, texto) {
   var pp = TGG_pedidoPdf_(ctx.ss, t, ctx.chatId);   // 📄 "pdf guía …": reenvía el PDF de una guía emitida
   if (pp) {
     var pdf = TGG_pdf_(pp.c);
-    if (!pdf) TG_enviar_(ctx.chatId, pp.c ? '📄 La guía caso ' + pp.c.id + (pp.c.gre ? ' (' + TG_esc_(pp.c.gre) + ')' : '') + ' aún no tiene PDF' +
-      (pp.c.estado === 'Emitida' ? ': descárguelo de SOL → Consulta de GRE.' : ' (todavía no se emitió).') : '📄 No encontré esa guía. Escriba, por ejemplo, <i>pdf guía b0006956</i>.');
+    if (!pdf) TG_enviar_(ctx.chatId, pp.c ? TG_esc_(TGG_pedirPdfSunat_(ctx.ss, pp.c, ctx.chatId)) : pp.falta ? '📄 ¿De qué empresa es esa guía? Escriba, por ejemplo, <i>pdf guía EG07-502 de M&amp;D</i>.' :
+      '📄 No encontré esa guía. Escriba, por ejemplo, <i>pdf guía EG07-00000502</i> o <i>pdf guía b0006956</i>.');
     else TG_enviarArchivo_(ctx.chatId, pdf.archivo.getBlob().setName(pdf.nombre), '📄 ' + TG_esc_(pdf.nombre));
     return true;
   }
@@ -646,8 +684,8 @@ function TGG_atajoWA_(ss, q, clave) {
   var pp = !(q.adjuntos || []).length && TGG_pedidoPdf_(ss, texto, clave);   // 📄 "pdf guía …": manda el PDF adjunto
   if (pp) {
     var pdf = TGG_pdf_(pp.c);
-    if (!pdf) return TGG_respWA_(pp.c ? '📄 La guía caso ' + pp.c.id + (pp.c.gre ? ' (' + pp.c.gre + ')' : '') + ' aún no tiene PDF' +
-      (pp.c.estado === 'Emitida' ? ': descárguelo de SOL → Consulta de GRE.' : ' (todavía no se emitió).') : '📄 No encontré esa guía. Escriba, por ejemplo, *pdf guía b0006956*.');
+    if (!pdf) return TGG_respWA_(pp.c ? TGG_pedirPdfSunat_(ss, pp.c, clave) : pp.falta ? '📄 ¿De qué empresa es esa guía? Escriba, por ejemplo, *pdf guía EG07-502 de M&D*.' :
+      '📄 No encontré esa guía. Escriba, por ejemplo, *pdf guía EG07-00000502* o *pdf guía b0006956*.');
     var rp = TGG_respWA_('📄 Aquí está el PDF de la guía ' + (pp.c.gre || pp.c.id) + '.');
     rp.archivos = [{ base64: pdf.base64, mime: 'application/pdf', nombre: pdf.nombre, titulo: '📄 ' + pdf.nombre }];
     return rp;
