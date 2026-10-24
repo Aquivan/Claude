@@ -430,7 +430,7 @@ def fecha(fr, pag, nombre, valor):
     """Fecha en el calendario de SUNAT (ngbDatepicker de solo lectura): se escribe quitando el bloqueo y, si no la toma,
     se elige en el calendario (mes, año y día)."""
     f = fr.locator(f"input[name={nombre}]").first
-    if not f.count() or not f.is_visible():
+    if not f.count() or not f.is_visible() or not f.is_enabled() or (f.input_value() or "").strip() == valor:
         return
     f.evaluate("e => { e.removeAttribute('readonly'); e.readOnly = false; }")
     try:
