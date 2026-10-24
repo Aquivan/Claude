@@ -78,14 +78,16 @@ def main():
         vistos, codigos = set(), []
         print("\n=== Opciones del menú (guía / remisión / traslado):")
         for o in opciones:
-            m = re.search(r"\d+(?:[._]\d+){3,}", o["id"] + " " + o["on"])
-            cod = m.group(0).replace("_", ".") if m else ""
+            # id "nivel4_62_1_1_1_1" → código 62.1.1.1.1 (el primer número es el nivel del menú, no va)
+            m = re.match(r"nivel4_(\d+(?:_\d+){4})$", o["id"])
+            cod = m.group(1).replace("_", ".") if m else ""
             clave_o = (o["t"], cod)
             if clave_o in vistos:
                 continue
             vistos.add(clave_o)
             print(f"   · {o['t']}  [id={o['id'][:40]} código={cod}]")
-            if cod and re.search(r"emis|emitir|generar|registr", o["t"], re.I) and cod not in codigos:
+            if cod and re.search(r"emis|emitir", o["t"], re.I) and re.search(r"GRE|gu[ií]a", o["t"]) \
+                    and not re.search(r"masiva|transportista|complementaria|eventos", o["t"], re.I) and cod not in codigos:
                 codigos.append(cod)
         extra = [c.strip() for c in os.environ.get("CODIGOS", "").split(",") if c.strip()]
         codigos = extra + [c for c in codigos if c not in extra]
@@ -97,10 +99,12 @@ def main():
             try:
                 pag.goto(f"{MENU}?action=execute&code={cod}", wait_until="networkidle", timeout=60000)
             except Exception as e:
-                print("   No abrió:", str(e)[:120])
-                continue
-            pag.wait_for_timeout(8000)
-            for fr in pag.frames:
+                # ERR_ABORTED suele ser solo que el menú redirige a la aplicación: se espera y se mira igual
+                print("   Aviso al abrir:", str(e).splitlines()[0][:120])
+            pag.wait_for_timeout(15000)
+            marcos = [f for pg in ctx.pages for f in pg.frames]   # la aplicación puede abrirse en otra pestaña
+            print(f"   Pestañas: {len(ctx.pages)} · marcos: {len(marcos)}")
+            for fr in marcos:
                 try:
                     est = fr.evaluate(JS_ESTRUCTURA)
                 except Exception:
