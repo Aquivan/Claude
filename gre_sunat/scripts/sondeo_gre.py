@@ -50,7 +50,7 @@ def sin_datos(t):
     return re.sub(r"[\w.+-]+@[\w-]+\.[\w.]+", "***@***", t)
 
 
-PROHIBIDO = re.compile(r"emitir|guardar|grabar|enviar|firmar|confirmar|aceptar", re.I)
+PROHIBIDO = re.compile(r"emitir|guardar|grabar|enviar|firmar|confirmar", re.I)
 
 
 def volcar(fr):
@@ -75,13 +75,17 @@ def asistente(fr, pag):
     """Emisión de GRE paso a paso, sin emitir. PASOS = acciones separadas por ";":
        texto → clic en ese texto · #id → clic en ese elemento · lista:texto → abrir y anotar opciones
        elegir:texto → elegir esa opción de la lista abierta. Cualquier botón de emitir/guardar se salta."""
-    pasos = os.environ.get("PASOS") or ("Remitente;#rdNo;html:Motivo de traslado;lista:css=input[type=text]:visible;"
-                                        "elegir:Compra;Siguiente;Siguiente")
+    pasos = os.environ.get("PASOS") or ("Remitente;#rdNo;lista:css=input[type=text]:visible;elegir:Compra;Siguiente;"
+                                        "Agregar;tecla:Escape;#descTipoActor_2_0;Siguiente;Siguiente;Siguiente;Siguiente")
     for paso in pasos.split(";"):
         paso = paso.strip()
         if not paso or PROHIBIDO.search(paso.split(":", 1)[-1]):
             continue
         tipo, _, val = paso.partition(":") if paso.startswith(("lista:", "elegir:", "html:")) else ("clic", "", paso)
+        if paso.startswith("tecla:"):
+            pag.keyboard.press(paso[6:])
+            pag.wait_for_timeout(1500)
+            continue
         if tipo == "html":   # código del control que está junto a ese texto (para saber cómo manejarlo)
             h = fr.evaluate("""t => { const x = [...document.querySelectorAll('label,span,div,p')].find(e => e.children.length < 3 && e.innerText && e.innerText.trim().startsWith(t));
                 if (!x) return 'no encontrado'; let p = x.parentElement; for (let i = 0; i < 2 && p && p.outerHTML.length < 600; i++) p = p.parentElement;
@@ -106,6 +110,12 @@ def asistente(fr, pag):
             print("Opciones de la lista:", " / ".join(sin_datos(x) for x in dict.fromkeys(fr.evaluate(JS_LISTA)))[:2500])
         else:
             volcar(fr)
+            try:   # un aviso de error se cierra con Aceptar para poder seguir mirando
+                ok = fr.locator("button:visible", has_text="Aceptar")
+                if ok.count():
+                    ok.first.click(timeout=3000)
+            except Exception:
+                pass
 
 
 def main():
