@@ -106,9 +106,33 @@ def esperar(pag, ms=1500):
     pag.wait_for_timeout(ms)
 
 
+OBSERVACIONES = []   # avisos de SUNAT que se aceptaron con «SI» (van con la vista previa)
+
+
+def seguir_observacion(fr, pag):
+    """«Mensaje de Observación … ¿Desea continuar?» (placa o DNI que SUNAT no tiene registrado): es solo un aviso, se responde SI.
+    Nunca toca una confirmación de emitir."""
+    for _ in range(3):
+        m = fr.locator(".modal:visible").filter(has_text=re.compile(r"desea continuar", re.I))
+        if not m.count():
+            return
+        txt = re.sub(r"\s+", " ", m.last.inner_text()).strip()
+        if re.search(r"emiti|emisi[oó]n de la gu|firmar|enviar", txt, re.I):
+            return
+        si = m.last.locator("button:visible", has_text=re.compile(r"^\s*(SI|Sí|Si|SÍ)\s*$"))
+        if not si.count():
+            return
+        nota = re.sub(r"^\s*Mensaje de Observaci[oó]n\s*", "", txt).replace("NO SI", "").strip()[:160]
+        OBSERVACIONES.append(nota)
+        paso(f"   aviso de SUNAT aceptado: {sin_datos(nota)}")
+        si.last.click(timeout=4000)
+        esperar(pag, 1200)
+
+
 def cerrar_avisos(fr, pag):
-    """Avisos informativos de SUNAT (Entendido / Aceptar). Devuelve sus textos."""
+    """Avisos informativos de SUNAT (Entendido / Aceptar / ¿Desea continuar? → SI). Devuelve sus textos."""
     vistos = []
+    seguir_observacion(fr, pag)
     for _ in range(3):
         b = fr.locator(".modal button:visible", has_text=re.compile(r"^\s*(Entendido|ENTENDIDO|Aceptar)\s*$"))
         if not b.count():
@@ -426,6 +450,8 @@ def p6_transporte(fr, pag, c):
         m.locator("[formcontrolname=nroRuc]").fill(re.sub(r"\D", "", t["ruc"]))
         m.locator("[formcontrolname=nroRuc]").press("Tab")
         esperar(pag, 3500)
+        seguir_observacion(fr, pag)
+        m = modal(fr)
         mtc = m.locator("[formcontrolname=nroRegistroMTC]").first
         if t.get("mtc") and not t.get("sin_mtc") and not (mtc.input_value() or "").strip():   # si SUNAT ya lo trae, se deja
             llenar(mtc, t["mtc"])
@@ -465,6 +491,8 @@ def vehiculos_conductores(fr, pag, t):
         m.locator("[formcontrolname=placaVehiculo]").fill(re.sub(r"[^A-Z0-9]", "", placa.upper()))
         m.locator("[formcontrolname=placaVehiculo]").press("Tab")
         esperar(pag, 2500)
+        seguir_observacion(fr, pag)   # «No encontramos … el número de placa … ¿Desea continuar?» → SI
+        m = modal(fr)
         campos = m.evaluate("m => [...m.querySelectorAll('input')].filter(e => e.offsetParent !== null).map(e => e.getAttribute('formcontrolname') || e.name || e.id)")
         paso(f"   vehículo {n + 1} ({'principal' if n == 0 else 'secundario'}) · campos: {campos}")
         # Si SUNAT pide la constancia/TUC/certificado del vehículo, va la que corresponde a esa placa (en el mismo orden).
@@ -483,6 +511,8 @@ def vehiculos_conductores(fr, pag, t):
         m.locator("[formcontrolname=nroDocIdentidad]").fill(cd["dni"])
         m.locator("[formcontrolname=nroDocIdentidad]").press("Tab")
         esperar(pag, 3000)
+        seguir_observacion(fr, pag)
+        m = modal(fr)
         m.locator("[formcontrolname=nroLicencia]").fill(cd.get("licencia", ""))
         nom = m.locator("[formcontrolname=nombreApellidos]")
         if nom.count() and not nom.input_value().strip():
@@ -584,7 +614,7 @@ def main():
             emitir = final(fr, pag)
             img = base64.b64encode(foto(pag, fr)).decode()
             if modo != "emitir":
-                bot({"accion": "gre_vista", "imagen": img, "huella": huella})
+                bot({"accion": "gre_vista", "imagen": img, "huella": huella, "notas": OBSERVACIONES[:5]})
                 print("::notice title=GRE vista::Vista previa enviada al chat. No se emitió nada.")
                 return
             # ===== EMITIR (aprobado por la persona con la huella de este caso) =====

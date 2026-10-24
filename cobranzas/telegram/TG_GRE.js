@@ -318,7 +318,10 @@ function TGG_gh_(q) {
   if (q.accion === 'gre_vista') {
     c.estado = 'Vista previa lista';
     TGG_guardar_(ss, c);
-    TGG_avisar_(c, '👁 Vista previa en SUNAT (no se emitió nada) · caso ' + c.id + '\nRevise la foto. Si está bien, toque ✅ Emitir.', q.imagen, true);
+    var notas = (q.notas || []).map(String).filter(Boolean).slice(0, 5);
+    TGG_avisar_(c, '👁 Vista previa en SUNAT (no se emitió nada) · caso ' + c.id +
+      (notas.length ? '\nAvisos de SUNAT que acepté (no impiden la guía):\n· ' + notas.join('\n· ') : '') +
+      '\nRevise la foto. Si está bien, toque ✅ Emitir.', q.imagen, true);
     return { ok: true };
   }
   if (q.accion === 'gre_fin') {
