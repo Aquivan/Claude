@@ -56,18 +56,23 @@ def main():
         sys.exit("Faltan SUNAT_RUC / SUNAT_USUARIO / SUNAT_CLAVE")
     with sync_playwright() as p:
         nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None)
-        ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
-        pag = ctx.new_page()
-        pag.on("dialog", lambda d: d.dismiss())   # solo mirar: cualquier confirmación se rechaza
-        pag.goto(f"{SEC}/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl={ORIG}&state={STATE}",
-                 wait_until="networkidle", timeout=60000)
-        pag.fill("#txtRuc", ruc)
-        pag.fill("#txtUsuario", usuario)
-        pag.fill("#txtContrasena", clave)
-        pag.click("#btnAceptar")
-        pag.wait_for_load_state("networkidle", timeout=60000)
+
+        def ingresar():
+            ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
+            pag = ctx.new_page()
+            pag.on("dialog", lambda d: d.dismiss())   # solo mirar: cualquier confirmación se rechaza
+            pag.goto(f"{SEC}/loginMenuSol?lang=es-PE&showDni=true&showLanguages=false&originalUrl={ORIG}&state={STATE}",
+                     wait_until="networkidle", timeout=60000)
+            pag.fill("#txtRuc", ruc)
+            pag.fill("#txtUsuario", usuario)
+            pag.fill("#txtContrasena", clave)
+            pag.click("#btnAceptar")
+            pag.wait_for_load_state("networkidle", timeout=60000)
+            pag.wait_for_timeout(3000)
+            return ctx, pag
+
+        ctx, pag = ingresar()
         print("Ingreso a SOL: OK")
-        inicio = pag.url
 
         # 1) Opciones del menú que hablan de guías de remisión
         opciones = []
@@ -97,21 +102,31 @@ def main():
         # 2) Cada opción de emisión: estructura del formulario (sin valores)
         for cod in codigos[:5]:
             print(f"\n================ Opción {cod}")
-            # Como una persona: clic en el menú nivel por nivel (nivel1_62 → … → nivel4_62_1_1_1_1)
-            try:
-                pag.goto(inicio, wait_until="networkidle", timeout=60000)
-            except Exception as e:
-                print("   Aviso al volver al menú:", str(e).splitlines()[0][:100])
+            # Como una persona: entrar de nuevo y hacer clic en el menú nivel por nivel
+            # (recargar el menú con goto lo deja vacío: SUNAT corta la navegación con ERR_ABORTED)
+            ctx.close()
+            ctx, pag = ingresar()
             p_ = cod.split(".")
             ids = [f"nivel1_{p_[0]}", f"nivel2_{'_'.join(p_[:2])}", f"nivel3_{'_'.join(p_[:3])}", f"nivel4_{'_'.join(p_)}"]
             for i in ids:
-                r = pag.evaluate("""i => { const e = document.getElementById(i); if (!e) return 'no existe';
-                    const a = e.querySelector('a') || e; a.click();
-                    return (e.getAttribute('onclick') || a.getAttribute('onclick') || a.getAttribute('href') || '').slice(0, 120); }""", i)
+                r = "no existe"
+                for fr in pag.frames:
+                    try:
+                        r = fr.evaluate("""i => { const e = document.getElementById(i); if (!e) return 'no existe';
+                            const a = e.querySelector('a') || e; a.click();
+                            return 'ok ' + (e.getAttribute('onclick') || a.getAttribute('onclick') || a.getAttribute('href') || '').slice(0, 120); }""", i)
+                    except Exception:
+                        continue
+                    if r != "no existe":
+                        break
                 print(f"   clic {i}: {sin_datos(r)}")
                 pag.wait_for_timeout(1500)
             pag.wait_for_timeout(15000)
             print("   Dirección:", sin_datos(pag.url.split("?")[0]))
+            try:
+                print("   Texto:", sin_datos(pag.inner_text("body")[:300]).replace("\n", " / "))
+            except Exception:
+                pass
             marcos = [f for pg in ctx.pages for f in pg.frames]   # la aplicación puede abrirse en otra pestaña
             print(f"   Pestañas: {len(ctx.pages)} · marcos: {len(marcos)} ·",
                   ", ".join(sin_datos(f.url.split("?")[0])[-60:] for f in marcos))
