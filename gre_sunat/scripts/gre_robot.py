@@ -39,6 +39,7 @@ STATE = ("rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACX
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36")
 MENU_GRE = ["nivel1_62", "nivel2_62_1", "nivel3_62_1_1", "nivel4_62_1_1_1_1"]   # Emisión de GRE
+MENU_CONSULTA = ["nivel1_62", "nivel2_62_1", "nivel3_62_1_5", "nivel4_62_1_5_1_1"]   # Consulta de GRE
 AGREGAR = re.compile(r"^\s*Agregar\s*$")
 OPCION = ".ng-dropdown-panel .ng-option:visible, [role=option]:visible, li:visible"
 
@@ -88,7 +89,9 @@ def bot(cuerpo):
 
 
 def fin(ok, texto, **extra):
-    bot(dict({"accion": "gre_fin", "ok": ok, "texto": texto}, **extra))
+    # En modo pdf el resultado es solo el PDF: nunca cambia el estado de la guía emitida.
+    accion = "gre_pdf" if os.environ.get("MODO") == "pdf" else "gre_fin"
+    bot(dict({"accion": accion, "ok": ok, "texto": texto}, **extra))
     open(os.path.join(os.environ.get("RUNNER_TEMP", "/tmp"), "gre_avisado"), "w").close()   # el paso "se cayó" no repite el aviso
 
 
@@ -469,7 +472,7 @@ def elegir_fila(fr, pag, p, alerta, cual):
 
 # ============================================================ pantallas
 
-def ingresar(nav, ruc, usuario, clave):
+def ingresar(nav, ruc, usuario, clave, menu=None, marco="emitir-gre", listo="Remitente"):
     ctx = nav.new_context(viewport={"width": 1366, "height": 1000}, locale="es-PE", user_agent=UA)
     pag = ctx.new_page()
     pag.set_default_timeout(15000)
@@ -492,7 +495,7 @@ def ingresar(nav, ruc, usuario, clave):
                     esperar(pag, 1500)
             except Exception:
                 pass
-    for i in MENU_GRE:   # se abre con clics, como una persona (ir directo a la dirección lo corta SUNAT)
+    for i in (menu or MENU_GRE):   # se abre con clics, como una persona (ir directo a la dirección lo corta SUNAT)
         for f in pag.frames:
             try:
                 if f.evaluate("i => { const e = document.getElementById(i); if (!e) return false; (e.querySelector('a') || e).click(); return true; }", i):
@@ -501,16 +504,16 @@ def ingresar(nav, ruc, usuario, clave):
                 continue
         esperar(pag, 1500)
     for _ in range(30):
-        fr = next((f for f in pag.frames if "emitir-gre" in f.url), None)
+        fr = next((f for f in pag.frames if marco in f.url), None)
         if fr:
             try:
-                fr.get_by_text("Remitente", exact=True).first.wait_for(timeout=2000)
+                fr.get_by_text(listo, exact=True).first.wait_for(timeout=2000)
                 return ctx, pag, fr
             except Exception:
                 pass
         esperar(pag, 1000)
     # Casi siempre es SOL lento o caído por un momento: se reintenta como una caída (nada se llenó todavía).
-    e = SunatCaida("no se abrió «Emisión de GRE» en SOL")
+    e = SunatCaida("no se abrió «" + ("Consulta de GRE" if marco == "consultagre" else "Emisión de GRE") + "» en SOL")
     e.ctx, e.pag = ctx, pag
     raise e
 
@@ -984,6 +987,68 @@ def bajar_pdf(pag, fr):
     return ""
 
 
+CAMPOS_JS = """() => [...document.querySelectorAll('input, select, ng-select')].filter(e => e.offsetParent !== null
+  && e.type !== 'hidden').map(e => { let l = ''; let p = e; for (let i = 0; i < 4 && p && !l; i++, p = p.parentElement) {
+    const x = p.querySelector('label'); if (x) l = x.innerText.trim(); }
+  return {n: e.getAttribute('formcontrolname') || e.name || e.id || '', t: e.type || e.tagName, l: l.slice(0, 60)}; })"""
+
+
+def consultar_pdf(fr, pag, numero):
+    """Consulta de GRE → GRE emitidas → Individual → serie y número → PDF. Solo consulta: no cambia nada en SUNAT."""
+    m = re.match(r"\s*([A-Z0-9]{4})\s*-\s*0*(\d+)", numero.upper())
+    if not m:
+        raise Alto(f"el número de guía «{numero}» no tiene la forma EG07-00000502")
+    serie, corr = m.group(1), m.group(2)
+    paso("1. Consulta de GRE · emitidas · individual")
+    for t in ("GRE emitidas", "Individual"):
+        try:
+            fr.get_by_text(t, exact=True).first.click(timeout=5000)
+            esperar(pag, 600)
+        except Exception:
+            pass
+    siguiente(fr, pag)
+    esperar_carga(fr, pag)
+    campos = fr.evaluate(CAMPOS_JS)
+    paso(f"   pantalla «{sin_datos(pantalla(fr))}» · campos: {[(c['n'], c['l']) for c in campos]}")
+    botones = [b.strip() for b in fr.locator("button:visible").all_inner_texts() if b.strip()]
+    paso(f"   botones: {botones[:15]}")
+    for c in campos:   # tipo de guía (si lo pide): Remitente
+        if re.search(r"tipo", c["l"], re.I) and c["t"] in ("ng-select", "NG-SELECT", "select-one", "text") and not re.search(r"serie|n[uú]mero", c["l"], re.I):
+            try:
+                combo(fr, pag, c["l"], "Remitente")
+            except Exception:
+                pass
+    for c in campos:
+        if not c["n"]:
+            continue
+        campo = fr.locator(f"[formcontrolname={c['n']}], [name={c['n']}], #{c['n']}").first
+        if re.search(r"serie", c["n"] + " " + c["l"], re.I):
+            llenar(campo, serie)
+        elif re.search(r"n[uú]mero|numero|correlativo|nro", c["n"] + " " + c["l"], re.I) and not re.search(r"ruc|doc", c["n"] + " " + c["l"], re.I):
+            llenar(campo, corr)
+    for t in (r"^\s*Buscar\s*$", r"^\s*Consultar\s*$", r"^\s*Siguiente\s*$"):
+        b = fr.locator("button:visible", has_text=re.compile(t, re.I))
+        if b.count() and b.first.is_enabled():
+            b.first.click(timeout=5000)
+            break
+    esperar(pag, 3000)
+    esperar_carga(fr, pag)
+    cerrar_avisos(fr, pag)
+    paso(f"   resultado: «{sin_datos(pantalla(fr))}» · botones: {[b.strip() for b in fr.locator('button:visible, a:visible').all_inner_texts() if b.strip()][:20]}")
+    pdf = bajar_pdf(pag, fr)
+    if not pdf:   # resultado en tabla: abrir la fila de esa guía
+        fila = fr.locator("table tbody tr", has_text=re.compile(serie + r"\s*-\s*0*" + corr + r"\b")).first
+        if fila.count():
+            try:
+                fila.locator("a, button, i, span[class*=icon]").first.click(timeout=4000)
+                esperar(pag, 2500)
+                cerrar_avisos(fr, pag)
+                pdf = bajar_pdf(pag, fr)
+            except Exception:
+                pass
+    return pdf
+
+
 ESPERA_MIN = 12   # minutos que la vista previa queda abierta esperando ✅ Emitir
 
 
@@ -1015,6 +1080,30 @@ def main():
     if c.get("empresa_ruc") != ruc:
         fin(False, "El caso es de otra empresa que la de esta corrida.")
         sys.exit("El caso es de otra empresa")
+    if modo == "pdf":
+        numero = str(r.get("gre") or "")
+        with sync_playwright() as p:
+            nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None)
+            pag = None
+            try:
+                ctx, pag, fr = ingresar(nav, ruc, usuario, clave, MENU_CONSULTA, "consultagre", "GRE emitidas")
+                pdf = consultar_pdf(fr, pag, numero)
+            except Exception as e:
+                print(f"::error title=GRE pdf::{type(e).__name__}: {sin_datos(e)}")
+                img = ""
+                try:
+                    img = base64.b64encode(pag.screenshot(type="jpeg", quality=70, full_page=True)).decode() if pag else ""
+                except Exception:
+                    pass
+                fin(False, f"No pude bajar el PDF de SUNAT ({sin_datos(e)[:120]}). Puede descargarlo en SOL → Consulta de GRE.", imagen=img)
+                sys.exit(1)
+            if not pdf:
+                fin(False, "Encontré la consulta pero no pude bajar el PDF. Puede descargarlo en SOL → Consulta de GRE.",
+                    imagen=base64.b64encode(pag.screenshot(type="jpeg", quality=70, full_page=True)).decode())
+                sys.exit(1)
+            fin(True, "PDF de la guía", pdf=pdf)
+            print("::notice title=GRE pdf::PDF enviado al chat")
+        return
     if modo == "emitir" and os.environ.get("CONFIRMAR", "") != huella:
         fin(False, "La confirmación no corresponde a este caso (¿se cambió algo después de aprobar?). No se emitió nada.")
         sys.exit("Clave de confirmación incorrecta")
