@@ -448,6 +448,16 @@ def ingresar(nav, ruc, usuario, clave):
     pag.click("#btnAceptar")
     pag.wait_for_load_state("networkidle", timeout=60000)
     esperar(pag, 3000)
+    # Pantallas que SOL pone a veces después de ingresar (campañas, «confirme sus datos»): se pasan sin aceptar nada.
+    for f in pag.frames:
+        for t in ("Continuar sin confirmar", "Omitir", "Ahora no"):
+            try:
+                b = f.get_by_text(t, exact=True)
+                if b.count() and b.first.is_visible():
+                    b.first.click(timeout=2000)
+                    esperar(pag, 1500)
+            except Exception:
+                pass
     for i in MENU_GRE:   # se abre con clics, como una persona (ir directo a la dirección lo corta SUNAT)
         for f in pag.frames:
             try:
@@ -465,7 +475,10 @@ def ingresar(nav, ruc, usuario, clave):
             except Exception:
                 pass
         esperar(pag, 1000)
-    raise Alto("no se abrió «Emisión de GRE» en SOL")
+    # Casi siempre es SOL lento o caído por un momento: se reintenta como una caída (nada se llenó todavía).
+    e = SunatCaida("no se abrió «Emisión de GRE» en SOL")
+    e.ctx, e.pag = ctx, pag
+    raise e
 
 
 def p1_datos(fr, pag, c):
@@ -913,16 +926,17 @@ def main():
                     emitir = final(fr, pag)
                     break
                 except Exception as e:
+                    ctx, pag = getattr(e, "ctx", ctx), getattr(e, "pag", pag)
                     if not (isinstance(e, SunatCaida) or (fr and sunat_caida(fr))):
                         raise
                     if intento == 3:
-                        raise Alto("SUNAT sigue diciendo que sus servicios no están disponibles (lo intenté 3 veces en ~7 minutos). "
-                                   "Escríbame «vuelve a intentar» en un rato y lo hago de nuevo.")
+                        raise Alto("SUNAT no respondió bien en 3 intentos (~7 minutos): " + (str(e) if isinstance(e, SunatCaida) else "servicio no disponible") +
+                                   ". No se emitió nada. Escríbame «vuelve a intentar» en un rato y lo hago de nuevo.")
                     espera = 150 if intento == 1 else 240
-                    paso(f"SUNAT no está disponible por un momento (intento {intento}): espero {espera // 60} min y empiezo de nuevo")
+                    paso(f"SUNAT no responde bien (intento {intento}: {e}): espero {espera // 60} min y empiezo de nuevo")
                     if intento == 1:
-                        bot({"accion": "gre_aviso", "texto": "⏳ SUNAT dice que sus servicios no están disponibles por unos minutos. "
-                             "Espero y lo vuelvo a intentar solo (no se emitió nada)."})
+                        bot({"accion": "gre_aviso", "texto": "⏳ SUNAT no responde bien en este momento (" + str(e)[:80] + "). "
+                             "Espero unos minutos y lo vuelvo a intentar solo. No se emitió nada."})
                     OBSERVACIONES.clear()
                     try:
                         ctx.close()
@@ -949,7 +963,7 @@ def main():
         except Alto as e:
             print(f"::error title=GRE no emitida::{sin_datos(e)}")
             try:
-                img = base64.b64encode(foto(pag, fr)).decode() if fr else ""
+                img = base64.b64encode(foto(pag, fr) if fr else pag.screenshot(type="jpeg", quality=70)).decode() if pag else ""
             except Exception:
                 img = ""
             fin(False, str(e) + ("\n\n" + e.detalle if e.detalle else ""), imagen=img, opciones=e.opciones)
@@ -957,7 +971,7 @@ def main():
         except Exception as e:   # error inesperado: se avisa al chat con la foto de dónde quedó (nada se emitió)
             print(f"::error title=GRE robot::{type(e).__name__} en {sin_datos(PASO_ACTUAL[0])}")
             try:
-                img = base64.b64encode(foto(pag, fr)).decode() if fr else ""
+                img = base64.b64encode(foto(pag, fr) if fr else pag.screenshot(type="jpeg", quality=70)).decode() if pag else ""
             except Exception:
                 img = ""
             fin(False, f"El robot no pudo seguir en «{PASO_ACTUAL[0]}». Le mando la foto de dónde quedó.", imagen=img)
