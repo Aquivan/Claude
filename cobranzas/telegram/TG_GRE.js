@@ -348,7 +348,7 @@ function TGG_gh_(q) {
       c.estado = q.dudoso ? 'Revisar en SOL' : 'No emitida';
       c.intentos = (c.intentos || 0) + 1;
       c.ultimo_error = String(q.texto || '').slice(0, 1500);   // permite volver a pedir la vista previa aunque la guía no cambie
-      c.opciones = q.opciones && (q.opciones.lista || []).length ? { cual: String(q.opciones.cual), lista: q.opciones.lista.slice(0, 20) } : null;
+      c.opciones = q.opciones && (q.opciones.lista || []).length ? { cual: String(q.opciones.cual), lista: q.opciones.lista.slice(0, 40) } : null;
       if (c.opciones) TGG_seguirConversacion_(String(c.chat || ''), c);   // lo que responda (el número) va a esta guía
       TGG_guardar_(ss, c);
       TGG_avisar_(c, (q.dudoso ? '⚠️ ' : '⛔ ') + 'Guía caso ' + c.id + ': ' + String(q.texto || 'el robot falló') + (q.dudoso ? '' : c.opciones ? '\nNo se emitió nada.' : '\nNo se emitió nada. Escríbame o dícteme cómo seguir y continúo solo.'), q.imagen, false);
