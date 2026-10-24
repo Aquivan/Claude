@@ -144,8 +144,11 @@ function TGG_analizar_(ss, c) {
     Object.keys(empresas).map(function (r) { return r + ' → ' + empresas[r]; }).join('; ') +
     '\n\nMensajes de la persona, en orden:\n' + ((c.mensajes || []).map(function (m, i) { return (i + 1) + ') ' + m; }).join('\n') || '(ninguno)') +
     (c.bienes ? '\n\nBorrador actual (corrígelo con lo que dicen los archivos y los mensajes):\n' + TGG_paraRobot_(c) : '') +
+    (c.opciones ? '\n\nSUNAT no encontró el punto de ' + c.opciones.cual + ' y mostró estos locales del RUC ' + ((c[c.opciones.cual] || {}).ruc || '') +
+      ' (si la persona elige uno, pon en ' + c.opciones.cual + '.direccion ese domicilio tal cual):\n' +
+      c.opciones.lista.map(function (o, i) { return (i + 1) + ') ' + o.fila; }).join('\n') : '') +
     '\n\nArchivos adjuntos: ' + (c.archivos || []).length + '.';
-  var r = TGG_gemini_(txt, c.archivos);
+  var r = TGG_gemini_(txt, c.archivos), antes = { partida: c.partida, llegada: c.llegada };
   if (r.no_es_para_la_guia && c.bienes) return false;
   ['motivo', 'contraparte', 'documento', 'bienes', 'peso_kg', 'bultos', 'partida', 'llegada', 'transporte', 'fecha'].forEach(function (k) { if (r[k] !== undefined) c[k] = r[k]; });
   var dig = function (x) { return String(x || '').replace(/\D/g, ''); };
@@ -159,7 +162,12 @@ function TGG_analizar_(ss, c) {
   });
   c.peso_kg = Number(c.peso_kg) || null;
   c.bultos = Number(c.bultos) || null;
-  ['partida', 'llegada'].forEach(function (k) { var p = c[k] || {}; c[k] = { ruc: dig(p.ruc), direccion: String(p.direccion || '') }; });
+  ['partida', 'llegada'].forEach(function (k) {
+    var p = c[k] || {}, o = antes[k] || {}, dir = String(p.direccion || '');
+    c[k] = { ruc: dig(p.ruc), direccion: dir };
+    var elegido = c.opciones && c.opciones.cual === k && c.opciones.lista.filter(function (x) { return x.direccion === dir; })[0];
+    if (elegido) c[k].fila = elegido.fila; else if (o.fila && o.direccion === dir) c[k].fila = o.fila;
+  });
   var t = c.transporte || {};
   t.ruc = dig(t.ruc);
   t.modo = /priv/i.test(t.modo || '') || !t.ruc ? 'privado' : 'publico';
@@ -181,10 +189,27 @@ function TGG_analizar_(ss, c) {
 
 /** Suma un mensaje de la persona (o su respuesta a la pregunta) y vuelve a analizar. false si no era para la guía. */
 function TGG_editar_(ss, c, texto, pregunta) {
+  var op = c.opciones, n = op && String(texto).match(/^\s*(?:(?:el|la|n[uú]mero|nro\.?|n°|#|opci[oó]n|seleccion[eao]?|elij[oa]|escoj[oa]|us[ae]|marc[ao]|marque|pon(?:ga)?|es|local|establecimiento|de|del)\s*)*(\d{1,2})\s*[).]?\s*$/i), antes = op && JSON.stringify(c[op.cual] || {});
+  if (n && op.lista[Number(n[1]) - 1]) {   // "7", "el 7", "seleccione el 7": el local de la lista que mostró SUNAT
+    var o = op.lista[Number(n[1]) - 1];
+    c.mensajes = (c.mensajes || []).concat(['Para ' + op.cual + ' elegí el local ' + n[1] + ') ' + o.fila]).slice(-25);
+    c[op.cual] = { ruc: (c[op.cual] || {}).ruc || '', direccion: o.direccion, fila: o.fila };
+    c.opciones = null; c.relanzar = true; c.estado = 'Propuesta';
+    return true;
+  }
   c.mensajes = (c.mensajes || []).concat([(pregunta ? 'Respondiendo a «' + pregunta.q + '»: ' : '') + String(texto).slice(0, 1500)]).slice(-25);
   var ok = TGG_analizar_(ss, c);
-  if (!ok) c.mensajes.pop();
+  if (!ok) { c.mensajes.pop(); return ok; }
+  if (op && JSON.stringify(c[op.cual] || {}) !== antes) { c.opciones = null; c.relanzar = !TGG_preguntas_(c).length; }   // ya respondió lo que pidió SUNAT
   return ok;
+}
+
+/** Tras una respuesta a lo que pidió SUNAT, vuelve a pedir la vista previa sola. Devuelve el aviso ('' si no). */
+function TGG_relanzar_(ss, c, chat) {
+  if (!c.relanzar) return '';
+  c.relanzar = false;
+  try { c.chat = chat; TGG_pedir_(ss, c, 'vista'); } catch (e) { TGG_guardar_(ss, c); return '\n\n⚠️ ' + e.message; }
+  return '\n\n👁 Con eso vuelvo a preparar la vista previa en SUNAT (no se emite). Tarda 2–4 minutos.';
 }
 
 function TGG_faltan_(c) {
@@ -305,8 +330,11 @@ function TGG_gh_(q) {
       TGG_avisar_(c, '✅ Guía de remisión emitida: ' + c.gre + '\n' + (c.empresa || '') + ' · ' + c.motivo + ' · caso ' + c.id, q.imagen, false);
     } else {
       c.estado = q.dudoso ? 'Revisar en SOL' : 'No emitida';
+      c.intentos = (c.intentos || 0) + 1;   // permite volver a pedir la vista previa aunque la guía no cambie
+      c.opciones = q.opciones && (q.opciones.lista || []).length ? { cual: String(q.opciones.cual), lista: q.opciones.lista.slice(0, 20) } : null;
+      if (c.opciones) TGG_seguirConversacion_(String(c.chat || ''), c);   // lo que responda (el número) va a esta guía
       TGG_guardar_(ss, c);
-      TGG_avisar_(c, (q.dudoso ? '⚠️ ' : '⛔ ') + 'Guía caso ' + c.id + ': ' + String(q.texto || 'el robot falló') + (q.dudoso ? '' : '\nNo se emitió nada. Corríjalo y vuelva a pedir la vista previa.'), q.imagen, false);
+      TGG_avisar_(c, (q.dudoso ? '⚠️ ' : '⛔ ') + 'Guía caso ' + c.id + ': ' + String(q.texto || 'el robot falló') + (q.dudoso ? '' : c.opciones ? '\nNo se emitió nada.' : '\nNo se emitió nada. Corríjalo y vuelva a pedir la vista previa.'), q.imagen, false);
     }
     return { ok: true };
   }
@@ -440,7 +468,7 @@ function TGG_alBotonTG_(ctx, datos, op) {
   if (op === 'ok' && datos.huella && datos.huella !== TGG_huella_(c)) return TG_enviar_(ctx.chatId, '⚠️ La guía cambió después de pedir confirmar. Revísela y vuelva a tocar ✅ Emitir.', TGG_botonesTG_(c));
   if (op === 'ok' || op === 'vp') {
     var modo = op === 'ok' ? 'emitir' : 'vista';
-    if (TG_yaVisto_('gre' + modo + c.id + TGG_huella_(c))) return TG_enviar_(ctx.chatId, 'Eso ya se pidió.');
+    if (TG_yaVisto_('gre' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0))) return TG_enviar_(ctx.chatId, 'Eso ya se pidió.');
     if (op === 'ok') TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
     try { c.chat = ctx.chatId; TGG_pedir_(ctx.ss, c, modo); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message)); }
     return TG_enviar_(ctx.chatId, (modo === 'emitir' ? '🚚 <b>Emitiendo</b> la guía en SUNAT' : '👁 <b>Preparando la vista previa</b> en SUNAT (no se emite)') +
@@ -456,9 +484,10 @@ function TGG_editarTG_(ctx, id, texto, pregunta) {
   var ok;
   try { ok = TGG_editar_(ctx.ss, c, texto, pregunta); } catch (e) { TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message), TGG_botonesTG_(c)); return true; }
   if (!ok) return false;   // no era para la guía: lo responde la IA general
+  var extra = TGG_relanzar_(ctx.ss, c, ctx.chatId);
   TGG_guardar_(ctx.ss, c);
   TGG_seguirConversacion_(ctx.chatId, c);
-  TG_enviar_(ctx.chatId, TGG_texto_(c, true), TGG_botonesTG_(c));
+  TG_enviar_(ctx.chatId, TGG_texto_(c, true) + TG_esc_(extra), extra ? null : TGG_botonesTG_(c));
   return true;
 }
 
@@ -517,9 +546,10 @@ function TGG_atajoWA_(ss, q, clave) {
     var c0 = dato.c, ok;
     try { ok = TGG_editar_(ss, c0, texto, dato.pregunta); } catch (e) { return TGG_respWA_('⚠️ ' + e.message, c0); }
     if (ok) {
+      var extra = TGG_relanzar_(ss, c0, clave);
       TGG_guardar_(ss, c0);
       TGG_seguirConversacion_(clave, c0);
-      return TGG_respWA_(TGG_texto_(c0, false), c0);
+      return TGG_respWA_(TGG_texto_(c0, false) + extra, extra ? null : c0);
     }
   }
   if (!(/^\/?gu[ií]a\b/i.test(texto) || (TGG_PIDE_RX_.test(texto) && /\b(emit|hac|haz|gener|sac|arm|necesit|quiero)/i.test(texto)))) return null;
@@ -561,7 +591,7 @@ function TGG_botonWA_(acc, k, op, numero) {
   }
   if (op !== 'ok' && op !== 'vp') return TGG_respWA_('No entendí ese botón.');
   var modo = op === 'ok' ? 'emitir' : 'vista';
-  if (TG_yaVisto_('gre' + modo + c.id + TGG_huella_(c))) return TGG_respWA_('Eso ya se pidió.');
+  if (TG_yaVisto_('gre' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0))) return TGG_respWA_('Eso ya se pidió.');
   try { c.chat = clave; TGG_pedir_(ss, c, modo); } catch (e) { return TGG_respWA_('⚠️ ' + e.message, c); }
   return TGG_respWA_((modo === 'emitir' ? '🚚 *Emitiendo* la guía en SUNAT' : '👁 *Preparando la vista previa* en SUNAT (no se emite)') +
     ' · caso ' + c.id + '\nTarda 2–4 minutos; le mando aquí la foto o el resultado.');
