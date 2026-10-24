@@ -264,41 +264,128 @@ def puntaje(a, b):
     return len(pa & pb)
 
 
-def elegir_fila(fr, pag, p, alerta, cual):
-    """En la tabla de la ventana abierta marca el local del caso: el que la persona eligió (fila exacta) o el más parecido."""
-    m = modal(fr)
+PAGINAR_JS = """([m, hacia]) => {
+  const modal = [...document.querySelectorAll('.modal')].filter(e => e.offsetParent !== null).pop();
+  if (!modal) return false;
+  const rx = hacia === 'sig' ? /^(siguiente|next|›|»|>)$/i : /^(anterior|previous|‹|«|<)$/i;
+  const cls = hacia === 'sig' ? /next/i : /prev/i;
+  const b = [...modal.querySelectorAll('a, button, li, span')].filter(e => e.offsetParent !== null)
+    .find(e => rx.test((e.innerText || '').trim()) || cls.test(e.className || ''));
+  if (!b) return false;
+  const off = x => x && (/disabled/.test(x.className || '') || x.disabled || x.getAttribute('aria-disabled') === 'true');
+  if (off(b) || off(b.parentElement)) return false;
+  (b.querySelector('a') || b).click();
+  return true;
+}"""
+
+
+def leer_filas(m):
     filas = m.locator("table tbody tr")
+    out = []
+    for i in range(filas.count()):
+        c = filas.nth(i).evaluate("f => [...f.querySelectorAll('td')].map(t => t.innerText.trim()).filter(Boolean)")
+        if c and not re.search(r"no hay registros|ningun", simple(" ".join(c))):
+            out.append(c)
+    return out
+
+
+def todas_las_filas(fr, pag):
+    """La lista de locales de SUNAT viene en páginas de 10: se recorren todas (o se pide mostrar todas)."""
+    m = modal(fr)
+    largo = m.locator("select[name$=_length], .dataTables_length select").first
+    if largo.count():
+        try:
+            ops = largo.locator("option").all_inner_texts()
+            nums = [o for o in ops if re.sub(r"\D", "", o)]
+            if nums:
+                largo.select_option(label=max(nums, key=lambda o: int(re.sub(r"\D", "", o) or 0)))
+                esperar(pag, 1000)
+        except Exception:
+            pass
+    vistas, todas = set(), []
+    for _ in range(20):
+        nuevas = 0
+        for c in leer_filas(m):
+            k = " · ".join(c)
+            if k not in vistas:
+                vistas.add(k); todas.append(c); nuevas += 1
+        if not nuevas or not fr.evaluate(PAGINAR_JS, [None, "sig"]):
+            break
+        esperar(pag, 900)
+    return todas
+
+
+def marcar_fila(fr, pag, celdas):
+    """Marca la fila con esas celdas: la busca con «Buscar» (filtra todas las páginas) o recorriendo las páginas."""
+    m = modal(fr)
+    clave = simple(" · ".join(celdas))
     buscar = m.locator("input[type=search], label:has-text('Buscar') input").first
-    if p.get("fila") and buscar.count():   # la tabla puede tener varias páginas: se filtra por la dirección elegida
-        buscar.fill(p["direccion"][:40])
+    if buscar.count():
+        buscar.fill(celdas[-1][:40])
         esperar(pag, 1200)
-    n = filas.count()
-    if not n or "No hay registros" in (filas.first.inner_text() or "") or "ningún" in simple(filas.first.inner_text() or ""):
-        if p.get("fila") and buscar.count():
-            buscar.fill("")
-            esperar(pag, 1000)
-            n = filas.count()
-        if not n:
-            raise Alto(alerta)
-    celdas = [filas.nth(i).evaluate("f => [...f.querySelectorAll('td')].map(t => t.innerText.trim()).filter(Boolean)") for i in range(n)]
+    for _ in range(25):
+        filas = m.locator("table tbody tr")
+        for i in range(filas.count()):
+            c = filas.nth(i).evaluate("f => [...f.querySelectorAll('td')].map(t => t.innerText.trim()).filter(Boolean)")
+            if simple(" · ".join(c)) == clave:
+                filas.nth(i).locator("input[type=radio]").first.check(timeout=4000)
+                return True
+        if not fr.evaluate(PAGINAR_JS, [None, "sig"]):
+            break
+        esperar(pag, 900)
+    if buscar.count():   # el filtro no lo encontró: desde la primera página, sin filtro
+        buscar.fill("")
+        esperar(pag, 1000)
+        for _ in range(20):
+            if not fr.evaluate(PAGINAR_JS, [None, "ant"]):
+                break
+            esperar(pag, 600)
+        return marcar_fila_sin_buscar(fr, pag, clave)
+    return False
+
+
+def marcar_fila_sin_buscar(fr, pag, clave):
+    m = modal(fr)
+    for _ in range(25):
+        filas = m.locator("table tbody tr")
+        for i in range(filas.count()):
+            c = filas.nth(i).evaluate("f => [...f.querySelectorAll('td')].map(t => t.innerText.trim()).filter(Boolean)")
+            if simple(" · ".join(c)) == clave:
+                filas.nth(i).locator("input[type=radio]").first.check(timeout=4000)
+                return True
+        if not fr.evaluate(PAGINAR_JS, [None, "sig"]):
+            return False
+        esperar(pag, 900)
+    return False
+
+
+def elegir_fila(fr, pag, p, alerta, cual):
+    """Marca el local del caso entre TODOS los que SUNAT tiene (todas las páginas): el que la persona eligió (fila exacta)
+    o el más parecido. Si no hay uno claro, manda la lista completa al chat para elegir con un número."""
+    celdas = todas_las_filas(fr, pag)
+    if not celdas:
+        raise Alto(alerta)
     textos = [" · ".join(x) for x in celdas]
+    n = len(textos)
+    paso(f"   {cual}: SUNAT tiene {n} local(es)")
+    elegido = None
     if p.get("fila"):
-        exacta = [i for i in range(n) if simple(textos[i]) == simple(p["fila"])]
-        if exacta:
-            filas.nth(exacta[0]).locator("input[type=radio]").first.check(timeout=4000)
-            return exacta[0]
-    pts = [puntaje(p["direccion"], t) for t in textos]
-    mejor = max(range(n), key=lambda i: pts[i])
-    palabras = lambda t: frozenset(w for w in re.findall(r"[a-z]+", simple(t)) if len(w) > 1 and w not in COMUNES | {"domicilio", "fiscal"})
-    unico = len({palabras(textos[i]) for i in range(n) if pts[i] == pts[mejor]}) == 1   # empate de la misma dirección: vale la primera
-    # Basta una palabra ("Mártires") si solo un local la tiene; si empatan, hacen falta 2 o más y ganar.
-    if n > 1 and not (pts[mejor] >= 1 and unico):
-        lista = "\n".join(f"{i + 1}) " + re.sub(r"\s+", " ", t).strip()[:110] for i, t in enumerate(textos[:20]))
-        raise Alto(alerta + ": ninguna dirección registrada coincide con la del caso (o hay varias iguales).",
-                   f"Locales que SUNAT tiene registrados:\n{lista}\n\nResponda solo con el número (ej. «7») y vuelvo a preparar la vista previa.",
-                   {"cual": cual, "lista": [{"fila": textos[i], "direccion": (celdas[i] or [""])[-1]} for i in range(min(n, 20))]})
-    filas.nth(mejor).locator("input[type=radio]").first.check(timeout=4000)
-    return mejor
+        elegido = next((i for i in range(n) if simple(textos[i]) == simple(p["fila"])), None)
+    if elegido is None:
+        pts = [puntaje(p["direccion"], t) for t in textos]
+        mejor = max(range(n), key=lambda i: pts[i])
+        palabras = lambda t: frozenset(w for w in re.findall(r"[a-z]+", simple(t)) if len(w) > 1 and w not in COMUNES | {"domicilio", "fiscal"})
+        unico = len({palabras(textos[i]) for i in range(n) if pts[i] == pts[mejor]}) == 1   # empate de la misma dirección: vale la primera
+        # Basta una palabra ("Mártires") si solo un local la tiene; si empatan, hacen falta 2 o más y ganar.
+        if n > 1 and not (pts[mejor] >= 1 and unico):
+            lista = "\n".join(f"{i + 1}) " + re.sub(r"\s+", " ", t).strip()[:85] for i, t in enumerate(textos[:40]))
+            raise Alto(alerta + ": ninguna dirección registrada coincide con la del caso (o hay varias iguales).",
+                       f"Los {n} locales que SUNAT tiene registrados:\n{lista}\n\nResponda solo con el número (ej. «7») y vuelvo a preparar la vista previa.",
+                       {"cual": cual, "lista": [{"fila": textos[i], "direccion": (celdas[i] or [""])[-1]} for i in range(min(n, 40))]})
+        elegido = mejor
+    if not marcar_fila(fr, pag, celdas[elegido]):
+        raise Alto(alerta + ": encontré el local pero SUNAT no me dejó marcarlo.")
+    return elegido
 
 
 # ============================================================ pantallas
