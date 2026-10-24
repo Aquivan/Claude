@@ -372,6 +372,7 @@ function TGG_gh_(q) {
   if (!c) return { ok: false, error: 'caso desconocido' };
   if (q.accion === 'gre_caso') return { ok: true, datos: TGG_paraRobot_(c) };
   if (q.accion === 'gre_elegir') return TGG_elegirLocal_(c, String(q.cual || ''), q.lista || []);
+  if (q.accion === 'gre_aviso') { TGG_avisar_(c, String(q.texto || '').slice(0, 500) + ' · caso ' + c.id, null, false); return { ok: true }; }
   var cache = CacheService.getScriptCache();
   if (q.accion === 'gre_vista') {
     c.estado = 'Vista previa lista';

@@ -26,6 +26,7 @@ import json
 import os
 import re
 import sys
+import time
 import unicodedata
 import urllib.request
 
@@ -129,9 +130,24 @@ def seguir_observacion(fr, pag):
         esperar(pag, 1200)
 
 
+class SunatCaida(Exception):
+    """SUNAT dice que sus servicios no están disponibles por unos minutos."""
+
+
+def sunat_caida(fr):
+    """¿SUNAT muestra «en estos momentos no se puede acceder a los servicios de SUNAT… reintentar»?"""
+    try:
+        t = " ".join(fr.locator(".modal:visible").all_inner_texts())
+    except Exception:
+        return False
+    return bool(re.search(r"no se puede acceder a los servicios|reintentar en \d+ minutos|servicio no disponible", t, re.I))
+
+
 def cerrar_avisos(fr, pag):
     """Avisos informativos de SUNAT (Entendido / Aceptar / ¿Desea continuar? → SI). Devuelve sus textos."""
     vistos = []
+    if sunat_caida(fr):
+        raise SunatCaida("SUNAT no está disponible por unos minutos")
     seguir_observacion(fr, pag)
     for _ in range(3):
         b = fr.locator(".modal button:visible", has_text=re.compile(r"^\s*(Entendido|ENTENDIDO|Aceptar)\s*$"))
@@ -882,14 +898,38 @@ def main():
         nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None)
         pag = fr = None
         try:
-            ctx, pag, fr = ingresar(nav, ruc, usuario, clave)
-            p1_datos(fr, pag, c)
-            p2_actores(fr, pag, c)
-            p3_documentos(fr, pag, c)
-            p4_bienes(fr, pag, c)
-            p5_puntos(fr, pag, c)
-            p6_transporte(fr, pag, c)
-            emitir = final(fr, pag)
+            # SUNAT a veces dice «en estos momentos no se puede acceder a los servicios… reintentar en 5 minutos»:
+            # se espera y se empieza de nuevo (hasta 3 veces). Nunca después de tocar Emitir.
+            for intento in range(1, 4):
+                ctx = None
+                try:
+                    ctx, pag, fr = ingresar(nav, ruc, usuario, clave)
+                    p1_datos(fr, pag, c)
+                    p2_actores(fr, pag, c)
+                    p3_documentos(fr, pag, c)
+                    p4_bienes(fr, pag, c)
+                    p5_puntos(fr, pag, c)
+                    p6_transporte(fr, pag, c)
+                    emitir = final(fr, pag)
+                    break
+                except Exception as e:
+                    if not (isinstance(e, SunatCaida) or (fr and sunat_caida(fr))):
+                        raise
+                    if intento == 3:
+                        raise Alto("SUNAT sigue diciendo que sus servicios no están disponibles (lo intenté 3 veces en ~7 minutos). "
+                                   "Escríbame «vuelve a intentar» en un rato y lo hago de nuevo.")
+                    espera = 150 if intento == 1 else 240
+                    paso(f"SUNAT no está disponible por un momento (intento {intento}): espero {espera // 60} min y empiezo de nuevo")
+                    if intento == 1:
+                        bot({"accion": "gre_aviso", "texto": "⏳ SUNAT dice que sus servicios no están disponibles por unos minutos. "
+                             "Espero y lo vuelvo a intentar solo (no se emitió nada)."})
+                    OBSERVACIONES.clear()
+                    try:
+                        ctx.close()
+                    except Exception:
+                        pass
+                    fr = None
+                    time.sleep(espera)
             img = base64.b64encode(foto(pag, fr)).decode()
             if modo != "emitir":
                 bot({"accion": "gre_vista", "imagen": img, "huella": huella, "notas": OBSERVACIONES[:5]})
