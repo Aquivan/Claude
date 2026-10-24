@@ -134,6 +134,12 @@ def recorrer(fr, pag, maximo=8):
             print("\n>>> Siguiente no disponible:", str(e).splitlines()[0][:80])
             break
         pag.wait_for_timeout(4000)
+        if pantalla(fr) == actual and "Desea continuar" in fr.inner_text("body"):
+            try:   # "No se ha registrado ningún … ¿Desea continuar?" → SI (solo pasa de pantalla)
+                fr.get_by_role("button", name="SI", exact=True).last.click(timeout=4000)
+                pag.wait_for_timeout(4000)
+            except Exception:
+                pass
         if pantalla(fr) == actual:
             print("\n>>> SUNAT no deja pasar sin datos en esta pantalla. Mensaje:")
             try:
