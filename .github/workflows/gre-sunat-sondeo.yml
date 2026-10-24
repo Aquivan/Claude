@@ -1,0 +1,39 @@
+# Proyecto "GRE por SUNAT" (carpeta gre_sunat/): sondeo de SOLO LECTURA del formulario de
+# Guía de Remisión Electrónica Remitente en SUNAT SOL. No llena ni emite nada; nunca imprime claves.
+name: GRE SUNAT - sondeo del formulario (solo mirar)
+run-name: "GRE sondeo · ${{ inputs.ruc }}"
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa (su Environment con claves SOL)"
+        required: true
+        default: "20447623669"
+      codigos:
+        description: "Opcional: códigos de menú SOL a revisar, separados por coma"
+        required: false
+        default: ""
+permissions:
+  contents: read
+jobs:
+  sondeo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: gre_sunat/scripts
+      - name: Preparar navegador
+        timeout-minutes: 5
+        run: |
+          pip install playwright==1.47.0
+          CH=$(command -v google-chrome || command -v google-chrome-stable || true)
+          if [ -n "$CH" ]; then echo "CHROMIUM=$CH" >> "$GITHUB_ENV"; else timeout 240 python -m playwright install --with-deps chromium; fi
+      - name: Sondeo (solo mirar)
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          CODIGOS: ${{ inputs.codigos }}
+        run: python gre_sunat/scripts/sondeo_gre.py
