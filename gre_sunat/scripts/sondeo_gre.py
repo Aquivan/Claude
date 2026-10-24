@@ -143,7 +143,7 @@ def llenar_prueba(fr, pag, actual):
             fr.locator("[formcontrolname=cantidad], input[name=cantidad]").first.fill("1")
             fr.locator("button:visible", has_text="Agregar").last.click(timeout=4000)
             pag.wait_for_timeout(2000)
-            combo(fr, pag, "Unidad de medida de peso bruto", "KGM")
+            combo(fr, pag, "Unidad de medida de peso bruto", "KILOGRAMO")
             fr.locator("[formcontrolname=pesoBruto], input[name=pesoBruto]").first.fill("1")
             print("   (bien de prueba puesto en el formulario)")
             print("   Tabla de bienes:", sin_datos(fr.evaluate("() => (document.querySelector('table') || {innerText: '-'}).innerText")).replace("\n", " / ")[:600])
