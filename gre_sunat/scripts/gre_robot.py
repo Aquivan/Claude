@@ -178,6 +178,40 @@ def boton_agregar_modal(fr):
     return modal(fr).locator("button:visible", has_text=re.compile(r"^\s*(Agregar|Aceptar)\s*$")).last
 
 
+CARGANDO_JS = """() => [...document.querySelectorAll('[class*=spinner], [class*=loading], [class*=loader], .blockUI, .cdk-overlay-backdrop')]
+  .some(e => e.offsetParent !== null && e.getBoundingClientRect().width > 20)"""
+
+
+def esperar_carga(fr, pag, max_s=25):
+    """Espera a que SUNAT termine de cargar (el círculo que gira). True si terminó."""
+    for _ in range(max_s * 2):
+        try:
+            if not fr.evaluate(CARGANDO_JS):
+                return True
+        except Exception:
+            return True
+        pag.wait_for_timeout(500)
+    paso(f"   SUNAT siguió cargando {max_s} s")
+    return False
+
+
+def confirmar_modal(fr, pag):
+    """Toca Agregar/Aceptar de la ventana cuando SUNAT lo habilita (espera a que termine de cargar)."""
+    listo = esperar_carga(fr, pag)
+    b = boton_agregar_modal(fr)
+    for _ in range(40):
+        if b.count() and b.is_enabled():
+            b.click(timeout=5000)
+            return
+        pag.wait_for_timeout(500)
+    vacios = modal(fr).evaluate("""m => [...m.querySelectorAll('input')].filter(e => e.offsetParent !== null && e.type !== 'checkbox'
+        && e.type !== 'radio' && !e.value).map(e => (e.closest('div') && e.closest('div').parentElement && e.closest('div').parentElement.querySelector('label')
+        || {innerText: e.getAttribute('formcontrolname') || '?'}).innerText.trim())""")
+    if not listo or fr.evaluate(CARGANDO_JS):
+        raise SunatCaida("SUNAT se quedó cargando")
+    raise Alto("SUNAT no deja agregar: faltan " + (", ".join(vacios)[:200] or "datos en la ventana"))
+
+
 def combo(fr, pag, etiqueta, elegir, dentro=None):
     """ng-select junto a la etiqueta: abre y elige la opción que empieza (o contiene) con `elegir`."""
     base = dentro or fr
@@ -518,7 +552,7 @@ def p2_actores(fr, pag, c):
     rs = m.locator("[formcontrolname=razonSocial], input[name=razonSocial]").first
     if rs.count() and not rs.input_value().strip():
         rs.fill(c["contraparte"].get("nombre", ""))
-    boton_agregar_modal(fr).click(timeout=5000)
+    confirmar_modal(fr, pag)
     esperar(pag, 2000)
     cerrar_avisos(fr, pag)
     siguiente(fr, pag)
@@ -545,7 +579,7 @@ def p3_documentos(fr, pag, c):
         for n in nombres:   # el documento de un tercero pide el RUC de quien lo emitió (a veces SUNAT ya lo trae y lo bloquea)
             if n and re.search(r"ruc|emisor", n, re.I) and d.get("ruc_emisor"):
                 llenar(m.locator(f"[formcontrolname={n}]").first, d["ruc_emisor"])
-        boton_agregar_modal(fr).click(timeout=5000)
+        confirmar_modal(fr, pag)
         esperar(pag, 2000)
         avisos = cerrar_avisos(fr, pag)
         if avisos and fr.locator(".modal:visible").count():
@@ -625,7 +659,7 @@ def p4_bienes(fr, pag, c):
         fr.locator("#descBien").fill(str(b["descripcion"])[:250])
         combo(fr, pag, "Unidad de medida del bien", f"{b.get('unidad') or 'NIU'} - ")
         fr.locator("[formcontrolname=cantidad], input[name=cantidad]").first.fill(str(b["cantidad"]))
-        boton_agregar_modal(fr).click(timeout=5000)
+        confirmar_modal(fr, pag)
         esperar(pag, 1500)
         avisos = cerrar_avisos(fr, pag)
         if fr.locator("#descBien:visible").count():
@@ -662,7 +696,7 @@ def punto(fr, pag, n, p, cual):
             radios.nth(i).check()
             esperar(pag, 2000)
     elegir_fila(fr, pag, p, f"no encontré el establecimiento de {cual} en SUNAT", cual)
-    boton_agregar_modal(fr).click(timeout=5000)
+    confirmar_modal(fr, pag)
     esperar(pag, 2500)
     cerrar_avisos(fr, pag)
 
@@ -730,7 +764,7 @@ def p6_transporte(fr, pag, c):
         mtc = m.locator("[formcontrolname=nroRegistroMTC]").first
         if t.get("mtc") and not t.get("sin_mtc") and not (mtc.input_value() or "").strip():   # si SUNAT ya lo trae, se deja
             llenar(mtc, t["mtc"])
-        boton_agregar_modal(fr).click(timeout=5000)
+        confirmar_modal(fr, pag)
         esperar(pag, 2000)
         avisos = cerrar_avisos(fr, pag)
         if fr.locator("[formcontrolname=nroRuc]:visible").count():
@@ -793,7 +827,7 @@ def vehiculos_conductores(fr, pag, t):
                     paso(f"   vehículo {n + 1}: autorización especial MTC puesta")
                 else:
                     paso(f"   vehículo {n + 1}: no pude poner la autorización MTC (entidad {'ok' if elegido else 'no encontrada'})")
-        boton_agregar_modal(fr).click(timeout=5000)
+        confirmar_modal(fr, pag)
         esperar(pag, 2000)
         avisos = cerrar_avisos(fr, pag)
         if fr.locator("[formcontrolname=placaVehiculo]:visible").count():
@@ -819,12 +853,13 @@ def vehiculos_conductores(fr, pag, t):
                 doc.press("Tab")
                 esperar(pag, 3000)
                 seguir_observacion(fr, pag)
+        esperar_carga(fr, pag)   # SUNAT busca el nombre del conductor; a veces tarda
         m = modal(fr)
         llenar(m.locator("[formcontrolname=nombreApellidos]").first, cd.get("nombre", "")) if not (
             m.locator("[formcontrolname=nombreApellidos]").first.input_value() or "").strip() else None
         paso(f"   conductor · licencia {'ok' if (lic.input_value() or '').strip() else 'vacía'} · documento "
              f"{'ok' if (doc.input_value() or '').strip() else 'vacío'}")
-        boton_agregar_modal(fr).click(timeout=5000)
+        confirmar_modal(fr, pag)
         esperar(pag, 2000)
         cerrar_avisos(fr, pag)
 
