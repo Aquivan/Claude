@@ -265,7 +265,7 @@ function TGG_paraGuia_(ss, clave, texto) {
   if (!ses.gre || !ses.greT || !texto || texto.charAt(0) === '/') return null;
   var edad = Date.now() - ses.greT;
   if (edad > 3 * 3600000 || (edad > 3600000 && !TGG_DATO_RX_.test(texto) && !(ses.esperando && ses.esperando.tipo === 'gre'))) return null;
-  if (/^\s*\/?gu[ií]a\b|\b(emit|emite|emita|genera|haz)\w*\b.*\bgu[ií]a\b/i.test(texto)) return null;   // pide OTRA guía o emitir
+  if (/^\s*\/?gu[ií]a\b|\b(emit|emite|emita|genera|haz)\w*\b.*\bgu[ií]a\b/i.test(texto) || TGG_PDF_RX_.test(texto)) return null;   // pide OTRA guía, emitir o el PDF
   var c = TGG_leer_(ss, ses.gre);
   if (!c || /Emitida|Descartada|Emitiendo/.test(c.estado || '')) return null;
   return { c: c, pregunta: ses.esperando && ses.esperando.tipo === 'gre' ? ses.esperando.pregunta : null };
@@ -340,6 +340,30 @@ function TGG_elegirLocal_(c, cual, lista) {
   } catch (e) { return { ok: false, error: e.message }; }
 }
 
+/** PDF de la guía emitida (guardado en Drive): {base64, nombre} o null. */
+function TGG_pdf_(c) {
+  if (!c || !c.pdf) return null;
+  try {
+    var f = DriveApp.getFileById(c.pdf);
+    return { base64: Utilities.base64Encode(f.getBlob().getBytes()), nombre: 'GRE ' + (c.gre || c.id) + '.pdf', archivo: f };
+  } catch (e) { return null; }
+}
+
+/** "pdf guía b0006956", "pdf de la guía", "/pdf EG07-123": el caso pedido (o el de la conversación) o null si no es este pedido. */
+var TGG_PDF_RX_ = /^\s*\/?(pdf|m[aá]nd[ae]me el pdf|env[ií]a(me)? el pdf|reenv[ií]a(me)? el pdf)\b/i;
+function TGG_pedidoPdf_(ss, texto, clave) {
+  var t = String(texto || '');
+  if (!TGG_PDF_RX_.test(t) || !/gu[ií]a|\b[0-9a-f]{8}\b|\b(EG\d{2}|T\d{3})-?\d+/i.test(t)) return null;
+  var m = t.match(/\b([0-9a-f]{8})\b/), g = t.match(/\b(EG\d{2}|T\d{3})\s*-\s*(\d+)/i), c = null;
+  if (m) c = TGG_leer_(ss, m[1]);
+  if (!c && g) {
+    var hoja = ss.getSheetByName(TGG_HOJA_), datos = hoja ? hoja.getDataRange().getValues() : [];
+    for (var i = datos.length - 1; i > 0 && !c; i--) if (String(datos[i][10]).toUpperCase().replace(/\s/g, '') === (g[1] + '-' + g[2]).toUpperCase()) c = TGG_leer_(ss, String(datos[i][1]));
+  }
+  if (!c && TG_sesion_(clave).gre) c = TGG_leer_(ss, TG_sesion_(clave).gre);
+  return { c: c };
+}
+
 /** doPost ?canal=gh con accion gre_* (lo llama gre_robot.py). La corrida debe ser de gre-sunat.yml y estar en curso. */
 function TGG_gh_(q) {
   var ss = TG_ss_(), cfg = TG_cfg_(ss), run = String(q.run || '').replace(/\D/g, '');
@@ -370,7 +394,8 @@ function TGG_gh_(q) {
         } catch (e) {}
       }
       TGG_guardar_(ss, c);
-      TGG_avisar_(c, '✅ Guía de remisión emitida: ' + c.gre + '\n' + (c.empresa || '') + ' · ' + c.motivo + ' · caso ' + c.id, q.imagen, false);
+      TGG_avisar_(c, '✅ Guía de remisión emitida: ' + c.gre + '\n' + (c.empresa || '') + ' · ' + c.motivo + ' · caso ' + c.id +
+        (c.pdf ? '\nLe mando el PDF. Cuando quiera, pídalo de nuevo con «pdf guía ' + c.id + '».' : '\nNo pude bajar el PDF: descárguelo de SOL → Consulta de GRE.'), q.imagen, false);
     } else {
       c.estado = q.dudoso ? 'Revisar en SOL' : 'No emitida';
       c.intentos = (c.intentos || 0) + 1;
@@ -397,7 +422,12 @@ function TGG_avisar_(c, texto, imagenB64, conEmitir) {
       if (blob) TGC_wa_({ tipo: 'imagen', numero: chat.slice(2), mime: 'image/jpeg', base64: imagenB64, texto: texto + extra, botones: botones });
       else TGC_wa_({ tipo: 'texto', numero: chat.slice(2), texto: texto + extra, botones: botones });
     } catch (e) { console.error('GRE aviso WhatsApp: ' + e.message); }
-    if (c.pdf) try { TGC_wa_({ tipo: 'texto', numero: chat.slice(2), texto: '📄 PDF: ' + DriveApp.getFileById(c.pdf).getUrl() }); } catch (e) {}
+    var pdf = TGG_pdf_(c);
+    if (pdf) {
+      var ok = false;
+      try { ok = TGC_wa_({ tipo: 'documento', numero: chat.slice(2), mime: 'application/pdf', base64: pdf.base64, nombre: pdf.nombre, texto: '📄 ' + pdf.nombre }); } catch (e) {}
+      if (!ok) try { TGC_wa_({ tipo: 'texto', numero: chat.slice(2), texto: '📄 PDF: ' + DriveApp.getFileById(c.pdf).getUrl() }); } catch (e) {}
+    }
     return;
   }
   var teclado = conEmitir ? [[{ text: '✅ Emitir', callback_data: 'k:' + TG_guardarBoton_({ t: 'gre', id: c.id }) + ':em' },
@@ -466,6 +496,14 @@ function TGG_desdeAdjTG_(ctx, adjs, texto) {
 /** Texto que pide una guía ("emite la guía", "/guia", "guía con estas fotos"). true si lo atendió. */
 function TGG_atajoTG_(ctx, texto) {
   var t = String(texto || ''), ses = TG_sesion_(ctx.chatId);
+  var pp = TGG_pedidoPdf_(ctx.ss, t, ctx.chatId);   // 📄 "pdf guía …": reenvía el PDF de una guía emitida
+  if (pp) {
+    var pdf = TGG_pdf_(pp.c);
+    if (!pdf) TG_enviar_(ctx.chatId, pp.c ? '📄 La guía caso ' + pp.c.id + (pp.c.gre ? ' (' + TG_esc_(pp.c.gre) + ')' : '') + ' aún no tiene PDF' +
+      (pp.c.estado === 'Emitida' ? ': descárguelo de SOL → Consulta de GRE.' : ' (todavía no se emitió).') : '📄 No encontré esa guía. Escriba, por ejemplo, <i>pdf guía b0006956</i>.');
+    else TG_enviarArchivo_(ctx.chatId, pdf.archivo.getBlob().setName(pdf.nombre), '📄 ' + TG_esc_(pdf.nombre));
+    return true;
+  }
   var esp = ses.greEsp && Date.now() - ses.greEsp < 10 * 60000;
   // "listo" después de "emite guía" + fotos: se arma con lo que llegó desde entonces y lo que escribió al pedirla.
   if (esp && /^\s*(listo|ya|eso es todo|termin[eé]|arma(la)?)\s*[.!]*\s*$/i.test(t)) {
@@ -574,6 +612,15 @@ function TGG_respWA_(texto, c) {
 /** WhatsApp: corrección pendiente, "guía" con fotos, "emitir guía <caso>". null si no es de guías. */
 function TGG_atajoWA_(ss, q, clave) {
   var texto = String(q.texto || '').trim(), ses = TG_sesion_(clave);
+  var pp = !(q.adjuntos || []).length && TGG_pedidoPdf_(ss, texto, clave);   // 📄 "pdf guía …": manda el PDF adjunto
+  if (pp) {
+    var pdf = TGG_pdf_(pp.c);
+    if (!pdf) return TGG_respWA_(pp.c ? '📄 La guía caso ' + pp.c.id + (pp.c.gre ? ' (' + pp.c.gre + ')' : '') + ' aún no tiene PDF' +
+      (pp.c.estado === 'Emitida' ? ': descárguelo de SOL → Consulta de GRE.' : ' (todavía no se emitió).') : '📄 No encontré esa guía. Escriba, por ejemplo, *pdf guía b0006956*.');
+    var rp = TGG_respWA_('📄 Aquí está el PDF de la guía ' + (pp.c.gre || pp.c.id) + '.');
+    rp.archivos = [{ base64: pdf.base64, mime: 'application/pdf', nombre: pdf.nombre, titulo: '📄 ' + pdf.nombre }];
+    return rp;
+  }
   // 🎤 Nota de voz con una guía abierta: se transcribe aquí para que vaya a la guía.
   if (!texto && q.audio && q.audio.base64 && TGG_abierta_(clave)) {
     try { texto = TG_transcribir_(ss, Utilities.newBlob(Utilities.base64Decode(q.audio.base64), q.audio.mime || 'audio/ogg', 'voz.ogg')); } catch (e) {}
