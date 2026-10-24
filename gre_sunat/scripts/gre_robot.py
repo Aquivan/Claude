@@ -216,6 +216,25 @@ def siguiente(fr, pag):
     except Exception:
         faltan = campos_faltantes(fr)
         paso(f"   campos que SUNAT marca como faltantes: {[sin_datos(x) for x in faltan]}")
+        try:   # estado de la pantalla (sin datos personales): cuántas filas tiene cada tabla y qué campos están vacíos
+            estado = fr.evaluate("""() => {
+              const vis = e => e && e.offsetParent !== null;
+              const tablas = [...document.querySelectorAll('table')].filter(vis).map(t => t.querySelectorAll('tbody tr').length);
+              const vacios = [...document.querySelectorAll('input, select, textarea')].filter(vis)
+                .filter(e => e.type !== 'checkbox' && e.type !== 'radio' && !e.value && !e.closest('.modal'))
+                .map(e => (e.getAttribute('formcontrolname') || e.name || e.id || '?') + (e.disabled ? '(bloq)' : ''));
+              const marcas = [...document.querySelectorAll('input[type=checkbox], input[type=radio]')].filter(vis)
+                .map(e => (e.getAttribute('formcontrolname') || e.name || e.id || '?') + '=' + (e.checked ? 1 : 0));
+              const rojo = [...document.querySelectorAll('.text-danger, .invalid-feedback, small')].filter(vis)
+                .map(e => e.innerText.trim()).filter(Boolean).slice(0, 6);
+              const sig = [...document.querySelectorAll('button')].find(b => b.innerText.trim() === 'Siguiente');
+              return {tablas, vacios, marcas, rojo, siguiente_bloqueado: sig ? sig.disabled : null};
+            }""")
+            paso(f"   estado: {sin_datos(json.dumps(estado, ensure_ascii=False))[:900]}")
+            if not faltan:
+                faltan = [f"vacíos: {', '.join(estado.get('vacios', [])[:6])}"] + estado.get("rojo", [])[:3]
+        except Exception:
+            pass
         raise Alto(f"SUNAT no deja pasar de «{actual}»: falta un dato obligatorio" +
                    (f" ({', '.join(faltan)[:300]})" if faltan else ""))
     esperar(pag, 3000)
