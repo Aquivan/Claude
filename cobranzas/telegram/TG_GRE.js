@@ -133,9 +133,11 @@ function TGG_armar_(lecturas, empresas, chat) {
   var tieneDoc = function (x) { return x && (x.dni || x.licencia); };
   var cond = tieneDoc(trans.conductor) ? trans.conductor : tieneDoc(tk.conductor) ? tk.conductor : null;
   c.transporte = { modo: ruc(t) ? 'publico' : 'privado', ruc: ruc(t), nombre: t.nombre || '', mtc: String(t.mtc || '').split(/[\s,\/-]+/)[0] || '',
-    registrar_vehiculos: !ruc(t), placas: placas.map(function (p) { return String(p).toUpperCase().replace(/[^A-Z0-9]/g, ''); })
+    registrar_vehiculos: true, placas: placas.map(function (p) { return String(p).toUpperCase().replace(/[^A-Z0-9]/g, ''); })
       .filter(function (p, i, a) { return p && a.indexOf(p) === i; }),
     conductores: cond && (cond.dni || cond.licencia) ? [{ dni: String(cond.dni || String(cond.licencia || '').replace(/\D/g, '')).replace(/\D/g, ''), licencia: String(cond.licencia || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), nombre: cond.nombre || '' }] : [] };
+  // Se registran vehículo y chofer si llegaron (la persona puede decir "sin vehículo" para dejárselo al transportista).
+  if (!c.transporte.placas.length || !c.transporte.conductores.length) c.transporte.registrar_vehiculos = c.transporte.modo === 'privado';
   if (c.transporte.modo === 'privado' && !c.transporte.placas.length) c.avisos.push('Falta el transporte: mande la tarjeta del transportista o diga la placa y el chofer.');
   c.fecha = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy');
   if (!c.bienes.length) c.avisos.push('No encontré los bienes: mande la factura o escríbalos.');
@@ -145,7 +147,7 @@ function TGG_armar_(lecturas, empresas, chat) {
 var TGG_SISTEMA_EDITAR_ = [
   'Corriges el borrador de una guía de remisión de Perú (JSON). Aplica EXACTAMENTE lo que pide la persona y devuelve el JSON completo con el mismo esquema.',
   'Ejemplos: "peso 30258.5" → peso_kg; "solo líneas 1 a 5" → deja solo esos bienes (numerados desde 1); "la mitad de cada uno" → cantidad/2;',
-  '"privado" / "público" → transporte.modo; "registrar vehículo" → transporte.registrar_vehiculos=true; "placa ABC123" → transporte.placas;',
+  '"privado" / "público" → transporte.modo; "registrar vehículo" → transporte.registrar_vehiculos=true; "sin vehículo" → false; "placa ABC123" → transporte.placas;',
   '"chofer Juan Pérez DNI 12345678 licencia Q12345678" → transporte.conductores; "fecha 25/10/2026" → fecha (dd/mm/aaaa);',
   '"venta" / "compra" → motivo (y si cambia, intercambia partida.ruc/llegada.ruc según quién es el tercero); "partida …" / "llegada …" → dirección.',
   'Si la persona da un dato que no entiendes o no cabe, no lo inventes: déjalo como estaba. No borres campos que no te pidieron cambiar.'
@@ -191,7 +193,7 @@ function TGG_texto_(c, html) {
   L.push('Partida: ' + e(((c.partida || {}).direccion || '¿?').slice(0, 90)));
   L.push('Llegada: ' + e(((c.llegada || {}).direccion || '¿?').slice(0, 90)));
   if (t.modo === 'publico') L.push('Transporte público: ' + e(t.nombre || '') + ' RUC ' + e(t.ruc || '¿?') + (t.mtc ? ' · MTC ' + e(t.mtc) : '') +
-    (t.registrar_vehiculos ? ' · con vehículo y chofer' : ' · vehículo y chofer los pone el transportista en su guía'));
+    (t.registrar_vehiculos ? ' · con vehículo y chofer (diga "sin vehículo" si los pone el transportista)' : ' · vehículo y chofer los pone el transportista en su guía'));
   else L.push('Transporte privado');
   if (t.modo === 'privado' || t.registrar_vehiculos) L.push('Vehículo: ' + e((t.placas || []).join(' / ') || '¿?') + ' · Chofer: ' +
     e((t.conductores || []).map(function (x) { return (x.nombre || '') + ' lic. ' + (x.licencia || '¿?'); }).join(', ') || '¿?'));

@@ -94,6 +94,7 @@ function WA_procesarMensaje_(m, nombre) {
     // 🏷 ¿De quién son? — respuesta a la pregunta, o "de Edit" antes de reenviar.
     if (WA_respuestaNombre_(de, cuerpo).tomado) return;
     if (WA_esEtiqueta_(cuerpo) && WA_etiquetaPrevia_(de, cuerpo)) return;
+    if (WA_greTexto_(m, de, nombre, cuerpo)) return;   // 🚚 "guía …" con las fotos ya juntadas (WA_Gre.js)
     WA_preguntarIA_(m, de, nombre, cuerpo);
     return;
   }
@@ -126,6 +127,9 @@ function WA_procesarMensaje_(m, nombre) {
   if (!esPdf && !esImagen) { WA_anotar_(m, de, nombre, '', media.filename || mime, 0, 'Error', 'Solo fotos o PDF', ''); return; }
 
   var caption = media.caption || '';
+  // 🚚 Fotos de una guía de remisión ("guía" en el comentario, o seguidas de una): se juntan, no van a vouchers.
+  try { if (WA_greArchivo_(m, de, media, caption, mime, esPdf)) return; }
+  catch (err) { WA_enviarTexto_(de, '⚠️ No pude guardar el archivo de la guía: ' + err.message); return; }
   // Foto/PDF con una pregunta en el comentario ("¿ya está pagado?", "ia …"): se le pregunta a la IA, no se registra.
   if (/\?\s*$/.test(caption) || /^\s*(ia|pregunta)\b/i.test(caption)) {
     try {

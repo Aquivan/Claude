@@ -43,7 +43,10 @@ OPCION = ".ng-dropdown-panel .ng-option:visible, [role=option]:visible, li:visib
 
 
 class Alto(Exception):
-    pass
+    """Motivo para no seguir. `detalle` va solo al chat (p. ej. la lista de locales), nunca al registro de la corrida."""
+    def __init__(self, texto, detalle=""):
+        super().__init__(texto)
+        self.detalle = detalle
 
 
 def simple(t):
@@ -188,9 +191,16 @@ def elegir_fila(fr, pag, texto_buscado, alerta):
     if not n or "No hay registros" in (filas.first.inner_text() or ""):
         raise Alto(alerta)
     textos = [filas.nth(i).inner_text() for i in range(n)]
-    mejor = max(range(n), key=lambda i: puntaje(texto_buscado, textos[i]))
-    if n > 1 and puntaje(texto_buscado, textos[mejor]) < 2:
-        raise Alto(alerta + " (ninguna dirección registrada se parece a la del caso)")
+    pts = [puntaje(texto_buscado, t) for t in textos]
+    mejor = max(range(n), key=lambda i: pts[i])
+    palabras = lambda t: frozenset(w for w in re.findall(r"[a-z]+", simple(t)) if len(w) > 1 and w not in COMUNES | {"domicilio", "fiscal"})
+    unico = len({palabras(textos[i]) for i in range(n) if pts[i] == pts[mejor]}) == 1   # empate de la misma dirección: vale la primera
+    # Basta una palabra ("Mártires") si solo un local la tiene; si empatan, hacen falta 2 o más y ganar.
+    if n > 1 and not (pts[mejor] >= 1 and unico):
+        lista = "\n".join(f"{i + 1}) " + re.sub(r"\s+", " ", t).strip()[:110] for i, t in enumerate(textos[:15]))
+        raise Alto(alerta + ": ninguna dirección registrada coincide con la del caso (o hay varias iguales).",
+                   "Locales que SUNAT tiene registrados:\n" + lista +
+                   "\n\nToque ✏️ Corregir y escriba, por ejemplo: «llegada » + palabras de uno de ellos.")
     filas.nth(mejor).locator("input[type=radio]").first.check(timeout=4000)
     return mejor
 
@@ -539,7 +549,7 @@ def main():
                 img = base64.b64encode(foto(pag, fr)).decode() if fr else ""
             except Exception:
                 img = ""
-            fin(False, str(e), imagen=img)
+            fin(False, str(e) + ("\n\n" + e.detalle if e.detalle else ""), imagen=img)
             sys.exit(1)
 
 
