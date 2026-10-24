@@ -101,6 +101,7 @@ function WA_procesarMensaje_(m, nombre) {
 
   // 🎤 Nota de voz o audio: la IA lo transcribe y responde lo que se pidió.
   if (m.type === 'audio' && m.audio) {
+    try { if (WA_greAudio_(de, m)) return; } catch (err) { console.error('Audio de guía: ' + err.message); }   // 🚚 WA_Gre.js
     try {
       var voz = WA_bajarMedia_(m.audio.id);
       var audio = { base64: Utilities.base64Encode(voz.getBytes()), mime: m.audio.mime_type || 'audio/ogg' };
