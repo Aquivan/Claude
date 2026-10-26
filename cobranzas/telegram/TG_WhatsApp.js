@@ -103,6 +103,8 @@ function TGW_responder_(q) {
   }
   // 🧾 "emitir" (lista de pendientes) o "emite la retención de F001-215" (o citando el mensaje): propuesta con botones.
   // 🚚 "guía" con fotos, ✏️ corrección pendiente o "emitir guía <caso>" (TG_GRE.js).
+  // 📋 "procesados hoy sonia", "procesados 26-10-26 Sonia(Edit).pdf": lista por tanda y RUC que falte (TG_Procesados.js).
+  if (TGQ_RX_.test(texto) && !(q.adjuntos || []).length) return TGQ_wa_(ss, texto, clave);
   var gre = TGG_atajoWA_(ss, q, clave);
   if (gre) return gre;
   var cre = TGR_atajoWA_(ss, texto, q.citado);
@@ -183,7 +185,8 @@ function TGW_archivo_(blob, titulo) {
 function TGW_boton_(k, op, numero) {
   var acc = TG_leerBoton_(k);
   if (acc && acc.t === 'cre') return TGR_botonWA_(acc, k, op, numero);
-  if (acc && acc.t === 'gre') return TGG_botonWA_(acc, k, op, numero);   // 🚚 guía de remisión (TG_GRE.js)   // 🧾 comprobante de retención (TG_Retener.js)
+  if (acc && acc.t === 'gre') return TGG_botonWA_(acc, k, op, numero);
+  if (acc && acc.t === 'cambios') return TGQ_botonWA_(acc, op, numero);   // ✏️ escribir RUC en Vouchers (TG_Procesados.js)   // 🚚 guía de remisión (TG_GRE.js)   // 🧾 comprobante de retención (TG_Retener.js)
   if (!acc || acc.t !== 'descarga') return { ok: true, respuesta: 'Ese botón ya venció (duran 6 horas). Pídamelo de nuevo.' };
   if (TG_yaVisto_('wadesc' + k)) return { ok: true, respuesta: 'Esa descarga ya se pidió.' };
   if (op !== 'si') return { ok: true, respuesta: 'Listo, no pedí nada.' };
