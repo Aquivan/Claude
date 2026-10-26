@@ -198,6 +198,7 @@ function RPN_gh_(q) {
   p.deleteProperty(k);
   var res = q.resultados || [], ex = lote.extra || {};
   if (ex.origen === 'hoja') RPN_ponerEnHoja_(TG_ss_(), res);
+  else if (ex.procesados) TGQ_trasPadron_(ex, res, q.error);   // 📋 vouchers procesados sin RUC (TG_Procesados.js)
   else RPN_avisarChat_(ex, res, q.error);
   return { ok: true };
 }

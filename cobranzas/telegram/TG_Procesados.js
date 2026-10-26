@@ -143,37 +143,169 @@ function TGQ_buscar_(ss, texto) {
   orden.sort(function (a, b) { return TGQ_orden_(TGQ_partirTanda_(b).fecha) - TGQ_orden_(TGQ_partirTanda_(a).fecha) || tandas[b].ultimaFila - tandas[a].ultimaFila; });
   if (q.ultimos) orden = orden.slice(0, q.ultimos);
   var lista = orden.map(function (k) { return tandas[k]; });
-  TGQ_sugerir_(cfg, lista);
+  TGQ_sugerir_(ss, cfg, lista, filas);
   return { q: q, tandas: lista, ampliado: ampliado };
 }
 
 function TGQ_orden_(dma) { var p = String(dma || '').split('-'); return p.length === 3 ? Number(p[2] + p[1] + p[0]) : 0; }
 
-/** RUC sugerido para cada voucher sin RUC: alias confirmados, su factura en el SIRE, o el nombre en tus facturas (si es claro). */
-function TGQ_sugerir_(cfg, tandas) {
+/**
+ * RUC sugerido para cada voucher sin RUC, buscando en TODO lo que tenemos (en este orden, y dice dónde lo encontró):
+ *   1. ⚙️ alias confirmados · 2. 📑 emisor de su factura en el SIRE · 3. 🧾 otros vouchers del mismo proveedor que ya tienen RUC ·
+ *   4. 📑 nombre en las facturas del SIRE · 5. 🧑‍💼 emisores de recibos por honorarios · 6. 🧾 proveedores de retenciones (CRE).
+ * Lo que siga sin RUC se busca después en el padrón de SUNAT y con IA en internet (TGQ_externos_).
+ */
+function TGQ_sugerir_(ss, cfg, tandas, todas) {
   var faltan = [];
   tandas.forEach(function (t) { t.filas.forEach(function (f) { if (!f.ruc) faltan.push(f); }); });
   if (!faltan.length) return;
-  var docs = [], propios = null, porDoc = {};
+  // Otros vouchers: nombre → RUC (solo si siempre es el mismo RUC)
+  var porVoucher = {};
+  (todas || []).forEach(function (f) {
+    if (!f.ruc || !f.prov) return;
+    var k = normNombre_(f.prov), x = porVoucher[k] = porVoucher[k] || { rucs: {}, n: 0, nombre: f.prov };
+    x.rucs[f.ruc] = (x.rucs[f.ruc] || 0) + 1; x.n++;
+  });
+  var poolVouchers = Object.keys(porVoucher).map(function (k) {
+    var r = Object.keys(porVoucher[k].rucs);
+    return r.length === 1 ? { ruc: r[0], nombre: porVoucher[k].nombre, pal: RPN_palabras_(porVoucher[k].nombre), n: porVoucher[k].n } : null;
+  }).filter(Boolean);
+  var docs = [], porDoc = {}, mapa = {};
   try { docs = leerDocumentosSire_(cfg, buscarLiquidaciones_(cfg)); } catch (e) { Logger.log('Procesados — SIRE: ' + e.message); }
-  docs.forEach(function (d) { if (d.emisorRuc) porDoc[String(d.serie).toUpperCase() + '-' + Number(d.numero)] = d.emisorRuc; });
+  docs.forEach(function (d) {
+    if (!d.emisorRuc) return;
+    porDoc[String(d.serie).toUpperCase() + '-' + Number(d.numero)] = d.emisorRuc;
+    if (d.emisorNombre && !mapa[d.emisorRuc] && !cfg.nombreEmpresa[d.emisorRuc]) mapa[d.emisorRuc] = d.emisorNombre;
+  });
+  var poolSire = Object.keys(mapa).map(function (r) { return { ruc: r, nombre: mapa[r], pal: RPN_palabras_(mapa[r]) }; });
+  var c = ANA_ctx_(ss);
+  var fuentes = [
+    { pool: poolVouchers, como: function (x) { return '🧾 otros vouchers de ' + x.nombre + ' ya tienen este RUC (' + x.n + ')'; } },
+    { pool: poolSire, como: function (x) { return '📑 tus facturas del SIRE: ' + x.nombre; } },
+    { pool: TGQ_pool_(c, 'honorarios', 'Recibos', 'RUC emisor', /^Emisor/), como: function (x) { return '🧑‍💼 recibos por honorarios: ' + x.nombre; } },
+    { pool: TGQ_pool_(c, 'retenciones', 'Emitidas', 'RUC proveedor', /^Proveedor/), como: function (x) { return '🧾 retenciones (CRE): ' + x.nombre; } },
+  ];
   faltan.forEach(function (f) {
     var alias = f.prov && cfg.aliasNombre[normNombre_(f.prov)];
-    if (alias) { f.sug = alias; f.como = 'alias confirmado (⚙️ Config)'; return; }
-    var m = String(f.refs).toUpperCase().match(/([A-Z]\w{3})-0*(\d+)/);
-    if (m && porDoc[m[1] + '-' + Number(m[2])] && !cfg.nombreEmpresa[porDoc[m[1] + '-' + Number(m[2])]]) {
-      f.sug = porDoc[m[1] + '-' + Number(m[2])]; f.como = 'emisor de la factura ' + m[1] + '-' + m[2] + ' (SIRE)'; return;
-    }
+    if (alias) { f.sug = alias; f.como = '⚙️ alias confirmado (Config)'; return; }
+    var m = String(f.refs).toUpperCase().match(/([A-Z]\w{3})-0*(\d+)/), r = m && porDoc[m[1] + '-' + Number(m[2])];
+    if (r && !cfg.nombreEmpresa[r]) { f.sug = r; f.como = '📑 emisor de su factura ' + m[1] + '-' + m[2] + ' en el SIRE'; return; }
     if (!f.prov) return;
-    if (!propios) {
-      var mapa = {};
-      docs.forEach(function (d) { if (d.emisorRuc && d.emisorNombre && !mapa[d.emisorRuc]) mapa[d.emisorRuc] = d.emisorNombre; });
-      propios = Object.keys(mapa).map(function (r) { return { ruc: r, nombre: mapa[r], pal: RPN_palabras_(mapa[r]) }; });
+    var duda = null;
+    for (var i = 0; i < fuentes.length; i++) {
+      var cands = RPN_buscarPropios_(fuentes[i].pool, f.prov);
+      if (!cands[0]) continue;
+      var x = fuentes[i].pool.filter(function (p) { return p.ruc === cands[0].ruc; })[0] || cands[0];
+      if (RPN_claro_(cands)) { f.sug = cands[0].ruc; f.como = fuentes[i].como(x) + ' (' + cands[0].puntaje + ' pts)'; return; }
+      if (!duda || cands[0].puntaje > duda.puntaje) duda = { puntaje: cands[0].puntaje, txt: cands[0].ruc + ' ' + cands[0].nombre + ' — ' + fuentes[i].como(x).split(':')[0] };
     }
-    var c = RPN_buscarPropios_(propios, f.prov);
-    if (c[0] && RPN_claro_(c)) { f.sug = c[0].ruc; f.como = 'nombre igual en tus facturas: ' + c[0].nombre; }
-    else if (c[0]) f.posible = c[0].ruc + ' ' + c[0].nombre;
+    if (duda) f.posible = duda.txt;
   });
+}
+
+/** [{ruc, nombre, pal}] de una pestaña de otra hoja del grupo (Honorarios, Retenciones…). [] si no se puede leer. */
+function TGQ_pool_(c, libro, hoja, colRuc, colNombre) {
+  try {
+    var t = TG_tablaLibro_(c, libro, hoja), jr = TG_col_(t.columnas, colRuc), jn = TG_col_(t.columnas, colNombre), m = {};
+    if (jr < 0 || jn < 0) return [];
+    t.filas.forEach(function (f) { var r = aRuc_(f[jr]); if (r && f[jn] && !m[r]) m[r] = String(f[jn]); });
+    return Object.keys(m).map(function (r) { return { ruc: r, nombre: m[r], pal: RPN_palabras_(m[r]) }; });
+  } catch (e) { Logger.log('Procesados — ' + libro + ': ' + e.message); return []; }
+}
+
+/* ============================================================ padrón SUNAT + IA en internet (en segundo plano) */
+
+/**
+ * Lo que siga sin RUC se pide al robot del padrón de SUNAT (ruc-por-nombre.yml). Cuando vuelve (RPN_gh_ → TGQ_trasPadron_),
+ * lo que el padrón no resolvió se busca con IA en internet, y llega un 2.º mensaje con lo encontrado y el botón ✅.
+ */
+function TGQ_externos_(ss, tandas, origen, chat) {
+  var faltan = [], filas = {};
+  tandas.forEach(function (t) {
+    t.filas.forEach(function (f) {
+      if (f.ruc || f.sug || !f.prov || f.colRuc < 1) return;
+      var k = normNombre_(f.prov);
+      if (!filas[k]) faltan.push({ q: f.prov });
+      (filas[k] = filas[k] || []).push({ hoja: f.hoja, fila: f.fila, col: f.colRuc, prov: f.prov });
+    });
+  });
+  if (!faltan.length) return '';
+  var err = RPN_lanzar_(ss, faltan.slice(0, 30), { origen: origen, chat: chat, procesados: filas });
+  return err || '⏳ Busco ' + faltan.length + ' proveedor(es) sin RUC en el padrón de SUNAT y, si no queda claro, con IA en internet. Le aviso aquí en 3–5 minutos.';
+}
+
+/** Vuelta del padrón (desde RPN_gh_): propuesta con lo del padrón + internet, al mismo chat. */
+function TGQ_trasPadron_(ex, res, error) {
+  var ss = TG_ss_(), cambios = [], lineas = [], n = 0, porNombre = {};
+  (res || []).forEach(function (r) { porNombre[normNombre_(r.q)] = r.candidatos || []; });
+  Object.keys(ex.procesados || {}).forEach(function (k) {
+    var lista = ex.procesados[k], prov = lista[0].prov, filasTxt = lista.map(function (f) { return f.hoja + '!' + f.fila; }).join(', ');
+    var cands = (porNombre[k] || []).slice().sort(function (a, b) { return b.puntaje - a.puntaje; });
+    var claro = cands.length && RPN_claro_(cands) && (!cands[0].estado || /ACTIVO/i.test(cands[0].estado));
+    if (claro) {
+      var como = '🏛 padrón de SUNAT: ' + cands[0].nombre + ' (' + cands[0].puntaje + ' pts' + (cands[0].estado ? ', ' + cands[0].estado : '') + ')';
+      lista.forEach(function (f) {
+        cambios.push({ id: String(++n), hoja: f.hoja, fila: f.fila, col: f.col, encabezado: 'ID Beneficiario', actual: '', nuevo: cands[0].ruc, motivo: prov + ' · ' + como });
+      });
+      lineas.push('✅ ' + prov + ' → ' + cands[0].ruc + '\n   ' + como + ' · filas ' + filasTxt);
+      return;
+    }
+    var web = TGQ_internet_(prov);
+    if (web) {
+      lineas.push('🌐 ' + prov + ' → ¿' + web.ruc + ' ' + web.nombre + '?\n   IA en internet' + (web.fuente ? ' (' + web.fuente + ')' : '') +
+        ' · no lo escribo solo: si es correcto, responda «en la fila ' + lista[0].fila + ' el RUC es ' + web.ruc + '»' +
+        (cands[0] ? '\n   Padrón (dudoso): ' + cands.slice(0, 2).map(function (x) { return x.ruc + ' ' + x.nombre; }).join(' / ') : ''));
+      return;
+    }
+    lineas.push('❓ ' + prov + ': no lo encontré' + (cands[0] ? ' claro. Padrón: ' + cands.slice(0, 3).map(function (x) { return x.ruc + ' ' + x.nombre + ' (' + x.puntaje + ')'; }).join(' / ')
+      : ' en el padrón ni en internet') + ' · filas ' + filasTxt);
+  });
+  var texto = '🔎 Búsqueda externa (padrón de SUNAT + IA en internet)' + (error ? ' · ⚠️ ' + error : '') + ':\n' + (lineas.join('\n') || 'nada nuevo.');
+  var vis = [];
+  if (cambios.length) {
+    ANX_guardarPropuestos_(ss, cambios);
+    vis = cambios.map(function (x) { return { id: x.id, fila: x.hoja + '!' + x.fila, columna: 'ID Beneficiario', actual: '', nuevo: x.nuevo, motivo: x.motivo }; });
+  }
+  if (ex.origen === 'tg' && ex.chat) {
+    TG_enviar_(ex.chat, TG_esc_(texto));
+    if (vis.length) TG_mostrarCambios_({ chatId: ex.chat }, vis);
+  } else if (ex.origen === 'wa') {
+    var botones = vis.length ? { k: TG_guardarBoton_({ t: 'cambios', ids: vis.map(function (x) { return x.id; }) }),
+      texto: '✏️ ¿Escribo ' + vis.length + ' RUC del padrón de SUNAT en la columna ID Beneficiario de Vouchers? (solo celdas vacías, se puede deshacer)',
+      opciones: [{ op: 'si', titulo: '✅ Escribir RUC' }, { op: 'no', titulo: '✖ No' }] } : null;
+    try { TGC_wa_({ tipo: 'texto', numero: String(ex.chat || '').replace(/\D/g, ''), texto: texto, botones: botones }); } catch (e) {}
+  }
+}
+
+/** IA con búsqueda en Google: RUC de una empresa o persona peruana → {ruc, nombre, fuente} o null. El RUC se valida (dígito verificador). */
+function TGQ_internet_(nombre) {
+  var clave = '';
+  try { clave = TGG_clave_(); } catch (e) { return null; }
+  var pedido = 'Busca en internet el RUC (Perú, SUNAT, 11 dígitos) de: "' + nombre + '". Puede ser una empresa o una persona con negocio. ' +
+    'Responde SOLO JSON: {"ruc":"11 dígitos o vacío","nombre":"razón social tal como figura","fuente":"página donde lo viste (dominio)","seguro":true|false}. ' +
+    'Si hay varias personas o empresas con nombre parecido y no puedes distinguir, seguro=false. No inventes.';
+  for (var i = 0; i < TGG_MODELOS_.length; i++) {
+    try {
+      var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + TGG_MODELOS_[i] + ':generateContent', {
+        method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': clave },
+        payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: pedido }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0 } }) });
+      if (r.getResponseCode() !== 200) continue;
+      var cand = (JSON.parse(r.getContentText()).candidates || [])[0];
+      var t = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
+      var j = t ? IA_extraerJson_(t) : null, ruc = j ? String(j.ruc || '').replace(/\D/g, '') : '';
+      return ruc && TGQ_rucValido_(ruc) && j.seguro !== false ? { ruc: ruc, nombre: String(j.nombre || ''), fuente: String(j.fuente || '').slice(0, 80) } : null;
+    } catch (e) { Logger.log('Procesados — internet: ' + e.message); }
+  }
+  return null;
+}
+
+/** RUC peruano válido: 11 dígitos, empieza en 10/15/16/17/20 y dígito verificador correcto. */
+function TGQ_rucValido_(r) {
+  if (!/^(10|15|16|17|20)\d{9}$/.test(r)) return false;
+  var f = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2], s = 0;
+  for (var i = 0; i < 10; i++) s += Number(r.charAt(i)) * f[i];
+  var d = 11 - (s % 11);
+  return (d === 10 ? 0 : d === 11 ? 1 : d) === Number(r.charAt(10));
 }
 
 /** Cambios para escribir los RUC sugeridos en la hoja de Vouchers (los guarda como propuestos). → [{id, fila(texto), columna, nuevo, motivo}] */
@@ -214,7 +346,7 @@ function TGQ_texto_(r, html) {
   if (L.length > 90) L = L.slice(0, 90).concat(['…']);
   return '📋 ' + b('Vouchers procesados') + ' · ' + e(pedido) + (r.ampliado ? '\n' + e(r.ampliado) : '') + '\n' + r.tandas.length + ' tanda(s) · ' + total +
     ' voucher(s) · ' + (sinRuc ? sinRuc + ' sin RUC del proveedor' + (conSug ? ' (' + conSug + ' con RUC sugerido)' : '') : 'todos con RUC ✅') + L.join('\n') +
-    (sinRuc - conSug > 0 ? '\n\n❓ Los que no tienen sugerencia: búsquelos con «ruc NOMBRE DEL PROVEEDOR» o en 🔎 RUC por nombre.' : '');
+    '';
 }
 
 /* ============================================================ Telegram */
@@ -226,6 +358,8 @@ function TGQ_tg_(ctx, texto) {
   TG_enviar_(ctx.chatId, TGQ_texto_(r, true));
   var cambios = TGQ_cambios_(ctx.ss, r.tandas);
   if (cambios.length) TG_mostrarCambios_(ctx, cambios);   // ✅ Escribir · ✖ No (TG_IA.js) · ↩️ Deshacer
+  var ext = TGQ_externos_(ctx.ss, r.tandas, 'tg', ctx.chatId);
+  if (ext) TG_enviar_(ctx.chatId, TG_esc_(ext));
 }
 
 /* ============================================================ WhatsApp */
@@ -234,6 +368,8 @@ function TGQ_wa_(ss, texto, clave) {
   var r;
   try { r = TGQ_buscar_(ss, texto); } catch (e) { return { ok: true, respuesta: '❌ ' + e.message, tablas: [], sugerencias: [], archivos: [], avisos: [] }; }
   var out = { ok: true, respuesta: TGQ_texto_(r, false), tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  var ext = TGQ_externos_(ss, r.tandas, 'wa', clave);
+  if (ext) out.respuesta += '\n\n' + ext;
   var cambios = TGQ_cambios_(ss, r.tandas);
   if (cambios.length) {
     var k = TG_guardarBoton_({ t: 'cambios', ids: cambios.map(function (x) { return x.id; }), clave: clave });
