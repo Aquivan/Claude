@@ -52,6 +52,8 @@ var TGH_ = {
 
   // 📋 Vouchers procesados por tanda (columna Archivo Original) con RUC sugerido (TG_Procesados.js)
   vouchers_procesados: function (c, a) { return TGQ_herramienta_(c, a); },
+  // 🔎 RUC de un proveedor en todas las fuentes + internet, diciendo dónde lo encontró (TG_Procesados.js)
+  buscar_ruc: function (c, a) { return TGQ_buscarRucHerr_(c, a); },
 
   sire_liquidacion: function (c, a) {
     var anio = parseInt(a.anio || a.año, 10) || new Date().getFullYear();

@@ -24,7 +24,10 @@ function CHAT_menuAbrir() {
  * Devuelve { respuesta, tablas: [{titulo, columnas, filas, total}], cambios: [...], adjuntos: [{id, nombre, mime}], seg, detalle }.
  */
 function CHAT_enviar(msg) {
-  return CHAT_enviarEn_(SpreadsheetApp.getActiveSpreadsheet(), msg);
+  // Las mismas herramientas de solo lectura del asistente de Telegram/WhatsApp (procesados, buscar_ruc, honorarios…).
+  var op = {};
+  try { op = { extraHerr: CHAT_herrExtra_(), extraSistema: CHAT_sistemaExtra_() }; } catch (e) { Logger.log('Chat — herramientas extra: ' + e.message); }
+  return CHAT_enviarEn_(SpreadsheetApp.getActiveSpreadsheet(), msg, op);
 }
 
 /**

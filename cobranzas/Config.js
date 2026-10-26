@@ -64,6 +64,7 @@ function onOpen() {
     .addItem('🧾 Actualizar padrones SUNAT (agentes de retención, buenos contribuyentes, SSCO)', 'menuActualizarPadrones')
     .addSubMenu(ui.createMenu('📋 Vouchers procesados (ver y completar RUC)')
       .addItem('📋 Ver procesados (hoy, de Sonia, 26-10-26 Edit…)', 'menuVouchersProcesados')
+      .addItem('🏛 Buscar en padrón SUNAT e internet los que faltan', 'menuBuscarExternosProcesados')
       .addItem('✍️ Escribir los RUC marcados en Vouchers', 'menuEscribirRucProcesados'))
     .addSubMenu(ui.createMenu('🔎 RUC por nombre (vouchers sin RUC)')
       .addItem('🔎 Buscar los RUC que faltan', 'menuBuscarRucPorNombre')
