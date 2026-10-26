@@ -31,6 +31,8 @@ var TG_SISTEMA_ = [
   '- vouchers_procesados {consulta}: vouchers registrados por TANDA (columna "Archivo Original": "26-10-26 Sonia", "26-10-26 Sonia(Edit)", "14-05-26 Edit Voucher").',
   '  consulta en palabras de la persona: "hoy", "hoy sonia", "ayer edit", "26-10-26 Sonia(Edit).pdf", "14 de octubre", "2 últimos de sonia". Devuelve fila, monto, proveedor,',
   '  RUC del beneficiario y un RUC sugerido si falta. Úsala para "procesados", "lo que mandó Sonia hoy", "tanda de Edit". Para completar RUC usa proponer_cambio (id_beneficiario).',
+  '  Si piden ANALIZAR una tanda (a qué factura o recibo corresponde cada pago, qué empresa pagó, cuáles falta retener): por cada fila usa verificar_vouchers,',
+  '  facturas/combinar u honorarios_conciliacion, asignar_voucher (solo lo respaldado) y, para las que deben retención y no tienen CRE, proponer_retencion.',
   '- buscar_ruc {nombre, factura?, internet?:false}: RUC de un proveedor o persona buscándolo en TODO: alias, emisor de su factura en el SIRE, otros vouchers,',
   '  facturas del SIRE, recibos por honorarios, retenciones y, si no queda claro, IA en internet (RUC validado). Dice dónde lo encontró y si es seguro o dudoso.',
   '  Si hay varias opciones, muéstralas numeradas con su fuente y pregunta cuál es; con la respuesta usa proponer_cambio (id_beneficiario).',

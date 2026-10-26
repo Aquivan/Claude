@@ -99,7 +99,8 @@ function TGQ_buscar_(ss, texto) {
     if (h.getLastRow() < 2) return;
     var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0], col = indiceColumnas_(enc);
     var c = { archivo: col('Archivo Original'), fecha: col('Fecha de depos', 'Fecha de deposito'), monto: col('Monto'), moneda: col('Moneda'),
-      prov: col('Proveedor (Beneficiario)'), ruc: col('ID Beneficiario'), refs: col('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc'), op: col('Numero de oper', 'Numero de operacion') };
+      prov: col('Proveedor (Beneficiario)'), ruc: col('ID Beneficiario'), refs: col('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc'), op: col('Numero de oper', 'Numero de operacion'),
+      empresa: col('Empresa'), idUsuario: col('ID Usuario') };
     if (c.archivo < 0 || c.monto < 0) return;
     var desde = Math.max(2, h.getLastRow() - 5000), n = h.getLastRow() - desde + 1;
     var leer = function (j) { return j >= 0 ? h.getRange(desde, j + 1, n, 1).getValues() : null; };
@@ -110,7 +111,8 @@ function TGQ_buscar_(ss, texto) {
       filas.push({ hoja: h.getName(), fila: desde + i, archivo: archivo, colRuc: c.ruc + 1,
         fecha: v.fecha ? aFecha_(v.fecha[i][0]) : null, monto: aNumero_(v.monto[i][0]), moneda: v.moneda ? String(v.moneda[i][0] || 'PEN') : 'PEN',
         prov: v.prov ? String(v.prov[i][0] || '').trim() : '', ruc: v.ruc ? aRuc_(v.ruc[i][0]) : '', refs: v.refs ? String(v.refs[i][0] || '') : '',
-        op: v.op ? String(v.op[i][0] || '') : '' });
+        op: v.op ? String(v.op[i][0] || '') : '', empresa: v.empresa ? String(v.empresa[i][0] || '').trim() : '',
+        idUsuario: v.idUsuario ? aRuc_(v.idUsuario[i][0]) : '' });
     }
   });
   // Palabras que no son nombre de ninguna tanda ("porfa", "revisame"…) no filtran.
@@ -432,6 +434,53 @@ function TGQ_texto_(r, html) {
     '';
 }
 
+/* ============================================================ 🤖 análisis con IA de la tanda */
+
+var TGQ_MAX_IA_ = 15;   // vouchers por análisis (los que les falta algo primero)
+
+/**
+ * Pedido para la IA (Telegram, WhatsApp o 💬 chat de la hoja) sobre las filas de la tanda: a qué factura / recibo por
+ * honorarios corresponde cada pago, qué empresa del grupo paga, si la foto del voucher ya dice la factura, y cuáles
+ * están pendientes de emitir retención. La IA solo PROPONE (asignar_voucher / proponer_cambio / proponer_retencion):
+ * se escribe o emite cuando la persona aprueba con ✅.
+ * filas = [{fila:"Originales!12", fecha, monto, moneda, prov, ruc, refs, empresa, op}]
+ */
+function TGQ_promptAnalisis_(nombres, filas) {
+  var falta = function (f) { return (!f.refs ? 1 : 0) + (!f.empresa ? 1 : 0) + (!f.ruc ? 1 : 0); };
+  var lista = filas.slice().sort(function (a, b) { return falta(b) - falta(a); }).slice(0, TGQ_MAX_IA_);
+  var L = lista.map(function (f) {
+    var fecha = f.fecha instanceof Date ? Utilities.formatDate(f.fecha, 'America/Lima', 'dd/MM/yyyy') : String(f.fecha || '');
+    return '- ' + f.fila + ' · ' + fecha + ' · ' + f.moneda + ' ' + Number(f.monto).toFixed(2) + ' · ' + (f.prov || '(sin proveedor)') +
+      ' · RUC: ' + (f.ruc || 'FALTA') + ' · empresa: ' + (f.empresa || 'FALTA') + ' · factura: ' + (f.refs || 'FALTA') + (f.op ? ' · op ' + f.op : '');
+  });
+  return 'Analiza los vouchers procesados de ' + nombres.join(', ') + ' (' + lista.length + (filas.length > lista.length ? ' de ' + filas.length : '') + '):\n' +
+    L.join('\n') + '\n\n' +
+    'Para CADA voucher:\n' +
+    '1. Abre su imagen con verificar_vouchers y mira si el voucher mismo dice la factura, el recibo o el concepto (glosa, referencia, nombre).\n' +
+    '2. Busca qué comprobante paga: facturas por pagar del proveedor (facturas / combinar: exacto, neto de retención 3% o de detracción) ' +
+    'o recibo por honorarios (honorarios_conciliacion). Si el RUC falta, búscalo con buscar_ruc.\n' +
+    '3. Decide qué empresa del grupo hizo el pago (la que tiene esa factura por pagar o la cuenta de origen del voucher).\n' +
+    '4. Si hay datos que lo respalden, llama asignar_voucher {fila, empresa, proveedor_ruc, facturas, motivo} (o proponer_cambio para un solo dato). ' +
+    'No propongas lo que ya está escrito ni lo que sea dudoso: en ese caso da las opciones y pregunta.\n' +
+    '5. Retención: indica qué vouchers están PENDIENTES DE EMITIR RETENCIÓN (CRE): la empresa pagadora es agente de retención, el proveedor no es ' +
+    'buen contribuyente ni agente de retención (padron_ruc), el comprobante supera S/ 700 y no hay CRE ya emitido (retenciones_sunat). ' +
+    'Para esos llama proponer_retencion {factura, empresa, proveedor}.\n' +
+    'Responde con una tabla: fila, monto, proveedor, factura o recibo, empresa, RUC, ¿se ve en la foto?, ¿retener?, propuesta; y al final la lista de retenciones pendientes.';
+}
+
+/** Filas de las tandas en el formato de TGQ_promptAnalisis_. */
+function TGQ_filasIA_(tandas) {
+  var out = [];
+  tandas.forEach(function (t) { t.filas.forEach(function (f) {
+    out.push({ fila: f.hoja + '!' + f.fila, fecha: f.fecha, monto: f.monto, moneda: f.moneda, prov: f.prov, ruc: f.ruc || (f.sug ? f.sug + ' (sugerido, falta escribir)' : ''),
+      refs: f.refs, empresa: f.empresa, op: f.op });
+  }); });
+  return out;
+}
+
+var TGQ_TXT_IA_ = '🤖 ¿Analizo con IA a qué factura o recibo por honorarios corresponde cada voucher, qué empresa del grupo pagó (también mirando la foto) ' +
+  'y cuáles están pendientes de emitir retención? Solo propongo: usted aprueba con ✅.';
+
 /* ============================================================ Telegram */
 
 function TGQ_tg_(ctx, texto) {
@@ -443,6 +492,10 @@ function TGQ_tg_(ctx, texto) {
   if (cambios.length) TG_mostrarCambios_(ctx, cambios);   // ✅ Escribir · ✖ No (TG_IA.js) · ↩️ Deshacer
   var ext = TGQ_externos_(ctx.ss, r.tandas, 'tg', ctx.chatId);
   if (ext) TG_enviar_(ctx.chatId, TG_esc_(ext));
+  if (r.tandas.length) {   // 🤖 el botón pregunta a la IA (t:'sug' → TG_preguntar_)
+    var pedido = TGQ_promptAnalisis_(r.tandas.map(function (t) { return t.nombre; }), TGQ_filasIA_(r.tandas));
+    TG_enviar_(ctx.chatId, TG_esc_(TGQ_TXT_IA_), [[{ text: '🤖 Analizar con IA (factura, empresa, retención)', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: pedido }) }]]);
+  }
 }
 
 /* ============================================================ WhatsApp */
@@ -459,7 +512,18 @@ function TGQ_wa_(ss, texto, clave) {
     out.botones = [{ k: k, texto: '✏️ ¿Escribo ' + cambios.length + ' RUC sugerido(s) en la columna ID Beneficiario de la hoja de Vouchers? (solo celdas vacías, se puede deshacer)',
       opciones: [{ op: 'si', titulo: '✅ Escribir RUC' }, { op: 'no', titulo: '✖ No' }] }];
   }
+  if (r.tandas.length) {
+    var pedido = TGQ_promptAnalisis_(r.tandas.map(function (t) { return t.nombre; }), TGQ_filasIA_(r.tandas));
+    (out.botones = out.botones || []).push({ k: TG_guardarBoton_({ t: 'tgqia', texto: pedido }), texto: TGQ_TXT_IA_,
+      opciones: [{ op: 'si', titulo: '🤖 Analizar con IA' }, { op: 'no', titulo: '✖ No' }] });
+  }
   return out;
+}
+
+/** Botón 🤖 Analizar con IA en WhatsApp: la misma pregunta que si la escribiera (TGW_responder_). */
+function TGQ_iaWA_(acc, op, numero) {
+  if (op !== 'si') return { ok: true, respuesta: 'Listo, no analizo nada. Puede pedírmelo cuando quiera con sus palabras.' };
+  return TGW_responder_({ numero: numero, texto: acc.texto });
 }
 
 /** Botón ✅/✖ de cambios en la hoja de Vouchers desde WhatsApp. */
@@ -510,8 +574,15 @@ function TGQ_buscarRucHerr_(c, a) {
 /** Herramientas extra para el 💬 Chat con la IA de la hoja (las de solo lectura del asistente + buscar_ruc). */
 function CHAT_herrExtra_() {
   var h = {};
-  ['vouchers_procesados', 'buscar_ruc', 'honorarios', 'honorarios_conciliacion', 'retenciones_sunat', 'notificaciones', 'sire_liquidacion', 'leer_libro']
+  ['vouchers_procesados', 'buscar_ruc', 'honorarios', 'honorarios_conciliacion', 'retenciones_sunat', 'notificaciones', 'sire_liquidacion', 'leer_libro', 'padron_ruc']
     .forEach(function (k) { if (TGH_[k]) h[k] = TGH_[k]; });
+  // 🧾 En la hoja no hay botón para emitir: dice qué retención falta y que se emite desde Telegram o WhatsApp.
+  h.proponer_retencion = function (c, a) {
+    var x = TGR_paraIA_({ ss: c.ss, cfg: c.cfg, op: { tg: { cre: [] } } }, a);
+    if (/^PROPUESTO/.test(x.nota)) x.nota = 'PENDIENTE DE EMITIR. Desde la hoja no se emite: dile que escriba en Telegram o WhatsApp ' +
+      '«emite la retención de ' + (a.factura || 'esa factura') + '» para ver 👁 Vista previa y ✅ Emitir.';
+    return x;
+  };
   return h;
 }
 
@@ -577,11 +648,13 @@ function menuVouchersProcesados() {
     ui.ButtonSet.OK_CANCEL);
   if (p.getSelectedButton() !== ui.Button.OK) return;
   var ss = SpreadsheetApp.getActive(), r = TGQ_buscar_(ss, p.getResponseText() || 'hoy');
+  PropertiesService.getDocumentProperties().setProperty('TGQ_ULTIMA', p.getResponseText() || 'hoy');   // para 🤖 Analizar con IA
   var sh = ss.getSheetByName(TGQ_HOJA_) || ss.insertSheet(TGQ_HOJA_);
   sh.clear(); sh.clearConditionalFormatRules();
   try { sh.getRange(1, 1, sh.getMaxRows(), TGQ_ENC_.length).clearDataValidations(); } catch (e) {}
   sh.getRange(1, 1, 1, TGQ_ENC_.length).merge().setValue('📋 VOUCHERS PROCESADOS · ' + (p.getResponseText() || 'hoy') + (r.ampliado ? ' · ' + r.ampliado : '') +
-    ' · Revise el RUC sugerido (o elija en ▼), marque ✔ Escribir y use 💼 Cobranzas → 📋 Vouchers procesados → ✍️ Escribir los RUC marcados. Los que falten: 🏛 Buscar en padrón e internet.')
+    ' · Revise el RUC sugerido (o elija en ▼), marque ✔ Escribir y use 💼 Cobranzas → 📋 Vouchers procesados → ✍️ Escribir los RUC marcados. Los que falten: 🏛 Buscar en padrón e internet. ' +
+    'Factura, empresa y retención: 🤖 Analizar con IA.')
     .setWrap(true).setFontWeight('bold').setFontColor(COLOR.BLANCO).setBackground(COLOR.OSCURO);
   sh.setRowHeight(1, 48);
   sh.getRange(2, 1, 1, TGQ_ENC_.length).setValues([TGQ_ENC_]).setFontWeight('bold').setFontColor(COLOR.BLANCO).setBackground(COLOR.AZUL).setWrap(true);
@@ -636,4 +709,24 @@ function menuEscribirRucProcesados() {
   ANX_guardarPropuestos_(ss, cambios);
   var res = ANX_aplicarDet_(ss, cambios.map(function (x) { return x.id; }), false);
   ui.alert('✍️ RUC en Vouchers', res.mensaje + (res.lote ? '\nPara deshacer: 💼 Cobranzas → ↩️ Deshacer (o «deshacer» en el bot).' : ''), ui.ButtonSet.OK);
+}
+
+/** 🤖 Analizar con IA la tanda de 📋 Procesados: abre el 💬 Chat con la IA con el pedido ya enviado (se aprueba con ✅ en el panel). */
+function menuAnalizarIAProcesados() {
+  var ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive();
+  var q = PropertiesService.getDocumentProperties().getProperty('TGQ_ULTIMA');
+  var p = ui.prompt('🤖 Analizar con IA', '¿Qué tanda? (Enter = ' + (q || 'hoy') + ')\nEj.: hoy sonia · 26-10-26 Sonia(Edit) · 14 de octubre', ui.ButtonSet.OK_CANCEL);
+  if (p.getSelectedButton() !== ui.Button.OK) return;
+  var r = TGQ_buscar_(ss, String(p.getResponseText() || '').trim() || q || 'hoy');
+  if (!r.tandas.length) return ui.alert(TGQ_texto_(r, false).replace(/\*/g, ''));
+  var pedido = TGQ_promptAnalisis_(r.tandas.map(function (t) { return t.nombre; }), TGQ_filasIA_(r.tandas));
+  PropertiesService.getUserProperties().setProperty('CHAT_AUTO', pedido);
+  CHAT_menuAbrir();
+}
+
+/** Lo usa ChatPanel.html al abrir: un pedido dejado por un menú (se envía solo una vez). */
+function CHAT_pendiente() {
+  var up = PropertiesService.getUserProperties(), m = up.getProperty('CHAT_AUTO') || '';
+  if (m) up.deleteProperty('CHAT_AUTO');
+  return m;
 }
