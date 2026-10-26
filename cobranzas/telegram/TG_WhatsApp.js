@@ -143,9 +143,16 @@ function TGW_responder_(q) {
     try { out.archivos.push(TGW_archivo_(TG_excel_(tablas, 'respuesta ' + Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HHmm')), '📊 Tablas completas')); }
     catch (e) { out.avisos.push('No pude armar el Excel: ' + e.message); }
   }
-  if (r.cambios && r.cambios.length) out.avisos.push('✏️ Propuse ' + r.cambios.length + ' cambio(s) en la hoja de Vouchers: confírmelos en Telegram o en la hoja.');
+  out.botones = [];
+  if (r.cambios && r.cambios.length) {   // ✏️ asignar_voucher / proponer_cambio: ✅ aquí mismo (TGQ_botonWA_)
+    var lc = r.cambios.slice(0, 12).map(function (x) { return '• ' + x.fila + ' · ' + x.columna + ': ' + x.nuevo + (x.aviso ? ' ⚠️ ' + x.aviso : ''); });
+    out.botones.push({ k: TG_guardarBoton_({ t: 'cambios', ids: r.cambios.map(function (x) { return x.id; }) }),
+      texto: '✏️ ¿Escribo ' + r.cambios.length + ' dato(s) en la hoja de Vouchers? (solo lo propuesto, se puede deshacer)\n' + lc.join('\n') + (r.cambios.length > 12 ? '\n…' : ''),
+      opciones: [{ op: 'si', titulo: '✅ Escribir' }, { op: 'no', titulo: '✖ No' }] });
+  }
   // 🚀 Descargas propuestas: el bot de WhatsApp las ofrece con botones (✔ / ✖) y la respuesta vuelve con accion=boton.
-  if ((op.tg.cre || []).length) out.botones = TGR_botonesWA_(op.tg.cre);   // 🧾 proponer_retencion: 👁 / ✅
+  if ((op.tg.cre || []).length) out.botones = out.botones.concat(TGR_botonesWA_(op.tg.cre));   // 🧾 proponer_retencion: 👁 / ✅
+  if (!out.botones.length) delete out.botones;
   out.descargas = (op.tg.acciones || []).slice(0, 3).map(function (a) {
     return { k: TG_guardarBoton_(a), texto: TG_textoDescarga_(a, cfg.cob) };
   });
@@ -187,6 +194,7 @@ function TGW_boton_(k, op, numero) {
   if (acc && acc.t === 'cre') return TGR_botonWA_(acc, k, op, numero);
   if (acc && acc.t === 'gre') return TGG_botonWA_(acc, k, op, numero);
   if (acc && acc.t === 'cambios') return TGQ_botonWA_(acc, op, numero);
+  if (acc && acc.t === 'tgqia') return TGQ_iaWA_(acc, op, numero);   // 🤖 analizar la tanda con IA (TG_Procesados.js)
   if (acc && acc.t === 'rucelige') return TGQ_eligeWA_(acc, op, numero);   // 🤔 elegir el RUC entre opciones   // ✏️ escribir RUC en Vouchers (TG_Procesados.js)   // 🚚 guía de remisión (TG_GRE.js)   // 🧾 comprobante de retención (TG_Retener.js)
   if (!acc || acc.t !== 'descarga') return { ok: true, respuesta: 'Ese botón ya venció (duran 6 horas). Pídamelo de nuevo.' };
   if (TG_yaVisto_('wadesc' + k)) return { ok: true, respuesta: 'Esa descarga ya se pidió.' };

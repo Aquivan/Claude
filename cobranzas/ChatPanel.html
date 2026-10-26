@@ -187,6 +187,8 @@ function deshacer() {
   google.script.run.withSuccessHandler(function (x) { burbuja(formato(x.error || x.mensaje), x.error ? 'err' : 'ia'); }).CHAT_deshacer();
 }
 pintarHistorial();
+// 🤖 Un menú (📋 Vouchers procesados → Analizar con IA) dejó un pedido: se envía solo.
+google.script.run.withSuccessHandler(function (m) { if (m) { document.getElementById('txt').value = m; enviar(); } }).CHAT_pendiente();
 </script>
 </body>
 </html>
