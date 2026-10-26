@@ -303,6 +303,8 @@ function TGQ_trasPadron_(ex, res, error) {
 /** "¿Cuál es el RUC de …?" con un botón por opción (Telegram: todas + Ninguno; WhatsApp: hasta 3). */
 function TGQ_preguntarEleccion_(ex, el) {
   var k = TG_guardarBoton_({ t: 'rucelige', prov: el.prov, filas: el.filas, opciones: el.opciones });
+  // Para responder (citando) este mensaje con el nombre o el RUC, sin tocar 🔎 (TGQ_citaEleccion_).
+  CacheService.getScriptCache().put('tgq_e_' + ex.chat + '_' + normNombre_(el.prov), JSON.stringify({ prov: el.prov, filas: el.filas }), 21600);
   var filasTxt = el.filas.map(function (f) { return f.hoja + '!' + f.fila; }).join(', ');
   var detalle = el.opciones.map(function (o, i) { return (i + 1) + '. ' + o.ruc + ' ' + o.nombre + ' — ' + o.det; }).join('\n');
   if (ex.origen === 'tg' && ex.chat) {
@@ -310,11 +312,12 @@ function TGQ_preguntarEleccion_(ex, el) {
       return [{ text: (i + 1) + '. ' + o.ruc + ' ' + String(o.nombre).slice(0, 38), callback_data: 'k:' + k + ':' + i }];
     }).concat([[{ text: '🔎 Buscar con otro nombre (o escribir el RUC)', callback_data: 'k:' + k + ':n' }], [{ text: '✖ Ninguno', callback_data: 'k:' + k + ':x' }]]);
     TG_enviar_(ex.chat, '🤔 <b>¿Cuál es el RUC de ' + TG_esc_(el.prov) + '?</b> (' + TG_esc_(filasTxt) + ')\n' + TG_esc_(detalle) +
-      '\n<i>Al elegir lo escribo en ID Beneficiario (se puede deshacer) y lo guardo como alias para la próxima.</i>', teclado);
+      '\n<i>Al elegir lo escribo en ID Beneficiario (se puede deshacer) y lo guardo como alias para la próxima. ' +
+      '¿No es ninguno? Toque 🔎 o responda (cite) este mensaje con el nombre completo o el RUC.</i>', teclado);
   } else if (ex.origen === 'wa') {
     try {
       TGC_wa_({ tipo: 'texto', numero: String(ex.chat || '').replace(/\D/g, ''), texto: '🤔 *¿Cuál es el RUC de ' + el.prov + '?* (' + filasTxt + ')\n' + detalle +
-        '\nAl elegir lo escribo en ID Beneficiario (se puede deshacer) y lo guardo como alias.',
+        '\nAl elegir lo escribo en ID Beneficiario (se puede deshacer) y lo guardo como alias. ¿No es ninguno? Responda (cite) este mensaje con el nombre completo o el RUC.',
         botones: { k: k, texto: 'Elija el RUC de ' + String(el.prov).slice(0, 60), opciones: el.opciones.slice(0, 3).map(function (o, i) {
           return { op: String(i), titulo: (i + 1) + '. ' + o.ruc };
         }) } });
@@ -354,7 +357,11 @@ function TGQ_alias_(ss, nombre, ruc) {
 
 function TGQ_eligeTG_(ctx, datos, op) {
   TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
-  if (op === 'n') return TG_enviar_(ctx.chatId, TG_esc_(TGQ_pedirNombre_(ctx.chatId, datos)));
+  if (op === 'n') {
+    var pn;
+    try { pn = TGQ_pedirNombre_(ctx.chatId, datos); } catch (e) { pn = '❌ ' + e.message + '\nResponda (cite) la pregunta con el nombre completo o el RUC.'; }
+    return TG_enviar_(ctx.chatId, TG_esc_(pn));
+  }
   var t;
   try { t = TGQ_elegir_(datos, op, ctx.chatId); } catch (e) { t = '❌ ' + e.message; }
   TG_enviar_(ctx.chatId, TG_esc_(t), /✅/.test(t) ? [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]] : null);
@@ -375,6 +382,28 @@ function TGQ_pedirNombre_(clave, acc) {
   return '✍️ Escríbame el nombre completo o la razón social con la que busco el RUC de «' + acc.prov + '» (filas ' +
     acc.filas.map(function (f) { return f.hoja + '!' + f.fila; }).join(', ') + ').\nEj.: DISTRIBUIDORA EXCLUSIVA DE PRODUCTOS DE CALIDAD · ' +
     'SUPERINTENDENCIA NACIONAL DE ADUANAS Y DE ADMINISTRACION TRIBUTARIA. Si ya sabe el RUC, escríbalo (11 dígitos) y lo anoto.';
+}
+
+/** Citó una pregunta «¿Cuál es el RUC de X?»: {prov, filas} de esa pregunta, o null. */
+function TGQ_citaEleccion_(chat, citado) {
+  var m = String(citado || '').replace(/\*/g, '').match(/¿Cu[aá]l es el RUC de (.+?)\?/);
+  var s = m && CacheService.getScriptCache().get('tgq_e_' + chat + '_' + normNombre_(m[1].trim()));
+  return s ? JSON.parse(s) : null;
+}
+
+/** Telegram: el nombre (o RUC) escrito tras 🔎 o citando la pregunta. */
+function TGQ_nombreTG_(ctx, acc, texto) {
+  TG_accion_(ctx.chatId, 'typing');
+  var tq;
+  try { tq = TGQ_otroNombre_(acc, texto, 'tg', ctx.chatId); } catch (err) { tq = '❌ ' + err.message; }
+  return TG_enviar_(ctx.chatId, TG_esc_(tq), /✅/.test(tq) ? [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]] : null);
+}
+
+/** WhatsApp: lo mismo; devuelve la respuesta para TGW_responder_. */
+function TGQ_nombreWA_(acc, texto, clave) {
+  var tq;
+  try { tq = TGQ_otroNombre_(acc, texto, 'wa', clave); } catch (err) { tq = '❌ ' + err.message; }
+  return { ok: true, respuesta: tq + (/✅/.test(tq) ? '\nSi algo salió mal, escriba *deshacer*.' : ''), tablas: [], sugerencias: [], archivos: [], avisos: [] };
 }
 
 /**

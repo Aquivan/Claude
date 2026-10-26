@@ -98,12 +98,10 @@ function TGW_responder_(q) {
   // 🔎 Respuesta a "Buscar con otro nombre" (el RUC de un voucher procesado, TG_Procesados.js).
   if (ses.esperando && ses.esperando.tipo === 'tgqnombre' && texto && !(q.adjuntos || []).length) {
     var eq = ses.esperando; ses.esperando = null; TG_guardarSesion_(clave, ses);
-    if (!TGQ_RX_.test(texto)) {
-      var tq;
-      try { tq = TGQ_otroNombre_(eq.acc, texto, 'wa', clave); } catch (err) { tq = '❌ ' + err.message; }
-      return { ok: true, respuesta: tq + (/✅/.test(tq) ? '\nSi algo salió mal, escriba *deshacer*.' : ''), tablas: [], sugerencias: [], archivos: [], avisos: [] };
-    }
+    if (!TGQ_RX_.test(texto)) return TGQ_nombreWA_(eq.acc, texto, clave);
   }
+  var citaRuc = q.citado && texto && TGQ_citaEleccion_(clave, q.citado);   // citó «¿Cuál es el RUC de X?»
+  if (citaRuc) return TGQ_nombreWA_(citaRuc, texto, clave);
   // 🔎 "ruc CORPORACION GRANIX": RUC por nombre (tus facturas y el padrón de SUNAT, RucPorNombre.js).
   if (/^\/?ruc\b/i.test(texto) && !/^\/?ruc\s+\d/i.test(texto)) {
     var rr;

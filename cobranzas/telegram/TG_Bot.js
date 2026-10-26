@@ -97,6 +97,9 @@ function TG_manejar_(u) {
   if (m.location || m.contact || m.video) { TG_enviar_(chatId, 'Por ahora entiendo textos, fotos, PDF, Excel y notas de voz.'); return; }
   if (!texto) return;
 
+  // 🔎 Citó «¿Cuál es el RUC de X?» con el nombre completo o el RUC (TG_Procesados.js).
+  var citaRuc = ctx.citado && texto.charAt(0) !== '/' && TGQ_citaEleccion_(chatId, ctx.citado);
+  if (citaRuc) return TGQ_nombreTG_(ctx, citaRuc, texto);
   // Un asistente paso a paso que espera un dato (ej. el texto de un recordatorio).
   var ses = TG_sesion_(chatId);
   if (ses.esperando && texto.charAt(0) !== '/') return TG_alEsperado_(ctx, ses, texto);
@@ -251,10 +254,7 @@ function TG_alEsperado_(ctx, ses, texto) {
   if (e.tipo === 'procnombre') return TGP_alNombreTG_(ctx, e, texto);
   if (e.tipo === 'tgqnombre') {   // 🔎 RUC con otro nombre (TG_Procesados.js); "procesados …" sigue siendo una consulta nueva
     if (TGQ_RX_.test(texto)) return TGQ_tg_(ctx, texto);
-    TG_accion_(ctx.chatId, 'typing');
-    var tq;
-    try { tq = TGQ_otroNombre_(e.acc, texto, 'tg', ctx.chatId); } catch (err) { tq = '❌ ' + err.message; }
-    return TG_enviar_(ctx.chatId, TG_esc_(tq), /✅/.test(tq) ? [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]] : null);
+    return TGQ_nombreTG_(ctx, e.acc, texto);
   }
   if (e.tipo === 'gre') { if (TGG_editarTG_(ctx, e.id, texto, e.pregunta)) return; return TG_preguntar_(ctx, texto, []); }   // 🚚 ✏️ corregir la guía
   return TG_preguntar_(ctx, texto, []);
