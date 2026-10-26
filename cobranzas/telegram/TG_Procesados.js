@@ -234,31 +234,33 @@ function TGQ_externos_(ss, tandas, origen, chat) {
   return err || '⏳ Busco ' + faltan.length + ' proveedor(es) sin RUC en el padrón de SUNAT y, si no queda claro, con IA en internet. Le aviso aquí en 3–5 minutos.';
 }
 
-/** Vuelta del padrón (desde RPN_gh_): propuesta con lo del padrón + internet, al mismo chat. */
+/** Vuelta del padrón (desde RPN_gh_): propuesta con lo del padrón + internet, al mismo chat; si hay dudas, botones para elegir. */
 function TGQ_trasPadron_(ex, res, error) {
-  var ss = TG_ss_(), cambios = [], lineas = [], n = 0, porNombre = {};
+  var ss = TG_ss_(), cambios = [], lineas = [], elecciones = [], n = 0, porNombre = {};
+  var est = function (x) { return x.estado && !/^ACTIVO$/i.test(x.estado) ? ' [' + x.estado + (x.condicion ? ' · ' + x.condicion : '') + ']' : ''; };
   (res || []).forEach(function (r) { porNombre[normNombre_(r.q)] = r.candidatos || []; });
   Object.keys(ex.procesados || {}).forEach(function (k) {
     var lista = ex.procesados[k], prov = lista[0].prov, filasTxt = lista.map(function (f) { return f.hoja + '!' + f.fila; }).join(', ');
     var cands = (porNombre[k] || []).slice().sort(function (a, b) { return b.puntaje - a.puntaje; });
-    var claro = cands.length && RPN_claro_(cands) && (!cands[0].estado || /ACTIVO/i.test(cands[0].estado));
+    var claro = cands.length && RPN_claro_(cands) && (!cands[0].estado || /^ACTIVO$/i.test(cands[0].estado));
     if (claro) {
-      var como = '🏛 padrón de SUNAT: ' + cands[0].nombre + ' (' + cands[0].puntaje + ' pts' + (cands[0].estado ? ', ' + cands[0].estado : '') + ')';
+      var como = '🏛 padrón de SUNAT: ' + cands[0].nombre + ' (' + cands[0].puntaje + ' pts, ACTIVO)';
       lista.forEach(function (f) {
         cambios.push({ id: String(++n), hoja: f.hoja, fila: f.fila, col: f.col, encabezado: 'ID Beneficiario', actual: '', nuevo: cands[0].ruc, motivo: prov + ' · ' + como });
       });
       lineas.push('✅ ' + prov + ' → ' + cands[0].ruc + '\n   ' + como + ' · filas ' + filasTxt);
       return;
     }
+    // Dudoso: opciones del padrón (las 3 mejores) y la de internet, para que la persona elija con un botón.
+    var opciones = cands.slice(0, 3).map(function (x) { return { ruc: x.ruc, nombre: x.nombre, det: '🏛 padrón ' + x.puntaje + ' pts' + est(x) }; });
     var web = TGQ_internet_(prov);
-    if (web) {
-      lineas.push('🌐 ' + prov + ' → ¿' + web.ruc + ' ' + web.nombre + '?\n   IA en internet' + (web.fuente ? ' (' + web.fuente + ')' : '') +
-        ' · no lo escribo solo: si es correcto, responda «en la fila ' + lista[0].fila + ' el RUC es ' + web.ruc + '»' +
-        (cands[0] ? '\n   Padrón (dudoso): ' + cands.slice(0, 2).map(function (x) { return x.ruc + ' ' + x.nombre; }).join(' / ') : ''));
-      return;
-    }
-    lineas.push('❓ ' + prov + ': no lo encontré' + (cands[0] ? ' claro. Padrón: ' + cands.slice(0, 3).map(function (x) { return x.ruc + ' ' + x.nombre + ' (' + x.puntaje + ')'; }).join(' / ')
-      : ' en el padrón ni en internet') + ' · filas ' + filasTxt);
+    if (web && !opciones.some(function (o) { return o.ruc === web.ruc; })) {
+      if (opciones.length >= 3) opciones.pop();
+      opciones.unshift({ ruc: web.ruc, nombre: web.nombre, det: '🌐 internet' + (web.fuente ? ' (' + web.fuente + ')' : '') });
+    } else if (web) opciones.forEach(function (o) { if (o.ruc === web.ruc) o.det += ' · 🌐 también en internet'; });
+    if (!opciones.length) { lineas.push('❓ ' + prov + ': no lo encontré en el padrón ni en internet · filas ' + filasTxt); return; }
+    lineas.push('🤔 ' + prov + ': hay ' + opciones.length + ' opción(es) · filas ' + filasTxt + ' (elija abajo)');
+    elecciones.push({ prov: prov, filas: lista, opciones: opciones });
   });
   var texto = '🔎 Búsqueda externa (padrón de SUNAT + IA en internet)' + (error ? ' · ⚠️ ' + error : '') + ':\n' + (lineas.join('\n') || 'nada nuevo.');
   var vis = [];
@@ -266,6 +268,7 @@ function TGQ_trasPadron_(ex, res, error) {
     ANX_guardarPropuestos_(ss, cambios);
     vis = cambios.map(function (x) { return { id: x.id, fila: x.hoja + '!' + x.fila, columna: 'ID Beneficiario', actual: '', nuevo: x.nuevo, motivo: x.motivo }; });
   }
+  var numero = String(ex.chat || '').replace(/\D/g, '');
   if (ex.origen === 'tg' && ex.chat) {
     TG_enviar_(ex.chat, TG_esc_(texto));
     if (vis.length) TG_mostrarCambios_({ chatId: ex.chat }, vis);
@@ -273,8 +276,71 @@ function TGQ_trasPadron_(ex, res, error) {
     var botones = vis.length ? { k: TG_guardarBoton_({ t: 'cambios', ids: vis.map(function (x) { return x.id; }) }),
       texto: '✏️ ¿Escribo ' + vis.length + ' RUC del padrón de SUNAT en la columna ID Beneficiario de Vouchers? (solo celdas vacías, se puede deshacer)',
       opciones: [{ op: 'si', titulo: '✅ Escribir RUC' }, { op: 'no', titulo: '✖ No' }] } : null;
-    try { TGC_wa_({ tipo: 'texto', numero: String(ex.chat || '').replace(/\D/g, ''), texto: texto, botones: botones }); } catch (e) {}
+    try { TGC_wa_({ tipo: 'texto', numero: numero, texto: texto, botones: botones }); } catch (e) {}
   }
+  elecciones.forEach(function (el) { TGQ_preguntarEleccion_(ex, el); });
+}
+
+/** "¿Cuál es el RUC de …?" con un botón por opción (Telegram: todas + Ninguno; WhatsApp: hasta 3). */
+function TGQ_preguntarEleccion_(ex, el) {
+  var k = TG_guardarBoton_({ t: 'rucelige', prov: el.prov, filas: el.filas, opciones: el.opciones });
+  var filasTxt = el.filas.map(function (f) { return f.hoja + '!' + f.fila; }).join(', ');
+  var detalle = el.opciones.map(function (o, i) { return (i + 1) + '. ' + o.ruc + ' ' + o.nombre + ' — ' + o.det; }).join('\n');
+  if (ex.origen === 'tg' && ex.chat) {
+    var teclado = el.opciones.map(function (o, i) {
+      return [{ text: (i + 1) + '. ' + o.ruc + ' ' + String(o.nombre).slice(0, 38), callback_data: 'k:' + k + ':' + i }];
+    }).concat([[{ text: '✖ Ninguno (lo escribo yo)', callback_data: 'k:' + k + ':x' }]]);
+    TG_enviar_(ex.chat, '🤔 <b>¿Cuál es el RUC de ' + TG_esc_(el.prov) + '?</b> (' + TG_esc_(filasTxt) + ')\n' + TG_esc_(detalle) +
+      '\n<i>Al elegir lo escribo en ID Beneficiario (se puede deshacer) y lo guardo como alias para la próxima.</i>', teclado);
+  } else if (ex.origen === 'wa') {
+    try {
+      TGC_wa_({ tipo: 'texto', numero: String(ex.chat || '').replace(/\D/g, ''), texto: '🤔 *¿Cuál es el RUC de ' + el.prov + '?* (' + filasTxt + ')\n' + detalle +
+        '\nAl elegir lo escribo en ID Beneficiario (se puede deshacer) y lo guardo como alias. Si no es ninguno, escríbame el RUC.',
+        botones: { k: k, texto: 'Elija el RUC de ' + String(el.prov).slice(0, 60), opciones: el.opciones.slice(0, 3).map(function (o, i) {
+          return { op: String(i), titulo: (i + 1) + '. ' + o.ruc };
+        }) } });
+    } catch (e) {}
+  }
+}
+
+/** Escribe el RUC elegido en esas filas y lo guarda como alias del nombre. → texto del resultado. */
+function TGQ_elegir_(acc, op, clave) {
+  if (op === 'x' || !acc.opciones[Number(op)]) return 'Listo, no escribí nada. Si sabe el RUC, escríbamelo: «en la fila ' + (acc.filas[0] || {}).fila + ' el RUC es …».';
+  if (TG_yaVisto_('rucelige' + acc.prov + op + acc.filas.map(function (f) { return f.fila; }).join(','))) return 'Eso ya se escribió.';
+  var o = acc.opciones[Number(op)], ss = TG_ss_(), n = 0;
+  var cambios = acc.filas.map(function (f) {
+    return { id: String(++n), hoja: f.hoja, fila: f.fila, col: f.col, encabezado: 'ID Beneficiario', actual: '', nuevo: o.ruc, motivo: acc.prov + ' · elegido por la persona: ' + o.nombre + ' (' + o.det + ')' };
+  });
+  ANX_guardarPropuestos_(ss, cambios);
+  var r = ANX_aplicarDet_(ss, cambios.map(function (x) { return x.id; }), false);
+  if (r.lote) TGU_anotar_(clave, { desc: '✏️ RUC de ' + acc.prov, lotes: [r.lote] });
+  var alias = TGQ_alias_(ss, acc.prov, o.ruc);
+  return r.mensaje + (alias ? '\n💾 ' + acc.prov + ' → ' + o.ruc + ' quedó como alias (⚙️ Config): la próxima vez sale solo.' : '');
+}
+
+/** Agrega nombre → RUC a la tabla de alias de ⚙️ Config (columnas I:J) si no estaba. */
+function TGQ_alias_(ss, nombre, ruc) {
+  var cfgSh = ss.getSheetByName(HOJA.CONFIG);
+  if (!cfgSh || !nombre) return false;
+  var ult = Math.max(cfgSh.getLastRow(), 3), col = cfgSh.getRange(3, 9, ult - 2, 1).getValues(), fila = 3;
+  for (var i = 0; i < col.length; i++) if (normNombre_(col[i][0]) === normNombre_(nombre)) return false;
+  for (var k = col.length - 1; k >= 0; k--) if (String(col[k][0]).trim()) { fila = k + 4; break; }
+  cfgSh.getRange(fila, 10).setNumberFormat('@');
+  cfgSh.getRange(fila, 9, 1, 2).setValues([[String(nombre), String(ruc)]]);
+  return true;
+}
+
+function TGQ_eligeTG_(ctx, datos, op) {
+  TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
+  var t;
+  try { t = TGQ_elegir_(datos, op, ctx.chatId); } catch (e) { t = '❌ ' + e.message; }
+  TG_enviar_(ctx.chatId, TG_esc_(t), /✅/.test(t) ? [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]] : null);
+}
+
+function TGQ_eligeWA_(acc, op, numero) {
+  var t;
+  try { t = TGQ_elegir_(acc, op, 'wa' + String(numero || '').replace(/\D/g, '')); } catch (e) { t = '❌ ' + e.message; }
+  return { ok: true, respuesta: t + (/✅/.test(t) ? '\nSi algo salió mal, escriba *deshacer*.' : '') };
 }
 
 /** IA con búsqueda en Google: RUC de una empresa o persona peruana → {ruc, nombre, fuente} o null. El RUC se valida (dígito verificador). */

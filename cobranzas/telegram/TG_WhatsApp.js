@@ -186,7 +186,8 @@ function TGW_boton_(k, op, numero) {
   var acc = TG_leerBoton_(k);
   if (acc && acc.t === 'cre') return TGR_botonWA_(acc, k, op, numero);
   if (acc && acc.t === 'gre') return TGG_botonWA_(acc, k, op, numero);
-  if (acc && acc.t === 'cambios') return TGQ_botonWA_(acc, op, numero);   // ✏️ escribir RUC en Vouchers (TG_Procesados.js)   // 🚚 guía de remisión (TG_GRE.js)   // 🧾 comprobante de retención (TG_Retener.js)
+  if (acc && acc.t === 'cambios') return TGQ_botonWA_(acc, op, numero);
+  if (acc && acc.t === 'rucelige') return TGQ_eligeWA_(acc, op, numero);   // 🤔 elegir el RUC entre opciones   // ✏️ escribir RUC en Vouchers (TG_Procesados.js)   // 🚚 guía de remisión (TG_GRE.js)   // 🧾 comprobante de retención (TG_Retener.js)
   if (!acc || acc.t !== 'descarga') return { ok: true, respuesta: 'Ese botón ya venció (duran 6 horas). Pídamelo de nuevo.' };
   if (TG_yaVisto_('wadesc' + k)) return { ok: true, respuesta: 'Esa descarga ya se pidió.' };
   if (op !== 'si') return { ok: true, respuesta: 'Listo, no pedí nada.' };
