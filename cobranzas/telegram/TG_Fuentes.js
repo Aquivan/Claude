@@ -50,6 +50,9 @@ var TGH_ = {
     return TG_limitar_(res, a.max);
   },
 
+  // 📋 Vouchers procesados por tanda (columna Archivo Original) con RUC sugerido (TG_Procesados.js)
+  vouchers_procesados: function (c, a) { return TGQ_herramienta_(c, a); },
+
   sire_liquidacion: function (c, a) {
     var anio = parseInt(a.anio || a.año, 10) || new Date().getFullYear();
     var rucs = a.empresa ? [ANA_empresa_(c, a.empresa)] : c.cfg.grupo;

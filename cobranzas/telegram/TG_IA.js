@@ -28,6 +28,9 @@ var TG_SISTEMA_ = [
   '- honorarios {empresa, emisor, periodo, desde, hasta, pendientes:true, buscar}: recibos por honorarios RECIBIDOS (renta bruta, retención 4ta, neto, PDF).',
   '- honorarios_conciliacion {tipo:"conciliacion"|"por_pagar"|"sin_recibo"|"retencion", empresa, emisor}: recibos por honorarios cruzados con los vouchers: ' +
     'estado de cada recibo (pagado, por pagar, parcial, pagado sin descontar la retención), honorarios por pagar por emisor, pagos a personas sin recibo, retención de 4ta por mes de PAGO (PLAME).',
+  '- vouchers_procesados {consulta}: vouchers registrados por TANDA (columna "Archivo Original": "26-10-26 Sonia", "26-10-26 Sonia(Edit)", "14-05-26 Edit Voucher").',
+  '  consulta en palabras de la persona: "hoy", "hoy sonia", "ayer edit", "26-10-26 Sonia(Edit).pdf", "14 de octubre", "2 últimos de sonia". Devuelve fila, monto, proveedor,',
+  '  RUC del beneficiario y un RUC sugerido si falta. Úsala para "procesados", "lo que mandó Sonia hoy", "tanda de Edit". Para completar RUC usa proponer_cambio (id_beneficiario).',
   '- sire_liquidacion {empresa, anio}: la Liquidación IGV del año de la empresa (hoja "Liquidacion IGV <RUC> - <año>" de SIRE): por mes ventas, compras, IGV,',
   '  saldo a favor, IGV por pagar, renta, etc. Úsala para "¿cuánto IGV pago?", "saldo a favor", "ventas del mes", "IR a cuenta".',
   '- leer_libro {libro:"notificaciones"|"retenciones"|"honorarios"|"detracciones"|"cobranzas"|"vouchers"|"sire" (con empresa y anio)|<ID o enlace de una Google Sheet>,',

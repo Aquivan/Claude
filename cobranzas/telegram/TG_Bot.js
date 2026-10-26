@@ -106,6 +106,7 @@ function TG_manejar_(u) {
   if (texto.charAt(0) === '/') return TG_comando_(ctx, texto);
   var atajo = TG_ATAJOS_[texto];
   if (atajo) return TG_comando_(ctx, atajo);
+  if (TGQ_RX_.test(texto)) return TGQ_tg_(ctx, texto);   // 📋 "procesados hoy sonia" (TG_Procesados.js)
   if (TGG_datoTG_(ctx, texto)) return;   // 🚚 dato suelto para la guía abierta ("es privado", "peso 30000")
   if (TGG_atajoTG_(ctx, texto)) return;   // 🚚 "emite la guía de remisión" (antes o después de las fotos) · "listo"
   if (TGR_atajoTG_(ctx, texto)) return;   // 🧾 "emite la retención de F001-215" (o citando el mensaje)
@@ -191,6 +192,7 @@ function TG_comando_(ctx, texto) {
     case 'emitirwa': return TGR_emitirWA_(ctx, arg);
     case 'guia': case 'gre': return TGG_atajoTG_(ctx, '/guia ' + arg);   // 🚚 guía de remisión por SUNAT
     case 'pdf': if (TGG_atajoTG_(ctx, '/pdf guía ' + arg)) return; break;   // 📄 PDF de una guía emitida
+    case 'procesados': case 'procesado': return TGQ_tg_(ctx, 'procesados ' + (arg || 'hoy'));   // 📋 vouchers procesados por tanda
     case 'honorarios': return TG_enviarHonorarios_(ctx, arg);
     case 'estado': return TG_enviarEstado_(ctx);
     case 'descargar': return TG_asistenteDescarga_(ctx, null);
