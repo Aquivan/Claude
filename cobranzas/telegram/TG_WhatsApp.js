@@ -95,6 +95,15 @@ function TGW_responder_(q) {
   // 🧩 "1 6 9" mientras el robot de Quesito espera la respuesta de un captcha.
   var capt = TGC_respuesta_(texto);
   if (capt) return { ok: true, respuesta: capt, tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  // 🔎 Respuesta a "Buscar con otro nombre" (el RUC de un voucher procesado, TG_Procesados.js).
+  if (ses.esperando && ses.esperando.tipo === 'tgqnombre' && texto && !(q.adjuntos || []).length) {
+    var eq = ses.esperando; ses.esperando = null; TG_guardarSesion_(clave, ses);
+    if (!TGQ_RX_.test(texto)) {
+      var tq;
+      try { tq = TGQ_otroNombre_(eq.acc, texto, 'wa', clave); } catch (err) { tq = '❌ ' + err.message; }
+      return { ok: true, respuesta: tq + (/✅/.test(tq) ? '\nSi algo salió mal, escriba *deshacer*.' : ''), tablas: [], sugerencias: [], archivos: [], avisos: [] };
+    }
+  }
   // 🔎 "ruc CORPORACION GRANIX": RUC por nombre (tus facturas y el padrón de SUNAT, RucPorNombre.js).
   if (/^\/?ruc\b/i.test(texto) && !/^\/?ruc\s+\d/i.test(texto)) {
     var rr;

@@ -249,6 +249,13 @@ function TG_alEsperado_(ctx, ses, texto) {
   if (e.tipo === 'pregunta_adj') return TG_preguntar_(ctx, texto, e.adj || []);
   if (e.tipo === 'entrega') return TGE_alTextoTG_(ctx, e, texto);
   if (e.tipo === 'procnombre') return TGP_alNombreTG_(ctx, e, texto);
+  if (e.tipo === 'tgqnombre') {   // 🔎 RUC con otro nombre (TG_Procesados.js); "procesados …" sigue siendo una consulta nueva
+    if (TGQ_RX_.test(texto)) return TGQ_tg_(ctx, texto);
+    TG_accion_(ctx.chatId, 'typing');
+    var tq;
+    try { tq = TGQ_otroNombre_(e.acc, texto, 'tg', ctx.chatId); } catch (err) { tq = '❌ ' + err.message; }
+    return TG_enviar_(ctx.chatId, TG_esc_(tq), /✅/.test(tq) ? [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]] : null);
+  }
   if (e.tipo === 'gre') { if (TGG_editarTG_(ctx, e.id, texto, e.pregunta)) return; return TG_preguntar_(ctx, texto, []); }   // 🚚 ✏️ corregir la guía
   return TG_preguntar_(ctx, texto, []);
 }

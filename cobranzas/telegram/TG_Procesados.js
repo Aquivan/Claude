@@ -308,16 +308,19 @@ function TGQ_preguntarEleccion_(ex, el) {
   if (ex.origen === 'tg' && ex.chat) {
     var teclado = el.opciones.map(function (o, i) {
       return [{ text: (i + 1) + '. ' + o.ruc + ' ' + String(o.nombre).slice(0, 38), callback_data: 'k:' + k + ':' + i }];
-    }).concat([[{ text: '✖ Ninguno (lo escribo yo)', callback_data: 'k:' + k + ':x' }]]);
+    }).concat([[{ text: '🔎 Buscar con otro nombre (o escribir el RUC)', callback_data: 'k:' + k + ':n' }], [{ text: '✖ Ninguno', callback_data: 'k:' + k + ':x' }]]);
     TG_enviar_(ex.chat, '🤔 <b>¿Cuál es el RUC de ' + TG_esc_(el.prov) + '?</b> (' + TG_esc_(filasTxt) + ')\n' + TG_esc_(detalle) +
       '\n<i>Al elegir lo escribo en ID Beneficiario (se puede deshacer) y lo guardo como alias para la próxima.</i>', teclado);
   } else if (ex.origen === 'wa') {
     try {
       TGC_wa_({ tipo: 'texto', numero: String(ex.chat || '').replace(/\D/g, ''), texto: '🤔 *¿Cuál es el RUC de ' + el.prov + '?* (' + filasTxt + ')\n' + detalle +
-        '\nAl elegir lo escribo en ID Beneficiario (se puede deshacer) y lo guardo como alias. Si no es ninguno, escríbame el RUC.',
+        '\nAl elegir lo escribo en ID Beneficiario (se puede deshacer) y lo guardo como alias.',
         botones: { k: k, texto: 'Elija el RUC de ' + String(el.prov).slice(0, 60), opciones: el.opciones.slice(0, 3).map(function (o, i) {
           return { op: String(i), titulo: (i + 1) + '. ' + o.ruc };
         }) } });
+      TGC_wa_({ tipo: 'texto', numero: String(ex.chat || '').replace(/\D/g, ''), texto: '', botones: { k: k,   // WhatsApp: máx. 3 botones por mensaje
+        texto: '¿No es ninguno para ' + String(el.prov).slice(0, 60) + '? Puedo buscar con el nombre completo que usted me escriba (o escríbame el RUC).',
+        opciones: [{ op: 'n', titulo: '🔎 Otro nombre' }, { op: 'x', titulo: '✖ Ninguno' }] } });
     } catch (e) {}
   }
 }
@@ -325,8 +328,8 @@ function TGQ_preguntarEleccion_(ex, el) {
 /** Escribe el RUC elegido en esas filas y lo guarda como alias del nombre. → texto del resultado. */
 function TGQ_elegir_(acc, op, clave) {
   if (op === 'x' || !acc.opciones[Number(op)]) return 'Listo, no escribí nada. Si sabe el RUC, escríbamelo: «en la fila ' + (acc.filas[0] || {}).fila + ' el RUC es …».';
-  if (TG_yaVisto_('rucelige' + acc.prov + op + acc.filas.map(function (f) { return f.fila; }).join(','))) return 'Eso ya se escribió.';
   var o = acc.opciones[Number(op)], ss = TG_ss_(), n = 0;
+  if (TG_yaVisto_('rucelige' + acc.prov + o.ruc + acc.filas.map(function (f) { return f.fila; }).join(','))) return 'Eso ya se escribió.';
   var cambios = acc.filas.map(function (f) {
     return { id: String(++n), hoja: f.hoja, fila: f.fila, col: f.col, encabezado: 'ID Beneficiario', actual: '', nuevo: o.ruc, motivo: acc.prov + ' · elegido por la persona: ' + o.nombre + ' (' + o.det + ')' };
   });
@@ -351,15 +354,58 @@ function TGQ_alias_(ss, nombre, ruc) {
 
 function TGQ_eligeTG_(ctx, datos, op) {
   TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
+  if (op === 'n') return TG_enviar_(ctx.chatId, TG_esc_(TGQ_pedirNombre_(ctx.chatId, datos)));
   var t;
   try { t = TGQ_elegir_(datos, op, ctx.chatId); } catch (e) { t = '❌ ' + e.message; }
   TG_enviar_(ctx.chatId, TG_esc_(t), /✅/.test(t) ? [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]] : null);
 }
 
 function TGQ_eligeWA_(acc, op, numero) {
+  if (op === 'n') return { ok: true, respuesta: TGQ_pedirNombre_('wa' + String(numero || '').replace(/\D/g, ''), acc) };
   var t;
   try { t = TGQ_elegir_(acc, op, 'wa' + String(numero || '').replace(/\D/g, '')); } catch (e) { t = '❌ ' + e.message; }
   return { ok: true, respuesta: t + (/✅/.test(t) ? '\nSi algo salió mal, escriba *deshacer*.' : '') };
+}
+
+/** 🔎 "Buscar con otro nombre": el próximo mensaje de la persona es el nombre (o el RUC) a buscar para esas filas. */
+function TGQ_pedirNombre_(clave, acc) {
+  var ses = TG_sesion_(clave);
+  ses.esperando = { tipo: 'tgqnombre', acc: { prov: acc.prov, filas: acc.filas } };
+  TG_guardarSesion_(clave, ses);
+  return '✍️ Escríbame el nombre completo o la razón social con la que busco el RUC de «' + acc.prov + '» (filas ' +
+    acc.filas.map(function (f) { return f.hoja + '!' + f.fila; }).join(', ') + ').\nEj.: DISTRIBUIDORA EXCLUSIVA DE PRODUCTOS DE CALIDAD · ' +
+    'SUPERINTENDENCIA NACIONAL DE ADUANAS Y DE ADMINISTRACION TRIBUTARIA. Si ya sabe el RUC, escríbalo (11 dígitos) y lo anoto.';
+}
+
+/**
+ * Respuesta a 🔎: con un RUC válido lo escribe; con un nombre busca en las fuentes propias y con IA en internet (al momento,
+ * con botones para elegir) y además en el padrón de SUNAT (llega en 3–5 min). El alias se guarda con el nombre del voucher.
+ */
+function TGQ_otroNombre_(acc, texto, origen, chat) {
+  var ss = TG_ss_(), t = String(texto || '').trim(), ruc = (t.replace(/[\s.-]/g, '').match(/\b\d{11}\b/) || [''])[0];
+  if (ruc) {
+    if (!TGQ_rucValido_(ruc)) { TGQ_pedirNombre_(chat, acc); return '⚠️ ' + ruc + ' no es un RUC válido (dígito verificador). Revíselo y escríbalo de nuevo (o el nombre).'; }
+    return TGQ_elegir_({ prov: acc.prov, filas: acc.filas, opciones: [{ ruc: ruc, nombre: t, det: '✍️ escrito por usted' }] }, '0', chat);
+  }
+  if (t.length < 3) { TGQ_pedirNombre_(chat, acc); return 'Necesito un nombre un poco más completo: escríbalo de nuevo.'; }
+  var opciones = [];
+  try {
+    var r = TGQ_candidatos_(TGQ_fuentes_(ss, leerConfig_(ss)), t, '');
+    if (r.sug) opciones.push({ ruc: r.sug, nombre: t, det: r.como });
+    (r.opciones || []).forEach(function (o) { opciones.push({ ruc: o.ruc, nombre: o.nombre, det: o.fuente + ' ' + o.puntaje + ' pts' }); });
+  } catch (e) { Logger.log('Procesados — otro nombre: ' + e.message); }
+  var web = TGQ_internet_(t);
+  if (web) {
+    var ya = opciones.filter(function (o) { return o.ruc === web.ruc; })[0];
+    if (ya) ya.det += ' · 🌐 también en internet';
+    else opciones.unshift({ ruc: web.ruc, nombre: web.nombre, det: '🌐 internet' + (web.fuente ? ' (' + web.fuente + ')' : '') });
+  }
+  var pad = {}; pad[normNombre_(t)] = acc.filas;
+  var err = RPN_lanzar_(ss, [{ q: t }], { origen: origen, chat: chat, procesados: pad });
+  var tras = err ? '' : '\n⏳ También lo busco en el padrón de SUNAT con ese nombre; le aviso en 3–5 minutos.';
+  if (!opciones.length) return '🔎 Con «' + t + '» no encontré nada en sus hojas ni en internet.' + tras;
+  TGQ_preguntarEleccion_({ origen: origen, chat: chat }, { prov: acc.prov, filas: acc.filas, opciones: opciones.slice(0, 4) });
+  return '🔎 Con «' + t + '» encontré ' + Math.min(opciones.length, 4) + ' opción(es): elija arriba.' + tras;
 }
 
 /** IA con búsqueda en Google: RUC de una empresa o persona peruana → {ruc, nombre, fuente} o null. El RUC se valida (dígito verificador). */
@@ -368,6 +414,7 @@ function TGQ_internet_(nombre) {
   try { clave = TGG_clave_(); } catch (e) { return null; }
   var pedido = 'Busca en internet el RUC (Perú, SUNAT, 11 dígitos) de: "' + nombre + '". Puede ser una empresa o una persona con negocio. ' +
     'Responde SOLO JSON: {"ruc":"11 dígitos o vacío","nombre":"razón social tal como figura","fuente":"página donde lo viste (dominio)","seguro":true|false}. ' +
+    'Si es una sigla o nombre comercial (ej. SUNAT, DSM), busca la razón social que le corresponde. ' +
     'Si hay varias personas o empresas con nombre parecido y no puedes distinguir, seguro=false. No inventes.';
   for (var i = 0; i < TGG_MODELOS_.length; i++) {
     try {
