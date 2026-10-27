@@ -194,6 +194,39 @@ function TGR_buscar_(ss, cob, q) {
   return x;
 }
 
+/* ============================================================ lo último que se procesó en el chat */
+
+/** Guarda la última factura / fila de voucher de 🧾 Procesar documento en ese chat (3 días). */
+function TGR_guardarUltimo_(clave, datos) {
+  if (!clave || !datos || (!datos.doc && !datos.fila)) return;
+  try {
+    var p = PropertiesService.getScriptProperties(), k = 'TGR_ULT_' + clave, ant = JSON.parse(p.getProperty(k) || '{}');
+    p.setProperty(k, JSON.stringify({ doc: datos.doc || ant.doc || '', fila: datos.fila || (datos.doc && datos.doc !== ant.doc ? '' : ant.fila || ''), t: Date.now() }));
+  } catch (e) {}
+}
+
+/** {doc, fila} de lo último procesado en ese chat (máx. 3 días) o null. */
+function TGR_ultimo_(clave) {
+  try {
+    var u = JSON.parse(PropertiesService.getScriptProperties().getProperty('TGR_ULT_' + clave) || 'null');
+    return u && Date.now() - u.t < 3 * 864e5 ? u : null;
+  } catch (e) { return null; }
+}
+
+/** Sin factura ni voucher escritos: si habla de "la factura" / "el voucher", usa lo último del chat. Marca q.deUltimo. */
+function TGR_completarQ_(q, texto, clave) {
+  if (q.doc || q.voucher) return q;
+  if (!/\b(factura|voucher|vocuher|vaucher|comprobante|pago|dep[oó]sito)\b/i.test(texto)) return q;
+  var u = TGR_ultimo_(clave);
+  if (!u) { q.preguntar = true; return q; }
+  q.doc = TGR_normDoc_(u.doc);
+  if (u.fila) q.voucher = { fila: u.fila };
+  q.deUltimo = (q.doc ? 'la factura ' + q.doc : '') + (u.fila ? (q.doc ? ' y ' : '') + 'el voucher ' + u.fila : '');
+  return q;
+}
+
+var TGR_COMO_ = 'Escríbalo así: «completa el voucher Fotos!362 con la F003-37515» o «emite la retención de la F003-37515» (también puede citar el mensaje del voucher o de la factura).';
+
 /* ============================================================ directo desde la hoja de Vouchers (por factura o por voucher) */
 
 /**
@@ -319,13 +352,15 @@ function TGR_cambiosVoucher_(ss, datos) {
 
 /** "completa el voucher Fotos!362" / "completa la factura del voucher op 280698" / "asigna F003-37515 a Fotos!362". */
 var TGR_COMPLETA_RX_ = /\b(complet|llen|asign|registr|pon|agreg)\w*\b/i;
-function TGR_completarPedido_(ss, texto, citado) {
+function TGR_completarPedido_(ss, texto, citado, clave) {
   if (!TGR_COMPLETA_RX_.test(texto) || TGR_esPedido_(texto)) return null;
-  var q = { doc: TGR_normDoc_(texto), voucher: TGR_normVoucher_(texto) || (!TGR_normDoc_(texto) ? TGR_normVoucher_(citado) : null) };
-  if (!q.voucher) return null;   // sin voucher lo atiende la IA
-  if (!q.doc && TGR_normDoc_(citado)) q.doc = TGR_normDoc_(citado);
+  var q = { doc: TGR_normDoc_(texto) || TGR_normDoc_(citado), voucher: TGR_normVoucher_(texto) || TGR_normVoucher_(citado) };
+  TGR_completarQ_(q, texto, clave);
+  if (q.preguntar) return { texto: '¿De qué voucher o factura? ' + TGR_COMO_ };
+  if (!q.voucher && !q.doc) return null;   // lo atiende la IA
   var x = TGR_parear_(ss, q);
-  if (!x) return { texto: 'No encontré una factura por pagar que cuadre con ese voucher. Dígame cuál: «completa Fotos!362 con F003-37515».' };
+  if (x && x.par && q.deUltimo) x.par.como += '; tomé ' + q.deUltimo + ' de lo último que me envió';
+  if (!x) return { texto: (q.voucher ? 'No encontré una factura por pagar que cuadre con ese voucher.' : 'No encontré en la hoja de Vouchers el pago de la ' + q.doc + ' (últimos 70 días).') + ' ' + TGR_COMO_ };
   if (x.motivo) return { texto: x.motivo };
   var datos = TGR_faltaEnVoucher_(x.par, x.rucDe);
   if (!datos) return { texto: '✅ ' + x.par.v.fila + ' ya tiene la factura ' + x.par.f.doc + ', la empresa y el RUC del proveedor.' };
@@ -415,7 +450,9 @@ function TGR_atajoTG_(ctx, texto) {
   if (!TGR_esPedido_(texto)) return false;
   TG_accion_(ctx.chatId, 'typing');
   var cob = TG_cfg_(ctx.ss).cob, x;
-  var q = { doc: TGR_normDoc_(texto) || TGR_normDoc_(ctx.citado), voucher: TGR_normVoucher_(texto) || TGR_normVoucher_(ctx.citado), empresa: '' };
+  var q = TGR_completarQ_({ doc: TGR_normDoc_(texto) || TGR_normDoc_(ctx.citado), voucher: TGR_normVoucher_(texto) || TGR_normVoucher_(ctx.citado), empresa: '' }, texto, ctx.chatId);
+  if (q.preguntar) { TG_enviar_(ctx.chatId, TG_esc_('🧾 ¿De qué factura o voucher? ' + TGR_COMO_)); return true; }
+  if (q.deUltimo) TG_enviar_(ctx.chatId, TG_esc_('🧾 Tomo ' + q.deUltimo + ' (lo último que me envió).'));
   try { x = TGR_buscar_(ctx.ss, cob, q); } catch (e) { TG_enviar_(ctx.chatId, '⚠️ No pude leer las retenciones: ' + TG_esc_(e.message)); return true; }
   if (x.lista) {
     TGR_proponerTG_(ctx, x.lista, '🧾 <b>Comprobante de retención por emitir' + (q.doc ? ' · ' + q.doc : '') + '</b>');
@@ -533,16 +570,17 @@ function TGR_botonesWA_(lista) {
 }
 
 /** WhatsApp: "emite la retención de F001-215" (o citando el mensaje). null si el texto no lo pide. */
-function TGR_atajoWA_(ss, texto, citado) {
+function TGR_atajoWA_(ss, texto, citado, clave) {
   if (!TGR_esPedido_(texto)) return null;
-  var q = { doc: TGR_normDoc_(texto) || TGR_normDoc_(citado), voucher: TGR_normVoucher_(texto) || TGR_normVoucher_(citado), empresa: '' };
+  var q = TGR_completarQ_({ doc: TGR_normDoc_(texto) || TGR_normDoc_(citado), voucher: TGR_normVoucher_(texto) || TGR_normVoucher_(citado), empresa: '' }, texto, clave);
+  if (q.preguntar) return { ok: true, respuesta: '🧾 ¿De qué factura o voucher? ' + TGR_COMO_ + '\nPara ver todos los pendientes escriba *emitir*.', tablas: [], sugerencias: [], archivos: [], avisos: [] };
   if (!q.doc && !q.voucher) return TGR_listaWA_(ss);
   var x = TGR_buscar_(ss, TG_cfg_(ss).cob, q);
   if (x.lista) {
     var bts = TGR_botonesWA_(x.lista), cam = [];
     try { cam = TGR_cambiosVoucher_(ss, x.lista[0].completar); } catch (e) { console.warn('Completar voucher: ' + e.message); }
     if (cam.length) bts.push(TGR_botonCambiosWA_(cam));
-    return { ok: true, respuesta: '🧾 *Comprobante de retención por emitir' + (q.doc ? ' · ' + q.doc : '') + '*', tablas: [], sugerencias: [], archivos: [], avisos: [], botones: bts };
+    return { ok: true, respuesta: '🧾 *Comprobante de retención por emitir' + (q.doc ? ' · ' + q.doc : '') + '*' + (q.deUltimo ? '\n(tomé ' + q.deUltimo + ': lo último que me envió)' : ''), tablas: [], sugerencias: [], archivos: [], avisos: [], botones: bts };
   }
   return { ok: true, respuesta: '🧾 *' + (q.doc ? 'Factura ' + q.doc : 'Voucher') + '*\n' + x.motivo + TGR_filasTexto_(x.filas, true), tablas: [], sugerencias: [], archivos: [], avisos: [] };
 }
@@ -557,7 +595,7 @@ function TGR_botonCambiosWA_(cam) {
 
 /** Telegram: "completa el voucher Fotos!362". true si lo atendió. */
 function TGR_completarTG_(ctx, texto) {
-  var r = TGR_completarPedido_(ctx.ss, texto, ctx.citado);
+  var r = TGR_completarPedido_(ctx.ss, texto, ctx.citado, ctx.chatId);
   if (!r) return false;
   TG_enviar_(ctx.chatId, TG_esc_(r.texto));
   if ((r.cambios || []).length) TG_mostrarCambios_(ctx, r.cambios);
@@ -565,8 +603,8 @@ function TGR_completarTG_(ctx, texto) {
 }
 
 /** WhatsApp: lo mismo; null si el texto no lo pide. */
-function TGR_completarWA_(ss, texto, citado) {
-  var r = TGR_completarPedido_(ss, texto, citado);
+function TGR_completarWA_(ss, texto, citado, clave) {
+  var r = TGR_completarPedido_(ss, texto, citado, clave);
   if (!r) return null;
   var out = { ok: true, respuesta: r.texto, tablas: [], sugerencias: [], archivos: [], avisos: [] };
   if ((r.cambios || []).length) out.botones = [TGR_botonCambiosWA_(r.cambios)];

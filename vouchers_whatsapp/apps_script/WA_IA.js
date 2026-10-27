@@ -129,6 +129,7 @@ function WA_md_(t) {
     .replace(/\*\*(.+?)\*\*/g, '*$1*')
     .replace(/^#{1,6}\s*(.+)$/gm, '*$1*')
     .replace(/<\/?b>/g, '*').replace(/<\/?i>/g, '_').replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&')
     .replace(/\n{3,}/g, '\n\n');
 }
 

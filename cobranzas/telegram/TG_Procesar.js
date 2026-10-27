@@ -138,6 +138,8 @@ function TGP_analizar_(ss, adjs, op) {
     fecha: op.fecha || TGE_hoy_(), resumen: resumenArch, pestana: /^(foto|original)$/.test(op.pestana || '') ? op.pestana : '' };
   var k = TG_guardarBoton_(plan);
   var res = TGP_texto_(k, plan);
+  var conFila = items.filter(function (x) { return x.fuente; })[0];   // 🧾 para "completa / emite la retención de la factura" sin decir cuál (TG_Retener.js)
+  TGR_guardarUltimo_(op.clave, { doc: (facturasTodas[0] || {}).serie_numero || '', fila: conFila ? conFila.fuente : '' });
   TGP_recordar_(op.clave, adjs, facturasTodas, items, res.texto);
   return res;
 }
@@ -486,6 +488,7 @@ function TGP_revisar_(ss, job) {
     if (/^\[DUPLICADO\]/.test(f.op)) { lineas.push('⚠️ ' + fuente + ': la hoja dice que ya estaba registrado (duplicado).'); return; }
     if (/^\[/.test(f.op)) { lineas.push('⚠️ ' + fuente + ': no pudo leer el voucher (' + TG_esc_(f.op) + ').'); return; }
     var l = '✅ <b>' + TG_esc_(it.nuevo.nombre) + '</b> registrado en <b>' + fuente + '</b> (' + TGP_monto_(it.v) + ')';
+    TGR_guardarUltimo_(job.clave, { doc: it.fac && it.fac.serie || '', fila: fuente });
     if (it.fac && it.fac.serie) {
       try {
         ANX_HERR_.asignar_voucher(c, { fila: fuente, empresa: it.fac.empresa, proveedor_ruc: it.fac.proveedor, facturas: it.fac.serie, motivo: '🧾 Procesar documento: ' + it.fac.serie });
