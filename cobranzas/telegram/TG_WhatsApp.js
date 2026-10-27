@@ -114,6 +114,8 @@ function TGW_responder_(q) {
   if (TGQ_RX_.test(texto) && !(q.adjuntos || []).length) return TGQ_wa_(ss, texto, clave);
   var gre = TGG_atajoWA_(ss, q, clave);
   if (gre) return gre;
+  var cons = TGR_constanciaWA_(ss, texto, q.citado, clave);   // 📄 «envíame la constancia de retención de …»
+  if (cons) return cons;
   var cre = TGR_atajoWA_(ss, texto, q.citado, clave);
   if (cre) return cre;
   var compl = TGR_completarWA_(ss, texto, q.citado, clave);   // ✏️ «completa el voucher Fotos!362 (con F003-37515)»
