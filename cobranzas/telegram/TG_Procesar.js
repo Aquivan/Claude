@@ -29,7 +29,7 @@ var TGP_NOMBRES_TIPO_ = { voucher: 'voucher', factura: 'factura', boleta: 'bolet
 function TGP_ctx_(ss) {
   var c = ANA_ctx_(ss);
   c.ia = AUD_ia_(ss, AUD_leerParam_(AUD_hoja_(ss), c.cfg));
-  if (!c.ia.clave) throw new Error('falta la clave de IA (menú 🤝 Conciliar con IA → 🔑 Guardar clave de IA).');
+  if (!c.ia.clave) throw new Error('falta la clave de IA (menú 🧠 Asistente IA → 🔑 Guardar clave de IA).');
   return c;
 }
 

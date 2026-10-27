@@ -24,7 +24,7 @@
 
   <label>Archivos (Excel, CSV, foto o PDF; puede elegir varios)</label>
   <input type="file" id="archivos" multiple accept=".xlsx,.xls,.csv,image/*,application/pdf">
-  <div class="nota">Excel: elija la pestaña (por ejemplo PAGOS). Fotos y PDF los lee la IA de 🤝 Conciliar con IA.
+  <div class="nota">Excel: elija la pestaña (por ejemplo PAGOS). Fotos y PDF los lee la IA del 🧠 Asistente IA.
     Lo subido se guarda en una carpeta temporal y se borra solo a los 7 días.</div>
   <div id="lista"></div>
 
@@ -71,7 +71,7 @@ document.getElementById('archivos').addEventListener('change', function (ev) {
           div.appendChild(sel);
         } catch (e) { div.innerHTML += ' <span class="err">no se pudo leer: ' + e.message + '</span>'; }
       } else if (!tieneClave) {
-        div.innerHTML += ' <span class="err">· falta la clave de IA (🤝 Conciliar con IA → 🔑) para leer fotos/PDF</span>';
+        div.innerHTML += ' <span class="err">· falta la clave de IA (🧠 Asistente IA → 🔑) para leer fotos/PDF</span>';
       }
       document.getElementById('lista').appendChild(div);
       leidos[idx] = item;
@@ -129,7 +129,7 @@ function explicar(e) {
     return '❌ Google bloqueó esta ventana porque en este navegador hay VARIAS cuentas de Google abiertas ' +
       '(error conocido de Google con las ventanas de Apps Script).\n\nSoluciones:\n' +
       '1) Abra la hoja en una ventana de incógnito (Ctrl+Shift+N) entrando solo con su cuenta, o\n' +
-      '2) Cierre esta ventana y use 🤝 Conciliar con IA → 📂 Importar desde la carpeta de Drive ' +
+      '2) Cierre esta ventana y use 🧠 Asistente IA → 📂 Importar desde la carpeta de Drive ' +
       '(copia el archivo a la carpeta temporal y lo lee desde ahí; no usa esta ventana).';
   }
   return '❌ ' + t;

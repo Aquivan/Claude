@@ -109,7 +109,7 @@ var TGG_SISTEMA_ = [
 
 function TGG_clave_() {
   var k = PropertiesService.getScriptProperties().getProperty('CIA_KEY_GEMINIGOOGLE') || IA_clave_('Gemini (Google)');
-  if (!k) throw new Error('falta la clave de Gemini (pestaña 🤝 Conciliar con IA → 🔑).');
+  if (!k) throw new Error('falta la clave de Gemini (pestaña 🧠 Asistente IA → 🔑).');
   return k;
 }
 

@@ -140,6 +140,7 @@ function actualizarTodoInterno_(forzar) {
       bitacora_(ss, 'Conciliar IA ERROR', t1, e.message);
       try { CIA_hoja_(ss).getRange('B9').setValue('❌ ' + e.message); } catch (e2) { /* nada */ }
     }
+    try { IA_retirar_(ss); } catch (e) { /* el asistente anterior ya no está */ }
     try { protegerDatosManuales_(ss, cfg.confirmarManual); } catch (e) { bitacora_(ss, 'Protección ERROR', t1, e.message); }
     if (Date.now() - t0 < 300000) {
       try { renderConsulta_(ss); bitacora_(ss, 'Consulta', t1, ''); } catch (e) { bitacora_(ss, 'Consulta ERROR', t1, e.message); }
