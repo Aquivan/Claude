@@ -14,11 +14,26 @@ var WA_GRE_RX_ = /\b(gu[ií]a(s)?|gre|remisi[oó]n)\b/i;
 var WA_GRE_MIN_ = 5;          // la guía abierta espera hasta 5 min sin mensajes
 var WA_GRE_SOLA_MS_ = 60000;  // se arma sola 1 min después del último mensaje (si ya hay archivos)
 
-function WA_greCarpeta_() {
-  var id = WA_prop_('WA_GRE_CARPETA');
-  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
-  var f = DriveApp.createFolder('Vouchers WhatsApp · guías (temporal)');
-  WA_props_().setProperty('WA_GRE_CARPETA', f.getId());
+function WA_greCarpeta_() { return WA_carpetaFija_('WA_GRE_CARPETA', 'Vouchers WhatsApp · guías (temporal)'); }
+
+/**
+ * Carpeta de trabajo única (junto a la hoja de Vouchers): la guardada si sigue viva; si no, una que ya se llame así;
+ * recién al final se crea. Así varias fotos que llegan a la vez no crean carpetas repetidas, y si alguien la borra
+ * (va a la papelera) se usa o crea otra en vez de seguir guardando en la papelera.
+ */
+function WA_carpetaFija_(prop, nombre) {
+  var p = WA_props_(), id = p.getProperty(prop);
+  if (id) { try { var g = DriveApp.getFolderById(id); if (!g.isTrashed()) return g; } catch (e) {} }
+  var padre = null;
+  try { padre = DriveApp.getFileById(WA_HOJA_ID_ || WA_prop_('WA_HOJA_ID')).getParents().next(); } catch (e) {}
+  var donde = [padre || DriveApp.getRootFolder()].concat(padre ? [DriveApp.getRootFolder()] : []), f = null;
+  donde.forEach(function (d) {
+    if (f) return;
+    var it = d.getFoldersByName(nombre);
+    while (it.hasNext() && !f) { var x = it.next(); if (!x.isTrashed()) f = x; }
+  });
+  if (!f) f = (padre || DriveApp.getRootFolder()).createFolder(nombre);
+  p.setProperty(prop, f.getId());
   return f;
 }
 
