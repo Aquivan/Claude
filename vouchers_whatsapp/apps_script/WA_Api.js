@@ -54,13 +54,36 @@ function WA_guardarTextoMsg_(id, texto) {
   texto = String(texto || '').trim();
   if (!id || !texto) return;
   try { CacheService.getScriptCache().put('wa_t_' + id, texto.slice(0, 2000), 21600); } catch (e) {}
+  // Además, por 7 días, solo las referencias (factura, fila del voucher, operación): citar un mensaje de ayer sigue funcionando.
+  var refs = WA_refs_(texto);
+  if (!refs) return;
+  try {
+    var props = WA_props_(), m = JSON.parse(props.getProperty('WA_REFS') || '{}'), hoy = Date.now();
+    m[id] = { r: refs, t: hoy };
+    var ids = Object.keys(m).filter(function (k) { return hoy - m[k].t < 7 * 864e5; }).sort(function (a, b) { return m[b].t - m[a].t; }).slice(0, 250), n = {};
+    ids.forEach(function (k) { n[k] = m[k]; });
+    props.setProperty('WA_REFS', JSON.stringify(n));
+  } catch (e) {}
+}
+
+// "F003-37515 · Fotos!362 · op 280698" del texto de un mensaje ('' si no tiene).
+function WA_refs_(texto) {
+  var t = String(texto || ''), out = [];
+  (t.match(/\b[FEB][A-Z0-9]{3}\s*-\s*\d{1,8}\b/gi) || []).forEach(function (x) { x = 'factura ' + x.replace(/\s/g, '').toUpperCase(); if (out.indexOf(x) < 0) out.push(x); });
+  (t.match(/\b(?:Fotos|Originales)!\d+/gi) || []).forEach(function (x) { if (out.indexOf(x) < 0) out.push(x); });
+  return out.slice(0, 6).join(' · ');
 }
 
 /** Texto del mensaje al que la persona responde (m.context.id), o '' si no responde a ninguno o ya venció. */
 function WA_textoCitado_(m) {
   var id = m && m.context && m.context.id;
   if (!id) return '';
-  try { return CacheService.getScriptCache().get('wa_t_' + id) || ''; } catch (e) { return ''; }
+  try {
+    var t = CacheService.getScriptCache().get('wa_t_' + id);
+    if (t) return t;
+    var x = JSON.parse(WA_props_().getProperty('WA_REFS') || '{}')[id];
+    return x ? '(mensaje anterior) ' + x.r : '';
+  } catch (e) { return ''; }
 }
 
 /* ============================================================ avisos que manda Cobranzas */
