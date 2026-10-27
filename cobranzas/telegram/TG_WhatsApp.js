@@ -116,6 +116,8 @@ function TGW_responder_(q) {
   if (gre) return gre;
   var cre = TGR_atajoWA_(ss, texto, q.citado);
   if (cre) return cre;
+  var compl = TGR_completarWA_(ss, texto, q.citado);   // ✏️ «completa el voucher Fotos!362 (con F003-37515)»
+  if (compl) return compl;
   // ⚡ "sire granix 202601-202609": bajar solo el reporte del SIRE (se confirma con el botón 🚀).
   var sire = TGS_wa_(ss, texto);
   if (sire) return sire;

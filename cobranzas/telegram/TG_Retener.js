@@ -265,6 +265,15 @@ function TGR_paga_(v, f) {
  * q = {doc} o {voucher:{fila|op|monto}} → {lista:[propuesta]} o {motivo, filas}.
  */
 function TGR_directo_(ss, q) {
+  var x = TGR_parear_(ss, q);
+  if (!x || x.motivo) return x;
+  var r = TGR_armarCre_(x.par, x.rucDe);
+  if (r.lista) r.lista[0].completar = TGR_faltaEnVoucher_(x.par, x.rucDe);   // la fila del voucher sin factura: se ofrece completarla
+  return r;
+}
+
+/** Busca el par voucher ↔ factura. q = {doc} o {voucher}. → {par, rucDe} | {motivo} | null. */
+function TGR_parear_(ss, q) {
   var cfg = leerConfig_(ss), rucDe = {};
   Object.keys(cfg.nombreEmpresa || {}).forEach(function (r) { rucDe[String(cfg.nombreEmpresa[r])] = r; });
   var facturas = TGR_porPagar_(ss), vs = TGR_vouchersRecientes_(cfg), pares = [];
@@ -275,6 +284,7 @@ function TGR_directo_(ss, q) {
     if (!mios.length) return { motivo: 'No encontré ese voucher en la hoja de Vouchers (últimos 70 días). Escríbalo así: «emite la retención del voucher Fotos!362» o «… de la op 3013760».' };
     if (mios.length > 1) return { motivo: 'Hay ' + mios.length + ' vouchers con ese dato: ' + mios.slice(0, 4).map(function (v) { return v.fila + ' (S/ ' + TG_num_(v.monto) + ')'; }).join(', ') + '. Dígame cuál (ej. Fotos!362).' };
     facturas.forEach(function (f) { if (!q.doc || f.doc === q.doc) { var como = TGR_paga_(mios[0], f); if (como) pares.push({ v: mios[0], f: f, como: como }); } });
+    if (!pares.length && q.doc) facturas.filter(function (f) { return f.doc === q.doc; }).forEach(function (f) { pares.push({ v: mios[0], f: f, como: 'usted lo indicó (el monto no cuadra exacto: revíselo)' }); });
     if (!pares.length) return { motivo: 'El voucher ' + mios[0].fila + ' (S/ ' + TG_num_(mios[0].monto) + (mios[0].prov ? ', ' + mios[0].prov : '') + ') no cuadra con ninguna factura por pagar' +
       (q.doc ? ' ' + q.doc : '') + '. Dígame la factura: «emite la retención de F003-37515 con el voucher ' + mios[0].fila + '».' };
   } else {
@@ -285,7 +295,48 @@ function TGR_directo_(ss, q) {
   }
   // El de la factura escrita primero; luego el más reciente.
   pares.sort(function (a, b) { return (/escrita/.test(b.como) ? 1 : 0) - (/escrita/.test(a.como) ? 1 : 0) || b.v.fecha - a.v.fecha; });
-  var p = pares[0], f = p.f, v = p.v;
+  return { par: pares[0], rucDe: rucDe };
+}
+
+/** Datos para completar la fila del voucher (empresa, ID usuario, RUC del proveedor, factura) si le faltan. null si ya está. */
+function TGR_faltaEnVoucher_(par, rucDe) {
+  var v = par.v, f = par.f, emp = rucDe[f.empresa] || '';
+  if (TGR_normDoc_(v.refs) === f.doc && v.ruc && (v.empresa || v.idUsuario)) return null;
+  return { fila: v.fila, empresa: emp || f.empresa, proveedor_ruc: f.ruc, facturas: f.documento, motivo: '🧾 ' + f.doc + ' de ' + f.contraparte + ' (cuadra por ' + par.como + ')' };
+}
+
+/** Propone (no escribe) completar la fila del voucher: [{id, fila, columna, actual, nuevo, motivo, aviso}] para ✅. */
+function TGR_cambiosVoucher_(ss, datos) {
+  if (!datos) return [];
+  var c = ANA_ctx_(ss);
+  c.cambios = [];
+  ANX_HERR_.asignar_voucher(c, datos);
+  var nuevos = c.cambios.filter(function (x) { return !/mismo dato/.test(x.aviso || ''); });
+  if (!nuevos.length) return [];
+  ANX_guardarPropuestos_(ss, nuevos);
+  return nuevos.map(function (x) { return { id: x.id, fila: x.hoja + '!' + x.fila, columna: x.encabezado, actual: x.actual, nuevo: x.nuevo, motivo: x.motivo, aviso: x.aviso }; });
+}
+
+/** "completa el voucher Fotos!362" / "completa la factura del voucher op 280698" / "asigna F003-37515 a Fotos!362". */
+var TGR_COMPLETA_RX_ = /\b(complet|llen|asign|registr|pon|agreg)\w*\b/i;
+function TGR_completarPedido_(ss, texto, citado) {
+  if (!TGR_COMPLETA_RX_.test(texto) || TGR_esPedido_(texto)) return null;
+  var q = { doc: TGR_normDoc_(texto), voucher: TGR_normVoucher_(texto) || (!TGR_normDoc_(texto) ? TGR_normVoucher_(citado) : null) };
+  if (!q.voucher) return null;   // sin voucher lo atiende la IA
+  if (!q.doc && TGR_normDoc_(citado)) q.doc = TGR_normDoc_(citado);
+  var x = TGR_parear_(ss, q);
+  if (!x) return { texto: 'No encontré una factura por pagar que cuadre con ese voucher. Dígame cuál: «completa Fotos!362 con F003-37515».' };
+  if (x.motivo) return { texto: x.motivo };
+  var datos = TGR_faltaEnVoucher_(x.par, x.rucDe);
+  if (!datos) return { texto: '✅ ' + x.par.v.fila + ' ya tiene la factura ' + x.par.f.doc + ', la empresa y el RUC del proveedor.' };
+  var cambios = TGR_cambiosVoucher_(ss, datos);
+  return { texto: '🧾 ' + x.par.v.fila + ' (S/ ' + TG_num_(x.par.v.monto) + ') paga ' + x.par.f.doc + ' de ' + x.par.f.contraparte + ' · ' + x.par.f.empresa + ' (cuadra por ' + x.par.como + ').' +
+    (cambios.length ? '' : '\nNo hay nada que completar.'), cambios: cambios };
+}
+
+/** Lo que quedó de TGR_directo_: con el par (voucher, factura) arma el CRE. */
+function TGR_armarCre_(p, rucDe) {
+  var f = p.f, v = p.v;
   var filas = [{ empresa: f.empresa, contraparte: f.contraparte, documento: f.documento, total: f.total, pagado: f.pagado, estado: f.estado, retener: f.retener }];
   if (!f.retener) return { motivo: 'La factura ' + f.doc + ' no lleva retención: la empresa compradora no era agente de retención en esa fecha.', filas: filas };
   if (/^No:/.test(f.retener)) return { motivo: 'No corresponde emitir comprobante de retención: ' + f.retener.replace(/^No:\s*/, '') + ' (según la hoja de Cobranzas).', filas: filas };
@@ -366,7 +417,13 @@ function TGR_atajoTG_(ctx, texto) {
   var cob = TG_cfg_(ctx.ss).cob, x;
   var q = { doc: TGR_normDoc_(texto) || TGR_normDoc_(ctx.citado), voucher: TGR_normVoucher_(texto) || TGR_normVoucher_(ctx.citado), empresa: '' };
   try { x = TGR_buscar_(ctx.ss, cob, q); } catch (e) { TG_enviar_(ctx.chatId, '⚠️ No pude leer las retenciones: ' + TG_esc_(e.message)); return true; }
-  if (x.lista) { TGR_proponerTG_(ctx, x.lista, '🧾 <b>Comprobante de retención por emitir' + (q.doc ? ' · ' + q.doc : '') + '</b>'); return true; }
+  if (x.lista) {
+    TGR_proponerTG_(ctx, x.lista, '🧾 <b>Comprobante de retención por emitir' + (q.doc ? ' · ' + q.doc : '') + '</b>');
+    var cam = [];
+    try { cam = TGR_cambiosVoucher_(ctx.ss, x.lista[0].completar); } catch (e) { console.warn('Completar voucher: ' + e.message); }
+    if (cam.length) TG_mostrarCambios_(ctx, cam);   // ✏️ la fila del voucher sin factura/empresa: ✅ Escribir
+    return true;
+  }
   TG_enviar_(ctx.chatId, '🧾 <b>' + (q.doc ? 'Factura ' + TG_esc_(q.doc) : q.voucher ? 'Voucher' : 'Comprobantes de retención') + '</b>\n' + TG_esc_(x.motivo) + TGR_filasTexto_(x.filas),
     [[{ text: '🧾 Ver todos los pendientes', callback_data: 'c:emitir' }]]);
   return true;
@@ -481,8 +538,39 @@ function TGR_atajoWA_(ss, texto, citado) {
   var q = { doc: TGR_normDoc_(texto) || TGR_normDoc_(citado), voucher: TGR_normVoucher_(texto) || TGR_normVoucher_(citado), empresa: '' };
   if (!q.doc && !q.voucher) return TGR_listaWA_(ss);
   var x = TGR_buscar_(ss, TG_cfg_(ss).cob, q);
-  if (x.lista) return { ok: true, respuesta: '🧾 *Comprobante de retención por emitir' + (q.doc ? ' · ' + q.doc : '') + '*', tablas: [], sugerencias: [], archivos: [], avisos: [], botones: TGR_botonesWA_(x.lista) };
+  if (x.lista) {
+    var bts = TGR_botonesWA_(x.lista), cam = [];
+    try { cam = TGR_cambiosVoucher_(ss, x.lista[0].completar); } catch (e) { console.warn('Completar voucher: ' + e.message); }
+    if (cam.length) bts.push(TGR_botonCambiosWA_(cam));
+    return { ok: true, respuesta: '🧾 *Comprobante de retención por emitir' + (q.doc ? ' · ' + q.doc : '') + '*', tablas: [], sugerencias: [], archivos: [], avisos: [], botones: bts };
+  }
   return { ok: true, respuesta: '🧾 *' + (q.doc ? 'Factura ' + q.doc : 'Voucher') + '*\n' + x.motivo + TGR_filasTexto_(x.filas, true), tablas: [], sugerencias: [], archivos: [], avisos: [] };
+}
+
+/** WhatsApp: botón ✅ Escribir para completar la fila del voucher (TGQ_botonWA_). */
+function TGR_botonCambiosWA_(cam) {
+  return { k: TG_guardarBoton_({ t: 'cambios', ids: cam.map(function (x) { return x.id; }) }),
+    texto: '✏️ ¿Completo la fila del voucher en la hoja de Vouchers? (solo celdas vacías, se puede deshacer)\n' +
+      cam.map(function (x) { return '• ' + x.fila + ' · ' + x.columna + ': ' + x.nuevo; }).join('\n'),
+    opciones: [{ op: 'si', titulo: '✅ Escribir' }, { op: 'no', titulo: '✖ No' }] };
+}
+
+/** Telegram: "completa el voucher Fotos!362". true si lo atendió. */
+function TGR_completarTG_(ctx, texto) {
+  var r = TGR_completarPedido_(ctx.ss, texto, ctx.citado);
+  if (!r) return false;
+  TG_enviar_(ctx.chatId, TG_esc_(r.texto));
+  if ((r.cambios || []).length) TG_mostrarCambios_(ctx, r.cambios);
+  return true;
+}
+
+/** WhatsApp: lo mismo; null si el texto no lo pide. */
+function TGR_completarWA_(ss, texto, citado) {
+  var r = TGR_completarPedido_(ss, texto, citado);
+  if (!r) return null;
+  var out = { ok: true, respuesta: r.texto, tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  if ((r.cambios || []).length) out.botones = [TGR_botonCambiosWA_(r.cambios)];
+  return out;
 }
 
 function TGR_listaWA_(ss) {
