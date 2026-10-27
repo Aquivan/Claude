@@ -19,15 +19,7 @@ var WA_PREGUNTA_RX_ = /\?|¿|\b(cu[aá]nto|cu[aá]ntos|qu[eé]|cu[aá]l|cu[aá]l
 
 function WA_preguntarNombre_() { return WA_prop_('WA_PREGUNTAR_NOMBRE') !== '0'; }
 
-function WA_carpetaEspera_() {
-  var p = WA_props_(), id = p.getProperty('WA_ESPERA_ID');
-  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
-  var padre = null;
-  try { padre = DriveApp.getFileById(WA_HOJA_ID_ || WA_prop_('WA_HOJA_ID')).getParents().next(); } catch (e) {}
-  var f = (padre || DriveApp.getRootFolder()).createFolder('Vouchers WhatsApp · en espera de nombre');
-  p.setProperty('WA_ESPERA_ID', f.getId());
-  return f;
-}
+function WA_carpetaEspera_() { return WA_carpetaFija_('WA_ESPERA_ID', 'Vouchers WhatsApp · en espera de nombre'); }   // WA_Gre.js
 
 function WA_leerJson_(k) { try { return JSON.parse(WA_prop_(k) || 'null'); } catch (e) { return null; } }
 
