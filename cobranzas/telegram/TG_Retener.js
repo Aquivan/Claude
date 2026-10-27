@@ -523,7 +523,7 @@ function TGR_alBotonTG_(ctx, datos, op, k) {
     if (TG_yaVisto_('cre' + modo + k)) return TG_enviar_(ctx.chatId, 'Eso ya se pidió.');
     if (op === 'ok') TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
     try { TGR_pedir_(cfg, p.s, modo); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ No pude pedirlo a GitHub: ' + TG_esc_(e.message)); }
-    TG_seguir_(ctx.chatId, TGR_WF_, null, p.titulo, { tipo: 'cre', modo: modo, k: k, total: p.total });
+    TG_seguir_(ctx.chatId, TGR_WF_, null, p.titulo, { tipo: 'cre', modo: modo, k: k, total: p.total, docs: p.s.documentos.map(function (x) { return x.serie + '-' + x.numero; }) });
     return TG_enviar_(ctx.chatId, (modo === 'emitir' ? '🧾 <b>Emitiendo</b> en SUNAT' : '👁 <b>Preparando la vista previa</b> en SUNAT (no se emite)') +
       ': ' + TG_esc_(p.titulo) + '\nTarda 1–2 minutos; le aviso aquí el resultado.');
   }
@@ -625,7 +625,7 @@ function TGR_constancias_(ss, texto, citado, clave) {
       if (cre && !buscar.some(function (b) { return b.cre === cre; })) buscar.push({ cre: cre, prov: dP >= 0 ? String(r[dP]).replace(/\D/g, '') : '', factura: d });
     });
   });
-  if (!buscar.length) return { lista: [], sunat: TGR_datosSunat_(ss, docs), motivo: 'No encontré comprobante de retención para ' + docs.join(', ') + ' en la hoja de Retenciones ' +
+  if (!buscar.length) return { lista: [], sunat: TGR_datosSunat_(ss, docs, texto + '\n' + citado), motivo: 'No encontré comprobante de retención para ' + docs.join(', ') + ' en la hoja de Retenciones ' +
     '(si se emitió hace poco o directo en SOL, todavía no está descargado). No le mando otro comprobante en su lugar.' };
   var lista = [];
   buscar.forEach(function (b) {
@@ -637,7 +637,7 @@ function TGR_constancias_(ss, texto, citado, clave) {
         retenido: eR >= 0 ? aNumero_(r[eR]) : 0, url: eU >= 0 ? String(r[eU] || '') : '', ruta: eRuta >= 0 ? String(r[eRuta] || '') : '' });
     });
   });
-  if (!lista.length) return { lista: [], sunat: TGR_datosSunat_(ss, docs.concat(buscar.map(function (b) { return b.cre; }))),
+  if (!lista.length) return { lista: [], sunat: TGR_datosSunat_(ss, docs.concat(buscar.map(function (b) { return b.cre; })), texto + '\n' + citado),
     motivo: 'La factura tiene el comprobante ' + buscar.map(function (b) { return b.cre; }).join(', ') + ', pero no lo encontré en Emitidas de Retenciones.' };
   return { lista: lista.slice(0, 5), deUltimo: deUltimo };
 }
@@ -645,14 +645,36 @@ function TGR_constancias_(ss, texto, citado, clave) {
 /* ---------- 🚀 bajarla de SUNAT (retenciones-descargar.yml) y mandarla apenas llegue ---------- */
 
 /** Empresa (RUC), proveedor y documentos para pedir la descarga a SUNAT; null si no se sabe la empresa. */
-function TGR_datosSunat_(ss, docs) {
-  var cfg = leerConfig_(ss), rucDe = {}, emp = '', prov = '';
+function TGR_datosSunat_(ss, docs, texto) {
+  var cfg = leerConfig_(ss), rucDe = {}, emp = '', prov = '', provNombre = '';
   Object.keys(cfg.nombreEmpresa || {}).forEach(function (r) { rucDe[String(cfg.nombreEmpresa[r])] = r; });
-  TGR_porPagar_(ss).forEach(function (f) { if (!emp && docs.indexOf(f.doc) >= 0 && rucDe[f.empresa]) { emp = rucDe[f.empresa]; prov = f.ruc; } });
+  // 1) La empresa y el proveedor que dice el mensaje («BKF → ENERGY PERU COMPANY…»): manda sobre todo lo demás.
+  var t = String(texto || ''), m = t.match(/([^\n:·]{2,60}?)\s*→\s*([^\n(·]{3,80})/);
+  if (m) { emp = TGR_empresaEn_(cfg, m[1]); provNombre = m[2].trim(); }
+  if (!emp) emp = TGR_empresaEn_(cfg, t);
+  // 2) Una factura por pagar con ese número (de esa empresa, si ya se sabe). Un "E001-90" puede ser factura de otra empresa: no se mezcla.
+  TGR_porPagar_(ss).forEach(function (f) {
+    if (prov || docs.indexOf(f.doc) < 0 || !rucDe[f.empresa] || (emp && rucDe[f.empresa] !== emp)) return;
+    if (provNombre && !ANA_coincide_(provNombre, f.ruc, f.contraparte)) return;
+    emp = rucDe[f.empresa]; prov = f.ruc;
+  });
   if (!emp && (cfg.grupo || []).length === 1) emp = cfg.grupo[0];
   if (!emp) return null;
   var hoy = new Date(), ant = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-  return { empresa: emp, prov: prov, docs: docs, periodo: Utilities.formatDate(ant, 'America/Lima', 'yyyyMM') };
+  return { empresa: emp, nombre: cfg.nombreEmpresa[emp] || emp, prov: prov, provNombre: provNombre, docs: docs, periodo: Utilities.formatDate(ant, 'America/Lima', 'yyyyMM') };
+}
+
+/** RUC de la empresa del grupo nombrada en el texto (nombre corto o RUC), o ''. */
+function TGR_empresaEn_(cfg, t) {
+  t = String(t || '');
+  var ruc = (t.match(/\b(20\d{9})\b/) || [])[1];
+  if (ruc && (cfg.grupo || []).indexOf(ruc) >= 0) return ruc;
+  var u = normNombre_(t), out = '';
+  Object.keys(cfg.nombreEmpresa || {}).forEach(function (r) {
+    var n = normNombre_(cfg.nombreEmpresa[r]);
+    if (!out && n && (' ' + u + ' ').indexOf(' ' + n + ' ') >= 0) out = r;
+  });
+  return out;
 }
 
 /** Botón 🚀: pide a GitHub bajar los CRE de esa empresa (mes anterior y actual, solo PDF) y lo sigue. → texto. */
@@ -662,7 +684,7 @@ function TGR_pedirSunat_(acc, chat) {
   TG_gh_(cfg, '/actions/workflows/retenciones-descargar.yml/dispatches', 'post', { ref: cfg.rama,
     inputs: { empresa: d.empresa, periodo: d.periodo, hasta: '', archivos: 'pdf', guardar: true } });
   TG_seguir_(chat, 'retenciones-descargar.yml', null, 'constancia de retención ' + d.docs.join(', '), { tipo: 'constancia', d: d });
-  return '🚀 Bajando de SUNAT las retenciones de ' + TG_nombreEmpresa_(cfg, d.empresa) + ' (solo consulta, no emite nada). En 3–5 minutos le mando la constancia de ' + d.docs.join(', ') + '.';
+  return '🚀 Bajando de SUNAT las retenciones de ' + (d.nombre || TG_nombreEmpresa_(cfg, d.empresa)) + (d.provNombre ? ' (a ' + d.provNombre + ')' : '') + ' (solo consulta, no emite nada). En 3–5 minutos le mando la constancia de ' + d.docs.join(', ') + '.';
 }
 
 function TGR_ghRaw_(cfg, ruta) {
@@ -685,11 +707,12 @@ function TGR_constanciaFin_(cfg, s, r) {
     var csv = function (x) { var t = Utilities.parseCsv(x.getContentText('UTF-8')); var h = t[0] || []; return t.slice(1).map(function (f) { var o = {}; h.forEach(function (k, j) { o[k] = f[j]; }); return o; }); };
     if (rc) csv(rc).forEach(function (o) {
       if (o.tipo !== 'Emitido') return;
+      if ((d.prov && o.ruc_proveedor !== d.prov) || (d.provNombre && !ANA_coincide_(d.provNombre, o.ruc_proveedor, o.proveedor))) return;   // solo el proveedor pedido
       pdfDe[TGR_normDoc_('X_' + o.comprobante)] = { pdf: o.pdf, proveedor: o.proveedor, fecha: o.fecha_emision, retenido: o.importe_retenido, cre: o.comprobante };
       if (d.docs.indexOf(TGR_normDoc_('X_' + o.comprobante)) >= 0 && cres.indexOf(o.comprobante) < 0) cres.push(o.comprobante);
     });
     if (rd) csv(rd).forEach(function (o) {
-      if (o.tipo !== 'Emitido' || (d.prov && o.ruc_proveedor !== d.prov)) return;
+      if (o.tipo !== 'Emitido' || (d.prov && o.ruc_proveedor !== d.prov) || (d.provNombre && !ANA_coincide_(d.provNombre, o.ruc_proveedor, o.proveedor))) return;
       if (d.docs.indexOf(TGR_normDoc_('X_' + o.doc_numero)) >= 0 && cres.indexOf(o.comprobante) < 0) cres.push(o.comprobante);
     });
   });
@@ -734,14 +757,15 @@ function TGR_constanciaTG_(ctx, texto) {
   var r = TGR_constancias_(ctx.ss, texto, ctx.citado, ctx.chatId);
   if (!r.lista.length) {
     var k0 = r.sunat ? TG_guardarBoton_({ t: 'consunat', d: r.sunat }) : '';
-    TG_enviar_(ctx.chatId, '📄 ' + TG_esc_(r.motivo) + (k0 ? '\n\n¿Lo bajo de SUNAT ahora? (solo consulta: no emite nada; tarda unos 3–5 minutos y se lo mando apenas llegue)' : ''),
+    TG_enviar_(ctx.chatId, '📄 ' + TG_esc_(r.motivo) + (k0 ? '\n\n¿Bajo de SUNAT las retenciones de <b>' + TG_esc_(r.sunat.nombre) + '</b>' + (r.sunat.provNombre ? ' (a ' + TG_esc_(r.sunat.provNombre) + ')' : '') +
+      ' y le mando la constancia? Solo consulta: no emite nada; tarda unos 3–5 minutos. Si la empresa no es esa, toque ✖ y escríbame: «constancia de retención de la F003-37515».' : ''),
       k0 ? [[{ text: '🚀 Bajarlo de SUNAT ahora', callback_data: 'k:' + k0 + ':si' }, { text: '✖ No', callback_data: 'x' }]] : null);
     return true;
   }
   r.lista.forEach(function (x) {
     var b = TGR_pdfConstancia_(x), t = TGR_textoConstancia_(x);
     if (b) { TG_enviarArchivo_(ctx.chatId, b.setName('Constancia retencion ' + x.cre + '.pdf'), '📄 ' + TG_esc_(t) + (r.deUltimo ? '\n<i>(tomé la factura ' + TG_esc_(r.deUltimo) + ': lo último que me envió)</i>' : '')); return; }
-    var sun = TGR_datosSunat_(ctx.ss, [TGR_normDoc_('X_' + x.cre), x.factura].filter(Boolean)), k1 = sun ? TG_guardarBoton_({ t: 'consunat', d: sun }) : '';
+    var sun = TGR_datosSunat_(ctx.ss, [TGR_normDoc_('X_' + x.cre), x.factura].filter(Boolean), x.empresa + ' → ' + x.proveedor), k1 = sun ? TG_guardarBoton_({ t: 'consunat', d: sun }) : '';
     TG_enviar_(ctx.chatId, '📄 ' + TG_esc_(t) + '\n⚠️ Aún no tengo su PDF en Drive.', k1 ? [[{ text: '🚀 Bajarlo de SUNAT ahora', callback_data: 'k:' + k1 + ':si' }]] : null);
   });
   return true;
@@ -752,7 +776,8 @@ function TGR_constanciaWA_(ss, texto, citado, clave) {
   if (!TGR_esConstancia_(texto)) return null;
   var r = TGR_constancias_(ss, texto, citado, clave), L = [], botones = [];
   var ofrecer = function (sun, cual) {
-    if (sun && botones.length < 3) botones.push({ k: TG_guardarBoton_({ t: 'consunat', d: sun }), texto: '¿Bajo ' + cual + ' de SUNAT ahora? Solo consulta (no emite nada); tarda unos 3–5 minutos y se lo mando apenas llegue.',
+    if (sun && botones.length < 3) botones.push({ k: TG_guardarBoton_({ t: 'consunat', d: sun }), texto: '¿Bajo ' + cual + ' de SUNAT ahora, de *' + sun.nombre + '*' + (sun.provNombre ? ' (a ' + sun.provNombre + ')' : '') +
+      '? Solo consulta (no emite nada); tarda unos 3–5 minutos y se lo mando apenas llegue. Si la empresa no es esa, toque ✖ y escríbame la factura.',
       opciones: [{ op: 'si', titulo: '🚀 Bajar de SUNAT' }, { op: 'no', titulo: '✖ No' }] });
   };
   if (!r.lista.length) {
@@ -763,7 +788,7 @@ function TGR_constanciaWA_(ss, texto, citado, clave) {
     var b = TGR_pdfConstancia_(x), t = TGR_textoConstancia_(x), ok = false;
     if (b) { try { ok = TGC_wa_({ tipo: 'documento', numero: String(clave).slice(2), mime: 'application/pdf', base64: Utilities.base64Encode(b.getBytes()), nombre: 'Constancia retencion ' + x.cre + '.pdf', texto: '📄 ' + t }); } catch (e) {} }
     L.push((ok ? '📄 ' : '⚠️ ') + t + (ok ? '' : b ? ' — no pude adjuntarlo' + (x.url ? ': ' + x.url : '') : ' — aún no tengo su PDF en Drive.'));
-    if (!b) ofrecer(TGR_datosSunat_(ss, [TGR_normDoc_('X_' + x.cre), x.factura].filter(Boolean)), 'el PDF de ' + x.cre);
+    if (!b) ofrecer(TGR_datosSunat_(ss, [TGR_normDoc_('X_' + x.cre), x.factura].filter(Boolean), x.empresa + ' → ' + x.proveedor), 'el PDF de ' + x.cre);
   });
   return { ok: true, respuesta: (r.lista.length > 1 ? 'Constancias de retención:\n' : '') + L.join('\n') + (r.deUltimo ? '\n(tomé la factura ' + r.deUltimo + ': lo último que me envió)' : ''),
     tablas: [], sugerencias: [], archivos: [], avisos: [], botones: botones.length ? botones : undefined };
@@ -784,7 +809,7 @@ function TGR_avisarFin_(cfg, s, r) {
   var ok = nota(/^CRE emitido/), vista = nota(/^CRE vista/), no = nota(/^CRE no emitido/), sin = nota(/^CRE sin confirmar/);
   var html, k = s.extra.k;
   // A qué pedido corresponde (puede haber varios del mismo comprobante).
-  var t = s.texto + ' (' + (s.extra.modo === 'emitir' ? 'emisión' : 'vista previa') + ' pedida a las ' + Utilities.formatDate(new Date(s.desde), 'America/Lima', 'HH:mm') + ')';
+  var t = s.texto + ((s.extra.docs || []).length ? ' · factura ' + s.extra.docs.join(', ') : '') + ' (' + (s.extra.modo === 'emitir' ? 'emisión' : 'vista previa') + ' pedida a las ' + Utilities.formatDate(new Date(s.desde), 'America/Lima', 'HH:mm') + ')';
   if (ok) {
     var url = '';
     try { url = TGR_mandarPdf_(s.chat, r.id); } catch (e) { console.warn('PDF del CRE: ' + e.message); }
@@ -889,7 +914,7 @@ function TGR_botonWA_(acc, k, op, numero) {
   var modo = op === 'ok' ? 'emitir' : 'vista';
   if (TG_yaVisto_('cre' + modo + k)) return { ok: true, respuesta: 'Eso ya se pidió.' };
   try { TGR_pedir_(cfg, p.s, modo); } catch (e) { return { ok: false, error: 'No pude pedirlo a GitHub: ' + e.message }; }
-  TG_seguir_(clave, TGR_WF_, null, p.titulo, { tipo: 'cre', modo: modo, k: k, total: p.total });
+  TG_seguir_(clave, TGR_WF_, null, p.titulo, { tipo: 'cre', modo: modo, k: k, total: p.total, docs: p.s.documentos.map(function (x) { return x.serie + '-' + x.numero; }) });
   return { ok: true, seguir: true, respuesta: (modo === 'emitir' ? '🧾 *Emitiendo* en SUNAT' : '👁 *Preparando la vista previa* en SUNAT (no se emite)') +
     ': ' + p.titulo + '\nTarda 1–2 minutos; le aviso aquí el resultado.' };
 }
