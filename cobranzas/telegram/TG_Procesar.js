@@ -321,7 +321,7 @@ function TGP_ejecutar_(ss, k) {
     var job = { id: accId, canal: p.canal, destino: p.destino, clave: p.clave, estado: 'separar', t: Date.now(), nombre: p.nombre, fecha: p.fecha, ordenante: p.ordenante, pestana: p.pestana || '',
       items: nuevos.map(function (it) { return { archivo: it.archivo, mime: it.mime, pagina: it.pagina, fac: it.fac, v: it.v }; }) };
     PropertiesService.getScriptProperties().setProperty(TGP_PROP_JOB_ + accId, JSON.stringify(job));
-    TGP_programar_(1);
+    TGP_reprogramar_();
     lineas.push('📥 Separando ' + (nuevos.length > 1 ? 'los ' + nuevos.length + ' vouchers' : 'el voucher') + ' y mandándolo a la hoja de Vouchers como <b>' + TG_esc_(TGE_corta_(p.fecha) + ' ' + p.nombre) + '</b>… le aviso cuando quede registrado' + (nuevos.some(function (x) { return x.fac && x.fac.serie; }) ? ' y con la factura completada' : '') + '.');
   }
   if (!lineas.length) lineas.push('No había nada que hacer.');
@@ -353,6 +353,15 @@ function TGP_programar_(minutos) {
   if (!hay) ScriptApp.newTrigger('TGP_trabajar').timeBased().after(Math.max(1, minutos) * 60 * 1000).create();
 }
 
+/**
+ * Borra los disparadores de TGP_trabajar (un disparador de una sola vez sigue listado después de correr) y deja
+ * uno nuevo en 1 min. Se llama ANTES de trabajar: si la ejecución se corta (límite de 6 min), el trabajo sigue.
+ */
+function TGP_reprogramar_() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGP_trabajar') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('TGP_trabajar').timeBased().after(60 * 1000).create();
+}
+
 /** Arranca el trabajo YA (en la misma ejecución del botón ✅), sin esperar al disparador. */
 function TGP_trabajarYa_() {
   try { TGP_trabajar(true).catch(function (e) { console.error('Procesar documento: ' + (e && e.stack || e)); }); }
@@ -363,13 +372,12 @@ function TGP_trabajarYa_() {
 async function TGP_trabajar(ya) {
   var props = PropertiesService.getScriptProperties();
   // Uno a la vez: si otra ejecución está trabajando, este disparador vuelve en un minuto.
-  if (Date.now() - Number(props.getProperty('TGP_TRABAJANDO') || 0) < 5 * 60000) { if (!ya) TGP_programar_(1); return; }
+  if (Date.now() - Number(props.getProperty('TGP_TRABAJANDO') || 0) < 5 * 60000) { if (!ya) TGP_reprogramar_(); return; }
   props.setProperty('TGP_TRABAJANDO', String(Date.now()));
-  if (!ya) ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGP_trabajar') ScriptApp.deleteTrigger(t); });
+  TGP_reprogramar_();   // respaldo antes de trabajar: un trabajo nunca queda huérfano
   var seguir = false;
   try { seguir = await TGP_vuelta_(props); } finally { props.deleteProperty('TGP_TRABAJANDO'); }
-  if (seguir) TGP_programar_(1);
-  else ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGP_trabajar') ScriptApp.deleteTrigger(t); });
+  if (!seguir) ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGP_trabajar') ScriptApp.deleteTrigger(t); });
 }
 
 async function TGP_vuelta_(props) {
@@ -477,7 +485,7 @@ function TGP_revisar_(ss, job) {
     var fuente = f.hoja + '!' + f.fila;
     if (/^\[DUPLICADO\]/.test(f.op)) { lineas.push('⚠️ ' + fuente + ': la hoja dice que ya estaba registrado (duplicado).'); return; }
     if (/^\[/.test(f.op)) { lineas.push('⚠️ ' + fuente + ': no pudo leer el voucher (' + TG_esc_(f.op) + ').'); return; }
-    var l = '✅ Registrado en <b>' + fuente + '</b> (' + TGP_monto_(it.v) + ')';
+    var l = '✅ <b>' + TG_esc_(it.nuevo.nombre) + '</b> registrado en <b>' + fuente + '</b> (' + TGP_monto_(it.v) + ')';
     if (it.fac && it.fac.serie) {
       try {
         ANX_HERR_.asignar_voucher(c, { fila: fuente, empresa: it.fac.empresa, proveedor_ruc: it.fac.proveedor, facturas: it.fac.serie, motivo: '🧾 Procesar documento: ' + it.fac.serie });
@@ -496,7 +504,9 @@ function TGP_revisar_(ss, job) {
   var s = function (ms) { return Math.max(0, Math.round(ms / 1000)) + ' s'; }, fin = Date.now();
   var tiempos = job.tSep ? '\n⏱ <i>' + s(fin - job.t) + ' en total: separar ' + s(job.tSep - job.t) + ' · hoja de Vouchers ' + s(tFilas - job.tSep) +
     ' · factura ' + s(fin - tFilas) + '</i>' : '';
-  TGP_avisar_(job, '🧾 <b>Listo</b>\n' + lineas.join('\n') + tiempos);
+  // Aviso que llega tarde (el trabajo estuvo detenido): que se note que es de un envío anterior.
+  var tarde = fin - job.t > 2 * 3600000 ? ' · <i>aviso atrasado de su envío del ' + Utilities.formatDate(new Date(job.t), 'America/Lima', 'dd/MM HH:mm') + '</i>' : '';
+  TGP_avisar_(job, '🧾 <b>Listo</b>' + tarde + '\n' + lineas.join('\n') + (tarde ? '' : tiempos));
   return true;
 }
 
