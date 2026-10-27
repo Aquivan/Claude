@@ -112,7 +112,8 @@ function TG_manejar_(u) {
   if (TGQ_RX_.test(texto)) return TGQ_tg_(ctx, texto);   // 📋 "procesados hoy sonia" (TG_Procesados.js)
   if (TGG_datoTG_(ctx, texto)) return;   // 🚚 dato suelto para la guía abierta ("es privado", "peso 30000")
   if (TGG_atajoTG_(ctx, texto)) return;   // 🚚 "emite la guía de remisión" (antes o después de las fotos) · "listo"
-  if (TGR_atajoTG_(ctx, texto)) return;   // 🧾 "emite la retención de F001-215" (o citando el mensaje)
+  if (TGR_atajoTG_(ctx, texto)) return;
+  if (TGR_completarTG_(ctx, texto)) return;   // ✏️ «completa el voucher Fotos!362 (con F003-37515)»   // 🧾 "emite la retención de F001-215" (o citando el mensaje)
   TG_preguntar_(ctx, texto, []);
 }
 
