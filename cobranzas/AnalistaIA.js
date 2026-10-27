@@ -649,7 +649,7 @@ function ANA_hojaResultado_(ss, limpiar) {
   var sh = ss.getSheetByName(ANA_HOJA_) || ss.insertSheet(ANA_HOJA_);
   if (limpiar) { if (sh.getFilter()) sh.getFilter().remove(); sh.clear(); }
   if (!limpiar && sh.getRange(1, 1).getValue()) return sh;
-  sh.getRange(1, 1, 1, 12).merge().setValue('💬  RESULTADO DE LA IA  ·  escriba su pregunta en la celda amarilla y use 🤝 Conciliar con IA → 💬 Preguntar a la IA')
+  sh.getRange(1, 1, 1, 12).merge().setValue('💬  RESULTADO DE LA IA  ·  escriba su pregunta en la celda amarilla y use 🧠 Asistente IA → 💬 Preguntar a la IA')
     .setFontSize(12).setFontWeight('bold').setFontColor('#F8FAFC').setBackground(COLOR.OSCURO);
   sh.getRange(2, 1).setValue('Pregunta ✏️').setFontWeight('bold');
   sh.getRange(2, 2, 1, 11).merge().setWrap(true).setBackground('#FFF8E1');
@@ -673,7 +673,7 @@ function ANA_escribir_(ss, pregunta, out, ia) {
   var cambios = out.c.cambios || [];
   if (cambios.length) {
     if (!out.c.lotePropuestos) out.c.lotePropuestos = ANX_guardarPropuestos_(ss, cambios);
-    sh.getRange(fila, 1).setValue('✏️ Cambios propuestos en la hoja de vouchers (' + cambios.length + ') · marque ✔ y use 🤝 Conciliar con IA → ✅ Aplicar cambios marcados de la IA')
+    sh.getRange(fila, 1).setValue('✏️ Cambios propuestos en la hoja de vouchers (' + cambios.length + ') · marque ✔ y use 🧠 Asistente IA → ✅ Aplicar cambios marcados de la IA')
       .setFontWeight('bold').setFontSize(11).setFontColor('#9A3412');
     fila++;
     sh.getRange(fila, 1, 1, 2).setValues([['Reemplazar si ya tiene dato', false]]).setFontSize(9);
@@ -728,7 +728,7 @@ function ANA_mensajeError_(e) {
     'Se reintentó varias veces y también con el modelo de siempre. Vuelva a preguntar en unos minutos, o escriba otro modelo en la celda B11 del 🔍 Auditor IA.';
   if (/\b429\b|RESOURCE_EXHAUSTED|quota|rate/i.test(m)) return '⚠️ Se llegó al límite de consultas de la clave de IA (error 429). Espere 1–2 minutos y vuelva a preguntar; ' +
     'si pasa seguido, la clave gratuita se quedó corta para el día.';
-  if (/\b(401|403)\b|API key|PERMISSION/i.test(m)) return '⚠️ La clave de IA no es válida o no tiene permiso (menú 🤝 Conciliar con IA → 🔑 Guardar clave de IA).';
+  if (/\b(401|403)\b|API key|PERMISSION/i.test(m)) return '⚠️ La clave de IA no es válida o no tiene permiso (menú 🧠 Asistente IA → 🔑 Guardar clave de IA).';
   if (/Falta la clave/i.test(m)) return '⚠️ ' + m;
   return '❌ ' + m.slice(0, 300);
 }
@@ -760,7 +760,7 @@ function ANA_menuPreguntar_(ss) {
   SpreadsheetApp.flush();
   var cfg = leerConfig_(ss);
   var ia = AUD_ia_(ss, AUD_leerParam_(sh, cfg));
-  if (!ia.clave) throw new Error('Falta la clave de IA: menú 🤝 Conciliar con IA → 🔑 Guardar clave de IA.');
+  if (!ia.clave) throw new Error('Falta la clave de IA: menú 🧠 Asistente IA → 🔑 Guardar clave de IA.');
   if (!ia.modelo && IA_PROVEEDORES_[ia.proveedor].tipo === 'gemini' &&
       PropertiesService.getScriptProperties().getProperty('ANA_SIN_MODELO_FUERTE') !== ANA_MODELO_GEMINI_) { ia.modelo = ANA_MODELO_GEMINI_; ia.modeloAuto = true; }
   // Preguntas de la última hora: para que se pueda seguir conversando ("¿y con GRANIX?")

@@ -338,7 +338,7 @@ function TG_adjDelGrupo_(ss, grupo, uno) {
 function TG_transcribir_(ss, blob) {
   var props = PropertiesService.getScriptProperties();
   var clave = props.getProperty('CIA_KEY_GEMINIGOOGLE') || IA_clave_('Gemini (Google)');
-  if (!clave) throw new Error('para entender audios hace falta la clave de Gemini (pestaña 🤝 Conciliar con IA → 🔑).');
+  if (!clave) throw new Error('para entender audios hace falta la clave de Gemini (pestaña 🧠 Asistente IA → 🔑).');
   var mime = blob.getContentType();
   if (!/^audio\//.test(mime)) mime = 'audio/ogg';
   var t = IA_llamar_({ proveedor: 'Gemini (Google)', clave: clave, json: false, maxTokens: 1500,

@@ -23,10 +23,13 @@
  */
 
 function CIA_agregarMenu_() {
-  SpreadsheetApp.getUi().createMenu('🤝 Conciliar con IA')
+  SpreadsheetApp.getUi().createMenu('🧠 Asistente IA')
+    .addItem('💬 Chat con la IA (preguntas, fotos, PDF, Excel)', 'CHAT_menuAbrir')
+    .addItem('📰 Resumen de cobranzas y pagos con IA', 'CIA_menuResumen')
+    .addItem('📋 Analizar vouchers procesados (factura, empresa, retención)', 'menuAnalizarIAProcesados')
+    .addSeparator()
     .addItem('🔍 Auditor IA: abrir (compras y pagos de todas las empresas)', 'AUD_menuAbrir')
     .addItem('▶ Auditar con IA (según los filtros)', 'AUD_menuAuditar')
-    .addItem('💬 Chat con la IA (adjuntar fotos, PDF, Excel)', 'CHAT_menuAbrir')
     .addItem('💬 Preguntar a la IA (celda amarilla)', 'AUD_menuPreguntar')
     .addItem('✅ Aplicar cambios marcados de la IA', 'ANX_menuAplicarMarcados')
     .addItem('↩️ Deshacer últimos cambios de la IA', 'ANX_menuDeshacer')
@@ -47,7 +50,17 @@ function CIA_agregarMenu_() {
     .addSeparator()
     .addItem('🔑 Guardar clave de IA (de esta pestaña)', 'CIA_menuGuardarClave')
     .addItem('🧪 Probar conexión con la IA', 'CIA_menuProbar')
+    .addSeparator()
+    .addItem('🧹 Quitar el asistente anterior (pestaña vieja)', 'IA_menuRetirar')
     .addToUi();
+}
+
+/** 📰 Resumen ejecutivo (lo que hacía el asistente anterior): se abre el 💬 Chat con la pregunta ya enviada. */
+function CIA_menuResumen() {
+  PropertiesService.getUserProperties().setProperty('CHAT_AUTO', 'Dame un resumen ejecutivo de cuentas por cobrar y por pagar del grupo: qué empresa tiene más por cobrar ' +
+    'y por pagar, qué clientes están más atrasados, a qué proveedores debemos más (y qué vence esta semana), vouchers sin cruzar, retenciones y detracciones ' +
+    'pendientes, y los riesgos que debo atender esta semana. Con cifras exactas.');
+  CHAT_menuAbrir();
 }
 
 /** IA elegida en la fila 11 de esta pestaña y su clave propia. */
@@ -62,20 +75,20 @@ function CIA_menuGuardarClave() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var ia = CIA_ia_(CIA_hoja_(ss));
   var ui = SpreadsheetApp.getUi();
-  var r = ui.prompt('🔑 Clave de ' + ia.proveedor + ' para 🤝 Conciliar con IA',
-    'Pegue la clave (API key). Se guarda oculta y SOLO la usa esta pestaña (el 🧠 Asistente IA tiene la suya aparte).', ui.ButtonSet.OK_CANCEL);
+  var r = ui.prompt('🔑 Clave de ' + ia.proveedor + ' para el 🧠 Asistente IA',
+    'Pegue la clave (API key). Se guarda oculta y SOLO la usa esta pestaña.', ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
   var k = String(r.getResponseText() || '').trim();
   if (!k) { ui.alert('No se guardó: la clave estaba vacía.'); return; }
   PropertiesService.getScriptProperties().setProperty('CIA_KEY_' + ia.proveedor.replace(/[^A-Za-z]/g, '').toUpperCase(), k);
-  ui.alert('Clave de ' + ia.proveedor + ' guardada para 🤝 Conciliar con IA.');
+  ui.alert('Clave de ' + ia.proveedor + ' guardada para el 🧠 Asistente IA.');
 }
 
 function CIA_menuProbar() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var ia = CIA_ia_(CIA_hoja_(ss));
   var ui = SpreadsheetApp.getUi();
-  if (!ia.clave) { ui.alert('Falta la clave: menú 🤝 Conciliar con IA → 🔑 Guardar clave de IA.'); return; }
+  if (!ia.clave) { ui.alert('Falta la clave: menú 🧠 Asistente IA → 🔑 Guardar clave de IA.'); return; }
   try {
     var t0 = Date.now();
     var r = IA_llamar_({ proveedor: ia.proveedor, clave: ia.clave, maxTokens: 200, sistema: 'Responde solo JSON.', texto: 'Responde exactamente {"ok": true}' });
@@ -120,11 +133,11 @@ function CIA_hoja_(ss) {
   sh.getRange('B4').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(CIA_TIPOS_).build());
   sh.getRange('D3:K8').merge().setValue(CIA_AYUDA_ ||
     'Cómo usarlo:\n1) Elija empresa, Ver y el proveedor/cliente (la lista muestra sus facturas pendientes).\n' +
-    '2) Menú 💼 Cobranzas → 🤝 Conciliar con IA → ▶ Analizar.\n' +
+    '2) Menú 💼 Cobranzas → 🧠 Asistente IA → ▶ Analizar.\n' +
     'Modo de análisis (fila 10): "Todo con IA" hace que la IA revise TODOS los vouchers con la lista completa de proveedores/clientes (más lento y usa más consultas).\n' +
     '3) Revise cada propuesta: marque ✔ Aceptar (puede corregir "Factura(s) propuesta(s)", ej. 01_F001-123,124) o ✖ Rechazar.\n' +
     '4) Menú → ✅ Aplicar lo aceptado. Queda como pago confirmado y el RUC detectado se recuerda para los próximos vouchers.\n' +
-    'La IA se elige aquí (fila 11) y su clave con el menú 🤝 Conciliar con IA → 🔑 (aparte del 🧠 Asistente IA). Sin clave, igual propone los casos evidentes.')
+    'La IA se elige aquí (fila 11) y su clave con el menú 🧠 Asistente IA → 🔑. Sin clave, igual propone los casos evidentes.')
     .setWrap(true).setVerticalAlignment('top').setFontSize(9).setFontColor(COLOR.TEXTO_SUAVE).setBackground('#F8FAFC');
   sh.getRange(CIA_F_ENC_ - 1, 3).setValue('PROPUESTAS').setFontWeight('bold').setFontSize(12);
   sh.getRange(CIA_F_ENC_, 1, 1, CIA_ENC_.length).setValues([CIA_ENC_]).setFontWeight('bold')
@@ -139,7 +152,7 @@ function CIA_hoja_(ss) {
 }
 
 /** Fila 10: modo de análisis (se agrega sola si la pestaña es de antes). */
-var CIA_AYUDA_ = 'Cómo usarlo (todo desde el menú 🤝 Conciliar con IA):\n' +
+var CIA_AYUDA_ = 'Cómo usarlo (todo desde el menú 🧠 Asistente IA):\n' +
   '1) Elija empresa, Ver y el proveedor/cliente (la lista sale de las facturas SIRE con saldo).\n' +
   '2) ▶ Analizar la selección. Modo (fila 10): "Todo con IA" = la IA revisa todos los vouchers con la lista completa de proveedores.\n' +
   '3) Revise cada propuesta: ✔ Aceptar (puede corregir "Factura(s) propuesta(s)", ej. 01_F001-123,124) o ✖ Rechazar.\n' +
@@ -258,7 +271,7 @@ function CIA_alEditar_(e) {
   if (a1 !== 'B3' && a1 !== 'B4') return;
   sh.getRange('B5').setValue(CIA_TODAS_CONTRA_);
   var n = CIA_actualizarLista_(e.source, sh);
-  e.source.toast(n + ' proveedores/clientes con saldo. Elija uno en "Proveedor / cliente" y luego ▶ Analizar.', '🤝 Conciliar con IA', 6);
+  e.source.toast(n + ' proveedores/clientes con saldo. Elija uno en "Proveedor / cliente" y luego ▶ Analizar.', '🧠 Asistente IA', 6);
 }
 
 /* ---------------------------------- parecido de nombres (con errores) */
@@ -463,16 +476,16 @@ function CIA_menuAbrir() {
   var sh = CIA_hoja_(ss);
   var n = CIA_actualizarLista_(ss, sh);
   ss.setActiveSheet(sh);
-  ss.toast(n + ' proveedores/clientes con saldo en la lista. Elija y use ▶ Analizar.', '🤝 Conciliar con IA', 8);
+  ss.toast(n + ' proveedores/clientes con saldo en la lista. Elija y use ▶ Analizar.', '🧠 Asistente IA', 8);
 }
 
 function CIA_menuAnalizar() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  ss.toast('Analizando vouchers y facturas…', '🤝 Conciliar con IA', 60);
+  ss.toast('Analizando vouchers y facturas…', '🧠 Asistente IA', 60);
   var msg;
   try { msg = CIA_analizar_(ss); } catch (e) { msg = '❌ ' + e.message; }
   CIA_estado_(CIA_hoja_(ss), msg);
-  ss.toast(msg, '🤝 Conciliar con IA', 12);
+  ss.toast(msg, '🧠 Asistente IA', 12);
 }
 
 function CIA_analizar_(ss) {
@@ -598,7 +611,7 @@ function CIA_analizar_(ss) {
   return Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' · ' + filas.length + ' propuestas de ' + hechos + ' proveedor(es)/cliente(s)' +
     (faltan > 0 ? ' · faltan ' + faltan + ': vuelva a ▶ Analizar' : '') +
     (sinContra ? ' · ' + sinContra + ' vouchers sin proveedor reconocible' : '') +
-    (hayIA ? ' · IA: ' + ia.proveedor + ' (' + consultas + ' consultas' + (par.todoIA ? ', modo Todo con IA' : '') + ')' : ' · sin clave de IA (menú 🤝 Conciliar con IA → 🔑)') +
+    (hayIA ? ' · IA: ' + ia.proveedor + ' (' + consultas + ' consultas' + (par.todoIA ? ', modo Todo con IA' : '') + ')' : ' · sin clave de IA (menú 🧠 Asistente IA → 🔑)') +
     (errores ? ' · ' + errores + ' errores de IA: ' + ultimoError.slice(0, 120) : '');
 }
 
@@ -671,7 +684,7 @@ function CIA_menuAplicar() {
   var msg;
   try { msg = CIA_aplicar_(ss); } catch (e) { msg = '❌ ' + e.message; }
   CIA_estado_(CIA_hoja_(ss), msg);
-  ss.toast(msg, '🤝 Conciliar con IA', 12);
+  ss.toast(msg, '🧠 Asistente IA', 12);
 }
 
 function CIA_aplicar_(ss) {
@@ -797,11 +810,11 @@ function CIA_leerMovs_(ss) {
 
 function CIA_menuListar() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  ss.toast('Armando las listas de facturas y vouchers…', '🤝 Conciliar con IA', 60);
+  ss.toast('Armando las listas de facturas y vouchers…', '🧠 Asistente IA', 60);
   var msg;
   try { msg = CIA_listar_(ss); } catch (e) { msg = '❌ ' + e.message; }
   CIA_estado_(CIA_hoja_(ss), msg);
-  ss.toast(msg, '🤝 Conciliar con IA', 12);
+  ss.toast(msg, '🧠 Asistente IA', 12);
 }
 
 function CIA_listar_(ss) {

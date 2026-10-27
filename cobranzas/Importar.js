@@ -1,5 +1,5 @@
 /**
- * Importar.js — "📥 Importar mi análisis" (parte del módulo 🤝 Conciliar con IA).
+ * Importar.js — "📥 Importar mi análisis" (parte del módulo 🧠 Asistente IA).
  *
  * Usted sube su trabajo anterior (Excel/CSV como "GRANIX RETENCIONES ANALISIS",
  * pestaña PAGOS) o fotos/PDF de vouchers o facturas (los lee la IA de
@@ -87,10 +87,10 @@ function IMP_procesar_(ss, archivos, empresaRuc, guardarCopia) {
     res.cuenta[IMP_EST_.LLENO] + ' sin nada nuevo · ' + res.cuenta[IMP_EST_.DUDA] + ' por revisar · ' + res.cuenta[IMP_EST_.NO] +
     ' no están en Vouchers' + (res.cuenta[IMP_EST_.INFO] ? ' · ' + res.cuenta[IMP_EST_.INFO] + ' retenciones/N/C (abajo, como referencia)' : '');
   sh.getRange('B4').setValue(resumen + (avisos.length ? '\n⚠️ ' + avisos.join('\n⚠️ ') : ''));
-  IMP_estado_(sh, 'Listo: revise la tabla, marque ✔ y use 🤝 Conciliar con IA → ✅ Completar vouchers marcados.');
+  IMP_estado_(sh, 'Listo: revise la tabla, marque ✔ y use 🧠 Asistente IA → ✅ Completar vouchers marcados.');
   ss.setActiveSheet(sh);
   return resumen + (avisos.length ? '\n\n⚠️ ' + avisos.join('\n⚠️ ') : '') +
-    '\n\nRevise la pestaña 🤝 Importar y use 🤝 Conciliar con IA → ✅ Completar vouchers marcados.';
+    '\n\nRevise la pestaña 🤝 Importar y use 🧠 Asistente IA → ✅ Completar vouchers marcados.';
 }
 
 /* ------------------------------- importar desde la carpeta de Drive */
@@ -246,7 +246,7 @@ function IMP_hoja_(ss) {
   sh.setRowHeight(1, 38);
   sh.getRange('A3:A5').setValues([['Cómo usarlo'], ['Última importación'], ['Estado']]).setFontWeight('bold');
   sh.getRange('B3:L3').merge().setValue(
-    '1) Menú 🤝 Conciliar con IA → 📥 Subir Excel, foto o PDF (elija la empresa: GRANIX, BKF…).  ' +
+    '1) Menú 🧠 Asistente IA → 📥 Subir Excel, foto o PDF (elija la empresa: GRANIX, BKF…).  ' +
     '2) Revise abajo: ✅ se encontró el voucher, 🟠 hay duda (elija en "Voucher elegido ✏️", ej. Originales!120), ❌ no está en Vouchers.  ' +
     '3) Marque ✔ y use ✅ Completar vouchers marcados: SOLO llena celdas vacías (ID Beneficiario, Tipo y Nº Doc., Empresa, ID Usuario); si el voucher ya tiene alguna factura, agrega las que faltan según la fila 6. ' +
     'Se puede deshacer. Los archivos subidos se borran solos a los ' + IMP_DIAS_ + ' días.')
@@ -441,7 +441,7 @@ var IMP_SISTEMA_DOC_ = [
 function IMP_leerConIA_(sh, a) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var ia = CIA_ia_(CIA_hoja_(ss));
-  if (!ia.clave) throw new Error('Para leer fotos o PDF falta la clave de IA (🤝 Conciliar con IA → 🔑 Guardar clave de IA).');
+  if (!ia.clave) throw new Error('Para leer fotos o PDF falta la clave de IA (🧠 Asistente IA → 🔑 Guardar clave de IA).');
   if (/pdf/i.test(a.mime) && ia.proveedor.indexOf('Gemini') < 0) throw new Error('Los PDF solo los lee Gemini; elija Gemini en la fila 11 de 🤝 Conciliar con IA o suba una foto.');
   IMP_estado_(sh, 'La IA está leyendo ' + a.nombre + '…');
   var r = IA_llamar_({ proveedor: ia.proveedor, clave: ia.clave, maxTokens: 8000, sistema: IMP_SISTEMA_DOC_,
@@ -808,7 +808,7 @@ function IMP_aplicar_(ss, sh) {
   }
   var r = celdas ? actualizarTodo_(true) : '';
   return hechos + ' vouchers completados (' + celdas + ' celdas: vacías o facturas agregadas)' + (avisos ? ' · ' + avisos + ' con aviso (ver Resultado)' : '') +
-    (celdas ? ' · Se puede deshacer: 🤝 Conciliar con IA → ↩️ Deshacer última importación' : '') + (r ? ' · ' + r : '');
+    (celdas ? ' · Se puede deshacer: 🧠 Asistente IA → ↩️ Deshacer última importación' : '') + (r ? ' · ' + r : '');
 }
 
 function IMP_hojaLog_(ss) {
