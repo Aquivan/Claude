@@ -10,6 +10,7 @@
 function doPost(e) {
   try {
     var p = (e && e.parameter) || {};
+    if (p.canal === 'vch') return VCH_doPost_(e);   // 🧠 Asistente IA abierto desde la hoja de Vouchers (AsistenteVouchers.js)
     if (p.canal === 'wa') return TGW_doPost_(e);   // 📲 preguntas que llegan por WhatsApp (TG_WhatsApp.js)
     if (p.canal === 'gh') return TGC_doPost_(e);   // 🧩 captcha de Quesito que pide el robot de GitHub (TG_Captcha.js)
     var secreto = PropertiesService.getScriptProperties().getProperty(TG_PROP_.SECRETO);
