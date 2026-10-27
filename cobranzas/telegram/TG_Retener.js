@@ -300,9 +300,28 @@ function TGR_paga_(v, f) {
 function TGR_directo_(ss, q) {
   var x = TGR_parear_(ss, q);
   if (!x || x.motivo) return x;
+  var ya = TGR_creYa_(ss, x.par.f);   // SUNAT ya tiene un CRE para esa factura (Retenciones · Detalle): no se propone otro
+  if (ya) return { motivo: 'Ya tiene comprobante de retención: ' + ya + ' (según la descarga de Retenciones). No hace falta emitir otro.',
+    filas: [{ empresa: x.par.f.empresa, contraparte: x.par.f.contraparte, documento: x.par.f.documento, total: x.par.f.total, pagado: x.par.f.pagado, estado: x.par.f.estado, retener: x.par.f.retener }] };
   var r = TGR_armarCre_(x.par, x.rucDe);
   if (r.lista) r.lista[0].completar = TGR_faltaEnVoucher_(x.par, x.rucDe);   // la fila del voucher sin factura: se ofrece completarla
   return r;
+}
+
+/** Comprobante(s) de retención que ya tiene esa factura según Retenciones · Detalle ("E001-90"), o ''. */
+function TGR_creYa_(ss, f) {
+  try {
+    var t = TG_tablaLibro_(ANA_ctx_(ss), 'retenciones', 'Detalle');
+    var jd = TG_col_(t.columnas, 'N° documento'), jr = TG_col_(t.columnas, 'RUC proveedor'), jc = TG_col_(t.columnas, 'Comprobante retención');
+    if (jd < 0 || jc < 0) return '';
+    var cre = {};
+    t.filas.forEach(function (r) {
+      if (TGR_normDoc_(r[jd]) !== f.doc && TGR_normDoc_('X_' + r[jd]) !== f.doc) return;
+      if (jr >= 0 && f.ruc && String(r[jr]).replace(/\D/g, '') !== f.ruc) return;
+      if (r[jc]) cre[String(r[jc])] = true;
+    });
+    return Object.keys(cre).join(', ');
+  } catch (e) { return ''; }
 }
 
 /** Busca el par voucher ↔ factura. q = {doc} o {voucher}. → {par, rucDe} | {motivo} | null. */
@@ -565,17 +584,19 @@ function TGR_avisarFin_(cfg, s, r) {
   var nota = function (rx) { return notas.filter(function (n) { return rx.test(n.title || ''); })[0]; };
   var ok = nota(/^CRE emitido/), vista = nota(/^CRE vista/), no = nota(/^CRE no emitido/), sin = nota(/^CRE sin confirmar/);
   var html, k = s.extra.k;
+  // A qué pedido corresponde (puede haber varios del mismo comprobante).
+  var t = s.texto + ' (' + (s.extra.modo === 'emitir' ? 'emisión' : 'vista previa') + ' pedida a las ' + Utilities.formatDate(new Date(s.desde), 'America/Lima', 'HH:mm') + ')';
   if (ok) {
     var url = '';
     try { url = TGR_mandarPdf_(s.chat, r.id); } catch (e) { console.warn('PDF del CRE: ' + e.message); }
-    html = '✅ <b>Comprobante de retención emitido: ' + TG_esc_(ok.message) + '</b>\n' + TG_esc_(s.texto) + ' · S/ ' + TG_num_(s.extra.total) +
+    html = '✅ <b>Comprobante de retención emitido: ' + TG_esc_(ok.message) + '</b>\n' + TG_esc_(t) + ' · S/ ' + TG_num_(s.extra.total) +
       (url ? '\n📄 Le envié el PDF (copia en Drive: <a href="' + url + '">' + TG_esc_(TGR_CARPETA_) + '</a>). El XML llega con la próxima descarga de Retenciones.'
         : '\n<i>El PDF y el XML llegan con la próxima descarga de Retenciones.</i>');
   }
-  else if (vista) html = '👁 <b>Vista previa lista</b>: ' + TG_esc_(s.texto) + '\nSUNAT aceptó todo y calculó S/ ' + TG_num_(s.extra.total) + '. <b>No se emitió nada.</b>';
-  else if (sin) html = '⚠️ <b>Se tocó Emitir pero no confirmé el número</b>: ' + TG_esc_(s.texto) + '\nRevise en SOL → Consultar emisión antes de volver a intentar.';
-  else if (no) html = '⛔ <b>No se emitió</b>: ' + TG_esc_(s.texto) + '\n' + TG_esc_(no.message);
-  else html = '❌ <b>El robot de retenciones falló</b>: ' + TG_esc_(s.texto) + '. No se emitió nada.' +
+  else if (vista) html = '👁 <b>Vista previa lista</b>: ' + TG_esc_(t) + '\nSUNAT aceptó todo y calculó S/ ' + TG_num_(s.extra.total) + '. <b>No se emitió nada.</b>';
+  else if (sin) html = '⚠️ <b>Se tocó Emitir pero no confirmé el número</b>: ' + TG_esc_(t) + '\nRevise en SOL → Consultar emisión antes de volver a intentar.';
+  else if (no) html = '⛔ <b>No se emitió</b>: ' + TG_esc_(t) + '\n' + TG_esc_(no.message);
+  else html = '❌ <b>El robot de retenciones falló</b>: ' + TG_esc_(t) + '. No se emitió nada.' +
     (paso ? '\nFalló en el paso «' + TG_esc_(paso) + '»' + (/^CRE /.test(paso) ? '.' : ' (antes de entrar a SUNAT): puede volver a pedirlo.') : '');
   html += '\n<a href="' + r.html_url + '">ver en GitHub</a>';
   if (String(s.chat).indexOf('wa') === 0) return TGR_guardarWA_(s.chat, html + (vista ? '\n\nPara emitirlo, escriba *emitir* y toque ✅ Emitir.' : ''));
