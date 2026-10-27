@@ -205,7 +205,11 @@ function TGW_boton_(k, op, numero) {
   if (acc && acc.t === 'cre') return TGR_botonWA_(acc, k, op, numero);
   if (acc && acc.t === 'gre') return TGG_botonWA_(acc, k, op, numero);
   if (acc && acc.t === 'cambios') return TGQ_botonWA_(acc, op, numero);
-  if (acc && acc.t === 'tgqia') return TGQ_iaWA_(acc, op, numero);   // 🤖 analizar la tanda con IA (TG_Procesados.js)
+  if (acc && acc.t === 'tgqia') return TGQ_iaWA_(acc, op, numero);
+  if (acc && acc.t === 'consunat') {   // 🚀 bajar la constancia de retención de SUNAT (TG_Retener.js)
+    if (op !== 'si') return { ok: true, respuesta: 'Listo, no bajé nada.' };
+    try { return { ok: true, seguir: true, respuesta: TGR_pedirSunat_(acc, 'wa' + String(numero || '').replace(/\D/g, '')) }; } catch (e) { return { ok: false, error: e.message }; }
+  }   // 🤖 analizar la tanda con IA (TG_Procesados.js)
   if (acc && acc.t === 'rucelige') return TGQ_eligeWA_(acc, op, numero);   // 🤔 elegir el RUC entre opciones   // ✏️ escribir RUC en Vouchers (TG_Procesados.js)   // 🚚 guía de remisión (TG_GRE.js)   // 🧾 comprobante de retención (TG_Retener.js)
   if (!acc || acc.t !== 'descarga') return { ok: true, respuesta: 'Ese botón ya venció (duran 6 horas). Pídamelo de nuevo.' };
   if (TG_yaVisto_('wadesc' + k)) return { ok: true, respuesta: 'Esa descarga ya se pidió.' };

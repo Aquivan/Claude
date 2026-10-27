@@ -625,9 +625,8 @@ function TGR_constancias_(ss, texto, citado, clave) {
       if (cre && !buscar.some(function (b) { return b.cre === cre; })) buscar.push({ cre: cre, prov: dP >= 0 ? String(r[dP]).replace(/\D/g, '') : '', factura: d });
     });
   });
-  if (!buscar.length) return { lista: [], motivo: 'No encontré comprobante de retención para ' + docs.join(', ') + ' en la hoja de Retenciones. ' +
-    'Si se emitió hace poco (o directo en SOL), todavía no está descargado: para traerlo ya escriba «descarga las retenciones» y, cuando termine, vuelva a pedírmelo. ' +
-    'No le mando otro comprobante en su lugar.' };
+  if (!buscar.length) return { lista: [], sunat: TGR_datosSunat_(ss, docs), motivo: 'No encontré comprobante de retención para ' + docs.join(', ') + ' en la hoja de Retenciones ' +
+    '(si se emitió hace poco o directo en SOL, todavía no está descargado). No le mando otro comprobante en su lugar.' };
   var lista = [];
   buscar.forEach(function (b) {
     em.filas.forEach(function (r) {
@@ -638,8 +637,78 @@ function TGR_constancias_(ss, texto, citado, clave) {
         retenido: eR >= 0 ? aNumero_(r[eR]) : 0, url: eU >= 0 ? String(r[eU] || '') : '', ruta: eRuta >= 0 ? String(r[eRuta] || '') : '' });
     });
   });
-  if (!lista.length) return { lista: [], motivo: 'La factura tiene el comprobante ' + buscar.map(function (b) { return b.cre; }).join(', ') + ', pero no lo encontré en Emitidas de Retenciones.' };
+  if (!lista.length) return { lista: [], sunat: TGR_datosSunat_(ss, docs.concat(buscar.map(function (b) { return b.cre; }))),
+    motivo: 'La factura tiene el comprobante ' + buscar.map(function (b) { return b.cre; }).join(', ') + ', pero no lo encontré en Emitidas de Retenciones.' };
   return { lista: lista.slice(0, 5), deUltimo: deUltimo };
+}
+
+/* ---------- 🚀 bajarla de SUNAT (retenciones-descargar.yml) y mandarla apenas llegue ---------- */
+
+/** Empresa (RUC), proveedor y documentos para pedir la descarga a SUNAT; null si no se sabe la empresa. */
+function TGR_datosSunat_(ss, docs) {
+  var cfg = leerConfig_(ss), rucDe = {}, emp = '', prov = '';
+  Object.keys(cfg.nombreEmpresa || {}).forEach(function (r) { rucDe[String(cfg.nombreEmpresa[r])] = r; });
+  TGR_porPagar_(ss).forEach(function (f) { if (!emp && docs.indexOf(f.doc) >= 0 && rucDe[f.empresa]) { emp = rucDe[f.empresa]; prov = f.ruc; } });
+  if (!emp && (cfg.grupo || []).length === 1) emp = cfg.grupo[0];
+  if (!emp) return null;
+  var hoy = new Date(), ant = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+  return { empresa: emp, prov: prov, docs: docs, periodo: Utilities.formatDate(ant, 'America/Lima', 'yyyyMM') };
+}
+
+/** Botón 🚀: pide a GitHub bajar los CRE de esa empresa (mes anterior y actual, solo PDF) y lo sigue. → texto. */
+function TGR_pedirSunat_(acc, chat) {
+  var d = acc.d, cfg = TG_cfg_(TG_ss_());
+  if (TG_yaVisto_('consunat' + chat + d.empresa + d.docs.join(','))) return 'Eso ya se pidió: le aviso apenas termine.';
+  TG_gh_(cfg, '/actions/workflows/retenciones-descargar.yml/dispatches', 'post', { ref: cfg.rama,
+    inputs: { empresa: d.empresa, periodo: d.periodo, hasta: '', archivos: 'pdf', guardar: true } });
+  TG_seguir_(chat, 'retenciones-descargar.yml', null, 'constancia de retención ' + d.docs.join(', '), { tipo: 'constancia', d: d });
+  return '🚀 Bajando de SUNAT las retenciones de ' + TG_nombreEmpresa_(cfg, d.empresa) + ' (solo consulta, no emite nada). En 3–5 minutos le mando la constancia de ' + d.docs.join(', ') + '.';
+}
+
+function TGR_ghRaw_(cfg, ruta) {
+  var r = UrlFetchApp.fetch('https://api.github.com/repos/' + cfg.owner + '/' + cfg.nombreRepo + '/contents/' + ruta + '?ref=' + encodeURIComponent(cfg.rama),
+    { muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + cfg.github, Accept: 'application/vnd.github.raw' } });
+  return r.getResponseCode() === 200 ? r : null;
+}
+
+/** Terminó la descarga: busca la constancia en lo bajado (cre.csv / detalle.csv / pdf) y la manda. */
+function TGR_constanciaFin_(cfg, s, r) {
+  var d = s.extra.d, chat = String(s.chat), wa = chat.indexOf('wa') === 0;
+  var decir = function (html) { if (wa) TGR_guardarWA_(chat, html); else TG_enviar_(chat, html); };
+  if (r.conclusion !== 'success') return decir('❌ <b>No pude bajar las retenciones de SUNAT</b> (' + TG_esc_(d.docs.join(', ')) + '). No se emitió nada. <a href="' + r.html_url + '">ver en GitHub</a>');
+  var meses = [], a = Number(d.periodo.slice(0, 4)), m = Number(d.periodo.slice(4)), hoy = new Date();
+  while (a * 100 + m <= hoy.getFullYear() * 100 + hoy.getMonth() + 1 && meses.length < 6) { meses.push(a + '/' + ('0' + m).slice(-2)); m++; if (m > 12) { m = 1; a++; } }
+  var cres = [], pdfDe = {};
+  meses.forEach(function (mes) {
+    var base = 'retenciones/datos/' + d.empresa + '/' + mes + '/';
+    var rc = TGR_ghRaw_(cfg, base + 'cre.csv'), rd = TGR_ghRaw_(cfg, base + 'detalle.csv');
+    var csv = function (x) { var t = Utilities.parseCsv(x.getContentText('UTF-8')); var h = t[0] || []; return t.slice(1).map(function (f) { var o = {}; h.forEach(function (k, j) { o[k] = f[j]; }); return o; }); };
+    if (rc) csv(rc).forEach(function (o) {
+      if (o.tipo !== 'Emitido') return;
+      pdfDe[TGR_normDoc_('X_' + o.comprobante)] = { pdf: o.pdf, proveedor: o.proveedor, fecha: o.fecha_emision, retenido: o.importe_retenido, cre: o.comprobante };
+      if (d.docs.indexOf(TGR_normDoc_('X_' + o.comprobante)) >= 0 && cres.indexOf(o.comprobante) < 0) cres.push(o.comprobante);
+    });
+    if (rd) csv(rd).forEach(function (o) {
+      if (o.tipo !== 'Emitido' || (d.prov && o.ruc_proveedor !== d.prov)) return;
+      if (d.docs.indexOf(TGR_normDoc_('X_' + o.doc_numero)) >= 0 && cres.indexOf(o.comprobante) < 0) cres.push(o.comprobante);
+    });
+  });
+  if (!cres.length) return decir('📄 Bajé las retenciones de SUNAT (' + meses.join(', ') + ') y <b>no hay comprobante para ' + TG_esc_(d.docs.join(', ')) + '</b> en esos meses.');
+  var n = 0;
+  cres.forEach(function (cre) {
+    var x = pdfDe[TGR_normDoc_('X_' + cre)] || { cre: cre }, rp = x.pdf ? TGR_ghRaw_(cfg, 'retenciones/datos/' + x.pdf) : null;
+    var t = cre + ' · ' + (x.proveedor || '') + (x.fecha ? ' · ' + x.fecha : '') + (x.retenido ? ' · retenido S/ ' + x.retenido : '');
+    if (!rp) { decir('📄 ' + TG_esc_(t) + '\n⚠️ SUNAT no entregó su PDF.'); return; }
+    var blob = rp.getBlob().setName('Constancia retencion ' + cre + '.pdf');
+    try {   // copia en Drive: la próxima vez sale al instante
+      var padres = DriveApp.getFileById(TG_ss_().getId()).getParents(), base = padres.hasNext() ? padres.next() : DriveApp.getRootFolder();
+      var it = base.getFoldersByName(TGR_CARPETA_), carpeta = it.hasNext() ? it.next() : base.createFolder(TGR_CARPETA_);
+      if (!carpeta.getFilesByName('CRE ' + TGR_normDoc_('X_' + cre) + '.pdf').hasNext()) carpeta.createFile(blob.copyBlob().setName('CRE ' + TGR_normDoc_('X_' + cre) + '.pdf'));
+    } catch (e) {}
+    if (wa) { try { TGC_wa_({ tipo: 'documento', numero: chat.slice(2), mime: 'application/pdf', base64: Utilities.base64Encode(blob.getBytes()), nombre: blob.getName(), texto: '📄 ' + t }); n++; } catch (e) {} }
+    else if (TG_enviarArchivo_(chat, blob, '📄 ' + TG_esc_(t))) n++;
+  });
+  if (n && wa) TGR_guardarWA_(chat, '📄 Le envié ' + (n > 1 ? n + ' constancias' : 'la constancia') + ' de retención bajada de SUNAT.');
 }
 
 /** PDF de una constancia: el enlace de la columna PDF, o el que guardó el bot al emitir. Blob o null. */
@@ -663,11 +732,17 @@ function TGR_constanciaTG_(ctx, texto) {
   if (!TGR_esConstancia_(texto)) return false;
   TG_accion_(ctx.chatId, 'upload_document');
   var r = TGR_constancias_(ctx.ss, texto, ctx.citado, ctx.chatId);
-  if (!r.lista.length) { TG_enviar_(ctx.chatId, '📄 ' + TG_esc_(r.motivo)); return true; }
+  if (!r.lista.length) {
+    var k0 = r.sunat ? TG_guardarBoton_({ t: 'consunat', d: r.sunat }) : '';
+    TG_enviar_(ctx.chatId, '📄 ' + TG_esc_(r.motivo) + (k0 ? '\n\n¿Lo bajo de SUNAT ahora? (solo consulta: no emite nada; tarda unos 3–5 minutos y se lo mando apenas llegue)' : ''),
+      k0 ? [[{ text: '🚀 Bajarlo de SUNAT ahora', callback_data: 'k:' + k0 + ':si' }, { text: '✖ No', callback_data: 'x' }]] : null);
+    return true;
+  }
   r.lista.forEach(function (x) {
     var b = TGR_pdfConstancia_(x), t = TGR_textoConstancia_(x);
-    if (b) TG_enviarArchivo_(ctx.chatId, b.setName('Constancia retencion ' + x.cre + '.pdf'), '📄 ' + TG_esc_(t) + (r.deUltimo ? '\n<i>(tomé la factura ' + TG_esc_(r.deUltimo) + ': lo último que me envió)</i>' : ''));
-    else TG_enviar_(ctx.chatId, '📄 ' + TG_esc_(t) + '\n⚠️ Aún no tengo su PDF en Drive (llega con la próxima descarga de Retenciones).');
+    if (b) { TG_enviarArchivo_(ctx.chatId, b.setName('Constancia retencion ' + x.cre + '.pdf'), '📄 ' + TG_esc_(t) + (r.deUltimo ? '\n<i>(tomé la factura ' + TG_esc_(r.deUltimo) + ': lo último que me envió)</i>' : '')); return; }
+    var sun = TGR_datosSunat_(ctx.ss, [TGR_normDoc_('X_' + x.cre), x.factura].filter(Boolean)), k1 = sun ? TG_guardarBoton_({ t: 'consunat', d: sun }) : '';
+    TG_enviar_(ctx.chatId, '📄 ' + TG_esc_(t) + '\n⚠️ Aún no tengo su PDF en Drive.', k1 ? [[{ text: '🚀 Bajarlo de SUNAT ahora', callback_data: 'k:' + k1 + ':si' }]] : null);
   });
   return true;
 }
@@ -675,15 +750,23 @@ function TGR_constanciaTG_(ctx, texto) {
 /** WhatsApp: null si el texto no lo pide. */
 function TGR_constanciaWA_(ss, texto, citado, clave) {
   if (!TGR_esConstancia_(texto)) return null;
-  var r = TGR_constancias_(ss, texto, citado, clave), L = [];
-  if (!r.lista.length) return { ok: true, respuesta: '📄 ' + r.motivo, tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  var r = TGR_constancias_(ss, texto, citado, clave), L = [], botones = [];
+  var ofrecer = function (sun, cual) {
+    if (sun && botones.length < 3) botones.push({ k: TG_guardarBoton_({ t: 'consunat', d: sun }), texto: '¿Bajo ' + cual + ' de SUNAT ahora? Solo consulta (no emite nada); tarda unos 3–5 minutos y se lo mando apenas llegue.',
+      opciones: [{ op: 'si', titulo: '🚀 Bajar de SUNAT' }, { op: 'no', titulo: '✖ No' }] });
+  };
+  if (!r.lista.length) {
+    ofrecer(r.sunat, 'la constancia');
+    return { ok: true, respuesta: '📄 ' + r.motivo, tablas: [], sugerencias: [], archivos: [], avisos: [], botones: botones.length ? botones : undefined };
+  }
   r.lista.forEach(function (x) {
     var b = TGR_pdfConstancia_(x), t = TGR_textoConstancia_(x), ok = false;
     if (b) { try { ok = TGC_wa_({ tipo: 'documento', numero: String(clave).slice(2), mime: 'application/pdf', base64: Utilities.base64Encode(b.getBytes()), nombre: 'Constancia retencion ' + x.cre + '.pdf', texto: '📄 ' + t }); } catch (e) {} }
-    L.push((ok ? '📄 ' : '⚠️ ') + t + (ok ? '' : b ? ' — no pude adjuntarlo' + (x.url ? ': ' + x.url : '') : ' — aún no tengo su PDF en Drive (llega con la próxima descarga de Retenciones).'));
+    L.push((ok ? '📄 ' : '⚠️ ') + t + (ok ? '' : b ? ' — no pude adjuntarlo' + (x.url ? ': ' + x.url : '') : ' — aún no tengo su PDF en Drive.'));
+    if (!b) ofrecer(TGR_datosSunat_(ss, [TGR_normDoc_('X_' + x.cre), x.factura].filter(Boolean)), 'el PDF de ' + x.cre);
   });
   return { ok: true, respuesta: (r.lista.length > 1 ? 'Constancias de retención:\n' : '') + L.join('\n') + (r.deUltimo ? '\n(tomé la factura ' + r.deUltimo + ': lo último que me envió)' : ''),
-    tablas: [], sugerencias: [], archivos: [], avisos: [] };
+    tablas: [], sugerencias: [], archivos: [], avisos: [], botones: botones.length ? botones : undefined };
 }
 
 /* ============================================================ resultado (lo llama TG_seguirDescargas) */
@@ -730,7 +813,7 @@ function TGR_guardarWA_(clave, html) {
 function TGR_pendienteWA_(clave) {
   try {
     return JSON.parse(PropertiesService.getScriptProperties().getProperty('TG_SEGUIR') || '[]')
-      .some(function (s) { return s.chat === clave && s.extra && (s.extra.tipo === 'cre' || s.extra.tipo === 'sire_rapido'); });
+      .some(function (s) { return s.chat === clave && s.extra && (s.extra.tipo === 'cre' || s.extra.tipo === 'sire_rapido' || s.extra.tipo === 'constancia'); });
   } catch (e) { return false; }
 }
 
