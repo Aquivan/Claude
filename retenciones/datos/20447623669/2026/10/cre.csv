@@ -1,0 +1,2 @@
+empresa_ruc,tipo,periodo,fecha_emision,comprobante,serie,numero,ruc_agente,agente,ruc_proveedor,proveedor,regimen,tasa,importe_retenido,importe_pagado,moneda,estado,facturas,correo_receptor,pdf,xml,observacion
+20447623669,Recibido,202610,23/10/2026,E001-243,E001,243,20447969531,CORPORACION GRANIX E.I.R.L.,20447623669,PROCESOS ALIMENTARIOS M&D EIRL,Tasa 3%,3,5536.47,179012.23,PEN,EMITIDO,5,dsm.corporacion@gmail.com,20447623669/2026/10/pdf/20447969531-E001-243.pdf,20447623669/2026/10/xml/20447969531-E001-243.xml,
