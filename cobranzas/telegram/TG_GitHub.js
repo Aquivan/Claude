@@ -295,7 +295,8 @@ function TG_seguirDescargas() {
         else if (String(s.chat).indexOf('wa') !== 0) TG_enviar_(s.chat, '⏳ ' + TG_esc_(s.texto) + ' sigue corriendo después de 4 horas: <a href="' + r.html_url + '">ver en GitHub</a>');
         return;
       }
-      if (s.extra && s.extra.tipo === 'cre') return TGR_avisarFin_(cfg, s, r);   // 🧾 comprobante de retención (TG_Retener.js)
+      if (s.extra && s.extra.tipo === 'cre') return TGR_avisarFin_(cfg, s, r);
+      if (s.extra && s.extra.tipo === 'constancia') return TGR_constanciaFin_(cfg, s, r);   // 📄 constancia bajada de SUNAT (TG_Retener.js)   // 🧾 comprobante de retención (TG_Retener.js)
       if (s.extra && s.extra.tipo === 'sire_rapido') return TGS_avisarFin_(cfg, s, r);   // ⚡ SIRE solo reporte (TG_SireRapido.js)
       var fallidas = r.conclusion === 'failure' ? TG_ghJobsFallidos_(cfg, r.id) : [];
       var botones = fallidas.length ? [[{ text: '🔁 Reintentar lo que falló', callback_data: 'rr:' + r.id }]] : null;

@@ -441,7 +441,10 @@ function TG_alBoton_(ss, q) {
       return TG_preguntar_(ctx, '', adjs);
     case 'sug': return TG_preguntar_(ctx, datos.texto, []);
     case 'cambios': return TG_aplicarCambios_(ctx, datos, op);
-    case 'rucelige': return TGQ_eligeTG_(ctx, datos, op);   // 🤔 elegir el RUC entre opciones (TG_Procesados.js)
+    case 'rucelige': return TGQ_eligeTG_(ctx, datos, op);
+    case 'consunat':   // 🚀 bajar la constancia de retención de SUNAT (TG_Retener.js)
+      TG_llamar_('editMessageReplyMarkup', { chat_id: chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
+      try { return TG_enviar_(chatId, TG_esc_(TGR_pedirSunat_(datos, chatId))); } catch (e) { return TG_enviar_(chatId, '⚠️ ' + TG_esc_(e.message)); }   // 🤔 elegir el RUC entre opciones (TG_Procesados.js)
     case 'deshacer': return TG_deshacerCambios_(ctx);
     case 'archivo': return TG_mandarArchivo_(ctx, datos.id, datos.titulo);
     case 'descarga': return TG_confirmarDescarga_(ctx, datos, op);
