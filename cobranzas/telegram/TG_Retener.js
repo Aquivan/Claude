@@ -570,6 +570,122 @@ function TGR_mandarPdf_(chat, runId) {
   return f.getUrl();
 }
 
+/* ============================================================ 📄 "envíame la constancia de retención de …" */
+
+// "envíame / mándame / pásame / dame / quiero / descarga … la constancia / el comprobante de retención / el CRE / el PDF de la retención"
+var TGR_CONST_RX_ = /\b(env[ií]a|envi[aá]me|manda|m[aá]nda(me|lo|la)|p[aá]sa(me|lo|la)?|dame|quiero|necesito|descarga|baja|b[aá]ja(me|lo|la)|ver|mu[eé]stra(me)?)\w*\b/i;
+function TGR_esConstancia_(texto) {
+  var t = String(texto || '');
+  if (TGR_PIDE_RX_.test(t) && /\bemit/i.test(t)) return false;   // "emite…" es otra cosa
+  return TGR_CONST_RX_.test(t) && /\b(constancia|comprobante|cre|retenci[oó]n|retencion)\b/i.test(t);
+}
+
+/** Todas las series-número del texto ("F003-37515", "E001-90"). */
+function TGR_docsEn_(t) {
+  var out = [], rx = /\b([FEB][A-Z0-9]{3})\s*-\s*0*(\d{1,8})\b/gi, m;
+  while ((m = rx.exec(String(t || '')))) { var d = m[1].toUpperCase() + '-' + Number(m[2]); if (out.indexOf(d) < 0) out.push(d); }
+  return out;
+}
+
+/**
+ * Constancias (PDF del CRE) pedidas por número de comprobante, factura, voucher o lo último del chat.
+ * → {lista:[{cre, empresa, proveedor, fecha, retenido, url}], motivo}
+ */
+function TGR_constancias_(ss, texto, citado, clave) {
+  var c = ANA_ctx_(ss), em, de;
+  try { em = TG_tablaLibro_(c, 'retenciones', 'Emitidas'); de = TG_tablaLibro_(c, 'retenciones', 'Detalle'); }
+  catch (e) { return { lista: [], motivo: 'No pude abrir la hoja de Retenciones: ' + e.message }; }
+  var J = function (t, n) { return TG_col_(t.columnas, n); };
+  var eC = J(em, 'Comprobante'), eP = J(em, 'RUC proveedor'), eN = J(em, /^Proveedor/), eE = J(em, 'Empresa'), eF = J(em, 'Fecha emisión'),
+    eR = J(em, 'Importe retenido S/'), eU = J(em, 'PDF'), eRuta = J(em, 'Ruta');
+  var dD = J(de, 'N° documento'), dC = J(de, 'Comprobante retención'), dP = J(de, 'RUC proveedor');
+  if (eC < 0) return { lista: [], motivo: 'La pestaña Emitidas de Retenciones no tiene la columna Comprobante.' };
+  var docs = TGR_docsEn_(texto);
+  var v = TGR_normVoucher_(texto) || (!docs.length ? TGR_normVoucher_(citado) : null);
+  if (!docs.length && !v) docs = TGR_docsEn_(citado);
+  if (!docs.length && v) {   // por voucher: la factura que paga
+    var x = TGR_parear_(ss, { voucher: v });
+    if (!x || x.motivo) return { lista: [], motivo: (x && x.motivo) || 'No encontré qué factura paga ese voucher. Dígame la factura: «envíame la constancia de retención de la F003-37515».' };
+    docs = [x.par.f.doc];
+  }
+  var deUltimo = '';
+  if (!docs.length) {
+    var q = TGR_completarQ_({ doc: '', voucher: null }, texto + ' factura', clave);
+    if (q.doc) { docs = [q.doc]; deUltimo = q.doc; }
+  }
+  if (!docs.length) return { lista: [], motivo: '¿De qué factura, voucher o comprobante? Escríbalo así: «envíame la constancia de retención de la F003-37515», «… del voucher Fotos!362» o «… del E001-90» (o cite el mensaje).' };
+  // Cada documento: ¿es el número del CRE? si no, la factura → sus CRE (Detalle).
+  var buscar = [];   // {cre, prov}
+  docs.forEach(function (d) {
+    var esCre = em.filas.some(function (r) { return TGR_normDoc_('X_' + r[eC]) === d || TGR_normDoc_(r[eC]) === d; });
+    if (esCre) { buscar.push({ cre: d, prov: '' }); return; }
+    de.filas.forEach(function (r) {
+      if (dD < 0 || dC < 0 || (TGR_normDoc_(r[dD]) !== d && TGR_normDoc_('X_' + r[dD]) !== d)) return;
+      var cre = TGR_normDoc_('X_' + r[dC]) || TGR_normDoc_(r[dC]);
+      if (cre && !buscar.some(function (b) { return b.cre === cre; })) buscar.push({ cre: cre, prov: dP >= 0 ? String(r[dP]).replace(/\D/g, '') : '', factura: d });
+    });
+  });
+  if (!buscar.length) return { lista: [], motivo: 'No encontré comprobante de retención para ' + docs.join(', ') + ' en la hoja de Retenciones. ' +
+    'Si se emitió hace poco (o directo en SOL), todavía no está descargado: para traerlo ya escriba «descarga las retenciones» y, cuando termine, vuelva a pedírmelo. ' +
+    'No le mando otro comprobante en su lugar.' };
+  var lista = [];
+  buscar.forEach(function (b) {
+    em.filas.forEach(function (r) {
+      var cre = TGR_normDoc_('X_' + r[eC]) || TGR_normDoc_(r[eC]);
+      if (cre !== b.cre || (b.prov && eP >= 0 && String(r[eP]).replace(/\D/g, '') !== b.prov)) return;
+      lista.push({ cre: String(r[eC]), factura: b.factura || '', empresa: eE >= 0 ? String(r[eE]) : '', proveedor: eN >= 0 ? String(r[eN]) : '',
+        fecha: eF >= 0 && r[eF] instanceof Date ? Utilities.formatDate(r[eF], 'America/Lima', 'dd/MM/yyyy') : (eF >= 0 ? String(r[eF]) : ''),
+        retenido: eR >= 0 ? aNumero_(r[eR]) : 0, url: eU >= 0 ? String(r[eU] || '') : '', ruta: eRuta >= 0 ? String(r[eRuta] || '') : '' });
+    });
+  });
+  if (!lista.length) return { lista: [], motivo: 'La factura tiene el comprobante ' + buscar.map(function (b) { return b.cre; }).join(', ') + ', pero no lo encontré en Emitidas de Retenciones.' };
+  return { lista: lista.slice(0, 5), deUltimo: deUltimo };
+}
+
+/** PDF de una constancia: el enlace de la columna PDF, o el que guardó el bot al emitir. Blob o null. */
+function TGR_pdfConstancia_(x) {
+  var m = String(x.url || '').match(/\/d\/([\w-]{20,})|[?&]id=([\w-]{20,})/);
+  if (m) { try { return DriveApp.getFileById(m[1] || m[2]).getBlob(); } catch (e) {} }
+  try {
+    var it = DriveApp.getFilesByName('CRE ' + TGR_normDoc_('X_' + x.cre) + '.pdf');
+    if (it.hasNext()) return it.next().getBlob();
+  } catch (e) {}
+  return null;
+}
+
+function TGR_textoConstancia_(x) {
+  return x.cre + (x.factura ? ' (factura ' + x.factura + ')' : '') + ' · ' + x.empresa + ' → ' + x.proveedor + (x.fecha ? ' · ' + x.fecha : '') +
+    (x.retenido ? ' · retenido S/ ' + TG_num_(x.retenido) : '');
+}
+
+/** Telegram. true si lo atendió. */
+function TGR_constanciaTG_(ctx, texto) {
+  if (!TGR_esConstancia_(texto)) return false;
+  TG_accion_(ctx.chatId, 'upload_document');
+  var r = TGR_constancias_(ctx.ss, texto, ctx.citado, ctx.chatId);
+  if (!r.lista.length) { TG_enviar_(ctx.chatId, '📄 ' + TG_esc_(r.motivo)); return true; }
+  r.lista.forEach(function (x) {
+    var b = TGR_pdfConstancia_(x), t = TGR_textoConstancia_(x);
+    if (b) TG_enviarArchivo_(ctx.chatId, b.setName('Constancia retencion ' + x.cre + '.pdf'), '📄 ' + TG_esc_(t) + (r.deUltimo ? '\n<i>(tomé la factura ' + TG_esc_(r.deUltimo) + ': lo último que me envió)</i>' : ''));
+    else TG_enviar_(ctx.chatId, '📄 ' + TG_esc_(t) + '\n⚠️ Aún no tengo su PDF en Drive (llega con la próxima descarga de Retenciones).');
+  });
+  return true;
+}
+
+/** WhatsApp: null si el texto no lo pide. */
+function TGR_constanciaWA_(ss, texto, citado, clave) {
+  if (!TGR_esConstancia_(texto)) return null;
+  var r = TGR_constancias_(ss, texto, citado, clave), L = [];
+  if (!r.lista.length) return { ok: true, respuesta: '📄 ' + r.motivo, tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  r.lista.forEach(function (x) {
+    var b = TGR_pdfConstancia_(x), t = TGR_textoConstancia_(x), ok = false;
+    if (b) { try { ok = TGC_wa_({ tipo: 'documento', numero: String(clave).slice(2), mime: 'application/pdf', base64: Utilities.base64Encode(b.getBytes()), nombre: 'Constancia retencion ' + x.cre + '.pdf', texto: '📄 ' + t }); } catch (e) {} }
+    L.push((ok ? '📄 ' : '⚠️ ') + t + (ok ? '' : b ? ' — no pude adjuntarlo' + (x.url ? ': ' + x.url : '') : ' — aún no tengo su PDF en Drive (llega con la próxima descarga de Retenciones).'));
+  });
+  return { ok: true, respuesta: (r.lista.length > 1 ? 'Constancias de retención:\n' : '') + L.join('\n') + (r.deUltimo ? '\n(tomé la factura ' + r.deUltimo + ': lo último que me envió)' : ''),
+    tablas: [], sugerencias: [], archivos: [], avisos: [] };
+}
+
 /* ============================================================ resultado (lo llama TG_seguirDescargas) */
 
 function TGR_avisarFin_(cfg, s, r) {
