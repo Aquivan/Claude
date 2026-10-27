@@ -32,12 +32,39 @@ jobs:
   cre:
     name: "CRE ${{ inputs.modo }} (${{ inputs.ruc }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     environment: ${{ inputs.ruc }}
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: retenciones/emision
+          sparse-checkout: |
+            retenciones/emision
+            cobranzas/.clasp.json
+          sparse-checkout-cone-mode: false
+      - name: Dirección del bot (para mandarle el PDF; si falla, igual se emite)
+        if: inputs.modo == 'emitir'
+        continue-on-error: true
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          [ -n "$CLASPRC_JSON" ] || { echo "::warning::Falta CLASPRC_JSON: el PDF llegará con la próxima descarga de Retenciones."; exit 0; }
+          npm install -g @google/clasp@3.3.0 >/dev/null 2>&1
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"; chmod 600 "$HOME/.clasprc.json"
+          cd cobranzas
+          ID=$(clasp --json list-deployments 2>/dev/null | python3 -c "
+          import json,sys
+          t=sys.stdin.read()
+          try: d=json.loads(t[t.index('['):])
+          except Exception: d=[]
+          b=[x for x in d if (x.get('description') or '').startswith('Asistente Telegram')]
+          print(b[0]['deploymentId'] if b else '')")
+          rm -f "$HOME/.clasprc.json"
+          [ -n "$ID" ] || { echo "::warning::No encontré la aplicación web del bot."; exit 0; }
+          echo "::add-mask::$ID"
+          echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5   # Python fijo: el servidor ya trae 3.14 y playwright 1.47 no instala ahí
+        with:
+          python-version: "3.12"
       - name: Instalar navegador
         run: |
           pip install -q playwright==1.47.0

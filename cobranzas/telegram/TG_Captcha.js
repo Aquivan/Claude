@@ -24,6 +24,11 @@ function TGC_doPost_(e) {
     // 🔎 RUC por nombre (RucPorNombre.js): solo una ejecución de ruc-por-nombre.yml que esté corriendo.
     // 🚚 Guía de remisión por SUNAT (TG_GRE.js): valida ella misma que la corrida sea de gre-sunat.yml.
     if (/^gre_/.test(String(q.accion || ''))) return TGW_json_(TGG_gh_(q));
+    // 🧾 PDF del comprobante de retención recién emitido (TG_Retener.js): solo una corrida de retenciones-cre.yml que esté corriendo.
+    if (/^cre_/.test(String(q.accion || ''))) {
+      if (!run || !TGC_runValido_(cfg, run, /(^|\/)retenciones-cre\.ya?ml$/)) return TGW_json_({ ok: false, error: 'Forbidden' });
+      return TGW_json_(TGR_pdfGh_(ss, run, q));
+    }
     if (/^rpn_/.test(String(q.accion || ''))) {
       if (!run || !TGC_runValido_(cfg, run, /(^|\/)ruc-por-nombre\.ya?ml$/)) return TGW_json_({ ok: false, error: 'Forbidden' });
       return TGW_json_(RPN_gh_(q));

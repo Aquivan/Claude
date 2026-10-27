@@ -1605,6 +1605,9 @@ jobs:
           PYEOF
           python3 /tmp/extraer_items.py "$RUC" "$DIR_DESCARGAS" "$RUTA_COMPRAS_CSV" "$RUTA_VENTAS_CSV" "$FACTURAS_CSV"
 
+      - uses: actions/setup-python@v5   # Python fijo: el servidor ya trae 3.14 y playwright 1.47 no instala ahí
+        with:
+          python-version: "3.12"
       - name: Subir PDF/XML a Cloudflare R2 (opcional, solo si la empresa lo activa)
         # 100% opcional -- si "subir_pdf_r2" no esta en true para esta empresa
         # en empresas.json, este paso ni se ejecuta. Y si esta en true pero

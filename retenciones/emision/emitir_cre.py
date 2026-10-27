@@ -13,10 +13,13 @@ Seguros (si uno falla, NO se emite nada):
 Al terminar escribe el número (E001-…) como anotación "CRE emitido" (el bot la lee) y en el resumen de la corrida.
 Las claves llegan por variables de entorno y nunca se imprimen; no imprime montos ni nombres.
 """
+import base64
 import hashlib
+import json
 import os
 import re
 import sys
+import urllib.request
 
 from playwright.sync_api import sync_playwright
 
@@ -41,6 +44,99 @@ def salida(nombre, valor):
         if os.environ.get(var):
             with open(os.environ[var], "a", encoding="utf-8") as f:
                 f.write(linea)
+
+
+def bot(cuerpo):
+    """Manda algo al bot de Cobranzas (?canal=gh). Sin BOT_URL no hace nada: la emisión no depende de esto."""
+    url = os.environ.get("BOT_URL", "")
+    if not url:
+        return {"ok": False, "error": "sin BOT_URL"}
+    cuerpo = dict(cuerpo, run=os.environ.get("GITHUB_RUN_ID", ""))
+    req = urllib.request.Request(url + ("&" if "?" in url else "?") + "canal=gh", data=json.dumps(cuerpo).encode(),
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=90) as r:
+            return json.loads(r.read().decode() or "{}")
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+def bajar_pdf(pag):
+    """PDF del comprobante recién emitido (botón PDF / Descargar / Imprimir en cualquier marco). Base64 o ''.
+    Acepta descarga, pestaña nueva o la respuesta PDF misma. Nunca toca Emitir ni nada que cambie datos."""
+    ctx = pag.context
+    for f in pag.frames:   # avisos informativos primero
+        try:
+            b = f.locator(".modal button:visible, .bootbox button:visible", has_text=re.compile(r"^\s*(Aceptar|Entendido|Cerrar)\s*$"))
+            if b.count():
+                b.last.click(timeout=3000)
+                pag.wait_for_timeout(800)
+        except Exception:
+            pass
+    for rx in (r"^\s*(Descargar\s*)?PDF\s*$", r"\bPDF\b", r"Descargar(?!.*XML)", r"Imprimir"):
+        for f in pag.frames:
+            try:
+                b = f.locator("button:visible, a:visible", has_text=re.compile(rx, re.I))
+                if b.count():
+                    b = b.first
+                else:   # botones <input type=button value="PDF">
+                    b = next((x for x in f.locator("input[type=button]:visible, input[type=submit]:visible").all()
+                              if re.search(rx, x.get_attribute("value") or "", re.I)), None)
+                    if b is None:
+                        continue
+            except Exception:
+                continue
+            capturado = {}
+
+            def al_responder(r):
+                try:
+                    if "pdf" in (r.headers.get("content-type") or "").lower() and "pdf" not in capturado:
+                        capturado["pdf"] = r.body()
+                except Exception:
+                    pass
+
+            def al_bajar(d):
+                try:
+                    capturado["dl"] = d.path()
+                except Exception:
+                    pass
+
+            ctx.on("response", al_responder)
+            pag.on("download", al_bajar)
+            paginas = len(ctx.pages)
+            try:
+                b.click(timeout=5000)
+            except Exception:
+                continue
+            for _ in range(40):   # hasta 20 s
+                pag.wait_for_timeout(500)
+                if capturado:
+                    break
+                if len(ctx.pages) > paginas:
+                    nueva = ctx.pages[-1]
+                    try:
+                        nueva.wait_for_load_state("load", timeout=15000)
+                        nueva.on("download", al_bajar)
+                        if nueva.url.startswith("http"):
+                            r = ctx.request.get(nueva.url)
+                            if "pdf" in (r.headers.get("content-type") or "").lower():
+                                capturado["pdf"] = r.body()
+                        elif nueva.url.startswith("blob:"):
+                            datos = nueva.evaluate("""async u => { const b = await (await fetch(u)).blob();
+                                return await new Promise(ok => { const f = new FileReader(); f.onload = () => ok(f.result.split(',')[1]); f.readAsDataURL(b); }); }""", nueva.url)
+                            if datos:
+                                return datos
+                    except Exception:
+                        pass
+                    pag.wait_for_timeout(1500)
+                    if capturado:
+                        break
+            if capturado.get("dl"):
+                with open(capturado["dl"], "rb") as fh:
+                    capturado["pdf"] = fh.read()
+            if capturado.get("pdf", b"")[:4] == b"%PDF":
+                return base64.b64encode(capturado["pdf"]).decode()
+    return ""
 
 
 def main():
@@ -117,6 +213,17 @@ def main():
         print(f"✅ Comprobante de retención emitido: {numero}")
         salida("comprobante", numero)
         salida("resultado", "emitido")
+        # 📄 El PDF va directo al bot (no se sube a GitHub: el repositorio es público). Si falla, el CRE igual quedó emitido.
+        try:
+            pdf = bajar_pdf(pag)
+        except Exception as e:
+            pdf = ""
+            print("  No pude bajar el PDF:", str(e)[:150])
+        if pdf:
+            r = bot({"accion": "cre_pdf", "numero": numero, "pdf": pdf})
+            print("PDF del comprobante enviado al bot." if r.get("ok") else f"::warning title=CRE sin PDF::No pude mandar el PDF al bot ({r.get('error', '')[:120]}).")
+        else:
+            print("::warning title=CRE sin PDF::No encontré el botón para bajar el PDF; llega con la próxima descarga de Retenciones.")
 
 
 if __name__ == "__main__":

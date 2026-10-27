@@ -521,24 +521,62 @@ function TGR_emitirWA_(ctx, arg) {
     '\n<i>Escriba /emitirwa y el número para agregarlo o quitarlo.</i>');
 }
 
+/* ============================================================ PDF del comprobante emitido */
+
+var TGR_CARPETA_ = '🧾 CRE emitidos (bot)';
+
+/** El robot manda el PDF recién emitido: se guarda en Drive (junto a la hoja) y se recuerda por corrida hasta avisar. */
+function TGR_pdfGh_(ss, run, q) {
+  var numero = String(q.numero || '').replace(/[^\w-]/g, '').slice(0, 20), datos;
+  try { datos = Utilities.base64Decode(String(q.pdf || '')); } catch (e) { return { ok: false, error: 'PDF inválido' }; }
+  if (datos.length < 500 || datos.length > 8 * 1024 * 1024) return { ok: false, error: 'PDF de tamaño raro' };
+  var padres = DriveApp.getFileById(ss.getId()).getParents(), base = padres.hasNext() ? padres.next() : DriveApp.getRootFolder();
+  var it = base.getFoldersByName(TGR_CARPETA_), carpeta = it.hasNext() ? it.next() : base.createFolder(TGR_CARPETA_);
+  var f = carpeta.createFile(Utilities.newBlob(datos, 'application/pdf', 'CRE ' + (numero || run) + '.pdf'));
+  PropertiesService.getScriptProperties().setProperty('TGR_PDF_' + run, JSON.stringify({ id: f.getId(), numero: numero }));
+  return { ok: true };
+}
+
+/** Manda el PDF guardado de esa corrida al chat (Telegram o WhatsApp). → enlace de Drive o ''. */
+function TGR_mandarPdf_(chat, runId) {
+  var p = PropertiesService.getScriptProperties(), k = 'TGR_PDF_' + runId, x;
+  try { x = JSON.parse(p.getProperty(k) || 'null'); } catch (e) { x = null; }
+  if (!x) return '';
+  p.deleteProperty(k);
+  var f = DriveApp.getFileById(x.id), blob = f.getBlob(), nombre = f.getName();
+  try {
+    if (String(chat).indexOf('wa') === 0) TGC_wa_({ tipo: 'documento', numero: String(chat).slice(2), mime: 'application/pdf', base64: Utilities.base64Encode(blob.getBytes()), nombre: nombre, texto: '📄 ' + nombre });
+    else TG_enviarArchivo_(chat, blob, '📄 ' + TG_esc_(nombre));
+  } catch (e) { console.warn('PDF del CRE: ' + e.message); }
+  return f.getUrl();
+}
+
 /* ============================================================ resultado (lo llama TG_seguirDescargas) */
 
 function TGR_avisarFin_(cfg, s, r) {
-  var notas = [];
+  var notas = [], paso = '';
   try {
     (TG_gh_(cfg, '/actions/runs/' + r.id + '/jobs').jobs || []).forEach(function (j) {
       notas = notas.concat(TG_gh_(cfg, '/check-runs/' + j.id + '/annotations') || []);
+      var st = (j.steps || []).filter(function (x) { return x.conclusion === 'failure'; })[0];
+      if (st && !paso) paso = st.name;
     });
   } catch (e) {}
   var nota = function (rx) { return notas.filter(function (n) { return rx.test(n.title || ''); })[0]; };
   var ok = nota(/^CRE emitido/), vista = nota(/^CRE vista/), no = nota(/^CRE no emitido/), sin = nota(/^CRE sin confirmar/);
   var html, k = s.extra.k;
-  if (ok) html = '✅ <b>Comprobante de retención emitido: ' + TG_esc_(ok.message) + '</b>\n' + TG_esc_(s.texto) + ' · S/ ' + TG_num_(s.extra.total) +
-    '\n<i>El PDF y el XML llegan con la próxima descarga de Retenciones.</i>';
+  if (ok) {
+    var url = '';
+    try { url = TGR_mandarPdf_(s.chat, r.id); } catch (e) { console.warn('PDF del CRE: ' + e.message); }
+    html = '✅ <b>Comprobante de retención emitido: ' + TG_esc_(ok.message) + '</b>\n' + TG_esc_(s.texto) + ' · S/ ' + TG_num_(s.extra.total) +
+      (url ? '\n📄 Le envié el PDF (copia en Drive: <a href="' + url + '">' + TG_esc_(TGR_CARPETA_) + '</a>). El XML llega con la próxima descarga de Retenciones.'
+        : '\n<i>El PDF y el XML llegan con la próxima descarga de Retenciones.</i>');
+  }
   else if (vista) html = '👁 <b>Vista previa lista</b>: ' + TG_esc_(s.texto) + '\nSUNAT aceptó todo y calculó S/ ' + TG_num_(s.extra.total) + '. <b>No se emitió nada.</b>';
   else if (sin) html = '⚠️ <b>Se tocó Emitir pero no confirmé el número</b>: ' + TG_esc_(s.texto) + '\nRevise en SOL → Consultar emisión antes de volver a intentar.';
   else if (no) html = '⛔ <b>No se emitió</b>: ' + TG_esc_(s.texto) + '\n' + TG_esc_(no.message);
-  else html = '❌ <b>El robot de retenciones falló</b>: ' + TG_esc_(s.texto) + '. No se emitió nada.';
+  else html = '❌ <b>El robot de retenciones falló</b>: ' + TG_esc_(s.texto) + '. No se emitió nada.' +
+    (paso ? '\nFalló en el paso «' + TG_esc_(paso) + '»' + (/^CRE /.test(paso) ? '.' : ' (antes de entrar a SUNAT): puede volver a pedirlo.') : '');
   html += '\n<a href="' + r.html_url + '">ver en GitHub</a>';
   if (String(s.chat).indexOf('wa') === 0) return TGR_guardarWA_(s.chat, html + (vista ? '\n\nPara emitirlo, escriba *emitir* y toque ✅ Emitir.' : ''));
   TG_enviar_(s.chat, html, vista && k ? [[{ text: '✅ Emitir', callback_data: 'k:' + k + ':em' }]] : null);

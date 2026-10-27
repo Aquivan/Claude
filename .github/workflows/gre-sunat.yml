@@ -61,6 +61,9 @@ jobs:
           [ -n "$ID" ] || { echo "::error::No encontré la aplicación web del bot."; exit 1; }
           echo "::add-mask::$ID"
           echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5   # Python fijo: el servidor ya trae 3.14 y playwright 1.47 no instala ahí
+        with:
+          python-version: "3.12"
       - name: Preparar navegador
         timeout-minutes: 5
         run: |
