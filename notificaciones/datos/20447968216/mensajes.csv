@@ -1,4 +1,6 @@
 empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,etiqueta,leido,urgente,destacado,remitente,dependencia,adjuntos,archivos,nota_pdf,revision
+20447968216,Mensaje,1104984084,27/10/2026 02:35:01,27/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
+20447968216,Mensaje,1104845715,26/10/2026 21:08:24,26/10/2026,Se Registró Expediente MPV,Otro,,,NO,,,SUNAT,,0,,,
 20447968216,Mensaje,1104425253,26/10/2026 08:12:14,26/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,1,,,
 20447968216,Mensaje,1104386263,26/10/2026 02:53:29,26/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
 20447968216,Mensaje,1104101154,25/10/2026 02:29:11,25/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
@@ -35,7 +37,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20447968216,Mensaje,1087456898,01/10/2026 01:14:23,01/10/2026,Propuesta del Registro de Compras y Ventas - 202609,Otro,,,NO,,,SUNAT,0021,0,,,
 20447968216,Mensaje,1086816354,30/09/2026 02:27:19,30/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
 20447968216,Mensaje,1086179525,29/09/2026 01:50:16,29/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,SI,,,SUNAT,0021,0,,,
-20447968216,Mensaje,1085534654,27/09/2026 02:36:27,27/09/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0021,0,,,
 20447968216,Mensaje,1078559147,17/09/2026 12:08:00,17/09/2026,Guía de Referencia para acreditar Instrumentos Financieros Derivados,Otro,,,NO,,,9248,,1,,,
 20447968216,Mensaje,1063733931,24/08/2026 20:45:00,24/08/2026,Comunicación Obligado a la presentación FV 621 período 07-2026,Otro,,,NO,,,9188,,1,,,
 20447968216,Mensaje,1063317236,24/08/2026 12:09:02,24/08/2026,Creación de Expediente Electrónico de Reclamos,Otro,,,NO,,,SUNAT,0021,0,,,
