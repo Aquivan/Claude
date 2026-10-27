@@ -1,15 +1,20 @@
-# Agrega el Asistente IA (vouchers_ia/) al proyecto Apps Script de la hoja
-# de Vouchers SIN reemplazar su codigo actual:
+# Pone en la hoja de Vouchers el MISMO 🧠 Asistente IA de Cuentas por Cobrar y Pagar (Cobranzas), SIN reemplazar
+# el codigo del bot:
 #   1. Descarga el codigo que esta HOY en la hoja (clasp pull).
-#   2. Le agrega solo IACliente.js y AsistenteIA.js, y una linea al inicio de
-#      onOpen() para que aparezca el menu "🧠 Asistente IA".
-#   3. revisar = solo muestra lo que haria. subir = sube ese mismo codigo
-#      (el de la hoja + lo nuevo), asi nada de lo existente cambia.
-# Solo se ejecuta a mano (Actions → Run workflow).
+#   2. En su carpeta asistente_ia/ deja: AsistenteIA.js (vouchers_ia/, con la direccion de Cobranzas),
+#      MenuIA.js (generado con los mismos items del menu 🧠 Asistente IA de Cobranzas) y ChatPanel.html
+#      (el mismo panel de chat de Cobranzas). Quita el IACliente.js del asistente anterior.
+#      Y una linea al inicio de onOpen() para el menu (si no estaba).
+#   3. revisar = solo muestra lo que haria. subir = sube ese mismo codigo (el de la hoja + lo nuevo).
+# Corre solo cuando cambian el menu o el chat de Cobranzas o vouchers_ia/ (asi ambas hojas quedan iguales),
+# o a mano (Actions → Run workflow).
 
 name: Asistente IA en hoja Vouchers
 
 on:
+  push:
+    branches: [claude/python-codes-izve18]
+    paths: ['vouchers_ia/**', 'cobranzas/ChatPanel.html', 'cobranzas/ConciliacionIA.js', '.github/workflows/asistente-vouchers.yml']
   workflow_dispatch:
     inputs:
       accion:
@@ -54,9 +59,23 @@ jobs:
           chmod 600 "$HOME/.clasprc.json"
           clasp show-authorized-user
 
+      - name: Direccion de Cobranzas (su aplicacion web)
+        run: |
+          cd cobranzas
+          ID=$(clasp --json list-deployments 2>/dev/null | python3 -c "
+          import json,sys
+          t=sys.stdin.read()
+          try: d=json.loads(t[t.index('['):])
+          except Exception: d=[]
+          b=[x for x in d if (x.get('description') or '').startswith('Asistente Telegram')]
+          print(b[0]['deploymentId'] if b else '')")
+          [ -n "$ID" ] || { echo "::error::No encontré la aplicación web de Cobranzas."; exit 1; }
+          echo "::add-mask::$ID"
+          echo "COB_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
+
       - name: Descargar el codigo actual de la hoja Vouchers (solo lectura)
         env:
-          SID: ${{ inputs.script_id }}
+          SID: ${{ inputs.script_id || '1D9dcCYU-Nqw7bgjFYPcTSUTcyrVE25AK03_zx4ZTUknId-lUieAV6J1G' }}
         run: |
           mkdir -p /tmp/hoja
           printf '{"scriptId":"%s","rootDir":"/tmp/hoja"}' "$SID" > /tmp/hoja/.clasp.json
@@ -76,26 +95,55 @@ jobs:
               for f in fs:
                   if f.endswith(('.js', '.gs')):
                       codigo.append(os.path.relpath(os.path.join(raiz, f), d))
-          nuevos = ['IACliente', 'AsistenteIA']
+          nuevos = ['IACliente', 'AsistenteIA', 'MenuIA', 'ChatPanel']
           def base(f): return os.path.splitext(os.path.basename(f))[0]
           def leer(f): return open(os.path.join(d, f), encoding='utf-8').read()
-          # 1) No debe haber nombres IA_ ya usados por el codigo actual.
+          # 1) El codigo del bot no debe usar nombres IA_ ni VIA_ (son del asistente).
           for f in codigo:
               if base(f) in nuevos: continue
-              if re.search(r'\b(function|var|const|let)\s+IA_', leer(f)):
-                  print('::error::El archivo ' + f + ' ya usa nombres IA_; no se sube nada.'); sys.exit(1)
+              if re.search(r'\b(function|var|const|let)\s+V?IA_', leer(f)):
+                  print('::error::El archivo ' + f + ' ya usa nombres IA_/VIA_; no se sube nada.'); sys.exit(1)
           # 2) onOpen() debe existir una sola vez.
           con = [f for f in codigo if base(f) not in nuevos and re.search(r'function\s+onOpen\s*\(', leer(f))]
           if len(con) != 1:
               print('::error::Se esperaba un solo onOpen() y hay ' + str(len(con)) + '; no se sube nada.'); sys.exit(1)
-          # 3) Los archivos del asistente van en su PROPIA carpeta "asistente_ia/",
-          #    separados del codigo del bot (reemplaza solo versiones previas del asistente).
+          # 3) Carpeta propia "asistente_ia/": reemplaza todo lo del asistente (el anterior y este).
           carpeta = 'asistente_ia'
-          for f in codigo:
-              if base(f) in nuevos: os.remove(os.path.join(d, f))
+          shutil.rmtree(os.path.join(d, carpeta), ignore_errors=True)
+          for f in codigo:   # versiones viejas del asistente fuera de su carpeta
+              if base(f) in ('IACliente', 'AsistenteIA') and os.path.exists(os.path.join(d, f)): os.remove(os.path.join(d, f))
           os.makedirs(os.path.join(d, carpeta), exist_ok=True)
-          for n in nuevos:
-              shutil.copy('vouchers_ia/' + n + '.js', os.path.join(d, carpeta, n + '.js'))
+          url = os.environ['COB_URL']
+          js = open('vouchers_ia/AsistenteIA.js', encoding='utf-8').read().replace('__COBRANZAS_URL__', url)
+          open(os.path.join(d, carpeta, 'AsistenteIA.js'), 'w', encoding='utf-8').write(js)
+          # El mismo panel de chat de Cobranzas (sus llamadas CHAT_x pasan a VIA_x de esta hoja).
+          html = open('cobranzas/ChatPanel.html', encoding='utf-8').read()
+          html = re.sub(r'\bCHAT_(enviar|aplicar|deshacer|verResultado|pendiente)\b', r'VIA_\1', html)
+          if re.search(r'\bCHAT_\w+\(', html):
+              print('::error::El panel de Cobranzas usa una función nueva: ' + ', '.join(sorted(set(re.findall(r'\bCHAT_\w+', html)))) + ' (agréguela a vouchers_ia).'); sys.exit(1)
+          open(os.path.join(d, carpeta, 'ChatPanel.html'), 'w', encoding='utf-8').write(html)
+          # El menu: los mismos items del menu 🧠 Asistente IA de Cobranzas (CIA_agregarMenu_).
+          cia = open('cobranzas/ConciliacionIA.js', encoding='utf-8').read()
+          bloque = re.search(r'function CIA_agregarMenu_\(\)\s*\{(.*?)\.addToUi\(\)', cia, re.S).group(1)
+          aqui = {'CHAT_menuAbrir': 'VIA_menuAbrirChat', 'CIA_menuResumen': 'VIA_menuResumen',
+                  'menuAnalizarIAProcesados': 'VIA_menuProcesados', 'IA_menuRetirar': 'VIA_menuRetirar'}
+          pest = {'CIA_': '🤝 Conciliar con IA', 'IMP_': '🤝 Importar'}
+          lineas, extra = [], []
+          for m in re.finditer(r"\.addItem\('((?:[^'\\]|\\.)*)',\s*'(\w+)'\)|\.addSeparator\(\)", bloque):
+              if not m.group(1):
+                  lineas.append("    .addSeparator()"); continue
+              etiqueta, fn = m.group(1), m.group(2)
+              if fn in aqui:
+                  lineas.append("    .addItem('%s', '%s')" % (etiqueta, aqui[fn])); continue
+              w = 'VIA_m_' + fn
+              p_ = next((v for k, v in pest.items() if fn.startswith(k)), '')
+              lineas.append("    .addItem('%s ↗', '%s')" % (etiqueta, w))
+              extra.append("function %s() { VIA_abrirCobranzas_('%s', 'Esto se trabaja en Cuentas por Cobrar y Pagar: allí use 🧠 Asistente IA → %s.'); }" % (w, p_, etiqueta.replace("'", "\\'")))
+          menu = ("// GENERADO por asistente-vouchers.yml desde el menú 🧠 Asistente IA de Cobranzas (no editar aquí).\n"
+                  "// ↗ = se trabaja en la hoja de Cuentas por Cobrar y Pagar (abre esa hoja).\n"
+                  "function VIA_menu_() {\n  SpreadsheetApp.getUi().createMenu('🧠 Asistente IA')\n" + "\n".join(lineas) + "\n    .addToUi();\n}\n\n" + "\n".join(extra) + "\n")
+          open(os.path.join(d, carpeta, 'MenuIA.js'), 'w', encoding='utf-8').write(menu)
+          print(menu)
           # 4) Una linea al inicio de onOpen().
           ruta = os.path.join(d, con[0])
           t = leer(con[0])
@@ -110,12 +158,12 @@ jobs:
           print('Permiso para llamar a la IA (external_request): ' + ('ya lo tiene' if 'external_request' in man or 'oauthScopes' not in man else 'FALTA'))
           PY
           echo "=========== CAMBIOS EN ARCHIVOS QUE YA EXISTIAN ==========="
-          diff -ruN --strip-trailing-cr -x '.clasp.json' -x 'IACliente.js' -x 'AsistenteIA.js' /tmp/original /tmp/hoja | grep -E '^([+-][^+-]|\+\+\+)' || true
-          echo "=========== ARCHIVOS NUEVOS ==========="
-          find /tmp/hoja -name 'IACliente.js' -o -name 'AsistenteIA.js' | xargs wc -l
+          diff -ruN --strip-trailing-cr -x '.clasp.json' -x 'asistente_ia' /tmp/original /tmp/hoja | grep -E '^([+-][^+-]|\+\+\+)' || true
+          echo "=========== CARPETA asistente_ia ==========="
+          ls -la /tmp/hoja/asistente_ia
 
       - name: Subir a la hoja Vouchers
-        if: inputs.accion == 'subir'
+        if: github.event_name == 'push' || inputs.accion == 'subir'
         run: |
           cd /tmp/hoja && clasp push --force
           echo "Asistente IA subido. El resto del codigo de la hoja quedo igual."

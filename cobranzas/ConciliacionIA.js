@@ -57,9 +57,7 @@ function CIA_agregarMenu_() {
 
 /** 📰 Resumen ejecutivo (lo que hacía el asistente anterior): se abre el 💬 Chat con la pregunta ya enviada. */
 function CIA_menuResumen() {
-  PropertiesService.getUserProperties().setProperty('CHAT_AUTO', 'Dame un resumen ejecutivo de cuentas por cobrar y por pagar del grupo: qué empresa tiene más por cobrar ' +
-    'y por pagar, qué clientes están más atrasados, a qué proveedores debemos más (y qué vence esta semana), vouchers sin cruzar, retenciones y detracciones ' +
-    'pendientes, y los riesgos que debo atender esta semana. Con cifras exactas.');
+  PropertiesService.getUserProperties().setProperty('CHAT_AUTO', CIA_RESUMEN_TXT_);   // AsistenteVouchers.js
   CHAT_menuAbrir();
 }
 
