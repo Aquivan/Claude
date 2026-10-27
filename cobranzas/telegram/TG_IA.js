@@ -47,7 +47,7 @@ var TG_SISTEMA_ = [
   '  "sire_rapido" = SOLO el reporte/registro de compras y/o ventas (rápido, sin PDF/XML), una o varias empresas, un mes o un rango desde-hasta:',
   '  úsalo cuando pidan actualizar/bajar el reporte, registro o propuesta del SIRE, varios meses o "rápido". (También: comando /sire).',
   '  Notificaciones sin "desde" = SOLO LO NUEVO (lo que falta, rápido): es lo normal. Solo si piden expresamente todo el buzón usa todo:true.',
-  '- proponer_retencion {factura:"F001-215", empresa, proveedor}: para "emite / genera / saca la retención (CRE) de …" o "¿puedes emitir la retención en SUNAT?".',
+  '- proponer_retencion {factura:"F001-215", voucher:"Fotos!362" (u op / monto), empresa, proveedor}: también con solo el voucher; para "emite / genera / saca la retención (CRE) de …" o "¿puedes emitir la retención en SUNAT?".',
   '  Muestra al usuario la propuesta con botones 👁 Vista previa y ✅ Emitir (pide confirmar; no se emite sola). Si responde (cita) un mensaje, toma la factura de ahí.',
   '  Si NO hay nada que emitir, devuelve el motivo de la hoja: dilo tal cual, no lo recalcules. Nunca digas que emitiste algo.',
   '- RETENCIÓN IGV 3 %: si una factura se retiene o no lo decide la hoja (dato "retener" / columna "¿Retener? (IGV 3%)" y "Retención esperada S/"), NO tú.',

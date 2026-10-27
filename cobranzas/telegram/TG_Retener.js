@@ -183,8 +183,130 @@ function TGR_buscar_(ss, cob, q) {
     return true;
   });
   if (lista.length) return { lista: lista, r: r };
+  // La hoja de Cobranzas puede no haber visto todavía el voucher (recién registrado o sin la factura escrita):
+  // se busca directo en la hoja de Vouchers, por la factura o por el voucher.
+  var d = (q.doc || q.voucher) ? TGR_directo_(ss, q) : null;
+  if (d && d.lista) return { lista: d.lista, r: r };
+  if (!q.doc && d && d.motivo) return { motivo: d.motivo, filas: d.filas || [], r: r };
   if (!q.doc) return { motivo: r.lista.length ? 'Con esos datos no encontré un pago pendiente de comprobante.' : 'No hay pagos de este mes pendientes de comprobante de retención.', filas: [], r: r };
-  return TGR_porQueNo_(ss, q, r);
+  var x = TGR_porQueNo_(ss, q, r);
+  if (d && d.motivo && !/^(No corresponde|Ya está retenida|La hoja no evalúa)/.test(x.motivo)) x.motivo = d.motivo;
+  return x;
+}
+
+/* ============================================================ directo desde la hoja de Vouchers (por factura o por voucher) */
+
+/**
+ * Voucher que se pidió: "Fotos!362", "fila 362 de fotos", "op 3013760" o "S/ 1,769.27" → {fila} | {op} | {monto}; null si no hay.
+ */
+function TGR_normVoucher_(t) {
+  t = String(t || '');
+  var m = t.match(/\b(fotos|originales)\s*!\s*(\d+)/i) || t.match(/\b(fotos|originales)\s+(?:fila\s*)?(\d+)\b/i);
+  if (m) return { fila: m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() + '!' + m[2] };
+  m = t.match(/\bfila\s*(\d+)\s*(?:de\s*(?:la\s*)?(?:pesta[ñn]a\s*)?)?(fotos|originales)\b/i);
+  if (m) return { fila: m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase() + '!' + m[1] };
+  m = t.match(/\b(?:op|operaci[oó]n|n[°º]\s*de\s*operaci[oó]n)\.?\s*(?:n[°º]\.?\s*)?:?\s*(\d{3,})/i);
+  if (m) return { op: m[1].replace(/^0+/, '') };
+  m = t.match(/\bvoucher\b[^\d]{0,25}(?:S\/\s*)?(\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2})/i) || t.match(/S\/\s*(\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2})/i);
+  if (m && /voucher|pago|dep[oó]sito|transferencia/i.test(t)) return { monto: Number(m[1].replace(/,/g, '')) };
+  return null;
+}
+
+/** Vouchers en soles de los últimos 70 días, de todas las pestañas: [{fila, fecha, monto, moneda, op, refs, ruc, prov, empresa, idUsuario}]. */
+function TGR_vouchersRecientes_(cfg) {
+  var libro = SpreadsheetApp.openById(cfg.idVouchers), out = [], desdeF = new Date(Date.now() - 70 * 864e5);
+  libro.getSheets().forEach(function (h) {
+    if (h.getLastRow() < 2) return;
+    var col = indiceColumnas_(h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0]);
+    var c = { fecha: col('Fecha de depos', 'Fecha de deposito'), monto: col('Monto'), moneda: col('Moneda'), op: col('Numero de oper', 'Numero de operacion'),
+      refs: col('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc'), ruc: col('ID Beneficiario'), prov: col('Proveedor (Beneficiario)'),
+      empresa: col('Empresa'), idUsuario: col('ID Usuario') };
+    if (c.monto < 0 || c.fecha < 0) return;
+    var desde = Math.max(2, h.getLastRow() - 3000), n = h.getLastRow() - desde + 1;
+    var v = h.getRange(desde, 1, n, h.getLastColumn()).getValues();
+    v.forEach(function (r, i) {
+      var g = function (k) { return c[k] >= 0 ? r[c[k]] : ''; }, op = String(g('op') || '');
+      var fecha = aFecha_(g('fecha')), monto = aNumero_(g('monto'));
+      if (!monto || /^\[/.test(op) || !fecha || fecha < desdeF) return;
+      out.push({ fila: h.getName() + '!' + (desde + i), fecha: fecha, monto: monto, moneda: String(g('moneda') || 'PEN'), op: op.replace(/\D/g, '').replace(/^0+/, ''),
+        refs: String(g('refs') || ''), ruc: aRuc_(g('ruc')), prov: String(g('prov') || ''), empresa: String(g('empresa') || ''), idUsuario: aRuc_(g('idUsuario')) });
+    });
+  });
+  return out;
+}
+
+/** Facturas por pagar de 📋 Documentos: [{empresa, ruc, contraparte, documento, doc, total, nc, pagado, estado, retener}]. */
+function TGR_porPagar_(ss) {
+  var sh = ss.getSheetByName(HOJA.DOCS), out = [];
+  if (!sh || sh.getLastRow() < 2) return out;
+  var v = sh.getRange(1, 1, sh.getLastRow(), ENC_DOCS_.length).getValues(), I = {};
+  v[0].forEach(function (h, j) { I[h] = j; });
+  v.slice(1).forEach(function (x) {
+    if (x[I['Tipo']] !== 'Por pagar') return;
+    out.push({ empresa: String(x[I['Empresa']]), ruc: String(x[I['RUC contraparte']]).replace(/\D/g, ''), contraparte: String(x[I['Contraparte']]),
+      documento: String(x[I['Documento']]), doc: TGR_normDoc_(x[I['Documento']]), total: aNumero_(x[I['Total']]), nc: aNumero_(x[I['N/C']]),
+      pagado: aNumero_(x[I['Pagado']]), estado: String(x[I['Estado']]), retener: String(x[I['¿Retener? (IGV 3%)']] || ''), esperada: aNumero_(x[I['Retención esperada S/']]) });
+  });
+  return out;
+}
+
+/** ¿Este voucher paga esta factura? por la factura escrita en el voucher, o por monto (total, o total menos el 3 %) y el mismo proveedor. */
+function TGR_paga_(v, f) {
+  if (v.refs && v.refs.split(/\s*,\s*/).map(TGR_normDoc_).indexOf(f.doc) >= 0) return 'la factura escrita en el voucher';
+  if (v.ruc && f.ruc && v.ruc !== f.ruc) return '';
+  var neto = f.total - f.nc, ret = Math.round(neto * 3) / 100;
+  if (Math.abs(v.monto - (neto - ret)) <= 0.05) return 'el monto (total menos la retención del 3 %)';
+  if (Math.abs(v.monto - neto) <= 0.05 && (v.ruc === f.ruc || ANA_coincide_(f.contraparte, '', v.prov))) return 'el monto (total) y el proveedor';
+  return '';
+}
+
+/**
+ * Propuesta del CRE armada con el voucher y la factura, aunque la hoja de Cobranzas aún no los cruce.
+ * q = {doc} o {voucher:{fila|op|monto}} → {lista:[propuesta]} o {motivo, filas}.
+ */
+function TGR_directo_(ss, q) {
+  var cfg = leerConfig_(ss), rucDe = {};
+  Object.keys(cfg.nombreEmpresa || {}).forEach(function (r) { rucDe[String(cfg.nombreEmpresa[r])] = r; });
+  var facturas = TGR_porPagar_(ss), vs = TGR_vouchersRecientes_(cfg), pares = [];
+  if (q.voucher) {
+    var w = q.voucher, mios = vs.filter(function (v) {
+      return w.fila ? v.fila.toLowerCase() === w.fila.toLowerCase() : w.op ? v.op === w.op || (w.op.length >= 6 && v.op.slice(-6) === w.op.slice(-6)) : Math.abs(v.monto - w.monto) <= 0.05;
+    });
+    if (!mios.length) return { motivo: 'No encontré ese voucher en la hoja de Vouchers (últimos 70 días). Escríbalo así: «emite la retención del voucher Fotos!362» o «… de la op 3013760».' };
+    if (mios.length > 1) return { motivo: 'Hay ' + mios.length + ' vouchers con ese dato: ' + mios.slice(0, 4).map(function (v) { return v.fila + ' (S/ ' + TG_num_(v.monto) + ')'; }).join(', ') + '. Dígame cuál (ej. Fotos!362).' };
+    facturas.forEach(function (f) { if (!q.doc || f.doc === q.doc) { var como = TGR_paga_(mios[0], f); if (como) pares.push({ v: mios[0], f: f, como: como }); } });
+    if (!pares.length) return { motivo: 'El voucher ' + mios[0].fila + ' (S/ ' + TG_num_(mios[0].monto) + (mios[0].prov ? ', ' + mios[0].prov : '') + ') no cuadra con ninguna factura por pagar' +
+      (q.doc ? ' ' + q.doc : '') + '. Dígame la factura: «emite la retención de F003-37515 con el voucher ' + mios[0].fila + '».' };
+  } else {
+    facturas.filter(function (f) { return f.doc === q.doc; }).forEach(function (f) {
+      vs.forEach(function (v) { var como = TGR_paga_(v, f); if (como) pares.push({ v: v, f: f, como: como }); });
+    });
+    if (!pares.length) return null;   // que lo explique la hoja (TGR_porQueNo_)
+  }
+  // El de la factura escrita primero; luego el más reciente.
+  pares.sort(function (a, b) { return (/escrita/.test(b.como) ? 1 : 0) - (/escrita/.test(a.como) ? 1 : 0) || b.v.fecha - a.v.fecha; });
+  var p = pares[0], f = p.f, v = p.v;
+  var filas = [{ empresa: f.empresa, contraparte: f.contraparte, documento: f.documento, total: f.total, pagado: f.pagado, estado: f.estado, retener: f.retener }];
+  if (!f.retener) return { motivo: 'La factura ' + f.doc + ' no lleva retención: la empresa compradora no era agente de retención en esa fecha.', filas: filas };
+  if (/^No:/.test(f.retener)) return { motivo: 'No corresponde emitir comprobante de retención: ' + f.retener.replace(/^No:\s*/, '') + ' (según la hoja de Cobranzas).', filas: filas };
+  if (/^✅/.test(f.retener)) return { motivo: 'Ya está retenida: ' + f.retener + '.', filas: filas };
+  if (!/^PEN|^S\//i.test(v.moneda)) return { motivo: 'El voucher ' + v.fila + ' está en dólares: hágalo a mano en SOL.', filas: filas };
+  var hoy = new Date(Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd') + 'T12:00:00');
+  var minPago = new Date(hoy.getTime() - 5 * 864e5); minPago = new Date(minPago.getFullYear(), minPago.getMonth(), 1);
+  if (v.fecha < minPago) return { motivo: 'El pago (' + v.fila + ') es del ' + Utilities.formatDate(v.fecha, 'America/Lima', 'dd/MM/yyyy') +
+    ' y SEE-SOL solo emite comprobantes con pagos del mes en curso: hágalo con su contador.', filas: filas };
+  var empresaRuc = rucDe[f.empresa] || v.idUsuario;
+  if (!empresaRuc || !f.ruc) return { motivo: 'Al voucher ' + v.fila + ' o a la factura les falta la empresa o el RUC del proveedor.', filas: filas };
+  var neto = f.total - f.nc, bruto = Math.round(v.monto / 0.97 * 100) / 100;
+  if (bruto > neto + 0.05) bruto = Math.min(v.monto, neto);   // se pagó completo sin descontar
+  var ret = Math.round(bruto * 3) / 100, m = f.doc.match(/^([A-Z0-9]{4})-(\d+)$/);
+  var emision = v.fecha.getMonth() === hoy.getMonth() ? hoy : new Date(v.fecha.getFullYear(), v.fecha.getMonth() + 1, 0, 12);
+  var s = { empresa_ruc: empresaRuc, proveedor_ruc: f.ruc, fecha_emision: Utilities.formatDate(emision, 'America/Lima', 'dd/MM/yyyy'), observacion: '',
+    documentos: [{ tipo: '01', serie: m[1], numero: m[2], notas_credito: [], fecha_pago: Utilities.formatDate(v.fecha, 'America/Lima', 'dd/MM/yyyy'), importe_pago: bruto, retencion: ret }] };
+  try { TGP_recalcularLuego_(); } catch (e) {}   // que Cobranzas también lo vea
+  return { lista: [{ titulo: f.empresa + ' → ' + f.contraparte.slice(0, 40),
+    detalle: 'Pago ' + Utilities.formatDate(v.fecha, 'America/Lima', 'dd/MM') + ' · voucher ' + v.fila + (v.op ? ' op ' + v.op : '') + ' · S/ ' + TG_num_(v.monto) + ' · ' + f.doc +
+      ' (cuadra por ' + p.como + ')', s: s, total: ret, falta: ret, empresa: f.empresa, proveedor: f.contraparte }] };
 }
 
 /** Por qué una factura no está para emitir: lo que dice la hoja (📋 Documentos y la parte de vouchers de _Retenciones datos). */
@@ -242,10 +364,10 @@ function TGR_atajoTG_(ctx, texto) {
   if (!TGR_esPedido_(texto)) return false;
   TG_accion_(ctx.chatId, 'typing');
   var cob = TG_cfg_(ctx.ss).cob, x;
-  var q = { doc: TGR_normDoc_(texto) || TGR_normDoc_(ctx.citado), empresa: '' };
+  var q = { doc: TGR_normDoc_(texto) || TGR_normDoc_(ctx.citado), voucher: TGR_normVoucher_(texto) || TGR_normVoucher_(ctx.citado), empresa: '' };
   try { x = TGR_buscar_(ctx.ss, cob, q); } catch (e) { TG_enviar_(ctx.chatId, '⚠️ No pude leer las retenciones: ' + TG_esc_(e.message)); return true; }
   if (x.lista) { TGR_proponerTG_(ctx, x.lista, '🧾 <b>Comprobante de retención por emitir' + (q.doc ? ' · ' + q.doc : '') + '</b>'); return true; }
-  TG_enviar_(ctx.chatId, '🧾 <b>' + (q.doc ? 'Factura ' + TG_esc_(q.doc) : 'Comprobantes de retención') + '</b>\n' + TG_esc_(x.motivo) + TGR_filasTexto_(x.filas),
+  TG_enviar_(ctx.chatId, '🧾 <b>' + (q.doc ? 'Factura ' + TG_esc_(q.doc) : q.voucher ? 'Voucher' : 'Comprobantes de retención') + '</b>\n' + TG_esc_(x.motivo) + TGR_filasTexto_(x.filas),
     [[{ text: '🧾 Ver todos los pendientes', callback_data: 'c:emitir' }]]);
   return true;
 }
@@ -261,7 +383,8 @@ function TGR_filasTexto_(filas, plano) {
 /** Herramienta de la IA: proponer_retencion {factura, empresa, proveedor}. */
 function TGR_paraIA_(c, a) {
   var emp = a.empresa ? ANA_empresa_(c, a.empresa) : '';
-  var q = { doc: TGR_normDoc_(a.factura || a.documento || ''), empresa: /^\d{11}$/.test(emp) ? emp : '', proveedor: String(a.proveedor || '').trim() };
+  var q = { doc: TGR_normDoc_(a.factura || a.documento || ''), voucher: a.voucher ? TGR_normVoucher_(/^(fotos|originales)!/i.test(a.voucher) ? a.voucher : 'voucher ' + a.voucher) : null,
+    empresa: /^\d{11}$/.test(emp) ? emp : '', proveedor: String(a.proveedor || '').trim() };
   var x = TGR_buscar_(c.ss, c.cfg, q);
   if (x.lista) {
     c.op.tg.cre = (c.op.tg.cre || []).concat(x.lista.slice(0, 5));
@@ -355,11 +478,11 @@ function TGR_botonesWA_(lista) {
 /** WhatsApp: "emite la retención de F001-215" (o citando el mensaje). null si el texto no lo pide. */
 function TGR_atajoWA_(ss, texto, citado) {
   if (!TGR_esPedido_(texto)) return null;
-  var q = { doc: TGR_normDoc_(texto) || TGR_normDoc_(citado), empresa: '' };
-  if (!q.doc) return TGR_listaWA_(ss);
+  var q = { doc: TGR_normDoc_(texto) || TGR_normDoc_(citado), voucher: TGR_normVoucher_(texto) || TGR_normVoucher_(citado), empresa: '' };
+  if (!q.doc && !q.voucher) return TGR_listaWA_(ss);
   var x = TGR_buscar_(ss, TG_cfg_(ss).cob, q);
-  if (x.lista) return { ok: true, respuesta: '🧾 *Comprobante de retención por emitir · ' + q.doc + '*', tablas: [], sugerencias: [], archivos: [], avisos: [], botones: TGR_botonesWA_(x.lista) };
-  return { ok: true, respuesta: '🧾 *Factura ' + q.doc + '*\n' + x.motivo + TGR_filasTexto_(x.filas, true), tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  if (x.lista) return { ok: true, respuesta: '🧾 *Comprobante de retención por emitir' + (q.doc ? ' · ' + q.doc : '') + '*', tablas: [], sugerencias: [], archivos: [], avisos: [], botones: TGR_botonesWA_(x.lista) };
+  return { ok: true, respuesta: '🧾 *' + (q.doc ? 'Factura ' + q.doc : 'Voucher') + '*\n' + x.motivo + TGR_filasTexto_(x.filas, true), tablas: [], sugerencias: [], archivos: [], avisos: [] };
 }
 
 function TGR_listaWA_(ss) {
