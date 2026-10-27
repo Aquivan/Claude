@@ -24,7 +24,12 @@ function WA_iaLlamar_(params, cuerpo) {
     method: 'post', contentType: 'application/json', payload: JSON.stringify(cuerpo || {}), muteHttpExceptions: true, followRedirects: true
   });
   var t = r.getContentText();
-  try { return JSON.parse(t); } catch (e) { return { ok: false, error: 'La IA respondió HTTP ' + r.getResponseCode() + ': ' + t.replace(/<[^>]+>/g, ' ').slice(0, 150) }; }
+  try { return JSON.parse(t); } catch (e) {
+    // Una página de Google en vez de la respuesta: casi siempre Cobranzas se estaba actualizando o tardó demasiado.
+    console.error('Cobranzas respondió HTTP ' + r.getResponseCode() + ': ' + t.replace(/<[^>]+>/g, ' ').slice(0, 300));
+    return { ok: false, error: '⚠️ Cobranzas no respondió bien (HTTP ' + r.getResponseCode() + '; quizá se estaba actualizando o tardó demasiado). ' +
+      'Lo que pidió pudo haberse hecho igual: espere el aviso un par de minutos y, si no llega, vuelva a pedirlo.' };
+  }
 }
 
 // Clave entre esta app y Cobranzas: se crea y registra sola la primera vez.

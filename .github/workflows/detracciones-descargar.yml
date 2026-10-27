@@ -119,6 +119,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5   # Python fijo: el servidor ya trae 3.14 y playwright 1.47 no instala ahí
+        with:
+          python-version: "3.12"
       - name: Instalar navegador
         run: |
           pip install playwright==1.47.0
@@ -173,6 +176,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5   # Python fijo: el servidor ya trae 3.14 y playwright 1.47 no instala ahí
+        with:
+          python-version: "3.12"
       - name: Instalar navegador
         run: |
           pip install playwright==1.47.0
