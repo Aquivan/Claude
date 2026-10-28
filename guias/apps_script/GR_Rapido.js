@@ -10,7 +10,7 @@
 
 var GR_RES_ = '📋 Resumen del día';
 // Transporte y partida: lo que se repite cuando el mismo camión sale con varias guías.
-var GR_TRANSPORTE_ = ['modalidad', 'm1', 'truc', 'tnom', 'mtc', 'placa', 'placa2', 'mtcveh', 'cdni', 'cnom', 'cape', 'clic', 'plocal', 'pubi', 'pdir', 'pest', 'fecha'];
+var GR_TRANSPORTE_ = ['modalidad', 'm1', 'truc', 'tnom', 'mtc', 'placa', 'placa2', 'mtcveh', 'mtcveh2', 'cdni', 'cnom', 'cape', 'clic', 'plocal', 'pubi', 'pdir', 'pest', 'fecha'];
 
 /* ---------------- 👁 vista ---------------- */
 
@@ -21,7 +21,7 @@ function GR_menuVistaGuia() {
   var r = GR_leerGuias_(sh, f, f)[0].r, t = function (k) { return String(r[k] == null ? '' : r[k]).trim(); };
   var mod = t('modalidad').slice(0, 2), mot = t('motivo').slice(0, 2), ocultar = {};
   if (mod === '02') ['truc', 'tnom', 'mtc'].forEach(function (k) { ocultar[k] = 1; });          // privado: sin transportista público
-  if (t('m1') === 'SI') ['placa', 'placa2', 'mtcveh', 'cdni', 'cnom', 'cape', 'clic'].forEach(function (k) { ocultar[k] = 1; });
+  if (t('m1') === 'SI') ['placa', 'placa2', 'mtcveh', 'mtcveh2', 'cdni', 'cnom', 'cape', 'clic'].forEach(function (k) { ocultar[k] = 1; });
   if (mot !== '13') ocultar.motivoTxt = 1;
   if (mot !== '04') { ocultar.pest = 1; ocultar.lest = 1; }
   if (t('docrel') === 'Ninguno') ['serie', 'numero', 'pedido', 'total'].forEach(function (k) { ocultar[k] = 1; });

@@ -47,7 +47,7 @@ function GR_datosBorrador(id) {
     documento: t('docrel') === 'Ninguno' ? '' : (t('numero') ? t('docrel') + ' ' + t('serie') + '-' + t('numero') : (t('cotizacion') ? 'Cotización ' + t('cotizacion') + ' (la factura se busca al emitir)' : '')),
     partida: { dir: t('pdir'), ubi: t('pubi'), cod: t('pest') }, llegada: { dir: t('ldir'), ubi: t('lubi'), cod: t('lest') },
     transportista: privado ? null : { ruc: t('truc'), nombre: t('tnom'), mtc: t('mtc') },
-    vehiculos: [t('placa'), t('placa2')].filter(String).map(function (p, i) { return { placa: p, cert: (t('mtcveh').split(/[\/,;]+/)[i] || '').trim(), rol: i ? 'Secundario' : 'Principal' }; }),
+    vehiculos: [t('placa'), t('placa2')].filter(String).map(function (p, i) { return { placa: p, cert: t(i ? 'mtcveh2' : 'mtcveh'), rol: i ? 'Secundario' : 'Principal' }; }),
     conductor: t('cdni') || t('cnom') ? { dni: t('cdni'), nombre: (t('cnom') + ' ' + t('cape')).trim(), licencia: t('clic') } : null,
     privado: privado, m1: t('m1') === 'SI', bienes: bienes, bienesOrigen: origen, observaciones: t('obsFinal') || t('obs')
   };

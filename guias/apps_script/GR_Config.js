@@ -19,7 +19,7 @@ var GR_LIS_ = 'Listas';
 var GR_REG_ = '🧾 Registro';
 var GR_AYU_ = '📖 Ayuda';
 var GR_FILA1_ = 3;
-var GR_VERSION_ = 11;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
+var GR_VERSION_ = 12;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
 
 // Catálogos SUNAT (anexo 8 de la R.S. 097-2012 y modificatorias).
 var GR_MOTIVOS_ = ['01 - Venta', '02 - Compra', '03 - Venta con entrega a terceros', '04 - Traslado entre establecimientos de la misma empresa',
@@ -77,8 +77,9 @@ var GR_COLS_ = [
   { k: 'tnom', t: 'Razón social transportista', v: 'cat:tra:B', g: 'pub', w: 220 },
   { k: 'mtc', t: 'N° registro MTC', v: 'cat:tra:C', g: 'pub', w: 95, f: '@', n: 'Registro del transportista en el MTC (si lo tiene).' },
   { k: 'placa', t: 'Placa principal', v: 'cat:veh:A', g: 'priv', w: 80, n: 'Privado: obligatorio. Público: OPCIONAL — si el transportista le da la placa y el chofer, póngalos y van en la guía (🚛 Buscar en el MTC trae sus placas y certificados). Ej. ABC-123.' },
+  { k: 'mtcveh', t: 'Cert. MTC placa principal', v: 'cat:veh:F', g: 'priv', w: 125, f: '@', n: 'Certificado de habilitación vehicular (MTC) de la placa principal, ej. 15M26029908E. Se llena solo desde 🚗 Vehículos (o 🚛 Buscar en el MTC).' },
   { k: 'placa2', t: 'Placa secundaria', v: 'cat:veh:A', g: 'priv', w: 80, n: 'Opcional (carreta, remolque).' },
-  { k: 'mtcveh', t: 'Cert. habilitación MTC', v: 'cat:veh:F', g: 'priv', w: 140, f: '@', n: 'Certificado de habilitación vehicular (MTC) de las placas, ej. 15M26029908E/15M26029906E. Se llena desde 🚗 Vehículos y va en el campo del vehículo en la guía.' },
+  { k: 'mtcveh2', t: 'Cert. MTC placa secundaria', v: 'cat:veh:F', g: 'priv', w: 125, f: '@', n: 'Certificado de habilitación vehicular (MTC) de la placa secundaria (carreta). Se llena solo desde 🚗 Vehículos.' },
   { k: 'cdni', t: 'DNI conductor', v: 'cat:con:A', g: 'priv', w: 85, f: '@', n: 'Si está en 👤 Conductores, llena nombres, apellidos y licencia.' },
   { k: 'cnom', t: 'Nombres conductor', v: 'cat:con:B', g: 'priv', w: 130 },
   { k: 'cape', t: 'Apellidos conductor', v: 'cat:con:C', g: 'priv', w: 140 },

@@ -57,7 +57,7 @@ function GR_casoDeFila_(r, ctx) {
   var placas = [t('placa'), t('placa2')].map(function (p) { return p.toUpperCase().replace(/[^A-Z0-9]/g, ''); }).filter(String);
   var transporte = privado || placas.length || t('cdni') ? {
     modo: privado ? 'privado' : 'publico', ruc: t('truc').replace(/\D/g, ''), nombre: t('tnom'), mtc: t('mtc'),
-    placas: placas, constancias: t('mtcveh').split(/[\/,;\s]+/).filter(String),
+    placas: placas, constancias: [t('mtcveh')].concat(t('placa2') ? [t('mtcveh2')] : []).map(function (x) { return x.replace(/\s/g, ''); }),   // en el orden de las placas
     registrar_vehiculos: privado || !!(placas.length && t('cdni')),   // público: opcional, se registran si hay placa y chofer
     conductores: t('cdni') ? [{ dni: t('cdni').replace(/\D/g, ''), nombre: (t('cape') ? t('cape') + ', ' : '') + t('cnom'), licencia: t('clic') }] : []
   } : { modo: 'publico', ruc: t('truc').replace(/\D/g, ''), nombre: t('tnom'), mtc: t('mtc'), placas: [], conductores: [], constancias: [] };

@@ -112,13 +112,12 @@ function GR_guardarTransporte(d) {
       var poner = function (k, val) { sh.getRange(fila, GR_col_(k)).setValue(val); };
       var cambiadas = [];
       if (d.modo === 'publico' && e.ruc) { poner('modalidad', GR_MODALIDAD_[0]); poner('truc', e.ruc); poner('tnom', e.nombre); poner('mtc', e.codigo || ''); cambiadas.push('truc', 'tnom', 'mtc', 'modalidad'); }
-      var cons = [];
-      [['placa', d.principal], ['placa2', d.secundaria]].forEach(function (x) {
-        if (!x[1]) return;
-        poner(x[0], GR_placa_(x[1])); cambiadas.push(x[0]);
-        var vv = (d.vehiculos || []).filter(function (v) { return v.placa === x[1]; })[0]; if (vv && vv.constancia) cons.push(vv.constancia);
+      [['placa', 'mtcveh', d.principal], ['placa2', 'mtcveh2', d.secundaria]].forEach(function (x) {
+        if (!x[2]) return;
+        poner(x[0], GR_placa_(x[2])); cambiadas.push(x[0]);
+        var vv = (d.vehiculos || []).filter(function (v) { return v.placa === x[2]; })[0];
+        if (vv && vv.constancia) { poner(x[1], vv.constancia); cambiadas.push(x[1]); }
       });
-      if (cons.length) { poner('mtcveh', cons.join('/')); cambiadas.push('mtcveh'); }
       if (d.modo === 'privado' && d.principal) { poner('modalidad', GR_MODALIDAD_[1]); cambiadas.push('modalidad'); }
       GR_procesarFilas_(ss, fila, fila, cambiadas);
       guia = d.id;
