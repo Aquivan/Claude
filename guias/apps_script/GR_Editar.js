@@ -3,7 +3,8 @@
  * cliente → nombre y llegada, transportista, conductor, ubigeo por nombre) y revisa la fila (Estado).
  */
 
-var GR_FIJOS_ = [GR_ESTADOS_.VISTA, GR_ESTADOS_.EMITIENDO, GR_ESTADOS_.EMITIDA, GR_ESTADOS_.ANULADA];
+// 👁 Vista previa no queda fija: si la persona cambia un dato, la fila se vuelve a revisar (y la vista previa anterior ya no vale).
+var GR_FIJOS_ = [GR_ESTADOS_.EMITIENDO, GR_ESTADOS_.EMITIDA, GR_ESTADOS_.ANULADA];
 
 function onEdit(e) {
   try { GR_alEditar_(e); } catch (err) { console.warn('onEdit: ' + (err && err.stack || err)); }
@@ -78,6 +79,7 @@ function GR_siguienteId_() {
 }
 
 function GR_valoresIniciales_(r) {
+  if (!r.via) r.via = 'Quesito';
   if (!r.docrel) r.docrel = 'Factura';
   if (!r.motivo) r.motivo = GR_MOTIVOS_[0];
   if (!r.total) r.total = 'SI';
@@ -300,6 +302,12 @@ function GR_validar_(r, ctx) {
     if (mot === '04' && !/^\d{4}$/.test(txt(x + 'est'))) F.push('cód. local ' + nom + ' (motivo 04)');
   });
   if (txt('obsFinal').length > 500) A.push('observaciones muy largas (' + txt('obsFinal').length + ' caracteres)');
+  // Lo que piden los robots (👁 Vista previa / ✅ Emitir).
+  var quesito = txt('via') !== 'SUNAT';
+  if (quesito && doc === 'Ninguno') F.push('en Quesito la guía sale de la factura: ponga la factura o elija Emitir en = SUNAT');
+  if (quesito && cod2('motivo') !== '01') A.push('el robot de Quesito por ahora solo hace ventas (motivo 01): use SUNAT para este motivo');
+  if (!quesito && !(ctx.prod[txt('id')] || []).length) F.push('productos en 📦 para SUNAT (🔎 Traer de la factura los llena)');
+  if (String(txt('m1')).toUpperCase() === 'SI') A.push('vehículo M1/L: el robot aún no lo marca, revise en la vista previa');
   if (GR_codUbigeo_(txt('pubi')) && GR_codUbigeo_(txt('pubi')) === GR_codUbigeo_(txt('lubi')) && GR_norm_(txt('pdir')) === GR_norm_(txt('ldir'))) F.push('partida y llegada son iguales');
   return { faltas: F, avisos: A };
 }
