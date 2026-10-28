@@ -52,14 +52,14 @@ var GR_COLS_ = [
   { k: 'estado', t: 'Estado', g: 'id', w: 210, n: '✏️ Borrador = falta algo (dice qué). ✅ Lista = se puede emitir. El resto lo pone el robot.' },
   { k: 'empresa', t: 'Empresa (remitente)', g: 'id', w: 120, v: 'empresas', n: 'Empresa que emite la guía (pestaña 🏢 Empresas). Llena sola el punto de partida.' },
   { k: 'via', t: 'Emitir en', g: 'id', w: 85, v: ['Quesito', 'SUNAT'], n: 'Quesito = desde la factura emitida en Quesito (lo normal en ventas). SUNAT = en SOL (compras y otros motivos). Menú 🚚 Guías → 👁 Vista previa / ✅ Emitir.' },
-  { k: 'cotizacion', t: 'N° cotización', g: 'comp', w: 90, n: 'Opcional. Si no tiene el N° de factura, ponga solo la cotización: 📥 Traer de Quesito busca su factura relacionada y llena cliente y productos.' },
+  { k: 'cotizacion', t: 'N° cotización', g: 'comp', w: 90, n: 'Opcional. Si no tiene el N° de factura, ponga solo la cotización: 📥 Traer datos de la factura busca (en Quesito) su factura relacionada y llena cliente y productos.' },
   { k: 'docrel', t: 'Doc. relacionado', g: 'comp', w: 100, v: GR_DOCREL_, n: 'Factura o boleta de la que sale la guía (Quesito la genera desde ella y trae cliente y productos). "Ninguno" = guía sin comprobante: llene los productos.' },
   { k: 'serie', t: 'Serie', g: 'comp', w: 62, n: '4 caracteres, tal cual en Quesito (ej. F001, FQQ1, E001).' },
   { k: 'numero', t: 'Número', g: 'comp', w: 72, f: '0', n: 'Número de la factura o boleta (sin ceros a la izquierda).' },
   { k: 'pedido', t: 'Producto y cantidad (opcional)', g: 'comp', w: 200, n: 'Qué lleva ESTA guía, sin llenar 📦 Productos. Vacío o «total» = todo lo de la factura. ' +
     'Si es una parte: «M&D 325 lote 1507: 10000» o «barra: 5000» (varios separados con ;). Basta el código, una palabra del nombre o el lote. ' +
-    '📥 Traer de Quesito lo convierte en 📦 Productos.' },
-  { k: 'tdest', t: 'Tipo doc.', g: 'dest', w: 80, v: GR_TIPODOC_, n: 'Documento del destinatario (cliente). Con factura/boleta Quesito lo toma del comprobante: puede quedar vacío (🔎 Traer de la factura lo llena). Con factura es siempre RUC.' },
+    '📥 Traer datos de la factura lo convierte en 📦 Productos.' },
+  { k: 'tdest', t: 'Tipo doc.', g: 'dest', w: 80, v: GR_TIPODOC_, n: 'Documento del destinatario (cliente). Con factura/boleta Quesito lo toma del comprobante: puede quedar vacío (📥 Traer datos de la factura lo llena). Con factura es siempre RUC.' },
   { k: 'ndest', t: 'N° documento', g: 'dest', w: 105, f: '@', n: 'RUC (11 dígitos, se revisa el dígito verificador) o DNI (8). Si ya está en 📍 Direcciones, llena solo el nombre y la llegada.' },
   { k: 'dest', t: 'Destinatario', g: 'dest', w: 230, n: 'Razón social o nombre del cliente.' },
   { k: 'motivo', t: 'Motivo de traslado', g: 'tras', w: 170, v: GR_MOTIVOS_, n: 'Catálogo 20 de SUNAT. Lo normal: 01 - Venta.' },

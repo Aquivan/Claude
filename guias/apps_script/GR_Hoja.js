@@ -11,9 +11,8 @@ function onOpen() {
     .addSeparator()
     .addItem('🔍 Revisar todas las guías', 'GR_menuRevisar')
     .addItem('📦 Ver productos de la guía seleccionada', 'GR_menuProductos')
-    .addItem('📥 Traer de Quesito: cliente y productos (factura o cotización)', 'GR_menuLeerQuesito')
+    .addItem('📥 Traer datos de la factura (SIRE o Quesito)', 'GR_menuTraerDatos')
     .addItem('📦 Elegir productos y cantidades de la guía', 'GR_menuElegirProductos')
-    .addItem('🔎 Traer cliente y productos de la factura (seleccionadas)', 'GR_menuTraerFactura')
     .addSeparator()
     .addItem('👁 Vista previa de la guía seleccionada (no emite)', 'GR_menuVista')
     .addItem('✅ Emitir la guía seleccionada', 'GR_menuEmitir')
@@ -211,7 +210,7 @@ function GR_hojaProductos_(ss) {
   cols.forEach(function (c, i) { sh.setColumnWidth(i + 1, c[1]); });
   sh.getRange(1, 1).setNote('Solo para guías PARCIALES (¿Todo lo de la factura? = NO) o sin factura: una fila por producto que va en esa guía.\n' +
     'ID guía = el ID de la fila en 🚚 Guías (ej. G-000012). En Quesito se dejan solo estos productos con estas cantidades.');
-  sh.getRange(1, 4).setNote('Como figura en la factura (🔎 Traer de la factura lo llena desde el SIRE): el robot busca la línea por este nombre.');
+  sh.getRange(1, 4).setNote('Como figura en la factura (📥 Traer datos de la factura lo llena, del SIRE o de Quesito): el robot busca la línea por este nombre.');
   sh.getRange(1, 10).setNote('SI = va toda la cantidad de esa línea de la factura; NO = solo una parte (la cantidad de esta fila).');
   sh.getRange(1, 8).setNote('Si todos los productos de la guía tienen peso (o bultos), la guía los suma sola.');
   sh.setRowHeight(1, 36); sh.setFrozenRows(1);
@@ -322,7 +321,7 @@ function GR_hojaAyuda_(ss) {
     ['2. Cada guía', 'Menú 🚚 Guías → ➕ Nueva guía (formulario), o escriba directo una fila en 🚚 Guías. El ID se pone solo.'],
     ['', 'Con la empresa se llena la partida; con el RUC del cliente, su nombre y su dirección de llegada; con el RUC del transportista, su nombre y MTC; con el DNI del conductor, sus datos.'],
     ['', 'Columnas en gris = no aplican (ej. transporte público → no se pide vehículo ni conductor).'],
-    ['⚡ Lo mínimo', 'Empresa + N° de factura (serie y número) o solo el N° de cotización + transporte. Luego 🚚 Guías → 📥 Traer de Quesito: el robot lee la factura (no crea nada) y llena cliente, dirección de llegada y productos.'],
+    ['⚡ Lo mínimo', 'Empresa + N° de factura (serie y número) o solo el N° de cotización + transporte. Luego 🚚 Guías → 📥 Traer datos de la factura: primero mira el SIRE (al instante); si hace falta (factura de hoy, solo cotización, lotes o dirección) lee Quesito (1–3 min, no crea nada).'],
     ['', '"Producto y cantidad" (opcional): vacío o «total» = todo lo de la factura. Una parte: «M&D 325 lote 1507: 10000» o «barra: 5000» (varios con ;). Si una palabra calza con dos líneas, se le pide el lote.'],
     ['3. Parcial', 'Si la guía NO lleva todo lo de la factura: escriba "Producto y cantidad", o ponga "¿Todo lo de la factura?" = NO y los productos en 📦 Productos con el mismo ID.'],
     ['4. Estado', '✏️ Borrador = falta algo (el estado dice qué). ✅ Lista para emitir = completa. 👁 Vista previa / ⏳ Emitiendo / 🚚 Emitida / ⚠️ Error los pone el robot.'],
