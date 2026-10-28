@@ -36,7 +36,7 @@
 <body>
 <div id="app">Cargando…</div>
 <script>
-var ID = <?= JSON.stringify(idGuia) ?>, D = null;
+var ID = <?= idGuia ?>, D = null;
 var fmt = function (n) { return Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 3 }); };
 function pintar() {
   if (!D.lineas.length) {

@@ -171,7 +171,7 @@ function GR_facturaDe_(ss, id) {
 
 /** Nombre corto para mostrar: "M&D 325 BARRA A BASE DE EXTRUIDOS" (sin lote ni cantidad). */
 function GR_corto_(l) {
-  var d = String(l.desc || '').replace(String(l.lote || '-'), ' ').replace(/\bNIU\b|\bKGM\b/g, ' ').replace(/\b\d[\d.,]*\b(?!\S*[A-Za-z])/g, function (m) {
+  var d = String(l.desc || '').replace(/Producto\s*-\s*Servicio\s*\(CAT[AÁ]LOGO\)/gi, ' ').replace(String(l.lote || '-'), ' ').replace(/\bNIU\b|\bKGM\b/g, ' ').replace(/\b\d[\d.,]*\b(?!\S*[A-Za-z])/g, function (m) {
     return /^\d{3}$/.test(m) ? m : ' '; }).replace(/\s+/g, ' ').trim();
   return d.replace(/\s+S\/\.?$/, '').slice(0, 70);
 }
