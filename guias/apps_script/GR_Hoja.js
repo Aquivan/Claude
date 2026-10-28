@@ -139,7 +139,7 @@ function GR_hojaGuias_(ss) {
     sh.setColumnWidth(j + 1, c.w);
     var datos = sh.getRange(GR_FILA1_, j + 1, sh.getMaxRows() - GR_FILA1_ + 1, 1);
     datos.setNumberFormat(c.f || '@');
-    if (c.g === 'res' || c.k === 'obsFinal' || c.k === 'productos') datos.setBackground('#f5f5f5').setFontColor('#37474f');
+    if (c.g === 'res' || c.k === 'obsFinal' || c.k === 'productos' || c.k === 'total') datos.setBackground('#f5f5f5').setFontColor('#37474f');   // automáticas
     if (c.k === 'obsFinal') datos.setWrap(true).setFontSize(9);
   });
   sh.setRowHeight(1, 40); sh.setRowHeight(2, 44);

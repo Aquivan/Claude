@@ -19,7 +19,7 @@ var GR_LIS_ = 'Listas';
 var GR_REG_ = '🧾 Registro';
 var GR_AYU_ = '📖 Ayuda';
 var GR_FILA1_ = 3;
-var GR_VERSION_ = 8;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
+var GR_VERSION_ = 9;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
 
 // Catálogos SUNAT (anexo 8 de la R.S. 097-2012 y modificatorias).
 var GR_MOTIVOS_ = ['01 - Venta', '02 - Compra', '03 - Venta con entrega a terceros', '04 - Traslado entre establecimientos de la misma empresa',
@@ -59,20 +59,20 @@ var GR_COLS_ = [
   { k: 'pedido', t: 'Producto y cantidad (opcional)', g: 'comp', w: 200, n: 'Qué lleva ESTA guía, sin llenar 📦 Productos. Vacío o «total» = todo lo de la factura. ' +
     'Si es una parte: «M&D 325 lote 1507: 10000» o «barra: 5000» (varios separados con ;). Basta el código, una palabra del nombre o el lote. ' +
     '📥 Traer datos de la factura lo convierte en 📦 Productos.' },
+  { k: 'total', t: '¿Todo lo de la factura?', g: 'comp', w: 95, v: GR_SINO_, n: 'Se pone solo: SI = la guía lleva TODOS los productos de la factura; NO = solo una parte (lo que dice «Producto y cantidad» o 📦 Productos).' },
   { k: 'tdest', t: 'Tipo doc.', g: 'dest', w: 80, v: GR_TIPODOC_, n: 'Documento del destinatario (cliente). Con factura/boleta Quesito lo toma del comprobante: puede quedar vacío (📥 Traer datos de la factura lo llena). Con factura es siempre RUC.' },
   { k: 'ndest', t: 'N° documento', v: 'cat:dir:B', g: 'dest', w: 105, f: '@', n: 'RUC (11 dígitos, se revisa el dígito verificador) o DNI (8). Si ya está en 📍 Direcciones, llena solo el nombre y la llegada.' },
   { k: 'dest', t: 'Destinatario', v: 'cat:dir:C', g: 'dest', w: 230, n: 'Razón social o nombre del cliente.' },
   { k: 'motivo', t: 'Motivo de traslado', g: 'tras', w: 170, v: GR_MOTIVOS_, n: 'Catálogo 20 de SUNAT. Lo normal: 01 - Venta.' },
-  { k: 'motivoTxt', t: 'Descripción (motivo 13)', g: 'tras', w: 150, n: 'Solo si el motivo es 13 - Otros: describa el motivo.' },
   { k: 'modalidad', t: 'Modalidad', g: 'tras', w: 150, v: GR_MODALIDAD_, n: '01 Público = lo lleva un transportista (llene 🏢). 02 Privado = vehículo propio (llene 🚗).' },
-  { k: 'femision', t: 'Fecha de emisión (opcional)', g: 'tras', w: 95, v: 'fecha', f: 'dd/mm/yyyy', n: 'Vacío = HOY (lo normal). Solo si la guía debe llevar otra fecha de emisión. SUNAT no acepta una guía con fecha de emisión pasada.' },
   { k: 'fecha', t: 'Fecha inicio traslado', g: 'tras', w: 95, v: 'fecha', f: 'dd/mm/yyyy', n: 'Día en que sale la mercadería. SUNAT no acepta una fecha anterior a la emisión de la guía.' },
-  { k: 'fentrega', t: 'Entrega al transportista (opcional)', g: 'tras', w: 95, v: 'fecha', f: 'dd/mm/yyyy', n: 'Vacío = el mismo día del inicio del traslado. Solo si se entrega la carga al transportista otro día.' },
-  { k: 'total', t: '¿Todo lo de la factura?', g: 'tras', w: 95, v: GR_SINO_, n: 'SI = la guía lleva TODOS los productos de la factura. NO = solo una parte: ponga los productos y cantidades en 📦 Productos.' },
   { k: 'peso', t: 'Peso bruto', g: 'tras', w: 80, f: '#,##0.00', n: 'Peso bruto total de ESTA guía. Si los productos de 📦 tienen peso, se suma solo.' },
   { k: 'upeso', t: 'Unidad', g: 'tras', w: 65, v: GR_PESO_, n: 'KGM (kilos) o TNE (toneladas).' },
   { k: 'bultos', t: 'N° bultos', g: 'tras', w: 62, f: '#,##0.##', n: 'Bultos o paquetes de la guía. Si los productos de 📦 tienen bultos, se suma solo.' },
   { k: 'm1', t: '¿Vehículo M1 o L?', g: 'tras', w: 80, v: GR_SINO_, n: 'SI si el traslado es en auto (M1) o moto/mototaxi (L): entonces no se piden placa ni conductor.' },
+  { k: 'motivoTxt', t: 'Descripción (motivo 13)', g: 'tras', w: 150, n: 'Solo si el motivo es 13 - Otros: describa el motivo.' },
+  { k: 'femision', t: 'Fecha de emisión (opcional)', g: 'tras', w: 95, v: 'fecha', f: 'dd/mm/yyyy', n: 'Vacío = HOY (lo normal). Solo si la guía debe llevar otra fecha de emisión. SUNAT no acepta una guía con fecha de emisión pasada.' },
+  { k: 'fentrega', t: 'Entrega al transportista (opcional)', g: 'tras', w: 95, v: 'fecha', f: 'dd/mm/yyyy', n: 'Vacío = el mismo día del inicio del traslado. Solo si se entrega la carga al transportista otro día.' },
   { k: 'truc', t: 'RUC transportista', v: 'cat:tra:A', g: 'pub', w: 105, f: '@', n: 'Solo transporte público. Si está en 🚛 Transportistas, llena el nombre y el MTC.' },
   { k: 'tnom', t: 'Razón social transportista', v: 'cat:tra:B', g: 'pub', w: 220 },
   { k: 'mtc', t: 'N° registro MTC', v: 'cat:tra:C', g: 'pub', w: 95, f: '@', n: 'Registro del transportista en el MTC (si lo tiene).' },
