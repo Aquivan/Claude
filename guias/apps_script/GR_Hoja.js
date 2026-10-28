@@ -15,6 +15,8 @@ function onOpen() {
     .addItem('📦 Elegir productos y cantidades de la guía', 'GR_menuElegirProductos')
     .addItem('📄 Ver la factura de la guía (vista previa)', 'GR_menuVerFactura')
     .addItem('📍 Buscar direcciones por RUC (locales en SUNAT)', 'GR_menuBuscarDirecciones')
+    .addItem('🚛 Buscar transportista o placa en el MTC (certificados)', 'GR_menuBuscarTransporte')
+    .addItem('👤 Completar conductor por DNI (nombre)', 'GR_menuConductorDni')
     .addSeparator()
     .addItem('👁 Vista previa de la guía seleccionada (no emite)', 'GR_menuVista')
     .addItem('✅ Emitir la guía seleccionada', 'GR_menuEmitir')
