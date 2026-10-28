@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_blank">
+<meta charset="utf-8">
+<style id="estilo">
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #222; margin: 0; padding: 10px 14px; background: #eef1f4; }
+  .doc { background: #fff; max-width: 880px; margin: 0 auto; padding: 22px 26px; border: 1px solid #d0d7de; }
+  .cab { display: table; width: 100%; border-bottom: 2px solid #1565c0; padding-bottom: 10px; }
+  .cab .izq, .cab .der { display: table-cell; vertical-align: top; }
+  .cab .der { width: 280px; border: 2px solid #1565c0; border-radius: 8px; text-align: center; padding: 8px; }
+  .rem { font-size: 16px; font-weight: bold; } .gris { color: #607d8b; font-size: 11px; }
+  .tipo { font-weight: bold; color: #1565c0; font-size: 13px; } .num { font-size: 15px; font-weight: bold; margin-top: 4px; }
+  .marca { display: inline-block; margin-top: 6px; font-size: 10px; background: #fff3e0; color: #e65100; padding: 2px 8px; border-radius: 10px; }
+  h3 { font-size: 11px; letter-spacing: .5px; color: #fff; background: #37474f; margin: 14px 0 0; padding: 4px 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { border: 1px solid #cfd8dc; padding: 5px 7px; vertical-align: top; text-align: left; }
+  th { background: #eceff1; font-size: 11px; }
+  .k { width: 150px; color: #546e7a; background: #f7f9fa; font-size: 11px; }
+  .n { text-align: right; white-space: nowrap; }
+  .falta { background: #ffebee; color: #c62828; font-weight: bold; }
+  .lote { color: #00796b; font-size: 10px; }
+  .pie { margin-top: 14px; font-size: 10px; color: #78909c; text-align: center; }
+  .avisos { max-width: 880px; margin: 0 auto 8px; }
+  .av { padding: 7px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 6px; }
+  .av.f { background: #ffebee; color: #b71c1c; } .av.a { background: #fff8e1; color: #6d4c00; } .av.ok { background: #e8f5e9; color: #1b5e20; }
+  .barra { max-width: 880px; margin: 8px auto 0; display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+  .btn { border: 0; border-radius: 8px; padding: 9px 16px; font: inherit; cursor: pointer; }
+  .pri { background: #1565c0; color: #fff; font-weight: bold; } .pri:disabled { background: #90caf9; } .sec { background: #fff; border: 1px solid #cfd8dc; }
+  #msg { margin-right: auto; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="app">Armando la guía…</div>
+<script>
+var ID = <?= idGuia ?>;
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function v(x, falta) { return x ? esc(x) : /^(opcional|—)/.test(falta || '') ? '<span class="gris">' + esc(falta) + '</span>' : '<span class="falta">' + (falta || 'FALTA') + '</span>'; }
+function fila(k, x, falta) { return '<tr><td class="k">' + k + '</td><td>' + (falta === false ? esc(x || '—') : v(x, falta)) + '</td></tr>'; }
+function fmt(n) { var x = Number(String(n).replace(/,/g, '')); return isNaN(x) ? esc(n) : x.toLocaleString('en-US', { maximumFractionDigits: 3 }); }
+function pintar(d) {
+  var h = '<div class="avisos">';
+  if (d.faltas.length) h += '<div class="av f">✏️ <b>Falta completar:</b> ' + esc(d.faltas.join(', ')) + '</div>';
+  if (d.avisos.length) h += '<div class="av a">⚠️ <b>Revise:</b> ' + esc(d.avisos.join(' · ')) + '</div>';
+  if (!d.faltas.length) h += '<div class="av ok">✅ Con estos datos la guía está completa. Se emitirá en <b>' + esc(d.donde) + '</b> (👁 Vista previa → ✅ Emitir).</div>';
+  h += '</div><div class="doc" id="doc">';
+  h += '<div class="cab"><div class="izq"><div class="rem">' + v(d.remitente.nombre, 'FALTA LA EMPRESA') + '</div><div class="gris">RUC ' + esc(d.remitente.ruc) + ' · Remitente</div>' +
+       '<div class="gris" style="margin-top:6px">Emisión: ' + esc(d.emision) + ' · Inicio de traslado: ' + v(d.traslado) + '</div></div>' +
+       '<div class="der"><div class="tipo">GUÍA DE REMISIÓN<br>REMITENTE ELECTRÓNICA</div><div class="num">' + (d.numero ? esc(d.numero) : esc(d.remitente.serie || 'T???') + ' - (al emitir)') + '</div>' +
+       (d.numero ? '' : '<div class="marca">BORRADOR · sin valor oficial</div>') + '</div></div>';
+  h += '<h3>DESTINATARIO Y DOCUMENTO</h3><table>' + fila('Destinatario', d.destinatario.nombre) + fila(esc(d.destinatario.tipo.split(' - ')[1] || 'Documento'), d.destinatario.doc) +
+       fila('Doc. relacionado', d.documento, 'FALTA LA FACTURA') + '</table>';
+  h += '<h3>DATOS DEL TRASLADO</h3><table>' + fila('Motivo', d.motivo + (d.motivoTxt ? ' · ' + d.motivoTxt : '')) + fila('Modalidad', d.modalidad) +
+       fila('Peso bruto total', d.peso ? fmt(d.peso) + ' ' + d.upeso : '') + fila('N° de bultos', d.bultos, d.donde === 'Quesito' ? 'FALTA' : '—') +
+       fila('Entrega al transportista', d.entrega, false) + '</table>';
+  h += '<h3>PUNTO DE PARTIDA Y DE LLEGADA</h3><table><tr><th style="width:50%">Partida</th><th>Llegada</th></tr><tr><td>' + v(d.partida.dir) + '<div class="gris">' + v(d.partida.ubi, 'FALTA EL DISTRITO') +
+       (d.partida.cod ? ' · Cód. ' + esc(d.partida.cod) : '') + '</div></td><td>' + v(d.llegada.dir) + '<div class="gris">' + v(d.llegada.ubi, 'FALTA EL DISTRITO') + (d.llegada.cod ? ' · Cód. ' + esc(d.llegada.cod) : '') + '</div></td></tr></table>';
+  h += '<h3>TRANSPORTE</h3><table>';
+  if (d.transportista) h += fila('Transportista', d.transportista.nombre) + fila('RUC', d.transportista.ruc) + fila('N° registro MTC', d.transportista.mtc, false);
+  if (d.m1) h += fila('Vehículo', 'M1 o L (sin placa ni conductor)', false);
+  else {
+    var opc = !d.privado;
+    if (d.vehiculos.length) d.vehiculos.forEach(function (x) { h += fila('Vehículo ' + x.rol.toLowerCase(), x.placa + (x.cert ? ' · Cert. MTC ' + x.cert : ''), false); });
+    else h += fila('Vehículo', '', opc ? 'opcional (público)' : 'FALTA LA PLACA');
+    if (d.conductor) h += fila('Conductor', d.conductor.nombre + ' · DNI ' + (d.conductor.dni || '?') + ' · Lic. ' + (d.conductor.licencia || '?'), false);
+    else h += fila('Conductor', '', opc ? 'opcional (público)' : 'FALTA EL CONDUCTOR');
+  }
+  h += '</table>';
+  h += '<h3>BIENES A TRASLADAR <span style="font-weight:normal">(' + esc(d.bienesOrigen) + ')</span></h3><table><tr><th style="width:36px">N°</th><th>Descripción</th><th style="width:70px">Unidad</th><th style="width:110px" class="n">Cantidad</th></tr>';
+  if (d.bienes.length) d.bienes.forEach(function (b, i) { h += '<tr><td>' + (i + 1) + '</td><td>' + esc(b.desc) + (b.lote ? '<div class="lote">' + esc(b.lote) + '</div>' : '') + '</td><td>' + esc(b.unidad || 'NIU') + '</td><td class="n">' + fmt(b.cant) + '</td></tr>'; });
+  else h += '<tr><td colspan="4" style="text-align:center;color:#78909c">' + esc(d.bienesOrigen) + '</td></tr>';
+  h += '</table>';
+  h += '<h3>OBSERVACIONES</h3><table><tr><td>' + (d.observaciones ? esc(d.observaciones) : '<span class="gris">(ninguna)</span>') + '</td></tr></table>';
+  h += '<div class="pie">Borrador generado desde la hoja «Guías de Remisión · Grupo» (guía ' + esc(d.id) + '). La guía oficial la crea ' + esc(d.donde) + ' al emitir.</div></div>';
+  h += '<div class="barra"><span id="msg"></span><button class="btn sec" onclick="google.script.host.close()">Cerrar</button>' +
+       '<button class="btn pri" id="pdf" onclick="pdf()">📄 Guardar PDF en Drive</button></div>';
+  document.getElementById('app').innerHTML = h;
+}
+function pdf() {
+  var b = document.getElementById('pdf'), m = document.getElementById('msg');
+  b.disabled = true; m.textContent = 'Generando PDF…';
+  var html = '<style>' + document.getElementById('estilo').innerHTML + '</style>' + document.getElementById('doc').outerHTML;
+  google.script.run.withSuccessHandler(function (url) { b.disabled = false; m.innerHTML = '✅ Guardado: <a href="' + esc(url) + '">abrir el PDF ↗</a>'; })
+    .withFailureHandler(function (e) { b.disabled = false; m.textContent = '⚠️ ' + e.message; })
+    .GR_borradorPdf(ID, html);
+}
+google.script.run.withSuccessHandler(pintar)
+  .withFailureHandler(function (e) { document.getElementById('app').textContent = '⚠️ ' + e.message; })
+  .GR_datosBorrador(ID);
+</script>
+</body>
+</html>
