@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Google Sans", Roboto, Arial, sans-serif; font-size: 13px; color: #263238; margin: 0; padding: 14px 18px; background: #f4f6f8; }
+  label { display: block; font-size: 12px; color: #546e7a; margin: 10px 0 4px; }
+  input[type=text], select { width: 100%; padding: 9px 10px; border: 1px solid #cfd8dc; border-radius: 8px; font: inherit; background: #fff; }
+  input:focus, select:focus { outline: none; border-color: #1e88e5; box-shadow: 0 0 0 2px #bbdefb; }
+  .o { text-align: center; color: #90a4ae; font-size: 12px; margin: 6px 0 -4px; }
+  .chk { display: flex; gap: 8px; align-items: center; margin-top: 14px; font-size: 13px; color: #263238; }
+  .chk input { width: 18px; height: 18px; }
+  .btn { border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; cursor: pointer; }
+  .pri { background: #1565c0; color: #fff; font-weight: 600; } .pri:disabled { background: #90caf9; }
+  .sec { background: #eceff1; color: #37474f; }
+  .pie { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  #msg { margin-top: 12px; font-size: 12px; white-space: pre-line; }
+  .ok { color: #2e7d32; } .err { color: #c62828; }
+</style>
+</head>
+<body>
+<label>Empresa</label>
+<select id="emp"></select>
+<label>N° de factura</label>
+<input type="text" id="fac" placeholder="FQQ1-3702 (o solo 3702)">
+<div class="o">— o —</div>
+<label>N° de cotización (si no tiene la factura)</label>
+<input type="text" id="cot" placeholder="2905">
+<label class="chk"><input type="checkbox" id="copiar" checked> Copiar el transporte de la guía anterior (placa, chofer, transportista, partida y fecha)</label>
+<div id="msg"></div>
+<div class="pie">
+  <button class="btn sec" onclick="google.script.host.close()">Cerrar</button>
+  <button class="btn pri" id="crear" onclick="crear()">➕ Crear y traer datos</button>
+</div>
+<script>
+var E = JSON.parse(<?= empresasJson ?>);
+var sel = document.getElementById('emp');
+E.forEach(function (e) { var o = document.createElement('option'); o.value = e.nombre; o.textContent = e.nombre + (e.serie ? '  (facturas ' + e.serie + ')' : ''); sel.appendChild(o); });
+try { var u = localStorage.getItem('gr_emp'); if (u) sel.value = u; } catch (e) {}
+document.getElementById('fac').focus();
+['fac', 'cot'].forEach(function (k) { document.getElementById(k).addEventListener('keydown', function (e) { if (e.key === 'Enter') crear(); }); });
+function crear() {
+  var b = document.getElementById('crear'), m = document.getElementById('msg');
+  b.disabled = true; m.className = ''; m.textContent = '⏳ Creando la guía y buscando la factura…';
+  try { localStorage.setItem('gr_emp', sel.value); } catch (e) {}
+  google.script.run.withSuccessHandler(function (r) {
+      m.className = 'ok'; m.textContent = '✅ Guía ' + r.id + ' creada (fila ' + r.fila + ').\n' + r.msgs.join('\n');
+      b.disabled = false; b.textContent = '➕ Crear otra';
+      document.getElementById('fac').value = ''; document.getElementById('cot').value = ''; document.getElementById('fac').focus(); })
+    .withFailureHandler(function (e) { b.disabled = false; m.className = 'err'; m.textContent = '⚠️ ' + e.message; })
+    .GR_crearGuiaRapida({ empresa: sel.value, factura: document.getElementById('fac').value, cotizacion: document.getElementById('cot').value, copiar: document.getElementById('copiar').checked });
+}
+</script>
+</body>
+</html>
