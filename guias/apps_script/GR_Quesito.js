@@ -63,8 +63,9 @@ function GR_menuTraerDatos() {
       return msgs.push(r.id + ': ' + (m ? '🔎 del SIRE; ' : '') + '⚠️ Quesito: ' + (c.error || 'el bot no aceptó el pedido'));
     }
     sh.getRange(fila, GR_col_('caso')).setValue(c.caso);
+    var ojoM = (m.match(/Ojo: .*$/) || [''])[0];
     sh.getRange(fila, GR_col_('msg')).setValue('📥 Leyendo en Quesito ' + (fac ? 'la factura ' + fac : 'la cotización ' + cot) + ' (' + porQue.join('; ') + ')… 1–3 min, no se crea nada.' +
-      (m ? ' Ya puse lo del SIRE.' : ''));
+      (m ? ' Ya puse lo del SIRE.' + (ojoM ? ' ' + ojoM : '') : ''));
     sh.getRange(fila, GR_col_('actualizado')).setValue(new Date());
     pedidas++;
     msgs.push(r.id + ': ' + (sire ? '🔎 cliente del SIRE; ' : '') + '📥 Quesito (' + porQue.join('; ') + ')…');
@@ -150,7 +151,19 @@ function GR_aplicarLeido_(ss, fila, d) {
     hecho.push('cliente ' + (nom || ruc));
   } else if (ruc && t('ndest').replace(/\D/g, '') === ruc && t('dest') === '' && nom) {   // ya tenía el RUC: falta solo el nombre
     poner('dest', nom); hecho.push('nombre del cliente');
-  } else if (ruc && t('ndest').replace(/\D/g, '') !== ruc) ojo.push('el cliente de la fila (' + t('ndest') + ') no es el de la factura (' + ruc + ')');
+  } else if (ruc && t('ndest').replace(/\D/g, '') !== ruc) {
+    // En una venta el destinatario ES el cliente de la factura: el de la fila era de otra factura (o estaba mal) → se cambia.
+    var viejo = t('ndest').replace(/\D/g, '');
+    var dirViejo = ctx.dir.filter(function (q) { return q.doc === viejo; }).map(function (q) { return GR_norm_(q.dir); });
+    var sets = { tdest: ruc.length === 11 ? GR_TIPODOC_[0] : GR_TIPODOC_[1], ndest: ruc, dest: nom };
+    Object.keys(sets).forEach(function (k) { sh.getRange(fila, GR_col_(k)).setValue(sets[k]); x[k] = sets[k]; puestos[k] = sets[k]; });
+    if (t('ldir') && dirViejo.indexOf(GR_norm_(t('ldir'))) >= 0 && !t('llocal')) {   // la llegada era la del cliente anterior
+      ['ldir', 'lubi', 'lest'].forEach(function (k) { sh.getRange(fila, GR_col_(k)).setValue(''); x[k] = ''; });
+      ojo.push('quité la llegada del cliente anterior');
+    }
+    hecho.push('cliente ' + (nom || ruc));
+    ojo.push('el cliente de la fila (' + viejo + ') no era el de la factura: puse ' + ruc);
+  }
   GR_procesarFilas_(ss, fila, fila, ['ndest', 'serie', 'numero']);   // 📍 Direcciones del cliente (si ya la tiene) llena la llegada
   x = GR_leerGuias_(sh, fila, fila)[0].r;
   // Llegada: si el cliente no tiene dirección en 📍, la de la factura (dirección fiscal: revísela si se entrega en otro lado)
