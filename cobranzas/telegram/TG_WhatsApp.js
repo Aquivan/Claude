@@ -206,6 +206,7 @@ function TGW_boton_(k, op, numero) {
   if (acc && acc.t === 'gre') return TGG_botonWA_(acc, k, op, numero);
   if (acc && acc.t === 'cambios') return TGQ_botonWA_(acc, op, numero);
   if (acc && acc.t === 'tgqia') return TGQ_iaWA_(acc, op, numero);
+  if (acc && acc.t === 'tgrcomp') return TGR_compBotonWA_(acc, op, numero);   // ✏️ completar vouchers (TG_Retener.js)
   if (acc && acc.t === 'consunat') {   // 🚀 bajar la constancia de retención de SUNAT (TG_Retener.js)
     if (op !== 'si') return { ok: true, respuesta: 'Listo, no bajé nada.' };
     try { return { ok: true, seguir: true, respuesta: TGR_pedirSunat_(acc, 'wa' + String(numero || '').replace(/\D/g, '')) }; } catch (e) { return { ok: false, error: e.message }; }
