@@ -4,34 +4,35 @@
  */
 
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('🚚 Guías')
-    .addItem('➕ Nueva guía rápida (solo empresa y factura)', 'GR_menuNuevaRapida')
-    .addItem('➕ Nueva guía (formulario)', 'GR_menuNueva')
-    .addItem('✏️ Editar la guía seleccionada', 'GR_menuEditar')
-    .addItem('📄 Duplicar la guía seleccionada', 'GR_menuDuplicar')
-    .addItem('🚛 Copiar transporte de la guía anterior', 'GR_menuCopiarTransporte')
+  var ui = SpreadsheetApp.getUi();
+  ui.createMenu('🚚 Guías')
+    .addItem('➕ 1. Nueva guía rápida (empresa + factura)', 'GR_menuNuevaRapida')
+    .addItem('📥 2. Traer datos de la factura (SIRE o Quesito)', 'GR_menuTraerDatos')
+    .addSubMenu(ui.createMenu('✏️ 3. Completar la guía')
+      .addItem('📦 Elegir productos y cantidades', 'GR_menuElegirProductos')
+      .addItem('🚛 Copiar transporte de la guía anterior', 'GR_menuCopiarTransporte')
+      .addItem('🚛 Buscar transportista o placa en el MTC', 'GR_menuBuscarTransporte')
+      .addItem('👤 Completar conductor por DNI', 'GR_menuConductorDni')
+      .addItem('📍 Buscar direcciones por RUC (SUNAT)', 'GR_menuBuscarDirecciones'))
+    .addItem('🧾 4. Ver cómo queda la guía (borrador / PDF)', 'GR_menuBorrador')
+    .addItem('👁 5. Vista previa en Quesito o SUNAT (no emite)', 'GR_menuVista')
+    .addItem('✅ 6. Emitir la guía seleccionada', 'GR_menuEmitir')
     .addSeparator()
-    .addItem('🔍 Revisar todas las guías', 'GR_menuRevisar')
-    .addItem('📦 Ver productos de la guía seleccionada', 'GR_menuProductos')
-    .addItem('📥 Traer datos de la factura (SIRE o Quesito)', 'GR_menuTraerDatos')
-    .addItem('📦 Elegir productos y cantidades de la guía', 'GR_menuElegirProductos')
-    .addItem('📄 Ver la factura de la guía (vista previa)', 'GR_menuVerFactura')
-    .addItem('📍 Buscar direcciones por RUC (locales en SUNAT)', 'GR_menuBuscarDirecciones')
-    .addItem('🚛 Buscar transportista o placa en el MTC (certificados)', 'GR_menuBuscarTransporte')
-    .addItem('👤 Completar conductor por DNI (nombre)', 'GR_menuConductorDni')
-    .addSeparator()
-    .addItem('👁 Vista previa de la guía seleccionada (no emite)', 'GR_menuVista')
-    .addItem('✅ Emitir la guía seleccionada', 'GR_menuEmitir')
     .addItem('🔄 Traer resultados del robot', 'GR_menuResultados')
     .addItem('📋 Resumen del día (emitidas y por emitir)', 'GR_menuResumen')
-    .addSeparator()
-    .addItem('👁 Ver solo lo que aplica a la guía seleccionada', 'GR_menuVistaGuia')
-    .addItem('👁 Ver todas las columnas', 'GR_menuVistaTodo')
-    .addSeparator()
-    .addItem('📥 Importar datos (del Excel de guías)', 'GR_menuImportar')
-    .addItem('🔑 Token de GitHub (para leer facturas del SIRE)', 'GR_menuToken')
-    .addSeparator()
-    .addItem('🧰 Preparar / reparar la hoja', 'GR_menuPreparar')
+    .addSubMenu(ui.createMenu('👁 Ver')
+      .addItem('📄 La factura de la guía', 'GR_menuVerFactura')
+      .addItem('📦 Los productos de la guía (en 📦)', 'GR_menuProductos')
+      .addItem('Solo las columnas que aplican a la guía', 'GR_menuVistaGuia')
+      .addItem('Todas las columnas', 'GR_menuVistaTodo')
+      .addItem('🔍 Revisar todas las guías', 'GR_menuRevisar'))
+    .addSubMenu(ui.createMenu('⚙️ Más')
+      .addItem('➕ Nueva guía con formulario', 'GR_menuNueva')
+      .addItem('✏️ Editar la guía con formulario', 'GR_menuEditar')
+      .addItem('📄 Duplicar la guía seleccionada', 'GR_menuDuplicar')
+      .addItem('📥 Importar datos (del Excel de guías)', 'GR_menuImportar')
+      .addItem('🔑 Token de GitHub (para leer el SIRE)', 'GR_menuToken')
+      .addItem('🧰 Preparar / reparar la hoja', 'GR_menuPreparar'))
     .addItem('📖 Ayuda', 'GR_menuAyuda')
     .addToUi();
   var ss = SpreadsheetApp.getActive();
@@ -180,6 +181,23 @@ function GR_formatoCondicional_(sh) {
     reglas.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(formula).setBackground('#eceff1').setFontColor('#9e9e9e').setRanges([r]).build());
   };
   var f = GR_FILA1_;
+  // ✏️ Lo que falta, en naranja, SOLO en las guías en Borrador (las que se están llenando); al completarse vuelve a lo normal.
+  var bor = 'REGEXMATCH($' + L('estado') + f + ',"^✏️")', vac = function (k) { return '$' + L(k) + f + '=""'; };
+  var mod = 'LEFT($' + L('modalidad') + f + ',2)', mot = 'LEFT($' + L('motivo') + f + ',2)', noM1 = '$' + L('m1') + f + '<>"SI"';
+  var conFactura = '$' + L('docrel') + f + '<>"Ninguno"', sinCot = '$' + L('cotizacion') + f + '=""', quesito = '$' + L('via') + f + '<>"SUNAT"';
+  var falta = function (ks, cond) {
+    ks.forEach(function (k) {
+      reglas.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(' + bor + ',' + vac(k) + (cond ? ',' + cond : '') + ')')
+        .setBackground('#ffcc80').setFontColor('#4e342e').setRanges([rango(k)]).build());
+    });
+  };
+  falta(['empresa', 'motivo', 'modalidad', 'fecha', 'peso', 'upeso', 'pubi', 'pdir', 'lubi', 'ldir']);
+  falta(['serie', 'numero'], 'AND(' + conFactura + ',OR(' + sinCot + ',NOT(' + quesito + ')))');
+  falta(['bultos'], quesito);
+  falta(['truc', 'tnom'], mod + '="01"');
+  falta(['placa', 'cdni', 'cnom', 'cape', 'clic'], 'AND(' + mod + '="02",' + noM1 + ')');
+  falta(['motivoTxt'], mot + '="13"');
+  falta(['pest', 'lest'], mot + '="04"');
   gris(rango('truc', 'mtc'), '=LEFT($' + L('modalidad') + f + ',2)="02"');                                   // privado: sin transportista
   gris(rango('placa', 'clic'), '=$' + L('m1') + f + '="SI"');   // M1/L: sin vehículo ni conductor
   reglas.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(LEFT($' + L('modalidad') + f + ',2)="01",$' + L('m1') + f + '<>"SI")')
@@ -336,22 +354,22 @@ function GR_hojaAyuda_(ss) {
   var L = [
     ['🚚 GUÍAS DE REMISIÓN REMITENTE · GRUPO', ''],
     ['', ''],
-    ['1. Una vez', 'En 🏢 Empresas complete por cada empresa: correo de Quesito, serie de guía (ej. TQQ1), ubigeo y dirección de partida. La CLAVE de Quesito no va en la hoja: se guarda como secreto en GitHub.'],
-    ['', 'En 🚛 Transportistas, 🚗 Vehículos, 👤 Conductores y 📍 Direcciones ponga los que usa siempre: así cada guía se llena sola.'],
-    ['2. Cada guía', 'Menú 🚚 Guías → ➕ Nueva guía (formulario), o escriba directo una fila en 🚚 Guías. El ID se pone solo.'],
-    ['', 'Con la empresa se llena la partida; con el RUC del cliente, su nombre y su dirección de llegada; con el RUC del transportista, su nombre y MTC; con el DNI del conductor, sus datos.'],
-    ['', 'Columnas en gris = no aplican (ej. transporte público → no se pide vehículo ni conductor).'],
-    ['⚡ Lo mínimo', 'Empresa + N° de factura (serie y número) o solo el N° de cotización + transporte. Luego 🚚 Guías → 📥 Traer datos de la factura: primero mira el SIRE (al instante); si hace falta (factura de hoy, solo cotización, lotes o dirección) lee Quesito (1–3 min, no crea nada).'],
-    ['', '"Producto y cantidad" (opcional): vacío o «total» = todo lo de la factura. Una parte: «M&D 325 lote 1507: 10000» o «barra: 5000» (varios con ;). Si una palabra calza con dos líneas, se le pide el lote.'],
-    ['3. Parcial', 'Si la guía NO lleva todo lo de la factura: escriba "Producto y cantidad", o ponga "¿Todo lo de la factura?" = NO y los productos en 📦 Productos con el mismo ID.'],
-    ['4. Estado', '✏️ Borrador = falta algo (el estado dice qué). ✅ Lista para emitir = completa. 👁 Vista previa / ⏳ Emitiendo / 🚚 Emitida / ⚠️ Error los pone el robot.'],
-    ['5. Emitir', 'Menú 🚚 Guías → 👁 Vista previa (llena todo en Quesito o SUNAT sin crear; la foto llega al Telegram y aquí el enlace) y luego ✅ Emitir (pide confirmar). El N° de guía y el PDF llegan solos a la fila.'],
+    ['Una vez', 'En 🏢 Empresas: serie de guía (ej. TQQ1), serie de factura (ej. FQQ1) y la partida. La clave de Quesito/SOL NO va en la hoja.'],
+    ['', 'Las pestañas 🚛 🚗 👤 📍 se llenan solas con lo que va usando (y con 🚛 Buscar en el MTC / 📍 Buscar direcciones por RUC).'],
+    ['1. Crear', 'Menú 🚚 Guías → ➕ 1. Nueva guía rápida: empresa + N° de factura (o de cotización). Puede copiar el transporte de la guía anterior.'],
+    ['2. Traer datos', '📥 2. Traer datos de la factura: cliente, productos y dirección. Primero el SIRE (al instante); Quesito solo si hace falta (1–3 min, no crea nada).'],
+    ['3. Completar', 'Las celdas en NARANJA son las que faltan (solo en guías ✏️ Borrador). Casi todas tienen lista para elegir: placa, chofer, transportista, cliente, dirección.'],
+    ['', 'Parcial: escriba «Producto y cantidad» (ej. «M&D 325 lote 1507: 10000») o use ✏️ 3. Completar → 📦 Elegir productos y cantidades.'],
+    ['', 'Transporte público: transportista obligatorio; placa y chofer OPCIONALES (si se los dan). Privado: placa y chofer obligatorios.'],
+    ['', 'Fecha de emisión vacía = hoy · Entrega al transportista vacía = el día del traslado · Observaciones: solo lo que no tiene campo propio.'],
+    ['4. Revisar', '🧾 4. Ver cómo queda la guía: el borrador con todos los datos (lo que falta en rojo) y 📄 Guardar PDF en Drive.'],
+    ['5. Vista previa', '👁 5. Vista previa en Quesito o SUNAT: el robot llena todo SIN crear la guía; la foto llega al Telegram y el enlace a la fila.'],
+    ['6. Emitir', '✅ 6. Emitir (pide confirmar). El N° de guía, la fecha y el PDF llegan solos a la fila. 📋 Resumen del día: lo emitido para enviar o imprimir.'],
     ['', ''],
-    ['Reglas que revisa', '• RUC con dígito verificador (detecta RUC mal escritos) · DNI de 8 dígitos · placa ABC-123'],
-    ['', '• Fecha de inicio de traslado no anterior a hoy (SUNAT no acepta una fecha anterior a la emisión)'],
-    ['', '• Público: RUC y razón social del transportista · Privado: placa, DNI, nombres, apellidos y licencia del conductor (salvo vehículos M1 o L)'],
-    ['', '• Partida y llegada con UBIGEO válido y dirección; distintas entre sí · Motivo 04: códigos de local · Motivo 13: descripción'],
-    ['', '• Parcial o sin factura: al menos un producto con cantidad en 📦 Productos'],
+    ['Estado', '✏️ Borrador = falta algo (dice qué) · ✅ Lista para emitir · 👁 Vista previa · ⏳ Emitiendo · 🚚 Emitida · ⚠️ Error (dice por qué).'],
+    ['Botón', '📄 Ver factura (arriba a la izquierda): datos de la factura de la fila seleccionada y su PDF.'],
+    ['Reglas que revisa', '• RUC con dígito verificador · DNI de 8 dígitos · placa ABC-123 · fecha de traslado no pasada · emisión no pasada'],
+    ['', '• Partida y llegada con distrito (ubigeo) y dirección real (no «OTROS») · llegada que es de otro cliente · Motivo 04: códigos de local · Motivo 13: descripción'],
   ];
   sh.getRange(1, 1, L.length, 2).setValues(L).setWrap(true).setVerticalAlignment('top');
   sh.getRange(1, 1, 1, 2).merge().setFontSize(14).setFontWeight('bold').setBackground('#1565c0').setFontColor('#ffffff');
