@@ -41,11 +41,13 @@ function GR_ventas_(ruc, periodo) {
     var v = Utilities.parseCsv(txt.replace(/^﻿/, '')), h = v[0].map(function (x) { return GR_norm_(x); });
     var c = function (n) { return h.indexOf(GR_norm_(n)); };
     var iS = c('Serie del CDP'), iN = c('Nro CP o Doc. Nro Inicial (Rango)'), iF = c('Fecha de emisión'), iR = c('Nro Doc Identidad'),
-      iC = c('Apellidos Nombres/ Razón Social'), iD = c('items_descripcion'), iQ = c('items_cantidad'), iT = c('Tipo CP/Doc.');
+      iC = c('Apellidos Nombres/ Razón Social'), iD = c('items_descripcion'), iQ = c('items_cantidad'), iT = c('Tipo CP/Doc.'),
+      iTot = c('Total CP'), iMon = c('Moneda'), iBI = c('BI Gravada'), iIGV = c('IGV / IPM');
     v.slice(1).forEach(function (f) {
       if (iT >= 0 && ['01', '03', '1', '3'].indexOf(String(f[iT]).trim()) < 0) return;
       var ds = iD >= 0 ? String(f[iD] || '').split(' || ') : [], qs = iQ >= 0 ? String(f[iQ] || '').split(' || ') : [];
       out.push({ serie: String(f[iS]).trim(), numero: Number(f[iN]), fecha: f[iF], ruc: String(f[iR]).trim(), cliente: String(f[iC]).trim(),
+        total: iTot >= 0 ? f[iTot] : '', moneda: iMon >= 0 ? f[iMon] : '', bi: iBI >= 0 ? f[iBI] : '', igv: iIGV >= 0 ? f[iIGV] : '',
         items: qs.map(function (q, i) { return { desc: String(ds[i] || '').trim(), cant: Number(String(q).replace(/,/g, '')) || 0 }; }).filter(function (x) { return x.cant > 0 || x.desc; }) });
     });
   }

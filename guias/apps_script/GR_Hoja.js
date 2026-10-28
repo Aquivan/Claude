@@ -13,6 +13,7 @@ function onOpen() {
     .addItem('📦 Ver productos de la guía seleccionada', 'GR_menuProductos')
     .addItem('📥 Traer datos de la factura (SIRE o Quesito)', 'GR_menuTraerDatos')
     .addItem('📦 Elegir productos y cantidades de la guía', 'GR_menuElegirProductos')
+    .addItem('📄 Ver la factura de la guía (vista previa)', 'GR_menuVerFactura')
     .addSeparator()
     .addItem('👁 Vista previa de la guía seleccionada (no emite)', 'GR_menuVista')
     .addItem('✅ Emitir la guía seleccionada', 'GR_menuEmitir')
@@ -140,12 +141,13 @@ function GR_hojaGuias_(ss) {
     if (c.g === 'res' || c.k === 'obsFinal' || c.k === 'productos') datos.setBackground('#f5f5f5').setFontColor('#37474f');
     if (c.k === 'obsFinal') datos.setWrap(true).setFontSize(9);
   });
-  sh.setRowHeight(1, 26); sh.setRowHeight(2, 44);
+  sh.setRowHeight(1, 40); sh.setRowHeight(2, 44);
   sh.setFrozenRows(2); sh.setFrozenColumns(GR_COLS_.filter(function (c) { return c.g === 'id'; }).length);   // fija toda la banda 🆔 GUÍA
   sh.getRange(GR_FILA1_, 1, sh.getMaxRows() - GR_FILA1_ + 1, n).setVerticalAlignment('middle');
   sh.getRange(GR_FILA1_, GR_col_('id'), sh.getMaxRows() - GR_FILA1_ + 1, 1).setFontColor('#607d8b').setFontSize(9);
   sh.getRange(GR_FILA1_, GR_col_('estado'), sh.getMaxRows() - GR_FILA1_ + 1, 1).setWrap(true).setFontSize(9);
   GR_formatoCondicional_(sh);
+  try { GR_botonFactura_(sh); } catch (e) { console.warn('botón Ver factura: ' + e.message); }   // 📄 fijo arriba a la izquierda
   // ID, estado y resultado los pone el sistema: aviso si alguien los cambia a mano.
   sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(function (p) { if (/^GR /.test(p.getDescription())) p.remove(); });
   [['id', 'estado'], ['guia', 'actualizado']].forEach(function (par) {

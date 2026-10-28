@@ -488,6 +488,9 @@ function TGG_gh_(q) {
     c.leido = { factura: String(dl.factura || '').slice(0, 20), cotizacion: String(dl.cotizacion || '').slice(0, 12), cliente: String(dl.cliente || '').slice(0, 200),
       cliente_pdf: dl.cliente_pdf || {}, fila: String(dl.fila || '').slice(0, 300), partida: dl.partida || {},
       lineas: (dl.lineas || []).slice(0, 40).map(function (l) { return { texto: String(l.texto || '').slice(0, 250), cantidad: Number(l.cantidad) || 0 }; }) };
+    if (dl.pdf) {   // 📄 la factura en PDF: al Drive del bot (la hoja de Guías la muestra en «Ver factura»)
+      try { c.leido.pdf = IMP_carpeta_(ss).createFile(Utilities.newBlob(Utilities.base64Decode(dl.pdf), 'application/pdf', 'Factura ' + c.leido.factura + '.pdf')).getId(); } catch (e) {}
+    }
     c.estado = 'Leído de Quesito'; c.ultimo_error = '';
     TGG_guardar_(ss, c);
     return { ok: true };

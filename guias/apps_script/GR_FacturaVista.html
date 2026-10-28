@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_blank">
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Google Sans", Roboto, Arial, sans-serif; font-size: 13px; color: #263238; margin: 0; padding: 12px 16px; background: #f4f6f8; }
+  .grid { display: flex; gap: 12px; align-items: stretch; }
+  .col { flex: 1; min-width: 0; }
+  .card { background: #fff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+  .tit { font-size: 18px; font-weight: 700; color: #1565c0; }
+  .sub { color: #607d8b; font-size: 12px; margin-top: 2px; }
+  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 4px 10px; margin-top: 8px; }
+  .k { color: #78909c; font-size: 12px; } .v { font-weight: 600; word-break: break-word; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  th { text-align: left; font-size: 11px; color: #607d8b; padding: 6px 4px; border-bottom: 1px solid #e0e0e0; }
+  td { padding: 6px 4px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+  td.n { text-align: right; white-space: nowrap; }
+  .lote { color: #00796b; font-size: 11px; }
+  .tot { display: flex; justify-content: flex-end; gap: 18px; margin-top: 8px; font-size: 13px; }
+  .tot b { font-size: 15px; }
+  .chip { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e3f2fd; color: #1565c0; margin-left: 6px; }
+  .aviso { background: #fff8e1; color: #6d4c00; padding: 8px 12px; border-radius: 8px; font-size: 12px; margin-bottom: 10px; }
+  .pdf { height: 560px; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .pdf iframe { flex: 1; border: 0; width: 100%; }
+  .pdf .bar { padding: 8px 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+  a { color: #1565c0; }
+  .vacio { color: #90a4ae; text-align: center; padding: 40px 10px; }
+</style>
+</head>
+<body>
+<div id="app">Cargando la factura…</div>
+<script>
+var ID = <?= idGuia ?>;
+var fmt = function (n) { var x = Number(String(n).replace(/,/g, '')); return isNaN(x) ? String(n || '') : x.toLocaleString('en-US', { maximumFractionDigits: 3 }); };
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function pintar(d) {
+  var s = d.sire || {}, h = '';
+  if (!d.factura && !d.cotizacion) {
+    document.getElementById('app').innerHTML = '<div class="aviso">Esta guía no tiene factura todavía. Ponga la serie y el número (o la cotización) y use <b>🚚 Guías → 📥 Traer datos de la factura</b>.</div>';
+    return;
+  }
+  h += '<div class="card"><div class="tit">📄 Factura ' + esc(d.factura || ('de la cotización ' + d.cotizacion)) + '</div>' +
+    '<div class="sub">Guía ' + esc(d.id) + ' · ' + esc(d.empresa) + (d.sire ? ' <span class="chip">SIRE</span>' : '') + (d.pdf ? ' <span class="chip">PDF de Quesito</span>' : '') + '</div>' +
+    '<div class="kv">' +
+    '<div class="k">Fecha</div><div class="v">' + esc(s.fecha || '—') + '</div>' +
+    '<div class="k">Cliente</div><div class="v">' + esc(s.cliente || d.cliente.nombre || '—') + '</div>' +
+    '<div class="k">RUC / DNI</div><div class="v">' + esc(s.ruc || d.cliente.ruc || '—') + '</div>' +
+    (d.llegada ? '<div class="k">Llegada (guía)</div><div class="v">' + esc(d.llegada) + '</div>' : '') +
+    '</div></div>';
+  h += '<div class="card"><b>Productos de la factura</b>';
+  if (d.lineas.length) {
+    h += '<table><tr><th>Producto</th><th style="text-align:right">Cantidad</th></tr>';
+    d.lineas.forEach(function (l) {
+      h += '<tr><td>' + esc(l.desc) + (l.lote ? '<div class="lote">' + esc(l.lote) + '</div>' : '') + '</td><td class="n">' + fmt(l.cant) + '</td></tr>';
+    });
+    h += '</table>';
+  } else h += '<div class="vacio">Sin productos todavía: use 📥 Traer datos de la factura.</div>';
+  if (s.total) h += '<div class="tot"><span>Gravada ' + fmt(s.bi) + '</span><span>IGV ' + fmt(s.igv) + '</span><span>Total <b>' + esc(s.moneda || '') + ' ' + fmt(s.total) + '</b></span></div>';
+  h += '</div>';
+  if (d.enGuia.length) {
+    h += '<div class="card"><b>Lo que lleva esta guía</b> (📦 Productos)<table><tr><th>Producto</th><th style="text-align:right">Cantidad</th></tr>';
+    d.enGuia.forEach(function (l) { h += '<tr><td>' + esc(l.desc) + (l.lote ? '<div class="lote">' + esc(l.lote) + '</div>' : '') + '</td><td class="n">' + fmt(l.cant) + '</td></tr>'; });
+    h += '</table></div>';
+  }
+  if (d.error && !d.sire) h += '<div class="aviso">SIRE: ' + esc(d.error) + '</div>';
+  var izq = h, der = '';
+  if (d.pdf) {
+    var prev = d.pdf.replace(/\/view.*$/, '/preview');
+    der = '<div class="card pdf"><div class="bar"><b>PDF de la factura</b><a href="' + esc(d.pdf) + '">Abrir en otra pestaña ↗</a></div>' +
+      '<iframe src="' + esc(prev) + '"></iframe></div>';
+  } else {
+    der = '<div class="card pdf"><div class="vacio">📄 El PDF aparece aquí cuando la factura se lee en Quesito.<br><br>' +
+      'Use <b>🚚 Guías → 📥 Traer datos de la factura</b> (si el SIRE ya tenía todo, el PDF no hace falta: los datos de la izquierda son los de SUNAT).</div></div>';
+  }
+  document.getElementById('app').innerHTML = '<div class="grid"><div class="col">' + izq + '</div><div class="col">' + der + '</div></div>';
+}
+google.script.run.withSuccessHandler(pintar)
+  .withFailureHandler(function (e) { document.getElementById('app').innerHTML = '<div class="aviso">⚠️ ' + esc(e.message) + '</div>'; })
+  .GR_datosFactura(ID);
+</script>
+</body>
+</html>
