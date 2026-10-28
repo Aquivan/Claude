@@ -21,6 +21,14 @@ function GR_alEditar_(e) {
     if (f1 < f0) return;
     var c0 = e.range.getColumn(), c1 = e.range.getLastColumn();
     var cambiadas = GR_COLS_.filter(function (c, j) { return j + 1 >= c0 && j + 1 <= c1; }).map(function (c) { return c.k; });
+    // Otra factura (o cotización, o empresa): lo que era de la factura anterior se quita antes de revisar la fila.
+    var cambioDoc = ['serie', 'numero', 'cotizacion', 'empresa'].some(function (k) { return cambiadas.indexOf(k) >= 0; });
+    if (cambioDoc && !(e.range.getNumCells() === 1 && String(e.oldValue == null ? '' : e.oldValue) === String(e.value == null ? '' : e.value))) {
+      sh.getRange(f0, 1, f1 - f0 + 1, 1).getValues().forEach(function (v, i) {
+        var id = String(v[0]);
+        if (/^G-\d+$/.test(id)) try { GR_olvidarFactura_(ss, sh, f0 + i, id); } catch (err) { console.warn('olvidar ' + id + ': ' + err.message); }
+      });
+    }
     if (cambiadas.indexOf('pedido') >= 0) {   // «Producto y cantidad» escrito a mano → 📦 Productos igual
       sh.getRange(f0, 1, f1 - f0 + 1, GR_col_('pedido')).getValues().forEach(function (v) {
         var id = String(v[0]);

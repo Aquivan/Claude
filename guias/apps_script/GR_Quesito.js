@@ -91,7 +91,8 @@ function GR_lineaQuesito_(l) {
 function GR_aplicarLeido_(ss, fila, d) {
   var sh = ss.getSheetByName(GR_HOJA_), x = GR_leerGuias_(sh, fila, fila)[0].r, ctx = GR_contexto_(ss), hecho = [], ojo = [];
   var t = function (k) { return String(x[k] == null ? '' : x[k]).trim(); };
-  var poner = function (k, v) { if (v !== '' && v != null && t(k) === '') { sh.getRange(fila, GR_col_(k)).setValue(v); x[k] = v; return true; } return false; };
+  var puestos = {};
+  var poner = function (k, v) { if (v !== '' && v != null && t(k) === '') { sh.getRange(fila, GR_col_(k)).setValue(v); x[k] = v; puestos[k] = v; return true; } return false; };
   var emp = ctx.emp[t('empresa')] || {};
   // Factura (si se pidió por cotización)
   var mf = String(d.factura || '').match(/^([A-Z0-9]{4})-0*(\d+)$/);
@@ -118,8 +119,9 @@ function GR_aplicarLeido_(ss, fila, d) {
     ojo.push('la llegada es la dirección fiscal del cliente: cámbiela si se entrega en otro sitio' + (t('lubi') ? '' : ' (ponga el distrito)'));
   }
   // Productos: todo lo de la factura o lo que dice "Producto y cantidad"
-  var ls = (d.lineas || []).map(GR_lineaQuesito_), prods = ctx.prod[t('id')] || [];
-  if (ls.length) GR_guardarFactura_(t('id'), ls);   // para 📦 Elegir productos y para «Producto y cantidad»
+  var ls = (d.lineas || []).map(GR_lineaQuesito_), prods = ctx.prod[t('id')] || [], previa = GR_facturaGuardada_(t('id'));
+  if (prods.length && previa && previa !== String(d.factura || '')) { GR_reemplazarProductos_(ss, t('id'), []); prods = []; }   // eran de otra factura
+  if (ls.length) GR_guardarFactura_(t('id'), ls, d.factura);   // para 📦 Elegir productos y para «Producto y cantidad»
   if (!ls.length) ojo.push('Quesito no trajo productos de la factura');
   else if (!prods.length) {
     var pedido = GR_partirPedido_(x.pedido), filas = [];
@@ -139,6 +141,8 @@ function GR_aplicarLeido_(ss, fila, d) {
     hecho.push(filas.length + ' producto(s) en 📦');
   }
   GR_procesarFilas_(ss, fila, fila, ['ldir', 'lubi', 'productos', 'total']);
+  // Lo que puso 📥 (para quitarlo solo si después cambian la factura y nadie lo tocó)
+  try { PropertiesService.getDocumentProperties().setProperty('GR_AUTO_' + t('id'), JSON.stringify(Object.assign({ factura: String(d.factura || '') }, puestos))); } catch (e) {}
   GR_registrar_(t('id'), '📥 De Quesito', (d.factura || '') + (d.cotizacion ? ' (cotización ' + d.cotizacion + ')' : '') + ' · ' + hecho.join(', '));
   return '📥 De Quesito: ' + (d.factura || '') + (hecho.length ? ' → ' + hecho.join(', ') : ' (ya estaba completa)') + (ojo.length ? '. Ojo: ' + ojo.join('; ') : '') + '.';
 }
@@ -155,15 +159,48 @@ function GR_agregarProductos_(ss, id, filas) {
 /* ---------------- 📦 Elegir productos y cantidades (ventana) ---------------- */
 
 /** Líneas de la factura de una guía (las que trajo 📥; si no hay, las de 📦 completas). */
-function GR_guardarFactura_(id, ls) {
+function GR_guardarFactura_(id, ls, factura) {
   try {
-    PropertiesService.getDocumentProperties().setProperty('GR_FAC_' + id, JSON.stringify(ls.slice(0, 40).map(function (l) {
-      return { desc: String(l.desc).slice(0, 200), unidad: l.unidad, cant: Number(l.cant) || 0, lote: String(l.lote || '').slice(0, 60) }; })));
+    PropertiesService.getDocumentProperties().setProperty('GR_FAC_' + id, JSON.stringify({ f: String(factura || ''), l: ls.slice(0, 40).map(function (l) {
+      return { desc: String(l.desc).slice(0, 200), unidad: l.unidad, cant: Number(l.cant) || 0, lote: String(l.lote || '').slice(0, 60) }; }) }));
   } catch (e) { console.warn('GR_guardarFactura_: ' + e.message); }
 }
 
+/** Factura de la que salieron los datos guardados de esta guía ('' si no se sabe). */
+function GR_facturaGuardada_(id) {
+  try { var v = JSON.parse(PropertiesService.getDocumentProperties().getProperty('GR_FAC_' + id) || 'null'); return v && !Array.isArray(v) ? v.f || '' : ''; }
+  catch (e) { return ''; }
+}
+
+/**
+ * Cambió la factura, la cotización o la empresa de una guía que ya tenía datos de otra factura: se quita lo que era
+ * de la anterior (productos de 📦, «Producto y cantidad» y el cliente y la llegada que puso 📥, si nadie los cambió).
+ * Devuelve el texto para «Mensaje» o '' si no había nada que quitar.
+ */
+function GR_olvidarFactura_(ss, sh, fila, id) {
+  var props = PropertiesService.getDocumentProperties(), auto = {};
+  try { auto = JSON.parse(props.getProperty('GR_AUTO_' + id) || '{}'); } catch (e) {}
+  var hayFac = !!props.getProperty('GR_FAC_' + id), prods = (GR_contexto_(ss).prod[id] || []).length;
+  if (!hayFac && !prods && !auto.factura) return '';
+  props.deleteProperty('GR_FAC_' + id); props.deleteProperty('GR_AUTO_' + id);
+  if (prods) GR_reemplazarProductos_(ss, id, []);
+  var r = GR_leerGuias_(sh, fila, fila)[0].r, quitado = prods ? ['productos'] : [];
+  ['tdest', 'ndest', 'dest', 'ldir', 'lubi'].forEach(function (k) {
+    if (auto[k] && String(r[k]) === String(auto[k])) { sh.getRange(fila, GR_col_(k)).setValue(''); if (k === 'ndest') quitado.push('cliente'); if (k === 'ldir') quitado.push('llegada'); }
+  });
+  if (String(r.pedido || '').trim()) { sh.getRange(fila, GR_col_('pedido')).setValue(''); quitado.push('«Producto y cantidad»'); }
+  sh.getRange(fila, GR_col_('total')).setValue('SI');
+  var m = '🔄 Cambió la factura: quité lo que era de la anterior (' + (quitado.join(', ') || 'datos guardados') + '). Use 🚚 Guías → 📥 Traer de Quesito.' +
+    (!auto.factura && r.ndest ? ' Revise también el cliente.' : '');
+  sh.getRange(fila, GR_col_('msg')).setValue(m);
+  return m;
+}
+
 function GR_facturaDe_(ss, id) {
-  try { var v = PropertiesService.getDocumentProperties().getProperty('GR_FAC_' + id); if (v) return { lineas: JSON.parse(v), deQuesito: true }; } catch (e) {}
+  try {
+    var v = JSON.parse(PropertiesService.getDocumentProperties().getProperty('GR_FAC_' + id) || 'null');
+    if (v) return { lineas: Array.isArray(v) ? v : v.l || [], deQuesito: true, factura: Array.isArray(v) ? '' : v.f || '' };
+  } catch (e) {}
   var ps = GR_contexto_(ss).prod[id] || [];
   return { lineas: ps.map(function (p) { return { desc: String(p.desc), unidad: GR_UNIDADES_.filter(function (u) { return u.indexOf(p.unidad + ' ') === 0; })[0] || GR_UNIDADES_[0],
     cant: p.completa === 'SI' ? p.cant : 0, lote: String(p.lote || '') }; }), deQuesito: false };
