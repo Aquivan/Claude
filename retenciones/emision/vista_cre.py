@@ -180,6 +180,39 @@ def claves_sol():
     return ruc, usuario, clave
 
 
+def pasar_avisos_sol(pag, rondas=4):
+    """Pantallas que SOL pone a veces al ingresar: «Informativo» sobre «datos de contacto» (botón Finalizar, que solo
+    cierra el aviso), «Continuar sin confirmar», campañas («Omitir», «Ahora no», «Cerrar»). Se pasan sin confirmar ni
+    actualizar nada. Devuelve cuántas pasó."""
+    hechos = 0
+    for _ in range(rondas):
+        tocado = False
+        for f in pag.frames:
+            for t in ("Finalizar", "Continuar sin confirmar", "Omitir", "Ahora no", "Cerrar", "Aceptar"):
+                try:
+                    b = f.get_by_text(t, exact=True)
+                    for i in range(b.count()):
+                        el = b.nth(i)
+                        if not el.is_visible():
+                            continue
+                        if t in ("Finalizar", "Aceptar", "Cerrar"):   # solo dentro de un aviso informativo, nunca de un formulario
+                            caja = el.evaluate("e => { const m = e.closest('.modal, .modal-dialog, [role=dialog], .ui-dialog'); return m ? m.innerText : ''; }")
+                            if not re.search(r"(?i)informativo|datos de contacto|c[oó]digo de verificaci[oó]n|campa[nñ]a|comunicado", caja or ""):
+                                continue
+                        el.click(timeout=3000)
+                        pag.wait_for_timeout(1500)
+                        hechos += 1
+                        tocado = True
+                        break
+                except Exception:
+                    continue
+        if not tocado:
+            break
+    if hechos:
+        print(f"  Avisos de SOL al ingresar: {hechos} (pasados sin confirmar nada)")
+    return hechos
+
+
 def preparar(pag, s, docs, avisos_ok, ruc, usuario, clave):
     """Llena el comprobante en SEE-SOL y abre la Vista preliminar. NO emite.
     Devuelve (marco de la vista preliminar, total de retención que calculó SUNAT)."""
@@ -193,6 +226,8 @@ def preparar(pag, s, docs, avisos_ok, ruc, usuario, clave):
     pag.fill("#txtContrasena", clave)
     pag.click("#btnAceptar")
     pag.wait_for_load_state("networkidle", timeout=60000)
+    pag.wait_for_timeout(2500)
+    pasar_avisos_sol(pag)   # «datos de contacto», campañas: se pasan sin confirmar nada
     print("Ingreso a SOL: OK")
 
     # 2) Formulario del comprobante de retención
