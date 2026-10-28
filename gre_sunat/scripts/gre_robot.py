@@ -472,6 +472,39 @@ def elegir_fila(fr, pag, p, alerta, cual):
 
 # ============================================================ pantallas
 
+def pasar_avisos_sol(pag, rondas=4):
+    """Pantallas que SOL pone a veces al ingresar: «Informativo» sobre «datos de contacto» (botón Finalizar, que solo
+    cierra el aviso), «Continuar sin confirmar», campañas («Omitir», «Ahora no», «Cerrar»). Se pasan sin confirmar ni
+    actualizar nada. Devuelve cuántas pasó."""
+    hechos = 0
+    for _ in range(rondas):
+        tocado = False
+        for f in pag.frames:
+            for t in ("Finalizar", "Continuar sin confirmar", "Omitir", "Ahora no", "Cerrar", "Aceptar"):
+                try:
+                    b = f.get_by_text(t, exact=True)
+                    for i in range(b.count()):
+                        el = b.nth(i)
+                        if not el.is_visible():
+                            continue
+                        if t in ("Finalizar", "Aceptar", "Cerrar"):   # solo dentro de un aviso informativo, nunca de un formulario
+                            caja = el.evaluate("e => { const m = e.closest('.modal, .modal-dialog, [role=dialog], .ui-dialog'); return m ? m.innerText : ''; }")
+                            if not re.search(r"(?i)informativo|datos de contacto|c[oó]digo de verificaci[oó]n|campa[nñ]a|comunicado", caja or ""):
+                                continue
+                        el.click(timeout=3000)
+                        pag.wait_for_timeout(1500)
+                        hechos += 1
+                        tocado = True
+                        break
+                except Exception:
+                    continue
+        if not tocado:
+            break
+    if hechos:
+        print(f"  Avisos de SOL al ingresar: {hechos} (pasados sin confirmar nada)")
+    return hechos
+
+
 def ingresar(nav, ruc, usuario, clave, menu=None, marco="emitir-gre", listo="Remitente"):
     ctx = nav.new_context(viewport={"width": 1366, "height": 1000}, locale="es-PE", user_agent=UA)
     pag = ctx.new_page()
@@ -486,15 +519,7 @@ def ingresar(nav, ruc, usuario, clave, menu=None, marco="emitir-gre", listo="Rem
     pag.wait_for_load_state("networkidle", timeout=60000)
     esperar(pag, 3000)
     # Pantallas que SOL pone a veces después de ingresar (campañas, «confirme sus datos»): se pasan sin aceptar nada.
-    for f in pag.frames:
-        for t in ("Continuar sin confirmar", "Omitir", "Ahora no"):
-            try:
-                b = f.get_by_text(t, exact=True)
-                if b.count() and b.first.is_visible():
-                    b.first.click(timeout=2000)
-                    esperar(pag, 1500)
-            except Exception:
-                pass
+    pasar_avisos_sol(pag)
     for i in (menu or MENU_GRE):   # se abre con clics, como una persona (ir directo a la dirección lo corta SUNAT)
         for f in pag.frames:
             try:
