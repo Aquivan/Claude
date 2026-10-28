@@ -73,8 +73,40 @@ function pintar(d) {
   h += '<h3>OBSERVACIONES</h3><table><tr><td>' + (d.observaciones ? esc(d.observaciones) : '<span class="gris">(ninguna)</span>') + '</td></tr></table>';
   h += '<div class="pie">Borrador generado desde la hoja «Guías de Remisión · Grupo» (guía ' + esc(d.id) + '). La guía oficial la crea ' + esc(d.donde) + ' al emitir.</div></div>';
   h += '<div class="barra"><span id="msg"></span><button class="btn sec" onclick="google.script.host.close()">Cerrar</button>' +
+       '<button class="btn sec" id="img" onclick="imagen()">🖼 Copiar como imagen</button>' +
        '<button class="btn pri" id="pdf" onclick="pdf()">📄 Guardar PDF en Drive</button></div>';
   document.getElementById('app').innerHTML = h;
+}
+/** La guía como imagen: se copia al portapapeles (para pegar en WhatsApp/Telegram/correo con Ctrl+V);
+ *  si el navegador no deja copiar, se muestra la imagen para clic derecho → «Copiar imagen» o descargarla. */
+function imagen() {
+  var b = document.getElementById('img'), m = document.getElementById('msg');
+  b.disabled = true; m.textContent = 'Armando la imagen…';
+  cargarH2c(function () {
+    html2canvas(document.getElementById('doc'), { scale: 2, backgroundColor: '#ffffff' }).then(function (cv) {
+      cv.toBlob(function (blob) {
+        var url = URL.createObjectURL(blob);
+        var listo = function () { b.disabled = false; m.innerHTML = '✅ Imagen copiada. Péguela con <b>Ctrl+V</b> en WhatsApp, Telegram o el correo.'; };
+        var mostrar = function () {
+          b.disabled = false; m.textContent = '';
+          var o = document.createElement('div');
+          o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9;overflow:auto;padding:14px;text-align:center';
+          o.innerHTML = '<div style="color:#fff;margin-bottom:8px">Haga <b>clic derecho sobre la imagen → «Copiar imagen»</b> (o <a style="color:#90caf9" download="Guia ' + esc(ID) + '.png" href="' + url + '">descárguela</a>). ' +
+            '<button class="btn sec" style="margin-left:8px;padding:5px 12px">Cerrar</button></div><img style="max-width:100%;background:#fff" src="' + url + '">';
+          o.querySelector('button').onclick = function () { o.remove(); };
+          document.body.appendChild(o);
+        };
+        try { navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(listo, mostrar); } catch (e) { mostrar(); }
+      }, 'image/png');
+    }, function (e) { b.disabled = false; m.textContent = '⚠️ ' + e; });
+  });
+}
+function cargarH2c(fn) {
+  if (window.html2canvas) return fn();
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+  s.onload = fn; s.onerror = function () { document.getElementById('img').disabled = false; document.getElementById('msg').textContent = '⚠️ No se pudo cargar el generador de imagen.'; };
+  document.head.appendChild(s);
 }
 function pdf() {
   var b = document.getElementById('pdf'), m = document.getElementById('msg');
