@@ -353,6 +353,7 @@ function TGG_texto_(c, html) {
 function TGG_pedir_(ss, c, modo) {
   var cfg = TG_cfg_(ss);
   if (TGG_faltan_(c).length) throw new Error(TGG_faltan_(c).join(' '));
+  if (modo === 'emitir' && /^(Emitida|Emitiendo)$/.test(c.estado || '')) throw new Error('esa guía ya está ' + c.estado.toLowerCase() + (c.gre ? ' (' + c.gre + ')' : '') + '.');
   // ⚡ La vista previa sigue abierta en SUNAT esperando: se emite ahí mismo (sin volver a llenar). Si no, corrida nueva.
   var lock = LockService.getUserLock();   // candado propio de las guías: no espera a "Actualizar todo" (usa el del script)
   if (!lock.tryLock(25000)) throw new Error('el bot está ocupado con otra guía. Toque de nuevo en un minuto.');
@@ -685,11 +686,11 @@ function TGG_alBotonTG_(ctx, datos, op) {
   if (op === 'ok' && datos.huella && datos.huella !== TGG_huella_(c)) return TG_enviar_(ctx.chatId, '⚠️ La guía cambió después de pedir confirmar. Revísela y vuelva a tocar ✅ Emitir.', TGG_botonesTG_(c));
   if (op === 'ok' || op === 'vp') {
     var modo = op === 'ok' ? 'emitir' : 'vista';
-    if (TG_yaVisto_('gre' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0))) return TG_enviar_(ctx.chatId, 'Eso ya se pidió.');
+    if (TG_yaVisto_('g2' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0), 120)) return TG_enviar_(ctx.chatId, 'Eso ya se pidió.');
     if (op === 'ok') TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
     var como;
     try { c.chat = ctx.chatId; como = TGG_pedir_(ctx.ss, c, modo); } catch (e) {
-      TG_olvidar_('gre' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0));   // no se pidió: el botón vuelve a servir
+      TG_olvidar_('g2' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0));   // no se pidió: el botón vuelve a servir
       return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message), TGG_botonesTG_(c)); }
     return TG_enviar_(ctx.chatId, (modo === 'emitir' ? '🚚 <b>Emitiendo</b> la guía en ' + TGG_donde_(c) : '👁 <b>Preparando la vista previa</b> en ' + TGG_donde_(c) + ' (no se emite)') +
       ' · caso ' + c.id + (como === 'misma' ? '\nEn la misma pantalla de la vista previa: en menos de un minuto le mando el resultado.' : '\nTarda 2–4 minutos; le mando aquí la foto o el resultado.'));
@@ -820,10 +821,10 @@ function TGG_botonWA_(acc, k, op, numero) {
   }
   if (op !== 'ok' && op !== 'vp') return TGG_respWA_('No entendí ese botón.');
   var modo = op === 'ok' ? 'emitir' : 'vista';
-  if (TG_yaVisto_('gre' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0))) return TGG_respWA_('Eso ya se pidió.');
+  if (TG_yaVisto_('g2' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0), 120)) return TGG_respWA_('Eso ya se pidió.');
   var como;
   try { c.chat = clave; como = TGG_pedir_(ss, c, modo); } catch (e) {
-    TG_olvidar_('gre' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0));   // no se pidió: puede volver a tocar el botón
+    TG_olvidar_('g2' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0));   // no se pidió: puede volver a tocar el botón
     return TGG_respWA_('⚠️ ' + e.message, c); }
   return TGG_respWA_((modo === 'emitir' ? '🚚 *Emitiendo* la guía en ' + TGG_donde_(c) : '👁 *Preparando la vista previa* en ' + TGG_donde_(c) + ' (no se emite)') +
     ' · caso ' + c.id + (como === 'misma' ? '\nEn la misma pantalla de la vista previa: en menos de un minuto le mando el resultado.' : '\nTarda 2–4 minutos; le mando aquí la foto o el resultado.'));
