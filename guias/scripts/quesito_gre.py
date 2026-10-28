@@ -79,7 +79,31 @@ def fin(ok, texto, **extra):
     open(os.path.join(os.environ.get("RUNNER_TEMP", "/tmp"), "gre_avisado"), "w").close()
 
 
+def mostrar_todo(pag):
+    """Abre a la vista todas las secciones plegadas (traslado, transportista, conductor, partida, llegada) para la foto.
+    Solo cambia cómo se ve la página: no envía nada."""
+    try:
+        pag.evaluate("""() => {
+          document.querySelectorAll('form .collapse, form .panel-collapse, form .accordion-collapse, form [class*="collapse"]').forEach(e => {
+            if (e.matches('a, button, [data-toggle], [data-bs-toggle]')) return;
+            e.classList.add('in', 'show'); e.style.display = 'block'; e.style.height = 'auto'; e.style.visibility = 'visible'; });
+        }""")
+        pag.wait_for_timeout(400)
+        # Si aún queda una sección con "+" (cerrada), un clic en su título la abre (es solo de la pantalla).
+        for t in ["DATOS DEL TRASLADO", "DATOS DEL TRANSPORTISTA", "DATOS DEL CONDUCTOR", "PUNTO DE PARTIDA", "PUNTO DE LLEGADA", "OBSERVACIONES"]:
+            loc = pag.get_by_text(re.compile("^\\s*" + t, re.I))
+            for i in range(loc.count()):
+                el = loc.nth(i)
+                if el.is_visible() and re.search(r"\+\s*$", el.evaluate("e => (e.closest('a, .panel-heading, .card-header, div') || e).innerText")):
+                    el.evaluate("e => e.click()")
+                    pag.wait_for_timeout(500)
+                    break
+    except Exception:
+        pass
+
+
 def foto(pag):
+    mostrar_todo(pag)
     return pag.screenshot(type="jpeg", quality=70, full_page=True)
 
 
