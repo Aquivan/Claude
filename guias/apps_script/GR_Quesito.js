@@ -17,7 +17,15 @@ function GR_menuTraerDatos() {
   if (sh.getName() !== GR_HOJA_ || sh.getActiveRange().getRow() < GR_FILA1_) return ui.alert('Seleccione una o varias filas de la pestaña ' + GR_HOJA_ + '.');
   var rg = sh.getActiveRange(), msgs = [], pedidas = 0;
   var filas = GR_leerGuias_(sh, Math.max(rg.getRow(), GR_FILA1_), rg.getLastRow()).slice(0, 10).map(function (x) { return x.fila; });
-  filas.forEach(function (fila) {
+  filas.forEach(function (fila) { var r = GR_traerDatosFila_(ss, sh, fila); msgs = msgs.concat(r.msgs); pedidas += r.pedidas; });
+  if (pedidas) GR_programarRevision_();
+  ss.toast(msgs.join('\n') || 'No había guías en esas filas.', '📥 Traer datos de la factura', 12);
+}
+
+/** 📥 de UNA fila (lo usan el menú y ➕ Nueva guía rápida). → {msgs, pedidas}: pedidas = 1 si se mandó a leer en Quesito. */
+function GR_traerDatosFila_(ss, sh, fila) {
+  var msgs = [], pedidas = 0;
+  (function () {
     var x = GR_leerGuias_(sh, fila, fila)[0], r = x.r, t = function (k) { return String(r[k] == null ? '' : r[k]).trim(); };
     if (!r.id) return;
     var ctx = GR_contexto_(ss), emp = ctx.emp[t('empresa')];
@@ -69,9 +77,8 @@ function GR_menuTraerDatos() {
     sh.getRange(fila, GR_col_('actualizado')).setValue(new Date());
     pedidas++;
     msgs.push(r.id + ': ' + (sire ? '🔎 cliente del SIRE; ' : '') + '📥 Quesito (' + porQue.join('; ') + ')…');
-  });
-  if (pedidas) GR_programarRevision_();
-  ss.toast(msgs.join('\n') || 'No había guías en esas filas.', '📥 Traer datos de la factura', 12);
+  })();
+  return { msgs: msgs, pedidas: pedidas };
 }
 
 /** "M&D 325 lote 1507: 10000; barra 5000" → [{desc, cant}]; vacío o "total" → []. Lanza un error si falta la cantidad. */

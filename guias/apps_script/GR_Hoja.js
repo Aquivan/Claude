@@ -5,9 +5,11 @@
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('🚚 Guías')
+    .addItem('➕ Nueva guía rápida (solo empresa y factura)', 'GR_menuNuevaRapida')
     .addItem('➕ Nueva guía (formulario)', 'GR_menuNueva')
     .addItem('✏️ Editar la guía seleccionada', 'GR_menuEditar')
     .addItem('📄 Duplicar la guía seleccionada', 'GR_menuDuplicar')
+    .addItem('🚛 Copiar transporte de la guía anterior', 'GR_menuCopiarTransporte')
     .addSeparator()
     .addItem('🔍 Revisar todas las guías', 'GR_menuRevisar')
     .addItem('📦 Ver productos de la guía seleccionada', 'GR_menuProductos')
@@ -21,6 +23,10 @@ function onOpen() {
     .addItem('👁 Vista previa de la guía seleccionada (no emite)', 'GR_menuVista')
     .addItem('✅ Emitir la guía seleccionada', 'GR_menuEmitir')
     .addItem('🔄 Traer resultados del robot', 'GR_menuResultados')
+    .addItem('📋 Resumen del día (emitidas y por emitir)', 'GR_menuResumen')
+    .addSeparator()
+    .addItem('👁 Ver solo lo que aplica a la guía seleccionada', 'GR_menuVistaGuia')
+    .addItem('👁 Ver todas las columnas', 'GR_menuVistaTodo')
     .addSeparator()
     .addItem('📥 Importar datos (del Excel de guías)', 'GR_menuImportar')
     .addItem('🔑 Token de GitHub (para leer facturas del SIRE)', 'GR_menuToken')
