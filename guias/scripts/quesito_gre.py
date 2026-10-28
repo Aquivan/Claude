@@ -80,26 +80,36 @@ def fin(ok, texto, **extra):
 
 
 def mostrar_todo(pag):
-    """Abre a la vista todas las secciones plegadas (traslado, transportista, conductor, partida, llegada) para la foto.
+    """Para la foto: deja a la vista TODAS las secciones (traslado, transportista, conductor, partida, llegada).
+    Quesito es un acordeón (abrir una cierra las otras): se fuerza que el cuerpo de cada sección se vea.
     Solo cambia cómo se ve la página: no envía nada."""
     try:
-        pag.evaluate("""() => {
-          document.querySelectorAll('form .collapse, form .panel-collapse, form .accordion-collapse, form [class*="collapse"]').forEach(e => {
-            if (e.matches('a, button, [data-toggle], [data-bs-toggle]')) return;
-            e.classList.add('in', 'show'); e.style.display = 'block'; e.style.height = 'auto'; e.style.visibility = 'visible'; });
-        }""")
-        pag.wait_for_timeout(400)
-        # Si aún queda una sección con "+" (cerrada), un clic en su título la abre (es solo de la pantalla).
-        for t in ["DATOS DEL TRASLADO", "DATOS DEL TRANSPORTISTA", "DATOS DEL CONDUCTOR", "PUNTO DE PARTIDA", "PUNTO DE LLEGADA", "OBSERVACIONES"]:
-            loc = pag.get_by_text(re.compile("^\\s*" + t, re.I))
-            for i in range(loc.count()):
-                el = loc.nth(i)
-                if el.is_visible() and re.search(r"\+\s*$", el.evaluate("e => (e.closest('a, .panel-heading, .card-header, div') || e).innerText")):
-                    el.evaluate("e => e.click()")
-                    pag.wait_for_timeout(500)
-                    break
-    except Exception:
-        pass
+        n = pag.evaluate("""(titulos) => {
+          const visible = e => !!(e && (e.offsetWidth || e.offsetHeight || e.getClientRects().length));
+          const campos = e => e && e.querySelector && e.querySelector('input:not([type=hidden]), select, textarea');
+          const ver = e => { e.style.setProperty('display', 'block', 'important'); e.style.setProperty('height', 'auto', 'important');
+            e.style.setProperty('visibility', 'visible', 'important'); e.style.setProperty('overflow', 'visible', 'important');
+            e.style.setProperty('opacity', '1', 'important'); e.classList.add('in', 'show'); };
+          let hechas = 0;
+          const nodos = [...document.querySelectorAll('a, h1, h2, h3, h4, h5, h6, div, span, button, li')]
+            .filter(e => visible(e) && titulos.some(t => (e.innerText || '').trim().toUpperCase().startsWith(t)) && !campos(e));
+          titulos.forEach(t => {
+            const ms = nodos.filter(e => (e.innerText || '').trim().toUpperCase().startsWith(t));
+            const h = ms.find(e => !ms.some(o => o !== e && e.contains(o)));   // el más interno: el título mismo, no su caja
+            if (!h) return;
+            // el cuerpo: lo que sigue al título (en él o en uno de sus contenedores) y tiene campos
+            for (let a = h, k = 0; a && k < 5; a = a.parentElement, k++) {
+              let s = a.nextElementSibling;
+              while (s && !campos(s)) s = s.nextElementSibling;
+              if (s) { ver(s); s.querySelectorAll('.collapse, .panel-collapse, [style*="display: none"]').forEach(x => { if (campos(x)) ver(x); }); hechas++; break; }
+            }
+          });
+          document.querySelectorAll('[data-parent], [data-bs-parent]').forEach(x => { x.removeAttribute('data-parent'); x.removeAttribute('data-bs-parent'); });
+          return hechas; }""", ["DATOS DEL TRASLADO", "DATOS DEL TRANSPORTISTA", "DATOS DEL CONDUCTOR", "PUNTO DE PARTIDA", "PUNTO DE LLEGADA", "OBSERVACIONES"])
+        paso(f"Foto: {n} sección(es) a la vista")
+        pag.wait_for_timeout(500)
+    except Exception as e:
+        paso(f"Foto: no pude abrir las secciones ({str(e)[:80]})")
 
 
 def foto(pag):
