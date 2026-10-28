@@ -174,6 +174,15 @@ function GR_aplicarLeido_(ss, fila, d) {
     hecho.push('llegada (dirección de la factura)');
     ojo.push('la llegada es la dirección fiscal del cliente: cámbiela si se entrega en otro sitio' + (t('lubi') ? '' : ' (ponga el distrito)'));
   }
+  // Sin dirección en la factura ni en 📍: el domicilio fiscal del cliente según SUNAT
+  if (t('ldir') === '' && ruc && ruc.length === 11) {
+    var fis = GR_domicilioFiscal_(ruc);
+    if (fis) {
+      poner('ldir', fis.direccion); if (t('lubi') === '') poner('lubi', fis.etiqueta);
+      hecho.push('llegada (domicilio fiscal SUNAT)');
+      ojo.push('la llegada es el domicilio fiscal del cliente: cámbiela si se entrega en un almacén (📍 Buscar direcciones por RUC)');
+    }
+  }
   // Productos: todo lo de la factura o lo que dice "Producto y cantidad"
   var ls = (d.lineas || []).map(GR_lineaQuesito_), prods = ctx.prod[t('id')] || [], previa = GR_facturaGuardada_(t('id'));
   // Otra factura, o lo de Quesito (con lotes) reemplaza lo del SIRE: 📦 se vuelve a armar

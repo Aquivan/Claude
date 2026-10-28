@@ -69,16 +69,35 @@ function GR_anexosDe_(ruc) {
   return out;
 }
 
+/** Domicilio fiscal y nombre del RUC (datos públicos de SUNAT vía apis.net.pe, sin clave). null si no responde. */
+function GR_domicilioFiscal_(ruc) {
+  var cache = CacheService.getDocumentCache(), k = 'gr_fis_' + ruc, g = cache.get(k);
+  if (g) return JSON.parse(g);
+  try {
+    var r = UrlFetchApp.fetch('https://api.apis.net.pe/v1/ruc?numero=' + ruc, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (r.getResponseCode() !== 200) return null;
+    var j = JSON.parse(r.getContentText()), ub = String(j.ubigeo || '').trim();
+    if (!j.direccion || /^\s*-?\s*$/.test(j.direccion)) return null;
+    var l = (GR_UBIGEOS_.filter(function (x) { return x.slice(0, 6) === ub; })[0] || '').split('|');
+    var dir = String(j.direccion).replace(/\s+/g, ' ').trim();
+    if (l.length > 3 && dir.toUpperCase().indexOf(l[3]) < 0) dir += ' - ' + l[3] + ' - ' + l[2] + ' - ' + l[1];
+    var out = { ubigeo: ub, etiqueta: GR_ubigeos_()[ub] || ub, direccion: dir, nombre: String(j.nombre || '').replace(/\s+/g, ' ').trim(),
+      estado: String(j.estado || ''), condicion: String(j.condicion || ''), fiscal: true };
+    try { cache.put(k, JSON.stringify(out), 86400); } catch (e) {}
+    return out;
+  } catch (e) { return null; }
+}
+
 /** Lo que muestra la ventana: los locales de SUNAT y los que ya están en 📍 Direcciones para ese RUC. */
 function GR_buscarDirecciones(ruc) {
   ruc = String(ruc || '').replace(/\D/g, '');
   if (!/^\d{11}$/.test(ruc)) throw new Error('Escriba un RUC de 11 dígitos (las personas con DNI no tienen locales registrados).');
   var ss = SpreadsheetApp.getActive(), ctx = GR_contexto_(ss);
   var ya = ctx.dir.filter(function (d) { return d.doc === ruc; }).map(function (d) { return { local: d.local, direccion: String(d.dir), uso: d.uso, ubigeo: String(d.ubi) }; });
-  var anexos = GR_anexosDe_(ruc), norm = ya.map(function (d) { return GR_norm_(d.direccion); });
+  var fiscal = GR_domicilioFiscal_(ruc), anexos = (fiscal ? [fiscal] : []).concat(GR_anexosDe_(ruc)), norm = ya.map(function (d) { return GR_norm_(d.direccion); });
   anexos.forEach(function (a) { a.yaEsta = norm.indexOf(GR_norm_(a.direccion)) >= 0; });
-  var nombre = (ctx.dir.filter(function (d) { return d.doc === ruc && d.nom; })[0] || {}).nom || '';
-  return { ruc: ruc, nombre: String(nombre), anexos: anexos, ya: ya };
+  var nombre = (ctx.dir.filter(function (d) { return d.doc === ruc && d.nom; })[0] || {}).nom || (fiscal && fiscal.nombre) || '';
+  return { ruc: ruc, nombre: String(nombre), anexos: anexos, ya: ya, estado: fiscal ? fiscal.estado + ' · ' + fiscal.condicion : '' };
 }
 
 /**
@@ -97,7 +116,7 @@ function GR_agregarDirecciones(d) {
     var clave = ruc + '|' + GR_norm_(it.direccion);
     if (existentes.indexOf(clave) < 0) {
       locales.push(local); existentes.push(clave);
-      nuevas.push([local, ruc, nombre, it.uso || 'Llegada', etq, it.direccion, '', 'De SUNAT (locales anexos)']);
+      nuevas.push([local, ruc, nombre, it.uso || 'Llegada', etq, it.direccion, '', it.fiscal ? 'Domicilio fiscal (SUNAT)' : 'De SUNAT (locales anexos)']);
     } else local = (ctx.dir.filter(function (x) { return x.doc === ruc && GR_norm_(x.dir) === GR_norm_(it.direccion); })[0] || {}).local || '';
     if (i === Number(d.usar)) usado = { local: local, etq: etq, dir: it.direccion };
   });
