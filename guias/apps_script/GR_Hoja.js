@@ -198,6 +198,11 @@ function GR_validacionesGuias_(ss, sh) {
       .setHelpText('Elija el distrito de la lista, o escriba su nombre (ej. "santa anita") o el código de 6 dígitos y se completa solo.');
     else if (c.v === 'fecha') b.requireDate().setAllowInvalid(false).setHelpText('Fecha, ej. 28/08/2026.');
     else if (c.v === 'locales') b.requireValueInRange(dir.getRange('A2:A'), true).setAllowInvalid(true).setHelpText('Elija un local de 📍 Direcciones (o deje vacío y escriba la dirección).');
+    else if (/^cat:/.test(c.v)) {   // lista de un catálogo (🚗 🚛 👤 📍): se elige o se escribe uno nuevo (la hoja lo aprende)
+      var pz = c.v.split(':'), hc = ss.getSheetByName({ dir: GR_DIR_, tra: GR_TRA_, veh: GR_VEH_, con: GR_CON_ }[pz[1]]);
+      if (!hc) return;
+      b.requireValueInRange(hc.getRange(pz[2] + '2:' + pz[2]), true).setAllowInvalid(true).setHelpText('Elija de la lista o escriba uno nuevo (se guarda solo en su pestaña).');
+    }
     else if (c.v === 'direcciones') b.requireValueInRange(dir.getRange('F2:F'), true).setAllowInvalid(true).setHelpText('Elija una dirección de 📍 Direcciones o escriba una nueva.');
     r.setDataValidation(b.build());
   });

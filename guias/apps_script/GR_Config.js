@@ -19,7 +19,7 @@ var GR_LIS_ = 'Listas';
 var GR_REG_ = '🧾 Registro';
 var GR_AYU_ = '📖 Ayuda';
 var GR_FILA1_ = 3;
-var GR_VERSION_ = 7;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
+var GR_VERSION_ = 8;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
 
 // Catálogos SUNAT (anexo 8 de la R.S. 097-2012 y modificatorias).
 var GR_MOTIVOS_ = ['01 - Venta', '02 - Compra', '03 - Venta con entrega a terceros', '04 - Traslado entre establecimientos de la misma empresa',
@@ -60,8 +60,8 @@ var GR_COLS_ = [
     'Si es una parte: «M&D 325 lote 1507: 10000» o «barra: 5000» (varios separados con ;). Basta el código, una palabra del nombre o el lote. ' +
     '📥 Traer datos de la factura lo convierte en 📦 Productos.' },
   { k: 'tdest', t: 'Tipo doc.', g: 'dest', w: 80, v: GR_TIPODOC_, n: 'Documento del destinatario (cliente). Con factura/boleta Quesito lo toma del comprobante: puede quedar vacío (📥 Traer datos de la factura lo llena). Con factura es siempre RUC.' },
-  { k: 'ndest', t: 'N° documento', g: 'dest', w: 105, f: '@', n: 'RUC (11 dígitos, se revisa el dígito verificador) o DNI (8). Si ya está en 📍 Direcciones, llena solo el nombre y la llegada.' },
-  { k: 'dest', t: 'Destinatario', g: 'dest', w: 230, n: 'Razón social o nombre del cliente.' },
+  { k: 'ndest', t: 'N° documento', v: 'cat:dir:B', g: 'dest', w: 105, f: '@', n: 'RUC (11 dígitos, se revisa el dígito verificador) o DNI (8). Si ya está en 📍 Direcciones, llena solo el nombre y la llegada.' },
+  { k: 'dest', t: 'Destinatario', v: 'cat:dir:C', g: 'dest', w: 230, n: 'Razón social o nombre del cliente.' },
   { k: 'motivo', t: 'Motivo de traslado', g: 'tras', w: 170, v: GR_MOTIVOS_, n: 'Catálogo 20 de SUNAT. Lo normal: 01 - Venta.' },
   { k: 'motivoTxt', t: 'Descripción (motivo 13)', g: 'tras', w: 150, n: 'Solo si el motivo es 13 - Otros: describa el motivo.' },
   { k: 'modalidad', t: 'Modalidad', g: 'tras', w: 150, v: GR_MODALIDAD_, n: '01 Público = lo lleva un transportista (llene 🏢). 02 Privado = vehículo propio (llene 🚗).' },
@@ -73,16 +73,16 @@ var GR_COLS_ = [
   { k: 'upeso', t: 'Unidad', g: 'tras', w: 65, v: GR_PESO_, n: 'KGM (kilos) o TNE (toneladas).' },
   { k: 'bultos', t: 'N° bultos', g: 'tras', w: 62, f: '#,##0.##', n: 'Bultos o paquetes de la guía. Si los productos de 📦 tienen bultos, se suma solo.' },
   { k: 'm1', t: '¿Vehículo M1 o L?', g: 'tras', w: 80, v: GR_SINO_, n: 'SI si el traslado es en auto (M1) o moto/mototaxi (L): entonces no se piden placa ni conductor.' },
-  { k: 'truc', t: 'RUC transportista', g: 'pub', w: 105, f: '@', n: 'Solo transporte público. Si está en 🚛 Transportistas, llena el nombre y el MTC.' },
-  { k: 'tnom', t: 'Razón social transportista', g: 'pub', w: 220 },
-  { k: 'mtc', t: 'N° registro MTC', g: 'pub', w: 95, f: '@', n: 'Registro del transportista en el MTC (si lo tiene).' },
-  { k: 'placa', t: 'Placa principal', g: 'priv', w: 80, n: 'Solo transporte privado. Ej. ABC-123 (sin espacios). Si está en 🚗 Vehículos, se revisa.' },
-  { k: 'placa2', t: 'Placa secundaria', g: 'priv', w: 80, n: 'Opcional (carreta, remolque).' },
-  { k: 'mtcveh', t: 'Cert. habilitación MTC', g: 'priv', w: 140, f: '@', n: 'Certificado de habilitación vehicular (MTC) de las placas, ej. 15M26029908E/15M26029906E. Se llena desde 🚗 Vehículos y sale en Observaciones.' },
-  { k: 'cdni', t: 'DNI conductor', g: 'priv', w: 85, f: '@', n: 'Si está en 👤 Conductores, llena nombres, apellidos y licencia.' },
-  { k: 'cnom', t: 'Nombres conductor', g: 'priv', w: 130 },
-  { k: 'cape', t: 'Apellidos conductor', g: 'priv', w: 140 },
-  { k: 'clic', t: 'Licencia', g: 'priv', w: 90, f: '@', n: 'Licencia de conducir (ej. Q12345678).' },
+  { k: 'truc', t: 'RUC transportista', v: 'cat:tra:A', g: 'pub', w: 105, f: '@', n: 'Solo transporte público. Si está en 🚛 Transportistas, llena el nombre y el MTC.' },
+  { k: 'tnom', t: 'Razón social transportista', v: 'cat:tra:B', g: 'pub', w: 220 },
+  { k: 'mtc', t: 'N° registro MTC', v: 'cat:tra:C', g: 'pub', w: 95, f: '@', n: 'Registro del transportista en el MTC (si lo tiene).' },
+  { k: 'placa', t: 'Placa principal', v: 'cat:veh:A', g: 'priv', w: 80, n: 'Solo transporte privado. Ej. ABC-123 (sin espacios). Si está en 🚗 Vehículos, se revisa.' },
+  { k: 'placa2', t: 'Placa secundaria', v: 'cat:veh:A', g: 'priv', w: 80, n: 'Opcional (carreta, remolque).' },
+  { k: 'mtcveh', t: 'Cert. habilitación MTC', v: 'cat:veh:F', g: 'priv', w: 140, f: '@', n: 'Certificado de habilitación vehicular (MTC) de las placas, ej. 15M26029908E/15M26029906E. Se llena desde 🚗 Vehículos y va en el campo del vehículo en la guía.' },
+  { k: 'cdni', t: 'DNI conductor', v: 'cat:con:A', g: 'priv', w: 85, f: '@', n: 'Si está en 👤 Conductores, llena nombres, apellidos y licencia.' },
+  { k: 'cnom', t: 'Nombres conductor', v: 'cat:con:B', g: 'priv', w: 130 },
+  { k: 'cape', t: 'Apellidos conductor', v: 'cat:con:C', g: 'priv', w: 140 },
+  { k: 'clic', t: 'Licencia', v: 'cat:con:D', g: 'priv', w: 90, f: '@', n: 'Licencia de conducir (ej. Q12345678).' },
   { k: 'plocal', t: 'Local de partida', g: 'par', w: 170, v: 'locales', n: 'Almacén o local de donde sale (📍 Direcciones, uso Partida). Al elegirlo se llenan el distrito, la dirección y el código de local. Si lo deja vacío, se usa la dirección de la empresa.' },
   { k: 'pubi', t: 'Ubigeo partida', g: 'par', w: 190, v: 'ubigeo', n: 'Se llena con la dirección de la empresa (🏢 Empresas). Elija o escriba el distrito o el código de 6 dígitos.' },
   { k: 'pdir', t: 'Dirección partida', g: 'par', w: 240, v: 'direcciones', n: 'Elija de la lista (sus direcciones de 📍 Direcciones) o escriba una nueva con «- DISTRITO - PROVINCIA - DEPARTAMENTO» al final.' },
