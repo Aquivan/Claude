@@ -109,6 +109,8 @@ function GR_reacomodar_(sh, filaTit, titulos, alias) {
 function GR_hojaGuias_(ss) {
   var sh = GR_hoja_(ss, GR_HOJA_, '#e65100'), n = GR_COLS_.length;
   if (sh.getMaxColumns() < n) sh.insertColumnsAfter(sh.getMaxColumns(), n - sh.getMaxColumns());
+  // Las listas viejas se quitan ANTES de mover datos (si no, un dato movido choca con la lista de la columna vieja).
+  sh.getRange(GR_FILA1_, 1, sh.getMaxRows() - GR_FILA1_ + 1, sh.getMaxColumns()).clearDataValidations();
   GR_reacomodar_(sh, 2, GR_COLS_.map(function (c) { return c.t; }));
   if (sh.getMaxRows() < 500) sh.insertRowsAfter(sh.getMaxRows(), 500 - sh.getMaxRows());
   // Fila 1: bandas por grupo.
