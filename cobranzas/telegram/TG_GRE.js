@@ -173,7 +173,22 @@ function TGG_analizar_(ss, c) {
     '\n\nArchivos adjuntos: ' + (c.archivos || []).length + '.';
   var r = TGG_gemini_(txt, c.archivos), antes = { partida: c.partida, llegada: c.llegada };
   if (r.no_es_para_la_guia && c.bienes) return false;
-  ['motivo', 'contraparte', 'documento', 'bienes', 'peso_kg', 'bultos', 'partida', 'llegada', 'transporte', 'fecha'].forEach(function (k) { if (r[k] !== undefined) c[k] = r[k]; });
+  // 🔒 Con un borrador ya armado y sin archivos nuevos, un cambio pedido por mensaje solo toca lo que ese mensaje nombra
+  // (si no, la IA "relee" los documentos y cambia, por ejemplo, la dirección de llegada sin que nadie lo pida).
+  var fijo = {}, nArch = (c.archivos || []).length;
+  if (c.bienes && (c.n_archivos == null ? nArch : Number(c.n_archivos)) >= nArch && !c.ultimo_error && !c.opciones) {
+    var ult = String((c.mensajes || []).slice(-1)[0] || '');
+    var temas = { partida: /partida|origen|sale|salida|direcci|almac|local|punto|parque/i, llegada: /llegada|destino|entrega|llega|direcci|almac|local|punto/i,
+      peso_kg: /peso|kg|kilo|tonelad/i, bultos: /bulto|paquete|caja|saco/i, fecha: /fecha|hoy|mañana|ma[nñ]ana|d[ií]a|\d{1,2}\/\d{1,2}/i,
+      documento: /factura|boleta|document|comprobante|\b[FBE][A-Z0-9]{3}\s*-?\s*\d/i, motivo: /motivo|venta|compra|traslado|devoluci|consignaci/i,
+      contraparte: /cliente|proveedor|ruc|destinatario|remitente|compra a|vende/i,
+      bienes: /bien|producto|l[ií]nea|cantidad|unidad|[ií]tem|\d+\s*(pk|und|unid|kg|cajas?|bolsas?|sacos?)\b|todo|solo|quita|agrega/i,
+      transporte: /placa|chofer|conductor|licencia|mtc|constancia|certificado|transport|veh[ií]culo|privado|p[uú]blico|ruc|carreta|tracto/i };
+    Object.keys(temas).forEach(function (k) { if (!temas[k].test(ult)) fijo[k] = true; });
+  }
+  ['motivo', 'contraparte', 'documento', 'bienes', 'peso_kg', 'bultos', 'partida', 'llegada', 'transporte', 'fecha'].forEach(function (k) {
+    if (r[k] !== undefined && !fijo[k]) c[k] = r[k]; });
+  c.n_archivos = nArch;
   var dig = function (x) { return String(x || '').replace(/\D/g, ''); };
   c.empresa_ruc = dig(r.empresa_ruc || c.empresa_ruc);
   if (!empresas[c.empresa_ruc]) c.empresa_ruc = '';
