@@ -102,6 +102,7 @@ function GR_aplicarLeido_(ss, fila, d) {
     ruc = rs.filter(function (q) { return q !== emp.ruc && GR_rucValido_(q); })[0] || '';
   }
   if (!nom && d.cliente) nom = String(d.cliente).replace(/^\s*\d{8,11}\s*[-–:]?\s*/, '').trim();
+  if ((nom.match(/[A-Za-zÑñ]/g) || []).length < 3) nom = '';   // un código o un número no es un nombre
   if (ruc && t('ndest') === '') {
     poner('tdest', ruc.length === 11 ? GR_TIPODOC_[0] : GR_TIPODOC_[1]); poner('ndest', ruc); poner('dest', nom);
     hecho.push('cliente ' + (nom || ruc));

@@ -430,15 +430,27 @@ def factura_de_cotizacion(pag, cot):
     raise Alto(f"No encontré la cotización {cot} en Quesito de esta empresa (últimos 3 meses). No se creó nada.")
 
 
-def datos_pdf(txt):
-    """Cliente según el texto del PDF de la factura: {nombre, ruc, direccion} (lo que se encuentre)."""
+def datos_pdf(txt, propio=""):
+    """Cliente según el texto del PDF de la factura: {nombre, ruc, direccion} (lo que se encuentre con seguridad).
+    El nombre debe tener letras (no "Cód. cliente: 5032565" ni un teléfono); el RUC no puede ser el de la propia empresa."""
     out = {}
-    for k, pat in (("nombre", r"(?:SE[ÑN]OR\s*\(?ES\)?|CLIENTE|RAZ[OÓ]N\s+SOCIAL)\s*:\s*(.+)"),
-                   ("ruc", r"(?:R\.?U\.?C\.?|DNI|DOCUMENTO)\s*(?:N[°ºo.]*)?\s*:\s*(\d{8,11})"),
-                   ("direccion", r"DIRECCI[OÓ]N\s*(?:DEL\s+CLIENTE)?\s*:\s*(.+)")):
-        m = re.search(pat, txt, re.I)
-        if m:
-            out[k] = re.split(r"\s{3,}", m.group(1).strip())[0].strip()
+    corta = lambda v: re.split(r"\s{3,}", v.strip())[0].strip()
+    for pat in (r"SE[ÑN]OR\s*\(?ES\)?\s*:\s*(.+)", r"RAZ[OÓ]N\s+SOCIAL\s*(?:DEL\s+CLIENTE)?\s*:\s*(.+)",
+                r"(?<![A-Z.])(?:CLIENTE|ADQUIRIENTE)\s*:\s*(.+)"):
+        for m in re.finditer(pat, txt, re.I):
+            v = corta(m.group(1))
+            if len(re.findall(r"[A-Za-zÑñ]", v)) >= 3:
+                out["nombre"] = v
+                break
+        if "nombre" in out:
+            break
+    for m in re.finditer(r"(?:R\.?\s?U\.?\s?C\.?|DNI)\s*(?:N[°ºo.]*)?\s*:?\s*(\d{11}|\d{8})\b", txt, re.I):
+        if m.group(1) != propio:
+            out["ruc"] = m.group(1)
+            break
+    m = re.search(r"DIRECCI[OÓ]N\s*(?:DEL\s+CLIENTE)?\s*:\s*(.+)", txt, re.I)
+    if m and len(re.findall(r"[A-Za-z]", corta(m.group(1)))) >= 5:
+        out["direccion"] = corta(m.group(1))
     return out
 
 
@@ -457,7 +469,7 @@ def cliente_pdf(pag, fila):
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             f.write(r.body())
         txt = subprocess.run(["pdftotext", "-layout", f.name, "-"], capture_output=True, text=True, timeout=30).stdout
-        return datos_pdf(txt)
+        return datos_pdf(txt, os.environ.get("RUC", ""))
     except Exception:
         return {}
 
