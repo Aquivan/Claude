@@ -122,6 +122,7 @@ function WA_desdeCobranzas_(e, p) {
         if (!r.ok) console.error('Foto para ' + a + ': ' + r.error);
       } else if (q.texto) WA_enviarTexto_(a, q.texto);
       if (q.botones && (q.botones.opciones || []).length) {   // p. ej. ✅ Emitir · ✏️ Modificar · 🗑 Descartar
+        if (media) Utilities.sleep(3000);   // la foto tarda más en llegar: los botones van DEBAJO de ella, no antes
         try { WA_ofrecerBotones_(a, q.botones); }
         catch (eb) { console.error('Botones de Cobranzas: ' + eb.message); WA_enviarTexto_(a, '⚠️ No pude mostrar los botones: ' + eb.message); }
       }

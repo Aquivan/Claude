@@ -782,6 +782,10 @@ function TGG_atajoWA_(ss, q, clave) {
       return TGG_respWA_(TGG_texto_(c0, false) + extra, extra ? null : c0);
     }
   }
+  // «Emitir» / «emítela» a secas, justo después de la vista previa de una guía: es esa guía (no las retenciones por emitir).
+  var sola = /^\s*\/?(emitir|emite|em[ií]tel[ao]|emitirl[ao]|s[ií],?\s*emit\w*|ok,?\s*emit\w*)\s*[.!]*\s*$/i.test(texto);
+  var ab = sola && !(q.adjuntos || []).length && TGG_abierta_(clave), cab = ab && TGG_leer_(ss, ab);
+  if (cab && cab.estado === 'Vista previa lista') return TGG_botonWA_({ id: cab.id }, null, 'em', clave.slice(2));
   if (!(/^\/?gu[ií]a\b/i.test(texto) || (TGG_PIDE_RX_.test(texto) && /\b(emit|hac|haz|gener|sac|arm|necesit|quiero)/i.test(texto)))) return null;
   var m = texto.match(/\b([0-9a-f]{8})\b/), id = (m && m[1]) || (/^\/?emitir\b/i.test(texto) && ses.gre);
   if (id && TGG_leer_(ss, id)) return TGG_botonWA_({ id: id }, null, /emit/i.test(texto) ? 'em' : 'ver', clave.slice(2));
