@@ -327,6 +327,7 @@ function GR_validar_(r, ctx) {
   if (txt('obsFinal').length > 500) A.push('observaciones muy largas (' + txt('obsFinal').length + ' caracteres)');
   // Lo que piden los robots (👁 Vista previa / ✅ Emitir).
   var quesito = txt('via') !== 'SUNAT';
+  if (quesito && !(Number(r.bultos) >= 1)) F.push('N° bultos (Quesito lo pide)');
   if (quesito && doc === 'Ninguno') F.push('en Quesito la guía sale de la factura: ponga la factura o elija Emitir en = SUNAT');
   if (quesito && cod2('motivo') !== '01') A.push('el robot de Quesito por ahora solo hace ventas (motivo 01): use SUNAT para este motivo');
   if (!quesito && !(ctx.prod[txt('id')] || []).length) F.push('productos en 📦 para SUNAT (🔎 Traer de la factura los llena)');
