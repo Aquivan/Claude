@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Google Sans", Roboto, Arial, sans-serif; font-size: 13px; color: #263238; margin: 0; padding: 12px 16px; background: #f4f6f8; }
+  .aviso { background: #fff8e1; color: #6d4c00; padding: 8px 12px; border-radius: 8px; margin: 0 0 10px; font-size: 12px; }
+  .barra { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .barra .tot { margin-left: auto; color: #546e7a; font-size: 12px; }
+  .chip { border: 1px solid #cfd8dc; background: #fff; border-radius: 16px; padding: 5px 12px; cursor: pointer; font: inherit; }
+  .chip:hover { background: #eceff1; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0 6px; }
+  th { text-align: left; font-size: 11px; color: #607d8b; font-weight: 600; padding: 0 8px; }
+  td { background: #fff; padding: 8px; border-top: 1px solid #e0e0e0; border-bottom: 1px solid #e0e0e0; vertical-align: middle; }
+  td:first-child { border-left: 1px solid #e0e0e0; border-radius: 10px 0 0 10px; width: 36px; text-align: center; }
+  td:last-child { border-right: 1px solid #e0e0e0; border-radius: 0 10px 10px 0; }
+  tr.no td { background: #fafafa; color: #9e9e9e; }
+  tr.si td { border-color: #a5d6a7; }
+  .nom { font-weight: 600; } .lote { color: #00796b; font-size: 12px; margin-top: 2px; }
+  .fac { color: #546e7a; white-space: nowrap; text-align: right; }
+  input[type=number] { width: 120px; padding: 7px 8px; border: 1px solid #cfd8dc; border-radius: 6px; font: inherit; text-align: right; }
+  input[type=number]:focus { outline: none; border-color: #1e88e5; box-shadow: 0 0 0 2px #bbdefb; }
+  input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+  .comp { background: #e8f5e9; color: #2e7d32; } .parc { background: #fff3e0; color: #e65100; } .mas { background: #ffebee; color: #c62828; }
+  .pie { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; align-items: center; }
+  .pie .msg { margin-right: auto; font-size: 12px; }
+  .btn { border: 0; border-radius: 8px; padding: 9px 18px; font: inherit; cursor: pointer; }
+  .pri { background: #1565c0; color: #fff; font-weight: 600; } .pri:disabled { background: #90caf9; }
+  .sec { background: #eceff1; color: #37474f; }
+  .err { color: #c62828; } .ok { color: #2e7d32; }
+</style>
+</head>
+<body>
+<div id="app">Cargando…</div>
+<script>
+var ID = <?= JSON.stringify(idGuia) ?>, D = null;
+var fmt = function (n) { return Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 3 }); };
+function pintar() {
+  if (!D.lineas.length) {
+    document.getElementById('app').innerHTML = '<div class="aviso">Esta guía aún no tiene productos. Cierre esta ventana y use <b>🚚 Guías → 📥 Traer de Quesito</b>: trae las líneas de la factura y aquí elige cuáles van y cuánto.</div>';
+    return;
+  }
+  var h = (D.deQuesito ? '' : '<div class="aviso">Muestro lo que está en 📦 Productos. Para ver todas las líneas de la factura use antes <b>📥 Traer de Quesito</b>.</div>') +
+    '<div class="barra"><button class="chip" onclick="todo(true)">✔ Todo lo de la factura</button><button class="chip" onclick="todo(false)">✖ Ninguno</button><span class="tot" id="tot"></span></div>' +
+    '<table><tr><th></th><th>Producto</th><th style="text-align:right">En la factura</th><th>Cantidad en esta guía</th></tr>';
+  D.lineas.forEach(function (l, k) {
+    h += '<tr id="r' + k + '" class="' + (l.va ? 'si' : 'no') + '"><td><input type="checkbox" id="c' + k + '" ' + (l.va ? 'checked' : '') + ' onchange="cambio(' + k + ')"></td>' +
+      '<td><div class="nom">' + esc(l.nombre) + '</div>' + (l.lote ? '<div class="lote">' + esc(l.lote) + '</div>' : '') + '</td>' +
+      '<td class="fac">' + (l.factura ? fmt(l.factura) + ' ' + esc(l.unidad) : '—') + '</td>' +
+      '<td><input type="number" min="0" step="any" id="q' + k + '" value="' + (l.va ? l.cant : '') + '" oninput="cambio(' + k + ', true)" ' + (l.va ? '' : 'disabled') + '>' +
+      '<span id="t' + k + '"></span></td></tr>';
+  });
+  h += '</table><div class="pie"><span class="msg" id="msg"></span><button class="btn sec" onclick="google.script.host.close()">Cancelar</button>' +
+    '<button class="btn pri" id="g" onclick="guardar()">Guardar en la guía</button></div>';
+  document.getElementById('app').innerHTML = h;
+  D.lineas.forEach(function (l, k) { etiqueta(k); });
+  total();
+}
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function cambio(k, deNumero) {
+  var c = document.getElementById('c' + k), q = document.getElementById('q' + k), l = D.lineas[k];
+  if (!deNumero) { q.disabled = !c.checked; if (c.checked && !q.value) q.value = l.factura || ''; if (!c.checked) q.value = ''; if (c.checked) q.focus(); }
+  document.getElementById('r' + k).className = c.checked ? 'si' : 'no';
+  etiqueta(k); total();
+}
+function etiqueta(k) {
+  var c = document.getElementById('c' + k), v = Number(document.getElementById('q' + k).value), l = D.lineas[k], t = document.getElementById('t' + k);
+  t.innerHTML = !c.checked || !v || !l.factura ? '' : v > l.factura ? '<span class="tag mas">más que la factura</span>'
+    : Math.abs(v - l.factura) < 1e-9 ? '<span class="tag comp">completa</span>' : '<span class="tag parc">parcial (quedan ' + fmt(l.factura - v) + ')</span>';
+}
+function elegidos() {
+  return D.lineas.map(function (l, k) { return { i: l.i, va: document.getElementById('c' + k).checked, cant: Number(document.getElementById('q' + k).value) }; })
+    .filter(function (e) { return e.va && e.cant > 0; });
+}
+function total() {
+  var e = elegidos(), n = D.lineas.length;
+  document.getElementById('tot').textContent = e.length + ' de ' + n + ' producto(s) en esta guía';
+}
+function todo(si) {
+  D.lineas.forEach(function (l, k) { var c = document.getElementById('c' + k); c.checked = si; document.getElementById('q' + k).value = si ? (l.factura || '') : ''; cambio(k); });
+}
+function guardar() {
+  var e = elegidos(), m = document.getElementById('msg'), b = document.getElementById('g');
+  if (!e.length) { m.className = 'msg err'; m.textContent = 'Marque al menos un producto con su cantidad.'; return; }
+  b.disabled = true; m.className = 'msg'; m.textContent = 'Guardando…';
+  google.script.run.withSuccessHandler(function (r) { m.className = 'msg ok'; m.textContent = '✅ ' + r.texto + '. Listo.'; setTimeout(function () { google.script.host.close(); }, 900); })
+    .withFailureHandler(function (err) { b.disabled = false; m.className = 'msg err'; m.textContent = '⚠️ ' + err.message; })
+    .GR_guardarProductos(ID, e);
+}
+google.script.run.withSuccessHandler(function (d) { D = d; pintar(); })
+  .withFailureHandler(function (err) { document.getElementById('app').innerHTML = '<div class="aviso">⚠️ ' + esc(err.message) + '</div>'; })
+  .GR_datosProductos(ID);
+</script>
+</body>
+</html>
