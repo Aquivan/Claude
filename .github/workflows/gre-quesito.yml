@@ -1,0 +1,92 @@
+# 🧀 Guía de Remisión Remitente en Quesito.pe desde una factura, pedida por el bot (Telegram / WhatsApp).
+#   modo vista  = llena todo en Quesito y NO crea la guía (además bloquea todo envío de datos desde el formulario);
+#                 la foto va directo al chat (no a GitHub) y la pantalla espera unos minutos el ✅ Emitir.
+#   modo emitir = crea la guía, solo con la huella de ESE caso (la pone el bot cuando la persona aprueba).
+# Los datos del caso NO van aquí: el robot se los pide al bot con el número de corrida (el repositorio es público).
+# Entra con la sesión copiada del Chrome (secreto QUESITO_SESION del Environment de la empresa). Solo a pedido.
+name: GRE - Quesito (Remitente)
+run-name: "GRE Quesito ${{ inputs.modo }} · ${{ inputs.ruc }}"
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa (su Environment con QUESITO_SESION)"
+        required: true
+      caso:
+        description: "Código del caso en el bot (pestaña 🚚 Guías SUNAT)"
+        required: true
+      modo:
+        description: "vista (no crea nada) o emitir"
+        required: true
+        default: vista
+        type: choice
+        options: [vista, emitir]
+      confirmar:
+        description: "Huella de confirmación (la pone el bot). Obligatoria para emitir."
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: gre-${{ inputs.ruc }}
+  cancel-in-progress: false
+jobs:
+  gre:
+    name: "GRE Quesito ${{ inputs.modo }} (${{ inputs.ruc }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            guias/scripts
+            guias/apps_script/GR_Ubigeos.js
+            cobranzas/.clasp.json
+          sparse-checkout-cone-mode: false
+      - name: Dirección del bot
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          [ -n "$CLASPRC_JSON" ] || { echo "::error::Falta CLASPRC_JSON: no puedo hablar con el bot."; exit 1; }
+          npm install -g @google/clasp@3.3.0 >/dev/null 2>&1
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"; chmod 600 "$HOME/.clasprc.json"
+          cd cobranzas
+          ID=$(clasp --json list-deployments 2>/dev/null | python3 -c "
+          import json,sys
+          t=sys.stdin.read()
+          try: d=json.loads(t[t.index('['):])
+          except Exception: d=[]
+          b=[x for x in d if (x.get('description') or '').startswith('Asistente Telegram')]
+          print(b[0]['deploymentId'] if b else '')")
+          rm -f "$HOME/.clasprc.json"
+          [ -n "$ID" ] || { echo "::error::No encontré la aplicación web del bot."; exit 1; }
+          echo "::add-mask::$ID"
+          echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5   # Python fijo: el servidor ya trae 3.14 y playwright 1.47 no instala ahí
+        with:
+          python-version: "3.12"
+      - name: Preparar navegador
+        timeout-minutes: 5
+        run: |
+          pip install -q playwright==1.47.0
+          CH=$(command -v google-chrome || command -v google-chrome-stable || true)
+          if [ -n "$CH" ]; then echo "CHROMIUM=$CH" >> "$GITHUB_ENV"; else timeout 240 python -m playwright install --with-deps chromium; fi
+      - name: GRE Quesito ${{ inputs.modo }}
+        env:
+          QUESITO_SESION: ${{ secrets.QUESITO_SESION }}
+          RUC: ${{ inputs.ruc }}
+          CASO: ${{ inputs.caso }}
+          MODO: ${{ inputs.modo }}
+          CONFIRMAR: ${{ inputs.confirmar }}
+        run: python guias/scripts/quesito_gre.py
+      - name: Avisar si el robot se cayó
+        if: failure()
+        env:
+          CASO: ${{ inputs.caso }}
+        run: |
+          [ -n "$BOT_URL" ] || exit 0
+          [ ! -f "$RUNNER_TEMP/gre_avisado" ] || exit 0
+          curl -sSL -o /dev/null -H 'Content-Type: application/json' \
+            -d "{\"accion\":\"gre_fin\",\"run\":\"$GITHUB_RUN_ID\",\"caso\":\"$CASO\",\"ok\":false,\"cayo\":true,\"texto\":\"El robot de Quesito se detuvo antes de terminar. No se creó nada (salvo que el aviso anterior diga lo contrario).\"}" \
+            "$BOT_URL?canal=gh" || true

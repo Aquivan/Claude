@@ -15,6 +15,20 @@
  */
 
 var TGG_WF_ = 'gre-sunat.yml';
+var TGG_WF_QUESITO_ = 'gre-quesito.yml';   // 🧀 la misma guía, emitida en Quesito.pe desde su factura (guias/scripts/quesito_gre.py)
+
+/** Dónde se emite: 'quesito' si la persona lo pidió ("en quesito"), si no SUNAT SOL. */
+function TGG_donde_(c) { return c && c.via === 'quesito' ? 'Quesito' : 'SUNAT'; }
+
+/** El último mensaje que dice dónde emitir manda: "en quesito" / "por sunat" (o "en sol"). */
+function TGG_via_(c) {
+  var m = c.mensajes || [];
+  for (var i = m.length - 1; i >= 0; i--) {
+    if (/quesito/i.test(m[i])) return 'quesito';
+    if (/\b(en|por|a|desde|con)\s+(la\s+)?(sunat|sol)\b/i.test(m[i])) return '';
+  }
+  return c.via || '';
+}
 var TGG_HOJA_ = '🚚 Guías SUNAT';
 var TGG_ENC_ = ['Creado', 'Caso', 'Empresa', 'Motivo', 'Documento', 'Contraparte', 'Bienes', 'Peso kg', 'Transportista', 'Estado', 'GRE', 'Chat', 'Actualizado', 'Datos'];
 var TGG_PIDE_RX_ = /\b(gu[ií]a(s)?( de remisi[oó]n)?|gre|remisi[oó]n)\b/i;
@@ -56,7 +70,7 @@ function TGG_leer_(ss, id) {
 /** Lo que recibe el robot (texto exacto: su huella es la clave para emitir). */
 function TGG_paraRobot_(c) {
   return JSON.stringify({ id: c.id, empresa_ruc: c.empresa_ruc, motivo: c.motivo, contraparte: c.contraparte, documento: c.documento,
-    bienes: c.bienes, peso_kg: c.peso_kg, bultos: c.bultos || null, partida: c.partida, llegada: c.llegada, transporte: c.transporte, fecha: c.fecha });
+    bienes: c.bienes, peso_kg: c.peso_kg, bultos: c.bultos || null, partida: c.partida, llegada: c.llegada, transporte: c.transporte, fecha: c.fecha, via: c.via || '' });
 }
 
 function TGG_huella_(c) {
@@ -90,6 +104,7 @@ var TGG_SISTEMA_ = [
   '4. Compra: partida = almacén del PROVEEDOR desde donde SALE la carga (el ticket de despacho dice el centro, ej. "C.D. TACNA"; si la',
   '   factura trae varias direcciones del proveedor, usa la de esa ciudad, NO la oficina principal); partida.ruc = RUC del proveedor.',
   '   llegada = dirección del comprador o la que diga la persona (ej. "Av. Mártires"); llegada.ruc = "". En Venta al revés.',
+  '4b. Direcciones de partida y llegada: si sabes el distrito, provincia y departamento, termínalas así: "… - DISTRITO - PROVINCIA - DEPARTAMENTO".',
   '5. Bienes: las líneas de la factura, en su orden, con unidad SUNAT y cantidad. Si la persona pide una parte ("solo líneas 1 a 5",',
   '   "la mitad", "200 de la línea 3") aplícalo; "total" o nada = todas. Si el ticket coincide con la factura, es el total: no preguntes.',
   '6. peso_kg = peso bruto total (TOTAL GENERAL del ticket/balanza en kg) o el que diga la persona. bultos = total de paquetes/unidades del ticket.',
@@ -194,6 +209,7 @@ function TGG_analizar_(ss, c) {
   if (!/^\d{2}\/\d{2}\/\d{4}$/.test(c.fecha || '')) c.fecha = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy');
   c.preguntas_ia = (r.preguntas || []).map(String).filter(function (x) { return x.trim(); }).slice(0, 2);
   c.entendido = String(r.entendido || '').slice(0, 300);
+  c.via = TGG_via_(c);
   c.estado = 'Propuesta';
   return true;
 }
@@ -223,7 +239,7 @@ function TGG_relanzar_(ss, c, chat) {
   if (!c.relanzar) return '';
   c.relanzar = false;
   try { c.chat = chat; TGG_pedir_(ss, c, 'vista'); } catch (e) { TGG_guardar_(ss, c); return '\n\n⚠️ ' + e.message; }
-  return '\n\n👁 Con eso vuelvo a preparar la vista previa en SUNAT (no se emite). Tarda 2–4 minutos.';
+  return '\n\n👁 Con eso vuelvo a preparar la vista previa en ' + TGG_donde_(c) + ' (no se emite). Tarda 2–4 minutos.';
 }
 
 function TGG_faltan_(c) {
@@ -236,6 +252,11 @@ function TGG_faltan_(c) {
   var t = c.transporte || {};
   if (t.modo === 'publico' && !t.ruc) f.push('Falta el RUC del transportista.');
   if ((t.modo === 'privado' || t.registrar_vehiculos) && (!(t.placas || []).length || !(t.conductores || []).length)) f.push('Faltan la placa y el chofer (DNI y licencia).');
+  if (c.via === 'quesito') {   // 🧀 en Quesito la guía sale desde la factura que la empresa emitió ahí
+    if (c.motivo !== 'Venta') f.push('En Quesito, por ahora, solo guías de venta desde su factura (escriba «por sunat» para las demás).');
+    if (!c.documento || !/^[A-Z0-9]{4}\s*-\s*\d+$/i.test(String(c.documento.numero || ''))) f.push('Para Quesito falta el número de la factura.');
+    if (!(Number(c.bultos) >= 1)) f.push('Faltan los bultos (Quesito los pide).');
+  }
   return f;
 }
 
@@ -245,7 +266,8 @@ function TGG_preguntas_(c) {
   var mapa = { 'Falta la empresa que emite la guía.': '¿Qué empresa del grupo emite la guía?', 'Faltan los bienes.': '¿Qué bienes se trasladan (con cantidad)?',
     'Falta el peso.': '¿Cuál es el peso bruto total en kg?', 'Falta el punto de partida.': '¿Desde qué dirección o almacén sale la carga?',
     'Falta el punto de llegada.': '¿A qué dirección o almacén llega?', 'Falta el RUC del transportista.': '¿Cuál es el RUC de la empresa de transporte?',
-    'Faltan la placa y el chofer (DNI y licencia).': '¿Placa(s) del vehículo y chofer (nombre, DNI y licencia)?' };
+    'Faltan la placa y el chofer (DNI y licencia).': '¿Placa(s) del vehículo y chofer (nombre, DNI y licencia)?',
+    'Para Quesito falta el número de la factura.': '¿De qué factura de Quesito sale la guía (ej. FQQ1-3648)?', 'Faltan los bultos (Quesito los pide).': '¿Cuántos bultos son?' };
   return TGG_faltan_(c).map(function (f, i) { return { k: 'f' + i, q: mapa[f] || f }; });
 }
 
@@ -296,9 +318,11 @@ function TGG_texto_(c, html) {
     ((t.constancias || []).length > 1 ? ' · Constancias MTC: ' + e(t.constancias.join(' / ')) : '') + '\nChofer: ' +
     e((t.conductores || []).map(function (x) { return (x.nombre || '') + ' lic. ' + (x.licencia || '¿?'); }).join(', ') || '¿?'));
   L.push('Fecha de traslado: ' + e(c.fecha || '¿?'));
+  L.push('Se emite en: ' + (c.via === 'quesito' ? '🧀 Quesito (desde la factura' + (c.documento ? ' ' + e(c.documento.numero) : '') + ') · escriba «por sunat» para cambiarlo'
+    : 'SUNAT SOL' + (c.motivo === 'Venta' ? ' · escriba «en quesito» para emitirla en Quesito desde su factura' : '')));
   var preg = TGG_preguntas_(c);
   if (preg.length) L.push('\n❓ ' + b(e(preg[0].q)) + (preg.length > 1 ? ' (después le pregunto ' + (preg.length - 1) + ' cosa(s) más)' : ''));
-  else L.push('\n' + b('¿Está todo bien?') + ' Toque ✅ Está bien y la lleno en SUNAT para que vea la vista previa (no se emite). ' +
+  else L.push('\n' + b('¿Está todo bien?') + ' Toque ✅ Está bien y la lleno en ' + TGG_donde_(c) + ' para que vea la vista previa (no se emite). ' +
     'Si quiere cambiar algo, toque ✏️ Modificar algo o escríbalo directo ("es privado", "peso 30000", "llegada Av. Mártires").');
   return L.join('\n');
 }
@@ -326,7 +350,7 @@ function TGG_pedir_(ss, c, modo) {
   c.estado = modo === 'emitir' ? 'Emitiendo' : 'Vista previa…';
   c.huella = TGG_huella_(c);
   TGG_guardar_(ss, c);
-  TG_gh_(cfg, '/actions/workflows/' + TGG_WF_ + '/dispatches', 'post', { ref: cfg.rama, inputs: {
+  TG_gh_(cfg, '/actions/workflows/' + (c.via === 'quesito' ? TGG_WF_QUESITO_ : TGG_WF_) + '/dispatches', 'post', { ref: cfg.rama, inputs: {
     ruc: c.empresa_ruc, caso: c.id, modo: modo, confirmar: modo === 'emitir' ? c.huella : '' } });
 }
 
@@ -396,6 +420,7 @@ function simpleNombre_(t) { return String(t || '').toLowerCase().normalize('NFD'
 /** Sin PDF guardado: si la guía está emitida, el robot lo baja de SUNAT (Consulta de GRE). Texto para la persona. */
 function TGG_pedirPdfSunat_(ss, c, clave) {
   if (!c.gre || c.estado !== 'Emitida') return 'La guía caso ' + c.id + ' aún no tiene PDF (todavía no se emitió).';
+  if (c.via === 'quesito') return '📄 La guía ' + c.gre + ' se emitió en Quesito: su PDF está en Quesito → Guías de Remisión (no lo tengo guardado aquí).';
   c.chat = clave; TGG_guardar_(ss, c);
   var cfg = TG_cfg_(ss);
   try {
@@ -407,7 +432,7 @@ function TGG_pedirPdfSunat_(ss, c, clave) {
 /** doPost ?canal=gh con accion gre_* (lo llama gre_robot.py). La corrida debe ser de gre-sunat.yml y estar en curso. */
 function TGG_gh_(q) {
   var ss = TG_ss_(), cfg = TG_cfg_(ss), run = String(q.run || '').replace(/\D/g, '');
-  if (!run || !TGC_runValido_(cfg, run, /(^|\/)gre-sunat\.ya?ml$/)) return { ok: false, error: 'Forbidden' };
+  if (!run || !TGC_runValido_(cfg, run, /(^|\/)gre-(sunat|quesito)\.ya?ml$/)) return { ok: false, error: 'Forbidden' };   // 🧀 también el robot de Quesito
   var c = TGG_leer_(ss, String(q.caso || ''));
   if (!c) return { ok: false, error: 'caso desconocido' };
   if (q.accion === 'gre_caso') return { ok: true, datos: TGG_paraRobot_(c), gre: c.gre || '' };
@@ -441,8 +466,8 @@ function TGG_gh_(q) {
     c.estado = 'Vista previa lista';
     TGG_guardar_(ss, c);
     var notas = (q.notas || []).map(String).filter(Boolean).slice(0, 5);
-    TGG_avisar_(c, '👁 Vista previa en SUNAT (no se emitió nada) · caso ' + c.id +
-      (notas.length ? '\nAvisos de SUNAT que acepté (no impiden la guía):\n· ' + notas.join('\n· ') : '') +
+    TGG_avisar_(c, '👁 Vista previa en ' + TGG_donde_(c) + ' (no se emitió nada) · caso ' + c.id +
+      (notas.length ? '\n' + (c.via === 'quesito' ? 'Para revisar' : 'Avisos de SUNAT que acepté (no impiden la guía)') + ':\n· ' + notas.join('\n· ') : '') +
       '\nRevise la foto. Si está bien, toque ✅ Emitir (le pido confirmar antes).', q.imagen, true);
     return { ok: true };
   }
@@ -612,8 +637,8 @@ function TGG_alBotonTG_(ctx, datos, op) {
     var f = TGG_faltan_(c);
     if (f.length) return TG_enviar_(ctx.chatId, '⚠️ Antes de emitir: ' + TG_esc_(f.join(' ')), TGG_botonesTG_(c));
     var k = TG_guardarBoton_({ t: 'gre', id: c.id, huella: TGG_huella_(c) });
-    return TG_enviar_(ctx.chatId, '⚠️ <b>¿Emito esta guía en SUNAT?</b>\n' + TGG_texto_(c, true).split('\n').slice(0, -1).join('\n') +
-      '\n\nEs una operación real ante SUNAT.' + (c.estado !== 'Vista previa lista' ? ' <i>Aún no vio la vista previa.</i>' : ''),
+    return TG_enviar_(ctx.chatId, '⚠️ <b>¿Emito esta guía en ' + TGG_donde_(c) + '?</b>\n' + TGG_texto_(c, true).split('\n').slice(0, -1).join('\n') +
+      '\n\nEs una operación real ante SUNAT' + (c.via === 'quesito' ? ' (Quesito la envía).' : '.') + (c.estado !== 'Vista previa lista' ? ' <i>Aún no vio la vista previa.</i>' : ''),
       [[{ text: '✅ Sí, emitir', callback_data: 'k:' + k + ':ok' }, { text: '✖ No', callback_data: 'k:' + k + ':x' }]]);
   }
   if (op === 'x') return TG_editarOEnviar_(ctx, '✖ No se emitió nada.', null);
@@ -625,7 +650,7 @@ function TGG_alBotonTG_(ctx, datos, op) {
     if (op === 'ok') TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
     var como;
     try { c.chat = ctx.chatId; como = TGG_pedir_(ctx.ss, c, modo); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message)); }
-    return TG_enviar_(ctx.chatId, (modo === 'emitir' ? '🚚 <b>Emitiendo</b> la guía en SUNAT' : '👁 <b>Preparando la vista previa</b> en SUNAT (no se emite)') +
+    return TG_enviar_(ctx.chatId, (modo === 'emitir' ? '🚚 <b>Emitiendo</b> la guía en ' + TGG_donde_(c) : '👁 <b>Preparando la vista previa</b> en ' + TGG_donde_(c) + ' (no se emite)') +
       ' · caso ' + c.id + (como === 'misma' ? '\nEn la misma pantalla de la vista previa: en menos de un minuto le mando el resultado.' : '\nTarda 2–4 minutos; le mando aquí la foto o el resultado.'));
   }
 }
@@ -742,7 +767,7 @@ function TGG_botonWA_(acc, k, op, numero) {
     var f = TGG_faltan_(c);
     if (f.length) return TGG_respWA_('⚠️ Antes de emitir: ' + f.join(' '), c);
     var kk = TG_guardarBoton_({ t: 'gre', id: c.id, huella: TGG_huella_(c) });
-    var r = TGG_respWA_('⚠️ *¿Emito esta guía en SUNAT?*\n' + TGG_texto_(c, false).split('\n').slice(0, -1).join('\n') + '\n\nEs una operación real ante SUNAT.' +
+    var r = TGG_respWA_('⚠️ *¿Emito esta guía en ' + TGG_donde_(c) + '?*\n' + TGG_texto_(c, false).split('\n').slice(0, -1).join('\n') + '\n\nEs una operación real ante SUNAT' + (c.via === 'quesito' ? ' (Quesito la envía).' : '.') +
       (c.estado !== 'Vista previa lista' ? ' Aún no vio la vista previa.' : ''));
     r.botones = [{ k: kk, texto: '¿Emitir?', opciones: [{ op: 'ok', titulo: '✅ Sí, emitir' }, { op: 'x', titulo: '✖ No' }] }];
     return r;
@@ -757,6 +782,6 @@ function TGG_botonWA_(acc, k, op, numero) {
   if (TG_yaVisto_('gre' + modo + c.id + TGG_huella_(c) + '_' + (c.intentos || 0))) return TGG_respWA_('Eso ya se pidió.');
   var como;
   try { c.chat = clave; como = TGG_pedir_(ss, c, modo); } catch (e) { return TGG_respWA_('⚠️ ' + e.message, c); }
-  return TGG_respWA_((modo === 'emitir' ? '🚚 *Emitiendo* la guía en SUNAT' : '👁 *Preparando la vista previa* en SUNAT (no se emite)') +
+  return TGG_respWA_((modo === 'emitir' ? '🚚 *Emitiendo* la guía en ' + TGG_donde_(c) : '👁 *Preparando la vista previa* en ' + TGG_donde_(c) + ' (no se emite)') +
     ' · caso ' + c.id + (como === 'misma' ? '\nEn la misma pantalla de la vista previa: en menos de un minuto le mando el resultado.' : '\nTarda 2–4 minutos; le mando aquí la foto o el resultado.'));
 }

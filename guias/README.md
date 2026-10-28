@@ -32,6 +32,18 @@ las guías en [Quesito](https://www.quesito.pe) con un robot (próxima etapa) y 
 2. Telegram y WhatsApp: "guía para la factura FQQ1-3525" → completa lo que falta preguntando → 👁 / ✅.
 3. Importar el Excel actual y, después, facturas.
 
+## 🧀 Emitir la guía en Quesito (robot)
+
+Workflow **"GRE - Quesito (Remitente)"** (`gre-quesito.yml`, script `guias/scripts/quesito_gre.py`), pedido por el bot de
+Telegram/WhatsApp con el mismo caso de la guía por SUNAT (`cobranzas/telegram/TG_GRE.js`): la persona escribe **«en quesito»**
+(y «por sunat» para volver). Solo guías de **venta desde la factura** que la empresa emitió en Quesito.
+- **👁 Vista previa**: busca la factura → «Generar GUIA DE REMISIÓN REMITENTE» → llena motivo, transporte, fechas, peso,
+  bultos, transportista o vehículo y chofer, llegada (con su ubigeo) y, si es parcial, deja solo esos productos. Manda la foto
+  al chat y **no crea nada**: además de no tocar «Crear», bloquea en la red todo envío de datos desde el formulario.
+- **✅ Emitir**: solo con la huella del caso aprobado; devuelve el número (TQQ1-…) y el PDF.
+- Si no está seguro (ubigeo de llegada, productos de una guía parcial, sesión vencida), se detiene y pregunta.
+- Solo el vehículo y chofer principales por ahora.
+
 ## Explorar Quesito (solo mirar)
 
 Workflow **"Guías - explorar Quesito (solo mirar)"** (`guias-quesito-explorar.yml`, script
