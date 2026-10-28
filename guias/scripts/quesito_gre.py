@@ -311,6 +311,43 @@ def productos(pag, c):
     NOTAS.append(f"Guía parcial: {len(plan)} de {len(ls)} productos de la factura, con las cantidades del caso.")
 
 
+def secundario(pag, boton, datos):
+    """«+ Agregar vehículo / conductor» (solo arma campos en la pantalla) y llena los campos nuevos que aparecen.
+    datos: {"placa": ...} o {"documento_numero", "nombre", "apellidos", "licencia"}; la clave se busca en el nombre del campo."""
+    antes = set(pag.evaluate("() => [...document.querySelectorAll('input, select')].map(e => e.name).filter(Boolean)"))
+    b = pag.get_by_text(re.compile(boton, re.I))
+    vis = [b.nth(i) for i in range(b.count()) if b.nth(i).is_visible()]
+    if not vis:
+        return False
+    vis[0].evaluate("e => e.click()")
+    pag.wait_for_timeout(800)
+    nuevos = [n for n in pag.evaluate("() => [...document.querySelectorAll('input, select')].filter(e => e.type !== 'hidden').map(e => e.name).filter(Boolean)")
+              if n not in antes]
+    if not nuevos:
+        return False
+    puestos = 0
+    for clave, valor in datos.items():
+        if not valor:
+            continue
+        n = next((x for x in nuevos if clave in x.lower()), None)
+        if clave == "nombre":   # "nombre" sin confundirse con "documento" ni "apellidos"
+            n = next((x for x in nuevos if re.search(r"nombre", x, re.I) and not re.search(r"apellido|documento", x, re.I)), None)
+        if not n:
+            continue
+        if n.endswith("]") and "tipo" in n.lower():
+            continue
+        pag.evaluate("""([n, v]) => { const e = document.querySelector(`[name="${n}"]`); if (!e) return;
+            e.value = v; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); }""", [n, str(valor)])
+        puestos += 1
+    tipo = next((x for x in nuevos if "documento_tipo" in x.lower()), None)
+    if tipo and "documento_numero" in datos:   # DNI
+        pag.evaluate("""(n) => { const e = document.querySelector(`select[name="${n}"]`); if (!e) return;
+            const o = [...e.options].find(o => /DNI|DOC\\.? ?NACI/i.test(o.text)); if (o) { e.value = o.value;
+            if (window.jQuery) window.jQuery(e).val(o.value).trigger('change'); else e.dispatchEvent(new Event('change', {bubbles: true})); } }""", tipo)
+    paso(f"Secundario: {puestos} dato(s) en {len(nuevos)} campo(s) nuevo(s)")
+    return puestos > 0
+
+
 def separar_nombre(nombre):
     """"PEREZ GOMEZ, JUAN CARLOS" o "JUAN CARLOS PEREZ GOMEZ" → (nombres, apellidos)."""
     n = re.sub(r"\s+", " ", str(nombre or "")).strip()
@@ -371,8 +408,15 @@ def llenar(pag, c):
         poner(pag, "conductor_nombre", nombres)
         poner(pag, "conductor_apellidos", apellidos)
         poner(pag, "conductor_numero_licencia", ch.get("licencia") or "")
-        if len(placas) > 1 or len(conductores) > 1:
-            NOTAS.append("Vehículos o choferes secundarios (" + ", ".join(placas[1:]) + ") no los pongo en Quesito todavía: solo el principal.")
+        for k, pl in enumerate(placas[1:3], start=1):   # Quesito acepta hasta 2 vehículos secundarios
+            cons = t.get("constancias") or []
+            if not secundario(pag, r"Agregar\s+veh[ií]culo", {"placa": pl, "tuc": cons[k] if len(cons) > k else ""}):
+                NOTAS.append(f"No pude poner la placa secundaria {pl}: agréguela en Quesito con «+ Agregar vehículo».")
+        for ch2 in conductores[1:3]:
+            nom2, ape2 = separar_nombre(ch2.get("nombre") or "")
+            if not secundario(pag, r"Agregar\s+conductor", {"documento_numero": re.sub(r"\D", "", str(ch2.get("dni") or "")), "nombre": nom2,
+                                                              "apellidos": ape2, "licencia": ch2.get("licencia") or ""}):
+                NOTAS.append("No pude poner el conductor secundario: agréguelo en Quesito con «+ Agregar conductor».")
     # Partida: Quesito trae la del local; se cambia solo si el caso dice otra dirección clara.
     act = pag.evaluate(f"() => (document.querySelector(\"input[name='{F}[partida_direccion]']\") || {{}}).value || ''")
     pd = (c.get("partida") or {}).get("direccion") or ""
