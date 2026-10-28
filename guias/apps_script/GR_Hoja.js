@@ -11,6 +11,7 @@ function onOpen() {
     .addSeparator()
     .addItem('🔍 Revisar todas las guías', 'GR_menuRevisar')
     .addItem('📦 Ver productos de la guía seleccionada', 'GR_menuProductos')
+    .addItem('📥 Traer de Quesito: cliente y productos (factura o cotización)', 'GR_menuLeerQuesito')
     .addItem('🔎 Traer cliente y productos de la factura (seleccionadas)', 'GR_menuTraerFactura')
     .addSeparator()
     .addItem('👁 Vista previa de la guía seleccionada (no emite)', 'GR_menuVista')
@@ -317,9 +318,11 @@ function GR_hojaAyuda_(ss) {
     ['2. Cada guía', 'Menú 🚚 Guías → ➕ Nueva guía (formulario), o escriba directo una fila en 🚚 Guías. El ID se pone solo.'],
     ['', 'Con la empresa se llena la partida; con el RUC del cliente, su nombre y su dirección de llegada; con el RUC del transportista, su nombre y MTC; con el DNI del conductor, sus datos.'],
     ['', 'Columnas en gris = no aplican (ej. transporte público → no se pide vehículo ni conductor).'],
-    ['3. Parcial', 'Si la guía NO lleva todo lo de la factura, ponga "¿Todo lo de la factura?" = NO y escriba los productos y cantidades en 📦 Productos con el mismo ID.'],
+    ['⚡ Lo mínimo', 'Empresa + N° de factura (serie y número) o solo el N° de cotización + transporte. Luego 🚚 Guías → 📥 Traer de Quesito: el robot lee la factura (no crea nada) y llena cliente, dirección de llegada y productos.'],
+    ['', '"Producto y cantidad" (opcional): vacío o «total» = todo lo de la factura. Una parte: «M&D 325 lote 1507: 10000» o «barra: 5000» (varios con ;). Si una palabra calza con dos líneas, se le pide el lote.'],
+    ['3. Parcial', 'Si la guía NO lleva todo lo de la factura: escriba "Producto y cantidad", o ponga "¿Todo lo de la factura?" = NO y los productos en 📦 Productos con el mismo ID.'],
     ['4. Estado', '✏️ Borrador = falta algo (el estado dice qué). ✅ Lista para emitir = completa. 👁 Vista previa / ⏳ Emitiendo / 🚚 Emitida / ⚠️ Error los pone el robot.'],
-    ['5. Emitir', '(Próxima etapa) El robot entra a Quesito con la cuenta de la empresa, genera la guía desde la factura y se detiene antes de "Crear" para la vista previa; emite solo con su confirmación y deja aquí el N° de guía, el estado SUNAT y el PDF. También desde Telegram y WhatsApp.'],
+    ['5. Emitir', 'Menú 🚚 Guías → 👁 Vista previa (llena todo en Quesito o SUNAT sin crear; la foto llega al Telegram y aquí el enlace) y luego ✅ Emitir (pide confirmar). El N° de guía y el PDF llegan solos a la fila.'],
     ['', ''],
     ['Reglas que revisa', '• RUC con dígito verificador (detecta RUC mal escritos) · DNI de 8 dígitos · placa ABC-123'],
     ['', '• Fecha de inicio de traslado no anterior a hoy (SUNAT no acepta una fecha anterior a la emisión)'],

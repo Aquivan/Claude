@@ -215,16 +215,37 @@ def num(v):
 
 
 def palabras(t):
-    return {w for w in simple(t).split() if len(w) > 2 and not w.isdigit()}
+    """Palabras que distinguen un producto: nombres y también códigos y lotes ("325", "1507")."""
+    return {w for w in simple(t).split() if len(w) > 2}
+
+
+def leer_pedido(texto):
+    """"M&D 325 lote 1507: 10000; barra 5000" → [{"descripcion", "cantidad"}]. "total" o vacío → [] (todo)."""
+    t = str(texto or "").strip()
+    if not t or re.fullmatch(r"(?i)\s*(todo|total|todos|completo|toda la factura)\s*", t):
+        return []
+    out = []
+    for parte in re.split(r"[;\n]+", t):
+        parte = parte.strip()
+        if not parte:
+            continue
+        m = re.search(r"[:=]?\s*(\d[\d.,]*)\s*(und|unid|unidades|niu|kg|cajas?|bolsas?|sacos?)?\s*$", parte, re.I)
+        if not m:
+            raise Alto(f"En «{parte}» no encontré la cantidad. Escríbalo así: «M&D 325 lote 1507: 10000» (o «total»). No se creó nada.")
+        desc = parte[:m.start()].strip(" :=-")
+        if re.fullmatch(r"(?i)\s*(todo|total)\s*", parte[m.start():]) or not desc:
+            raise Alto(f"En «{parte}» falta el producto (código, nombre o lote). No se creó nada.")
+        out.append({"descripcion": desc, "cantidad": num(m.group(1)), "pedido": True})
+    return out
 
 
 def productos(pag, c):
     """Deja en la guía solo los bienes del caso, con su cantidad (todo lo de la factura si coincide)."""
     ls = lineas(pag)
-    bs = c.get("bienes") or []
+    bs = c.get("bienes") or leer_pedido(c.get("pedido"))
     if not ls:
         raise Alto("Quesito no trajo productos de la factura. No se creó nada.")
-    if c.get("todo_factura") and not bs:   # la hoja dijo "¿Todo lo de la factura? = SI": quedan todas las líneas
+    if not bs and (c.get("todo_factura") or c.get("pedido") is not None):   # "¿Todo lo de la factura? = SI" o pedido "total": quedan todas
         paso(f"Productos: los {len(ls)} de la factura (todo)")
         return
     if len(bs) == len(ls) and all(abs(num(b.get("cantidad")) - num(l["cantidad"])) < 1e-6 for b, l in zip(bs, ls)):
@@ -234,8 +255,13 @@ def productos(pag, c):
     usadas, plan = set(), []
     for n, b in enumerate(bs):
         pb = palabras(b.get("descripcion"))
-        mejor = max(((len(pb & palabras(l["texto"])) / max(1, len(pb)), l["i"]) for l in ls if l["i"] not in usadas), default=(0, None))
-        i = mejor[1] if mejor[0] >= 0.5 else (ls[n]["i"] if len(bs) == len(ls) and ls[n]["i"] not in usadas else None)
+        puntos = sorted(((len(pb & palabras(l["texto"])) / max(1, len(pb)), l["i"]) for l in ls if l["i"] not in usadas), reverse=True)
+        mejor = puntos[0] if puntos else (0, None)
+        if b.get("pedido") and len(puntos) > 1 and puntos[1][0] == mejor[0] and mejor[0] > 0:   # "barra" calza con 2 líneas: no adivina
+            textos = [l["texto"][:90] for l in ls if l["i"] in (puntos[0][1], puntos[1][1])]
+            raise Alto(f"«{b.get('descripcion')}» calza con más de una línea de la factura: " + " | ".join(textos) +
+                       ". Agregue el lote o el código (ej. «lote 1507: 10000»). No se creó nada.")
+        i = mejor[1] if mejor[0] >= 0.5 else (ls[n]["i"] if len(bs) == len(ls) and not b.get("pedido") and ls[n]["i"] not in usadas else None)
         if i is None:
             raise Alto(f"No reconocí en la factura de Quesito el bien «{str(b.get('descripcion'))[:60]}». Revise los bienes del caso. No se creó nada.")
         usadas.add(i)
@@ -364,6 +390,89 @@ def bajar_pdf(pag):
     return ""
 
 
+def factura_de_cotizacion(pag, cot):
+    """N° de cotización → "FQQ1-3702" (su CPE relacionado en Cotizaciones). Busca hacia atrás hasta 3 meses."""
+    pag.goto(BASE + "/estimates", wait_until="networkidle", timeout=60000)
+    hoy = time.localtime()
+    desde_m, desde_a = (hoy.tm_mon - 3, hoy.tm_year) if hoy.tm_mon > 3 else (hoy.tm_mon + 9, hoy.tm_year - 1)
+    puesto = pag.evaluate("""([dm, da, hd, hm, ha]) => {
+      const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+      const sel = [...document.querySelectorAll('select')].filter(s => s.offsetParent !== null);
+      const esDia = s => s.options.length >= 28 && s.options.length <= 32 && /^\\d{1,2}$/.test(s.options[0].text.trim());
+      const esMes = s => [...s.options].some(o => /octubre|enero/i.test(o.text));
+      const esAnio = s => [...s.options].some(o => /^20\\d\\d$/.test(o.text.trim()));
+      const d = sel.filter(esDia), m = sel.filter(esMes), a = sel.filter(esAnio);
+      if (d.length < 2 || m.length < 2 || a.length < 2) return false;
+      const pon = (s, f) => { const o = [...s.options].find(f); if (o) { s.value = o.value; s.dispatchEvent(new Event('change', {bubbles: true})); } return !!o; };
+      return pon(d[0], o => o.text.trim() === '1') && pon(m[0], o => o.text.trim().toLowerCase() === meses[dm - 1]) && pon(a[0], o => o.text.trim() === String(da))
+        && pon(d[1], o => o.text.trim() === String(hd)) && pon(m[1], o => o.text.trim().toLowerCase() === meses[hm - 1]) && pon(a[1], o => o.text.trim() === String(ha)); }""",
+        [desde_m, desde_a, hoy.tm_mday, hoy.tm_mon, hoy.tm_year])
+    if puesto:
+        b = pag.get_by_text(re.compile(r"^\s*Filtrar\s*$", re.I))
+        if b.count():
+            b.first.click()
+            esperar(pag, 2500)
+    for _ in range(30):   # página por página
+        fila = pag.locator("tr").filter(has=pag.locator("td", has_text=re.compile(r"^\s*" + str(cot) + r"\s*$")))
+        if fila.count():
+            m = re.search(r"\b([FB][A-Z0-9]{3})\s*-\s*0*(\d+)", fila.first.inner_text())
+            if not m:
+                raise Alto(f"La cotización {cot} no tiene factura relacionada en Quesito todavía. No se creó nada.")
+            return m.group(1), m.group(2)
+        sig = pag.get_by_text(re.compile(r"Next", re.I))
+        if not sig.count() or "disabled" in (sig.first.get_attribute("class") or "") or not sig.first.is_visible():
+            break
+        antes = pag.url
+        sig.first.click()
+        esperar(pag, 1500)
+        if pag.url == antes:
+            break
+    raise Alto(f"No encontré la cotización {cot} en Quesito de esta empresa (últimos 3 meses). No se creó nada.")
+
+
+def datos_pdf(txt):
+    """Cliente según el texto del PDF de la factura: {nombre, ruc, direccion} (lo que se encuentre)."""
+    out = {}
+    for k, pat in (("nombre", r"(?:SE[ÑN]OR\s*\(?ES\)?|CLIENTE|RAZ[OÓ]N\s+SOCIAL)\s*:\s*(.+)"),
+                   ("ruc", r"(?:R\.?U\.?C\.?|DNI|DOCUMENTO)\s*(?:N[°ºo.]*)?\s*:\s*(\d{8,11})"),
+                   ("direccion", r"DIRECCI[OÓ]N\s*(?:DEL\s+CLIENTE)?\s*:\s*(.+)")):
+        m = re.search(pat, txt, re.I)
+        if m:
+            out[k] = re.split(r"\s{3,}", m.group(1).strip())[0].strip()
+    return out
+
+
+def cliente_pdf(pag, fila):
+    """Cliente según el PDF de la factura (fila de Comprobantes). {} si no se puede."""
+    try:
+        a = fila.locator("a", has_text=re.compile(r"^\s*PDF\s*$", re.I)).first
+        h = a.get_attribute("href") if a.count() else ""
+        if not h:
+            return {}
+        r = pag.context.request.get(h if h.startswith("http") else BASE + h)
+        if not r.ok or r.body()[:4] != b"%PDF":
+            return {}
+        import subprocess
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+            f.write(r.body())
+        txt = subprocess.run(["pdftotext", "-layout", f.name, "-"], capture_output=True, text=True, timeout=30).stdout
+        return datos_pdf(txt)
+    except Exception:
+        return {}
+
+
+def leer_formulario(pag):
+    """Lo que Quesito trajo de la factura al formulario de guía: cliente, productos y partida (solo lectura)."""
+    d = pag.evaluate("""(F) => {
+      const txt = n => { const e = document.querySelector(`[name="${F}[${n}]"]`); if (!e) return '';
+        if (e.tagName === 'SELECT') { const o = e.options[e.selectedIndex]; return o && o.value ? o.text.trim() : ''; }
+        return String(e.value || '').trim(); };
+      return { cliente: txt('entity_id'), partida: { ubigeo: txt('partida_ubigeo'), direccion: txt('partida_direccion') } }; }""", F)
+    d["lineas"] = [{"texto": re.sub(r"\s+", " ", l["texto"]).strip(), "cantidad": num(l["cantidad"])} for l in lineas(pag)]
+    return d
+
+
 def esperar_decision(huella):
     hasta = time.time() + ESPERA_MIN * 60
     while time.time() < hasta:
@@ -398,11 +507,12 @@ def main():
         sys.exit(1)
     d = c.get("documento") or {}
     m = re.match(r"^\s*([A-Z0-9]{4})\s*-\s*0*(\d+)\s*$", str(d.get("numero") or "").upper())
-    if not m:
-        fin(False, "Para Quesito la guía sale desde la factura: falta el número de la factura (ej. FQQ1-3648). No se creó nada.")
+    cot = re.sub(r"\D", "", str(c.get("cotizacion") or ""))
+    if not m and not cot:
+        fin(False, "Para Quesito la guía sale desde la factura: falta el número de la factura (ej. FQQ1-3648) o de la cotización. No se creó nada.")
         sys.exit(1)
-    serie, numero = m.group(1), m.group(2)
-    paso(f"Caso recibido · modo {modo} · factura {serie}-{numero} · {len(c.get('bienes') or [])} bien(es)")
+    serie, numero = (m.group(1), m.group(2)) if m else ("", "")
+    paso(f"Caso recibido · modo {modo} · " + (f"factura {serie}-{numero}" if m else f"cotización {cot}") + f" · {len(c.get('bienes') or [])} bien(es)")
 
     with sync_playwright() as p:
         nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None)
@@ -428,6 +538,10 @@ def main():
                 raise Alto("La sesión guardada de Quesito venció: entre a Quesito en su Chrome, cópiela con Cookie-Editor (Export → JSON) "
                            "y péguela en el secreto QUESITO_SESION de la empresa en GitHub. No se creó nada.")
             paso("Dentro de Quesito (sesión guardada)")
+            if not serie:   # solo la cotización: su factura relacionada
+                serie, numero = factura_de_cotizacion(pag, cot)
+                paso(f"La cotización {cot} es la factura {serie}-{numero}")
+                pag.goto(BASE + "/invoices", wait_until="networkidle", timeout=60000)
             # Buscar la factura
             pag.get_by_text(re.compile(r"Buscar\s+Documento", re.I)).first.click()
             pag.wait_for_timeout(1200)
@@ -444,6 +558,8 @@ def main():
             fila = pag.locator("tr", has_text=serie).filter(has_text=re.compile(r"\b0*" + numero + r"\b"))
             if not fila.count():
                 raise Alto(f"No encontré la factura {serie}-{numero} en Quesito de esta empresa. No se creó nada.")
+            cli = cliente_pdf(pag, fila.first) if modo == "leer" else {}
+            fila_txt = re.sub(r"\s+", " ", fila.first.inner_text())[:300] if modo == "leer" else ""
             opc = fila.first.get_by_text(re.compile(r"Opciones", re.I)).first
             try:
                 opc.click(timeout=8000)
@@ -460,6 +576,13 @@ def main():
             if "/despatch_advices/new" not in pag.url:
                 raise Alto("No se abrió el formulario de guía de Quesito. No se creó nada.")
             paso("Formulario de guía abierto (con la factura)")
+            if modo == "leer":   # 📥 solo leer lo que trae Quesito (cliente, productos, partida) para la hoja de Guías
+                datos = leer_formulario(pag)
+                datos.update({"factura": f"{serie}-{numero}", "cotizacion": cot, "cliente_pdf": cli, "fila": fila_txt})
+                r = bot({"accion": "gre_leido", "datos": datos})
+                open(os.path.join(os.environ.get("RUNNER_TEMP", "/tmp"), "gre_avisado"), "w").close()
+                print(f"::notice title=Quesito leído::factura {serie}-{numero} · {len(datos.get('lineas') or [])} línea(s) · nada se creó" + ("" if r.get("ok") else " · el bot no lo recibió"))
+                return
             llenar(pag, c)
             crear = boton_crear(pag)
             img = base64.b64encode(foto(pag)).decode()

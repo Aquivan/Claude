@@ -30,13 +30,22 @@ function TGGH_doPost_(e) {
       var como = TGG_pedir_(ss, c, q.modo === 'emitir' ? 'emitir' : 'vista');
       return TGW_json_({ ok: true, como: como || '' });
     }
+    if (p.accion === 'leer') {   // 📥 solo leer la factura (o cotización) en Quesito: cliente y productos para completar la fila
+      var r = TGGH_caso_(ss, q);
+      if (!r.caso) return TGW_json_(r);
+      var cl = TGG_leer_(ss, r.caso), cfg = TG_cfg_(ss);
+      cl.estado = 'Leyendo Quesito…'; cl.solo_leer = true; cl.leido = null; cl.ultimo_error = '';
+      TGG_guardar_(ss, cl);
+      TG_gh_(cfg, '/actions/workflows/' + TGG_WF_QUESITO_ + '/dispatches', 'post', { ref: cfg.rama, inputs: { ruc: cl.empresa_ruc, caso: cl.id, modo: 'leer', confirmar: '' } });
+      return TGW_json_({ ok: true, caso: cl.id });
+    }
     if (p.accion === 'estado') {
       var out = {};
       (q.casos || []).slice(0, 50).forEach(function (id) {
         var x = TGG_leer_(ss, String(id));
         if (!x) return;
         var url = function (fid) { try { return fid ? DriveApp.getFileById(fid).getUrl() : ''; } catch (err) { return ''; } };
-        out[x.id] = { estado: x.estado || '', gre: x.gre || '', via: x.via || '', error: x.ultimo_error || '', pdf: url(x.pdf), imagen: url(x.vista_img) };
+        out[x.id] = { estado: x.estado || '', gre: x.gre || '', via: x.via || '', error: x.ultimo_error || '', pdf: url(x.pdf), imagen: url(x.vista_img), leido: x.leido || null };
       });
       return TGW_json_({ ok: true, casos: out });
     }
@@ -55,7 +64,7 @@ function TGGH_caso_(ss, q) {
   if (c && /Emitida|Emitiendo/.test(c.estado || '')) return { ok: false, error: 'ese caso ya está ' + c.estado.toLowerCase() + (c.gre ? ' (' + c.gre + ')' : '') };
   if (!c) c = { id: Utilities.getUuid().replace(/-/g, '').slice(0, 8), creado: new Date().toISOString(), archivos: [], mensajes: [] };
   if (c.espera_run) c.decision = 'cerrar';   // una vista previa anterior que espera: se cierra sin emitir
-  ['motivo', 'contraparte', 'documento', 'bienes', 'peso_kg', 'bultos', 'partida', 'llegada', 'transporte', 'fecha', 'observaciones', 'via', 'todo_factura']
+  ['motivo', 'contraparte', 'documento', 'bienes', 'peso_kg', 'bultos', 'partida', 'llegada', 'transporte', 'fecha', 'observaciones', 'via', 'todo_factura', 'cotizacion', 'pedido']
     .forEach(function (k) { c[k] = d[k]; });
   c.empresa_ruc = ruc; c.empresa = empresas[ruc];
   c.origen = 'hoja'; c.hoja = String(q.hoja || '');

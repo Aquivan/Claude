@@ -69,9 +69,12 @@ function TGG_leer_(ss, id) {
 
 /** Lo que recibe el robot (texto exacto: su huella es la clave para emitir). */
 function TGG_paraRobot_(c) {
-  return JSON.stringify({ id: c.id, empresa_ruc: c.empresa_ruc, motivo: c.motivo, contraparte: c.contraparte, documento: c.documento,
+  var o = { id: c.id, empresa_ruc: c.empresa_ruc, motivo: c.motivo, contraparte: c.contraparte, documento: c.documento,
     bienes: c.bienes, peso_kg: c.peso_kg, bultos: c.bultos || null, partida: c.partida, llegada: c.llegada, transporte: c.transporte, fecha: c.fecha, via: c.via || '',
-    todo_factura: !!c.todo_factura, observaciones: c.observaciones || '' });
+    todo_factura: !!c.todo_factura, observaciones: c.observaciones || '' };
+  if (c.cotizacion) o.cotizacion = String(c.cotizacion);   // 🧀 Quesito: la factura se busca desde la cotización
+  if (c.pedido) o.pedido = String(c.pedido);               // 🧀 "M&D 325 lote 1507: 10000; barra 5000" o "total"
+  return JSON.stringify(o);
 }
 
 function TGG_huella_(c) {
@@ -246,7 +249,7 @@ function TGG_relanzar_(ss, c, chat) {
 function TGG_faltan_(c) {
   var f = [];
   if (!c.empresa_ruc) f.push('Falta la empresa que emite la guía.');
-  if (!(c.bienes || []).length && !(c.via === 'quesito' && c.todo_factura)) f.push('Faltan los bienes.');   // en Quesito "todo lo de la factura" no necesita la lista
+  if (!(c.bienes || []).length && !(c.via === 'quesito' && (c.todo_factura || c.pedido))) f.push('Faltan los bienes.');   // en Quesito "todo lo de la factura" (o un pedido corto) no necesita la lista
   if (!(Number(c.peso_kg) > 0)) f.push('Falta el peso.');
   if (!c.partida || !c.partida.direccion) f.push('Falta el punto de partida.');
   if (!c.llegada || !c.llegada.direccion) f.push('Falta el punto de llegada.');
@@ -255,7 +258,7 @@ function TGG_faltan_(c) {
   if ((t.modo === 'privado' || t.registrar_vehiculos) && (!(t.placas || []).length || !(t.conductores || []).length)) f.push('Faltan la placa y el chofer (DNI y licencia).');
   if (c.via === 'quesito') {   // 🧀 en Quesito la guía sale desde la factura que la empresa emitió ahí
     if (c.motivo !== 'Venta') f.push('En Quesito, por ahora, solo guías de venta desde su factura (escriba «por sunat» para las demás).');
-    if (!c.documento || !/^[A-Z0-9]{4}\s*-\s*\d+$/i.test(String(c.documento.numero || ''))) f.push('Para Quesito falta el número de la factura.');
+    if ((!c.documento || !/^[A-Z0-9]{4}\s*-\s*\d+$/i.test(String(c.documento.numero || ''))) && !/\d/.test(String(c.cotizacion || ''))) f.push('Para Quesito falta el número de la factura.');
     if (!(Number(c.bultos) >= 1)) f.push('Faltan los bultos (Quesito los pide).');
   }
   return f;
@@ -349,6 +352,7 @@ function TGG_pedir_(ss, c, modo) {
     }
   } finally { lock.releaseLock(); }
   c.estado = modo === 'emitir' ? 'Emitiendo' : 'Vista previa…';
+  c.solo_leer = false;
   c.huella = TGG_huella_(c);
   TGG_guardar_(ss, c);
   TG_gh_(cfg, '/actions/workflows/' + (c.via === 'quesito' ? TGG_WF_QUESITO_ : TGG_WF_) + '/dispatches', 'post', { ref: cfg.rama, inputs: {
@@ -461,6 +465,15 @@ function TGG_gh_(q) {
       return d;
     } finally { lk.releaseLock(); }
   }
+  if (q.accion === 'gre_leido') {   // 📥 lo que Quesito trae de la factura (para completar la hoja de Guías); no se creó nada
+    var dl = q.datos || {};
+    c.leido = { factura: String(dl.factura || '').slice(0, 20), cotizacion: String(dl.cotizacion || '').slice(0, 12), cliente: String(dl.cliente || '').slice(0, 200),
+      cliente_pdf: dl.cliente_pdf || {}, fila: String(dl.fila || '').slice(0, 300), partida: dl.partida || {},
+      lineas: (dl.lineas || []).slice(0, 40).map(function (l) { return { texto: String(l.texto || '').slice(0, 250), cantidad: Number(l.cantidad) || 0 }; }) };
+    c.estado = 'Leído de Quesito'; c.ultimo_error = '';
+    TGG_guardar_(ss, c);
+    return { ok: true };
+  }
   if (q.accion === 'gre_aviso') { TGG_avisar_(c, String(q.texto || '').slice(0, 500) + ' · caso ' + c.id, null, false); return { ok: true }; }
   var cache = CacheService.getScriptCache();
   if (q.accion === 'gre_vista') {
@@ -480,6 +493,11 @@ function TGG_gh_(q) {
     cache.put('tgg_fin_' + run, '1', 21600);
     if (!q.ok && c.estado === 'Emitida') {   // una corrida posterior falló: la guía sigue emitida
       TGG_avisar_(c, '⚠️ Guía ' + (c.gre || c.id) + ': ' + String(q.texto || 'el robot falló'), q.imagen, false);
+      return { ok: true };
+    }
+    if (c.solo_leer && !q.ok) {   // 📥 solo se leía la factura para la hoja: el error queda ahí (sin mensajes al chat)
+      c.estado = 'No leído'; c.ultimo_error = String(q.texto || 'el robot falló').slice(0, 1500);
+      TGG_guardar_(ss, c);
       return { ok: true };
     }
     if (q.ok) {

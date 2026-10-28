@@ -2,6 +2,7 @@
 #   modo vista  = llena todo en Quesito y NO crea la guía (además bloquea todo envío de datos desde el formulario);
 #                 la foto va directo al chat (no a GitHub) y la pantalla espera unos minutos el ✅ Emitir.
 #   modo emitir = crea la guía, solo con la huella de ESE caso (la pone el bot cuando la persona aprueba).
+#   modo leer   = 📥 solo lee lo que Quesito trae de la factura (o cotización): cliente y productos, para la hoja. No crea nada.
 # Los datos del caso NO van aquí: el robot se los pide al bot con el número de corrida (el repositorio es público).
 # Entra con la sesión copiada del Chrome (secreto QUESITO_SESION del Environment de la empresa). Solo a pedido.
 name: GRE - Quesito (Remitente)
@@ -16,11 +17,11 @@ on:
         description: "Código del caso en el bot (pestaña 🚚 Guías SUNAT)"
         required: true
       modo:
-        description: "vista (no crea nada) o emitir"
+        description: "vista (no crea nada), leer (solo lee la factura) o emitir"
         required: true
         default: vista
         type: choice
-        options: [vista, emitir]
+        options: [vista, leer, emitir]
       confirmar:
         description: "Huella de confirmación (la pone el bot). Obligatoria para emitir."
         required: false
@@ -70,6 +71,7 @@ jobs:
         timeout-minutes: 5
         run: |
           pip install -q playwright==1.47.0
+          command -v pdftotext >/dev/null || sudo apt-get install -y -qq poppler-utils >/dev/null 2>&1 || true
           CH=$(command -v google-chrome || command -v google-chrome-stable || true)
           if [ -n "$CH" ]; then echo "CHROMIUM=$CH" >> "$GITHUB_ENV"; else timeout 240 python -m playwright install --with-deps chromium; fi
       - name: GRE Quesito ${{ inputs.modo }}
