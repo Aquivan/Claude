@@ -145,7 +145,7 @@ function GR_autollenar_(r, cambiadas, ctx) {
   if (r.numero !== '' && /^\d+$/.test(String(r.numero).trim())) r.numero = Number(r.numero);
   if (cambio('serie') && /^B/.test(r.serie) && r.docrel === 'Factura') r.docrel = 'Boleta';
   // "Producto y cantidad": «total» o vacío = todo lo de la factura; con productos = solo una parte
-  if (cambio('pedido') && !(ctx.prod[r.id] || []).length) {
+  if (cambio('pedido')) {
     var ped = []; try { ped = GR_partirPedido_(r.pedido); } catch (e) {}
     r.total = ped.length ? 'NO' : 'SI';
   }
@@ -301,6 +301,7 @@ function GR_validar_(r, ctx) {
   var prods = ctx.prod[txt('id')] || [], pedido = [];
   try { pedido = GR_partirPedido_(r.pedido); } catch (e) { F.push('producto y cantidad: ' + e.message); }
   if (parcial && !prods.length && !(pedido.length && txt('via') !== 'SUNAT')) F.push('productos en 📦 Productos (o escriba «Producto y cantidad»)');
+  if (pedido.length && prods.length && txt('via') !== 'SUNAT') A.push('se usa «Producto y cantidad» (📦 Productos no se usa en esta guía)');
   if (prods.some(function (p) { return !(p.cant > 0) || !String(p.desc).trim() || (doc === 'Ninguno' && !p.unidad); })) F.push('productos sin descripción o cantidad');
   // Transporte
   if (mod === '01') {

@@ -60,7 +60,8 @@ function GR_casoDeFila_(r, ctx) {
     conductores: t('cdni') ? [{ dni: t('cdni').replace(/\D/g, ''), nombre: (t('cape') ? t('cape') + ', ' : '') + t('cnom'), licencia: t('clic') }] : []
   } : { modo: 'publico', ruc: t('truc').replace(/\D/g, ''), nombre: t('tnom'), mtc: t('mtc'), placas: [], conductores: [], constancias: [] };
   var doc = t('docrel') || 'Factura', quesito = t('via') !== 'SUNAT';
-  var pedido = quesito && !prods.length ? GR_partirPedido_(t('pedido')) : [];
+  var pedido = quesito ? GR_partirPedido_(t('pedido')) : [];
+  if (pedido.length) prods = [];   // "Producto y cantidad" manda sobre 📦 Productos (el robot lo busca en la factura de Quesito)
   var conFactura = doc !== 'Ninguno' && t('serie') && t('numero');
   return {
     empresa_ruc: emp.ruc, motivo: GR_MOTIVO_CASO_[mot], contraparte: { ruc: t('ndest').replace(/\D/g, ''), nombre: t('dest') },
