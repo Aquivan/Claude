@@ -549,7 +549,10 @@ def cliente_pdf(pag, fila):
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             f.write(r.body())
         txt = subprocess.run(["pdftotext", "-layout", f.name, "-"], capture_output=True, text=True, timeout=30).stdout
-        return datos_pdf(txt, os.environ.get("RUC", ""))
+        out = datos_pdf(txt, os.environ.get("RUC", ""))
+        if len(r.body()) < 4_000_000:   # 📄 la factura misma, para verla desde la hoja (va al Drive del bot, nunca a GitHub)
+            out["_pdf"] = base64.b64encode(r.body()).decode()
+        return out
     except Exception:
         return {}
 
@@ -670,7 +673,8 @@ def main():
             paso("Formulario de guía abierto (con la factura)")
             if modo == "leer":   # 📥 solo leer lo que trae Quesito (cliente, productos, partida) para la hoja de Guías
                 datos = leer_formulario(pag)
-                datos.update({"factura": f"{serie}-{numero}", "cotizacion": cot, "cliente_pdf": cli, "fila": fila_txt})
+                pdf_fac = cli.pop("_pdf", "") if isinstance(cli, dict) else ""
+                datos.update({"factura": f"{serie}-{numero}", "cotizacion": cot, "cliente_pdf": cli, "fila": fila_txt, "pdf": pdf_fac})
                 r = bot({"accion": "gre_leido", "datos": datos})
                 open(os.path.join(os.environ.get("RUNNER_TEMP", "/tmp"), "gre_avisado"), "w").close()
                 print(f"::notice title=Quesito leído::factura {serie}-{numero} · {len(datos.get('lineas') or [])} línea(s) · nada se creó" + ("" if r.get("ok") else " · el bot no lo recibió"))
