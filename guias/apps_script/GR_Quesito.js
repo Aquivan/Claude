@@ -154,12 +154,13 @@ function GR_aplicarLeido_(ss, fila, d) {
   } else if (ruc && t('ndest').replace(/\D/g, '') !== ruc) {
     // En una venta el destinatario ES el cliente de la factura: el de la fila era de otra factura (o estaba mal) → se cambia.
     var viejo = t('ndest').replace(/\D/g, '');
-    var dirViejo = ctx.dir.filter(function (q) { return q.doc === viejo; }).map(function (q) { return GR_norm_(q.dir); });
+    // Direcciones de 📍 que son de OTRO cliente (no del de la factura): si la llegada es una de ellas, no sirve.
+    var dirViejo = ctx.dir.filter(function (q) { return q.doc && q.doc !== ruc && !/partida/i.test(q.uso); }).map(function (q) { return GR_norm_(q.dir); });
     var sets = { tdest: ruc.length === 11 ? GR_TIPODOC_[0] : GR_TIPODOC_[1], ndest: ruc, dest: nom };
     Object.keys(sets).forEach(function (k) { sh.getRange(fila, GR_col_(k)).setValue(sets[k]); x[k] = sets[k]; puestos[k] = sets[k]; });
     if (t('ldir') && dirViejo.indexOf(GR_norm_(t('ldir'))) >= 0 && !t('llocal')) {   // la llegada era la del cliente anterior
       ['ldir', 'lubi', 'lest'].forEach(function (k) { sh.getRange(fila, GR_col_(k)).setValue(''); x[k] = ''; });
-      ojo.push('quité la llegada del cliente anterior');
+      ojo.push('quité la llegada (era de otro cliente): ' + (cp.direccion ? 'puse la de la factura' : 'póngala o use 📥 otra vez para traerla de Quesito'));
     }
     hecho.push('cliente ' + (nom || ruc));
     ojo.push('el cliente de la fila (' + viejo + ') no era el de la factura: puse ' + ruc);

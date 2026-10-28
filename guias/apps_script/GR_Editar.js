@@ -341,6 +341,10 @@ function GR_validar_(r, ctx) {
     if (txt(x + 'dir').length < 5) F.push('dirección ' + nom);
     if (mot === '04' && !/^\d{4}$/.test(txt(x + 'est'))) F.push('cód. local ' + nom + ' (motivo 04)');
   });
+  // La llegada es una dirección de 📍 de OTRO cliente (quedó de otra guía o de otra factura)
+  var ndl = txt('ndest').replace(/\D/g, ''), dl = GR_norm_(txt('ldir'));
+  var ajena = ndl && dl && cod2('motivo') === '01' && ctx.dir.filter(function (q) { return GR_norm_(q.dir) === dl && q.doc && q.doc !== ndl && !/partida/i.test(q.uso); })[0];
+  if (ajena) A.push('la llegada es la dirección de ' + String(ajena.nom || ajena.doc).slice(0, 40) + ', no del cliente');
   if (txt('obsFinal').length > 500) A.push('observaciones muy largas (' + txt('obsFinal').length + ' caracteres)');
   // Lo que piden los robots (👁 Vista previa / ✅ Emitir).
   var quesito = txt('via') !== 'SUNAT';
