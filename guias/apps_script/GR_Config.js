@@ -19,7 +19,7 @@ var GR_LIS_ = 'Listas';
 var GR_REG_ = '🧾 Registro';
 var GR_AYU_ = '📖 Ayuda';
 var GR_FILA1_ = 3;
-var GR_VERSION_ = 12;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
+var GR_VERSION_ = 13;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
 
 // Catálogos SUNAT (anexo 8 de la R.S. 097-2012 y modificatorias).
 var GR_MOTIVOS_ = ['01 - Venta', '02 - Compra', '03 - Venta con entrega a terceros', '04 - Traslado entre establecimientos de la misma empresa',
@@ -94,8 +94,9 @@ var GR_COLS_ = [
     'Para traer los almacenes de un RUC: 🚚 Guías → 📍 Buscar direcciones por RUC.' },
   { k: 'lest', t: 'Cód. local llegada', g: 'lle', w: 75, f: '@', n: 'Solo motivo 04 (traslado entre establecimientos de la misma empresa).' },
   { k: 'obs', t: 'Observaciones', g: 'otro', w: 220, n: 'Texto libre que sale en la guía (ej. lotes, referencia del pedido).' },
+  { k: 'cotobs', t: '¿Cotización en observaciones?', g: 'otro', w: 95, v: ['SI', 'NO'], n: 'Vacío o NO = la cotización NO sale en la guía (lo normal). SI = agrega «Cotización N° …» a las Observaciones.' },
   { k: 'obsFinal', t: 'Observaciones que irá en la guía (automático)', g: 'otro', w: 320,
-    n: 'Lo arma la hoja: sus observaciones + la cotización. Placas, conductor y MTC NO se repiten aquí: van en sus propios campos de la guía (si el robot no pudiera ponerlos en su campo, los agrega aquí solo). Es lo que el robot pondrá en Observaciones.' },
+    n: 'Lo arma la hoja: sus observaciones (+ la cotización solo si «¿Cotización en observaciones?» = SI). Placas, conductor y MTC NO se repiten aquí: van en sus propios campos de la guía (si el robot no pudiera ponerlos en su campo, los agrega aquí solo). Es lo que el robot pondrá en Observaciones.' },
   { k: 'productos', t: 'Productos (de 📦)', g: 'otro', w: 200, n: 'Resumen automático de 📦 Productos para esta guía (solo si es parcial o sin factura).' },
   { k: 'guia', t: 'N° guía emitida', g: 'res', w: 95 },
   { k: 'femi', t: 'Emitida el', g: 'res', w: 115, f: 'dd/mm/yyyy hh:mm' },
