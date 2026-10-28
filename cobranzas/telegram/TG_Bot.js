@@ -443,6 +443,7 @@ function TG_alBoton_(ss, q) {
     case 'sug': return TG_preguntar_(ctx, datos.texto, []);
     case 'cambios': return TG_aplicarCambios_(ctx, datos, op);
     case 'rucelige': return TGQ_eligeTG_(ctx, datos, op);
+    case 'tgrcomp': return TGR_compBotonTG_(ctx, datos, op);   // ✏️ completar vouchers: todo / solo RUC / otra factura (TG_Retener.js)
     case 'consunat':   // 🚀 bajar la constancia de retención de SUNAT (TG_Retener.js)
       TG_llamar_('editMessageReplyMarkup', { chat_id: chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
       try { return TG_enviar_(chatId, TG_esc_(TGR_pedirSunat_(datos, chatId))); } catch (e) { return TG_enviar_(chatId, '⚠️ ' + TG_esc_(e.message)); }   // 🤔 elegir el RUC entre opciones (TG_Procesados.js)

@@ -278,7 +278,7 @@ function TGR_porPagar_(ss) {
     if (x[I['Tipo']] !== 'Por pagar') return;
     out.push({ empresa: String(x[I['Empresa']]), ruc: String(x[I['RUC contraparte']]).replace(/\D/g, ''), contraparte: String(x[I['Contraparte']]),
       documento: String(x[I['Documento']]), doc: TGR_normDoc_(x[I['Documento']]), total: aNumero_(x[I['Total']]), nc: aNumero_(x[I['N/C']]),
-      pagado: aNumero_(x[I['Pagado']]), estado: String(x[I['Estado']]), retener: String(x[I['¿Retener? (IGV 3%)']] || ''), esperada: aNumero_(x[I['Retención esperada S/']]) });
+      pagado: aNumero_(x[I['Pagado']]), estado: String(x[I['Estado']]), fecha: aFecha_(x[I['Emisión']]), retener: String(x[I['¿Retener? (IGV 3%)']] || ''), esperada: aNumero_(x[I['Retención esperada S/']]) });
   });
   return out;
 }
@@ -371,21 +371,127 @@ function TGR_cambiosVoucher_(ss, datos) {
 
 /** "completa el voucher Fotos!362" / "completa la factura del voucher op 280698" / "asigna F003-37515 a Fotos!362". */
 var TGR_COMPLETA_RX_ = /\b(complet|llen|asign|registr|pon|agreg)\w*\b/i;
+/** Todos los vouchers nombrados en el texto: filas ("Fotos!377") y operaciones ("op 2179995"). */
+function TGR_refsVouchers_(t) {
+  t = String(t || '');
+  var out = [], vistos = {}, m, rx;
+  rx = /\b(fotos|originales)\s*!\s*(\d+)/gi;
+  while ((m = rx.exec(t))) { var f = m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() + '!' + m[2]; if (!vistos[f]) { vistos[f] = 1; out.push({ fila: f }); } }
+  rx = /\b(?:op|operaci[oó]n|n[°º]\s*de\s*operaci[oó]n)\.?\s*(?:n[°º]\.?\s*)?:?\s*(\d{3,})/gi;
+  while ((m = rx.exec(t))) { var o = m[1].replace(/^0+/, ''); if (!vistos['op' + o]) { vistos['op' + o] = 1; out.push({ op: o }); } }
+  if (!out.length) { var u = TGR_normVoucher_(t); if (u) out.push(u); }
+  return out;
+}
+
+/** Facturas que puede pagar este voucher, la más probable primero: la escrita en el voucher; luego la emitida
+ *  más cerca ANTES del pago (una posterior al pago va al final); a igual fecha, la que cuadra neta de retención. */
+function TGR_candidatosVoucher_(v, facturas, doc) {
+  var c = [];
+  facturas.forEach(function (f) {
+    if (doc && f.doc !== doc) return;
+    var como = TGR_paga_(v, f);
+    if (!como && doc) como = 'usted lo indicó (el monto no cuadra exacto: revíselo)';
+    if (!como) return;
+    var dias = v.fecha && f.fecha ? Math.round((v.fecha - f.fecha) / 864e5) : 9999;
+    var pagada = f.total > 0 && f.pagado >= f.total - f.nc - 0.05;   // ya pagada: va después de las que tienen saldo
+    c.push({ f: f, como: como, dias: dias, pagada: pagada,
+      orden: (/escrita/.test(como) ? 0 : 1e7) + (pagada ? 1e6 : 0) + (dias < 0 ? 5e5 - dias : dias) + (/retenci/.test(como) ? 0 : 0.5) });
+  });
+  return c.sort(function (a, b) { return a.orden - b.orden; });
+}
+
+var TGR_FMT_ = function (d) { return d ? Utilities.formatDate(d, 'America/Lima', 'dd/MM/yy') : ''; };
+
+/**
+ * "puedes completar el ruc" / "completa los vouchers Fotos!377 y op 2190288" / citando el resultado de los vouchers.
+ * → {texto} o {items:[{fila, monto, fecha, prov, falta, c:[{empresa, ruc, contraparte, documento, doc, fecha, total, como}]}], soloRuc}
+ */
 function TGR_completarPedido_(ss, texto, citado, clave) {
   if (!TGR_COMPLETA_RX_.test(texto) || TGR_esPedido_(texto)) return null;
-  var q = { doc: TGR_normDoc_(texto) || TGR_normDoc_(citado), voucher: TGR_normVoucher_(texto) || TGR_normVoucher_(citado) };
-  TGR_completarQ_(q, texto, clave);
-  if (q.preguntar) return { texto: '¿De qué voucher o factura? ' + TGR_COMO_ };
-  if (!q.voucher && !q.doc) return null;   // lo atiende la IA
-  var x = TGR_parear_(ss, q);
-  if (x && x.par && q.deUltimo) x.par.como += '; tomé ' + q.deUltimo + ' de lo último que me envió';
-  if (!x) return { texto: (q.voucher ? 'No encontré una factura por pagar que cuadre con ese voucher.' : 'No encontré en la hoja de Vouchers el pago de la ' + q.doc + ' (últimos 70 días).') + ' ' + TGR_COMO_ };
-  if (x.motivo) return { texto: x.motivo };
-  var datos = TGR_faltaEnVoucher_(x.par, x.rucDe);
-  if (!datos) return { texto: '✅ ' + x.par.v.fila + ' ya tiene la factura ' + x.par.f.doc + ', la empresa y el RUC del proveedor.' };
-  var cambios = TGR_cambiosVoucher_(ss, datos);
-  return { texto: '🧾 ' + x.par.v.fila + ' (S/ ' + TG_num_(x.par.v.monto) + ') paga ' + x.par.f.doc + ' de ' + x.par.f.contraparte + ' · ' + x.par.f.empresa + ' (cuadra por ' + x.par.como + ').' +
-    (cambios.length ? '' : '\nNo hay nada que completar.'), cambios: cambios };
+  var refs = TGR_refsVouchers_(texto), doc = TGR_normDoc_(texto);
+  if (!refs.length) refs = TGR_refsVouchers_(citado);
+  if (!doc && !TGR_refsVouchers_(texto).length) doc = TGR_normDoc_(citado);
+  if (!refs.length && !doc) {
+    var q = TGR_completarQ_({ doc: '', voucher: null }, texto, clave);
+    if (q.preguntar) return { texto: '¿De qué voucher o factura? ' + TGR_COMO_ + ' Si son varios, cite el mensaje con los vouchers.' };
+    if (q.voucher) refs = [q.voucher];
+    doc = q.doc || '';
+    if (!refs.length && !doc) return null;   // lo atiende la IA
+  }
+  var cfg = leerConfig_(ss), rucDe = {};
+  Object.keys(cfg.nombreEmpresa || {}).forEach(function (r) { rucDe[String(cfg.nombreEmpresa[r])] = r; });
+  var facturas = TGR_porPagar_(ss), vs = TGR_vouchersRecientes_(cfg), vouchers = [], avisos = [];
+  refs.forEach(function (w) {
+    var m = vs.filter(function (v) {
+      return w.fila ? v.fila.toLowerCase() === w.fila.toLowerCase() : w.op ? v.op === w.op || (w.op.length >= 6 && v.op.slice(-6) === w.op.slice(-6)) : Math.abs(v.monto - w.monto) <= 0.05;
+    });
+    if (m.length === 1) { if (!vouchers.some(function (x) { return x.fila === m[0].fila; })) vouchers.push(m[0]); }
+    else avisos.push(m.length ? 'Hay ' + m.length + ' vouchers con ' + (w.op ? 'la op ' + w.op : 'ese dato') + ': ' + m.slice(0, 4).map(function (v) { return v.fila; }).join(', ') + '.'
+      : 'No encontré en la hoja ' + (w.fila || (w.op ? 'la op ' + w.op : 'ese voucher')) + ' (últimos 70 días; si es de hoy, quizá aún se está registrando).');
+  });
+  if (!refs.length && doc) vs.forEach(function (v) { if (facturas.some(function (f) { return f.doc === doc && TGR_paga_(v, f); })) vouchers.push(v); });
+  var items = [];
+  vouchers.forEach(function (v) {
+    var c = TGR_candidatosVoucher_(v, facturas, doc).slice(0, 5);
+    if (!c.length) { avisos.push(v.fila + ' (S/ ' + TG_num_(v.monto) + (v.prov ? ', ' + v.prov : '') + '): no encontré una factura por pagar que cuadre. Dígame cuál: «completa ' + v.fila + ' con la F001-123».'); return; }
+    var falta = [];
+    if (!v.empresa && !v.idUsuario) falta.push('empresa');
+    if (!v.ruc) falta.push('RUC');
+    if (!TGR_normDoc_(v.refs)) falta.push('factura');
+    if (!falta.length && TGR_normDoc_(v.refs) === c[0].f.doc) { avisos.push('✅ ' + v.fila + ' ya tiene empresa, RUC y la factura ' + c[0].f.doc + '.'); return; }
+    items.push({ fila: v.fila, monto: v.monto, fecha: TGR_FMT_(v.fecha), prov: v.prov, falta: falta, c: c.map(function (x) {
+      return { empresa: rucDe[x.f.empresa] || x.f.empresa, nombreEmp: x.f.empresa, ruc: x.f.ruc, contraparte: x.f.contraparte, documento: x.f.documento, doc: x.f.doc,
+        fecha: TGR_FMT_(x.f.fecha), total: x.f.total, como: x.como, pagada: x.pagada };
+    }) });
+  });
+  if (!items.length) return { texto: avisos.join('\n') || 'No encontré qué completar. ' + TGR_COMO_ };
+  return { items: items, avisos: avisos, soloRuc: /\bruc\b/i.test(texto) && !/\b(factura|todo|empresa)\b/i.test(texto) };
+}
+
+/** Texto de la propuesta de un voucher (sin HTML). */
+function TGR_compTexto_(it, n) {
+  var x = it.c[0], otras = it.c.slice(1);
+  return (n ? n + '. ' : '') + '🧾 ' + it.fila + ' · S/ ' + TG_num_(it.monto) + (it.fecha ? ' · ' + it.fecha : '') + '\n   → ' + x.doc + (x.fecha ? ' (emitida ' + x.fecha + ')' : '') +
+    ' de ' + x.contraparte + ' · ' + x.nombreEmp + '\n   cuadra por ' + x.como + (it.falta.length ? '\n   le falta: ' + it.falta.join(', ') : '') +
+    (x.pagada ? '\n   ⚠️ esa factura ya figura pagada: revise si es otra' : '') +
+    (otras.length ? '\n   otras con ese monto: ' + otras.map(function (o) { return o.doc + (o.fecha ? ' (' + o.fecha + ')' : '') + (o.pagada ? ' pagada' : ''); }).join(', ') : '');
+}
+
+/** Escribe (lo aprobado con el botón) en la fila del voucher. modo 'todo' | 'ruc'. → texto del resultado. */
+function TGR_compEscribir_(its, modo, clave) {
+  var ss = TG_ss_(), ids = [], vacios = [];
+  its.forEach(function (it) {
+    var x = it.c[0];
+    var datos = modo === 'ruc' ? { fila: it.fila, proveedor_ruc: x.ruc, motivo: '🆔 RUC de ' + x.contraparte }
+      : { fila: it.fila, empresa: x.empresa, proveedor_ruc: x.ruc, facturas: x.documento, motivo: '🧾 ' + x.doc + ' de ' + x.contraparte + ' (cuadra por ' + x.como + ')' };
+    var cam = [];
+    try { cam = TGR_cambiosVoucher_(ss, datos); } catch (e) { vacios.push(it.fila + ': ' + e.message); }
+    if (!cam.length) vacios.push(it.fila + ': ya tenía esos datos');
+    ids = ids.concat(cam.map(function (c) { return c.id; }));
+  });
+  if (!ids.length) return 'No había nada que escribir. ' + vacios.join(' · ');
+  var r = ANX_aplicarDet_(ss, ids, false);
+  if (r.lote) TGU_anotar_(clave, { desc: '✏️ Completar vouchers ' + its.map(function (i) { return i.fila; }).join(', '), lotes: [r.lote] });
+  return r.mensaje + (vacios.length ? '\n' + vacios.join('\n') : '');
+}
+
+/** Botón de una propuesta. acc = {t:'tgrcomp', its:[…], soloRuc}. op: todo | ruc | otra | no | a<n> (usar otra factura). */
+function TGR_compBoton_(acc, op, clave) {
+  if (op === 'no') return { texto: 'Listo, no escribí nada.' };
+  if (op === 'todo' || op === 'ruc') {
+    if (TG_yaVisto_('tgrcomp' + clave + op + acc.its.map(function (i) { return i.fila + i.c[0].doc; }).join(','))) return { texto: 'Eso ya se escribió.' };
+    return { texto: TGR_compEscribir_(acc.its, op, clave), hecho: true };
+  }
+  var it = acc.its[0];
+  if (op === 'otra') return { texto: 'Otras facturas con el monto de ' + it.fila + ':\n' + it.c.slice(1).map(function (o, j) {
+    return (j + 1) + '. ' + o.doc + (o.fecha ? ' (emitida ' + o.fecha + ')' : '') + ' de ' + o.contraparte + ' · ' + o.nombreEmp + ' · S/ ' + TG_num_(o.total) + (o.pagada ? ' · ya pagada' : ' · con saldo'); }).join('\n'), otras: it };
+  var j = Number(String(op).replace(/\D/g, ''));
+  if (/^a\d+$/.test(op) && it.c[j]) {   // usar otra factura: queda como la propuesta
+    var nuevo = JSON.parse(JSON.stringify(it)), el = nuevo.c.splice(j, 1)[0];
+    nuevo.c.unshift(el);
+    return { nuevo: nuevo };
+  }
+  return { texto: 'No entendí ese botón.' };
 }
 
 /** Lo que quedó de TGR_directo_: con el par (voucher, factura) arma el CRE. */
@@ -876,22 +982,70 @@ function TGR_botonCambiosWA_(cam) {
     opciones: [{ op: 'si', titulo: '✅ Escribir' }, { op: 'no', titulo: '✖ No' }] };
 }
 
-/** Telegram: "completa el voucher Fotos!362". true si lo atendió. */
+/** Telegram: "completa el voucher Fotos!362" o citando los vouchers. true si lo atendió. */
 function TGR_completarTG_(ctx, texto) {
   var r = TGR_completarPedido_(ctx.ss, texto, ctx.citado, ctx.chatId);
   if (!r) return false;
-  TG_enviar_(ctx.chatId, TG_esc_(r.texto));
-  if ((r.cambios || []).length) TG_mostrarCambios_(ctx, r.cambios);
+  if (!r.items) { TG_enviar_(ctx.chatId, TG_esc_(r.texto)); return true; }
+  r.items.forEach(function (it, i) { TGR_compMandarTG_(ctx.chatId, it, r.items.length > 1 ? i + 1 : 0, r.soloRuc); });
+  if (r.items.length > 1) {
+    var k = TG_guardarBoton_({ t: 'tgrcomp', its: r.items });
+    TG_enviar_(ctx.chatId, '✏️ <b>¿Completo los ' + r.items.length + ' vouchers de una vez?</b> (cada uno con su primera factura; solo celdas vacías, se puede deshacer)',
+      [[{ text: '✅ Todo en los ' + r.items.length, callback_data: 'k:' + k + ':todo' }, { text: '🆔 Solo RUC en los ' + r.items.length, callback_data: 'k:' + k + ':ruc' }]]);
+  }
+  if ((r.avisos || []).length) TG_enviar_(ctx.chatId, TG_esc_(r.avisos.join('\n')));
   return true;
 }
 
-/** WhatsApp: lo mismo; null si el texto no lo pide. */
+function TGR_compMandarTG_(chat, it, n, soloRuc) {
+  var k = TG_guardarBoton_({ t: 'tgrcomp', its: [it] }), fila = [];
+  var b1 = { text: '✅ Todo (empresa, RUC, factura)', callback_data: 'k:' + k + ':todo' }, b2 = { text: '🆔 Solo RUC', callback_data: 'k:' + k + ':ruc' };
+  var teclado = [soloRuc ? [b2, b1] : [b1, b2]];
+  if (it.c.length > 1) teclado.push([{ text: '🔎 Otra factura con ese monto (' + (it.c.length - 1) + ')', callback_data: 'k:' + k + ':otra' }]);
+  teclado.push([{ text: '✖ No', callback_data: 'k:' + k + ':no' }]);
+  TG_enviar_(chat, TG_esc_(TGR_compTexto_(it, n)), teclado);
+}
+
+function TGR_compBotonTG_(ctx, datos, op) {
+  var r = TGR_compBoton_(datos, op, ctx.chatId);
+  if (r.nuevo) { TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } }); return TGR_compMandarTG_(ctx.chatId, r.nuevo, 0, false); }
+  if (r.otras) {
+    var k = TG_guardarBoton_({ t: 'tgrcomp', its: [r.otras] });
+    return TG_enviar_(ctx.chatId, TG_esc_(r.texto), r.otras.c.slice(1).map(function (o, j) { return [{ text: 'Usar ' + o.doc + (o.fecha ? ' (' + o.fecha + ')' : ''), callback_data: 'k:' + k + ':a' + (j + 1) }]; }));
+  }
+  if (op !== 'otra') TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
+  TG_enviar_(ctx.chatId, TG_esc_(r.texto), r.hecho && /✅/.test(r.texto) ? [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]] : null);
+}
+
+/** WhatsApp: lo mismo; null si el texto no lo pide (máx. 3 botones por mensaje). */
 function TGR_completarWA_(ss, texto, citado, clave) {
   var r = TGR_completarPedido_(ss, texto, citado, clave);
   if (!r) return null;
-  var out = { ok: true, respuesta: r.texto, tablas: [], sugerencias: [], archivos: [], avisos: [] };
-  if ((r.cambios || []).length) out.botones = [TGR_botonCambiosWA_(r.cambios)];
+  var out = { ok: true, respuesta: r.texto || '', tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  if (!r.items) return out;
+  out.respuesta = r.items.length > 1 ? '✏️ Encontré ' + r.items.length + ' vouchers para completar (solo celdas vacías, se puede deshacer):' : '✏️ Para completar (solo celdas vacías, se puede deshacer):';
+  if ((r.avisos || []).length) out.respuesta += '\n' + r.avisos.join('\n');
+  out.botones = r.items.slice(0, 4).map(function (it, i) { return TGR_compBotonesWA_(it, r.items.length > 1 ? i + 1 : 0, r.soloRuc); });
+  if (r.items.length > 1) out.botones.push({ k: TG_guardarBoton_({ t: 'tgrcomp', its: r.items }), texto: '¿Completo los ' + r.items.length + ' de una vez? (cada uno con su primera factura)',
+    opciones: [{ op: 'todo', titulo: '✅ Todo en todos' }, { op: 'ruc', titulo: '🆔 Solo RUC en todos' }, { op: 'no', titulo: '✖ No' }] });
   return out;
+}
+
+function TGR_compBotonesWA_(it, n, soloRuc) {
+  var ops = [{ op: 'todo', titulo: '✅ Todo' }, { op: 'ruc', titulo: '🆔 Solo RUC' }];
+  if (soloRuc) ops.reverse();
+  ops.push(it.c.length > 1 ? { op: 'otra', titulo: '🔎 Otra factura' } : { op: 'no', titulo: '✖ No' });
+  return { k: TG_guardarBoton_({ t: 'tgrcomp', its: [it] }), texto: TGR_compTexto_(it, n), opciones: ops };
+}
+
+function TGR_compBotonWA_(acc, op, numero) {
+  var clave = 'wa' + String(numero || '').replace(/\D/g, ''), r = TGR_compBoton_(acc, op, clave);
+  if (r.nuevo) return { ok: true, respuesta: '✏️ Con esa factura:', botones: [TGR_compBotonesWA_(r.nuevo, 0, false)] };
+  if (r.otras) {
+    var k = TG_guardarBoton_({ t: 'tgrcomp', its: [r.otras] });
+    return { ok: true, respuesta: r.texto, botones: [{ k: k, texto: '¿Cuál uso para ' + r.otras.fila + '?', opciones: r.otras.c.slice(1, 4).map(function (o, j) { return { op: 'a' + (j + 1), titulo: o.doc.slice(0, 20) }; }) }] };
+  }
+  return { ok: true, respuesta: r.texto + (r.hecho && /✅/.test(r.texto) ? '\nSi algo salió mal, escriba *deshacer*.' : '') };
 }
 
 function TGR_listaWA_(ss) {

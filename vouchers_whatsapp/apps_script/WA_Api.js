@@ -71,7 +71,8 @@ function WA_refs_(texto) {
   var t = String(texto || ''), out = [];
   (t.match(/\b[FEB][A-Z0-9]{3}\s*-\s*\d{1,8}\b/gi) || []).forEach(function (x) { x = 'factura ' + x.replace(/\s/g, '').toUpperCase(); if (out.indexOf(x) < 0) out.push(x); });
   (t.match(/\b(?:Fotos|Originales)!\d+/gi) || []).forEach(function (x) { if (out.indexOf(x) < 0) out.push(x); });
-  return out.slice(0, 6).join(' · ');
+  (t.match(/\bop\.?\s*\d{3,}/gi) || []).forEach(function (x) { x = 'op ' + x.replace(/\D/g, ''); if (out.indexOf(x) < 0) out.push(x); });   // los vouchers del resultado
+  return out.slice(0, 12).join(' · ');
 }
 
 /** Texto del mensaje al que la persona responde (m.context.id), o '' si no responde a ninguno o ya venció. */
