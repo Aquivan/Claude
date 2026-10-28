@@ -301,7 +301,14 @@ function GR_observaciones_(r) {
   var t = function (k) { return String(r[k] == null ? '' : r[k]).trim(); }, p = [];
   if (t('obs')) p.push(t('obs').replace(/\.\s*$/, ''));
   if (t('cotizacion') && t('cotobs').toUpperCase() === 'SI') p.push('Cotización N° ' + t('cotizacion'));   // por defecto NO va
-  // Placas, conductor y MTC tienen su propio campo en la guía (Quesito y SUNAT): no se repiten aquí.
+  // Quesito + transporte PÚBLICO: el vehículo y el chofer (opcionales) van aquí, solo los que se llenaron.
+  // (En privado, y en SUNAT, tienen su propio campo en la guía: no se repiten.)
+  if (t('via') !== 'SUNAT' && t('modalidad').slice(0, 2) === '01' && t('m1') !== 'SI') {
+    if (t('placa')) p.push('Placa N°1: ' + t('placa') + (t('mtcveh') ? ' (Cert. MTC ' + t('mtcveh') + ')' : ''));
+    if (t('placa2')) p.push('Placa N°2: ' + t('placa2') + (t('mtcveh2') ? ' (Cert. MTC ' + t('mtcveh2') + ')' : ''));
+    var ch = (t('cnom') + ' ' + t('cape')).trim();
+    if (ch || t('cdni')) p.push('Conductor: ' + (ch || '-') + (t('cdni') ? ', DNI ' + t('cdni') : '') + (t('clic') ? ', Licencia ' + t('clic') : ''));
+  }
   return p.length ? p.join('. ') + '.' : '';
 }
 

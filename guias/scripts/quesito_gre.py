@@ -408,7 +408,14 @@ def llenar(pag, c):
     conductores = t.get("conductores") or []
     if privado and (not placas or not conductores):
         raise Alto("Faltan la placa y el chofer (DNI y licencia). No se creó nada.")
-    if placas or conductores:   # privado: obligatorios · público: opcionales (los que dio el transportista)
+    if not privado and (placas or conductores) and not re.search(r"Placa N°|Conductor:", str(c.get("observaciones") or "")):
+        # público pedido por el bot (no viene armado de la hoja): el vehículo y el chofer que se tengan van en Observaciones
+        cons = t.get("constancias") or []
+        for k, pl in enumerate(placas[:2]):
+            EXTRA_OBS.append(f"Placa N°{k + 1}: {pl}" + (f" (Cert. MTC {cons[k]})" if len(cons) > k and cons[k] else ""))
+        for ch in conductores[:1]:
+            EXTRA_OBS.append(f"Conductor: {ch.get('nombre') or '-'}" + (f", DNI {ch.get('dni')}" if ch.get("dni") else "") + (f", Licencia {ch.get('licencia')}" if ch.get("licencia") else ""))
+    if privado and (placas or conductores):   # público: el vehículo y el chofer (opcionales) van en Observaciones
         if placas:
             poner(pag, "transportista_placa_numero", placas[0])
             if (t.get("constancias") or [None])[0]:
