@@ -34,6 +34,7 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from quesito_explorar import leer_sesion   # noqa: E402  (mismo lector de la sesión copiada)
+import en_vivo   # noqa: E402  (📺 la pantalla al bot, si la persona lo activó)
 
 BASE = "https://www.quesito.pe"
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -638,7 +639,8 @@ def main():
     paso(f"Caso recibido · modo {modo} · " + (f"factura {serie}-{numero}" if m else f"cotización {cot}") + f" · {len(c.get('bienes') or [])} bien(es)")
 
     with sync_playwright() as p:
-        nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None)
+        nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None, args=en_vivo.args())
+        en_vivo.iniciar(bot, PASO)
         ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
         pag = ctx.new_page()
         pag.on("dialog", lambda dl: (print("  Ventana de confirmación rechazada"), dl.dismiss()))

@@ -377,6 +377,7 @@ function TGG_pedir_(ss, c, modo) {
   TGG_guardar_(ss, c);
   TG_gh_(cfg, '/actions/workflows/' + (c.via === 'quesito' ? TGG_WF_QUESITO_ : TGG_WF_) + '/dispatches', 'post', { ref: cfg.rama, inputs: {
     ruc: c.empresa_ruc, caso: c.id, modo: modo, confirmar: modo === 'emitir' ? c.huella : '' } });
+  c.vivo_url = TGEV_iniciar_(c);   // 📺 si el modo en vivo está activo
 }
 
 var TGG_SISTEMA_LOCAL_ = [
@@ -458,6 +459,7 @@ function TGG_pedirPdfSunat_(ss, c, clave) {
 function TGG_gh_(q) {
   var ss = TG_ss_(), cfg = TG_cfg_(ss), run = String(q.run || '').replace(/\D/g, '');
   if (!run || !TGC_runValido_(cfg, run, /(^|\/)gre-(sunat|quesito)\.ya?ml$/)) return { ok: false, error: 'Forbidden' };   // 🧀 también el robot de Quesito
+  if (q.accion === 'gre_vivo') return TGEV_cuadroDelRobot_(q);   // 📺 foto de la pantalla (TG_EnVivo.js)
   var c = TGG_leer_(ss, String(q.caso || ''));
   if (!c) return { ok: false, error: 'caso desconocido' };
   if (q.accion === 'gre_caso') return { ok: true, datos: TGG_paraRobot_(c), gre: c.gre || '' };
@@ -753,6 +755,8 @@ function TGG_respWA_(texto, c) {
 /** WhatsApp: corrección pendiente, "guía" con fotos, "emitir guía <caso>". null si no es de guías. */
 function TGG_atajoWA_(ss, q, clave) {
   var texto = String(q.texto || '').trim(), ses = TG_sesion_(clave);
+  var ev = !(q.adjuntos || []).length && TGEV_comando_(texto);   // 📺 «en vivo sí/no»
+  if (ev) return TGG_respWA_(ev);
   var pp = !(q.adjuntos || []).length && TGG_pedidoPdf_(ss, texto, clave);   // 📄 "pdf guía …": manda el PDF adjunto
   if (pp) {
     var pdf = TGG_pdf_(pp.c);

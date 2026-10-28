@@ -1,0 +1,111 @@
+/**
+ * 📺 En vivo — ver la pantalla del robot (SUNAT / Quesito) mientras trabaja.  Prefijo TGEV_.
+ *
+ * Se activa o desactiva con «en vivo sí» / «en vivo no» (Telegram y WhatsApp) o desde la hoja de Guías (📺).
+ * Con el modo activo, cada corrida de guía crea un enlace secreto (?vivo=…) que llega al chat o a la hoja; el robot
+ * (guias/scripts/en_vivo.py) manda una foto cada ~2–3 s (accion gre_vivo) y la página la muestra sola. Las fotos solo
+ * viven unos minutos en la caché (nada en Drive ni en GitHub). Solo se mira: no se puede tocar nada desde la página.
+ */
+
+var TGEV_PROP_ = 'GRE_EN_VIVO';
+var TGEV_TROZO_ = 90000;   // la caché guarda hasta 100 KB por valor: la foto va en trozos
+
+function TGEV_activo_() { return PropertiesService.getScriptProperties().getProperty(TGEV_PROP_) === 'SI'; }
+function TGEV_poner_(si) { PropertiesService.getScriptProperties().setProperty(TGEV_PROP_, si ? 'SI' : 'NO'); return !!si; }
+
+/** Al pedir una corrida: si está activo, abre la transmisión del caso y devuelve el enlace ('' si está apagado). */
+function TGEV_iniciar_(c) {
+  if (!TGEV_activo_() || !c || !c.id) return '';
+  var cache = CacheService.getScriptCache(), tok = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+  cache.put('tgv_t_' + tok, String(c.id), 21600);
+  cache.put('tgv_on_' + c.id, '1', 3600);
+  cache.remove('tgv_m_' + c.id);
+  var url = TGEV_url_() + '?vivo=' + tok;
+  if (c.origen !== 'hoja') try { TGG_avisar_(c, '📺 Véalo en vivo (solo mirar; el enlace vence en unas horas): ' + url, null, false); } catch (e) {}
+  return url;
+}
+
+function TGEV_url_() {
+  var u = String(ScriptApp.getService().getUrl() || '');
+  return u.replace(/\/dev$/, '/exec');
+}
+
+/** Foto que manda el robot (doPost canal=gh, ya validada la corrida). */
+function TGEV_cuadroDelRobot_(q) {
+  var caso = String(q.caso || ''), cache = CacheService.getScriptCache();
+  if (!caso || !cache.get('tgv_on_' + caso) || !TGEV_activo_()) return { ok: true, vivo: false };
+  var img = String(q.img || '');
+  if (!img) return { ok: true, vivo: true };
+  var m = {};
+  try { m = JSON.parse(cache.get('tgv_m_' + caso) || '{}'); } catch (e) {}
+  var trozos = {}, n = Math.ceil(img.length / TGEV_TROZO_), seq = (Number(m.seq) || 0) + 1;
+  for (var i = 0; i < n; i++) trozos['tgv_i_' + caso + '_' + seq % 2 + '_' + i] = img.slice(i * TGEV_TROZO_, (i + 1) * TGEV_TROZO_);
+  cache.putAll(trozos, 600);   // dos juegos alternados: quien lee nunca ve una foto a medio escribir
+  cache.put('tgv_m_' + caso, JSON.stringify({ seq: seq, n: n, t: Date.now(), paso: String(q.paso || '').slice(0, 200) }), 600);
+  cache.put('tgv_on_' + caso, '1', 3600);
+  return { ok: true, vivo: true };
+}
+
+/** doGet ?vivo=… : la página que mira. */
+function TGEV_pagina_(tok) {
+  var t = HtmlService.createTemplate(TGEV_HTML_);
+  t.tok = String(tok || '').replace(/[^a-f0-9]/gi, '');
+  return t.evaluate().setTitle('📺 Robot en vivo').addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/** La página pregunta cada 2 s (google.script.run). Solo devuelve la foto si hay una nueva. */
+function TGEV_cuadro(tok, visto) {
+  tok = String(tok || '').replace(/[^a-f0-9]/gi, '');
+  var cache = CacheService.getScriptCache(), caso = tok && cache.get('tgv_t_' + tok);
+  if (!caso) return { vencido: true };
+  var m = {};
+  try { m = JSON.parse(cache.get('tgv_m_' + caso) || '{}'); } catch (e) {}
+  var r = { caso: caso, seq: m.seq || 0, t: m.t || 0, paso: m.paso || '', ahora: Date.now() };
+  if (!m.seq || Number(visto) === m.seq) return r;
+  var ks = [];
+  for (var i = 0; i < m.n; i++) ks.push('tgv_i_' + caso + '_' + m.seq % 2 + '_' + i);
+  var got = cache.getAll(ks), img = '';
+  for (var j = 0; j < ks.length; j++) { if (!got[ks[j]]) return r; img += got[ks[j]]; }
+  r.img = img;
+  return r;
+}
+
+/** «en vivo», «en vivo sí/no», «ver en vivo»: texto de respuesta (sin HTML) o null si no es esto. */
+function TGEV_comando_(texto) {
+  var m = String(texto || '').trim().match(/^\/?(?:ver\s+(?:el\s+robot\s+)?)?en\s*vivo\b\s*[:,]?\s*(s[ií]|no|on|off|activ\w*|desactiv\w*|apag\w*|prend\w*|encend\w*)?\s*[.!]*$/i);
+  if (!m) return null;
+  var w = (m[1] || '').toLowerCase(), si;
+  if (/^(s[ií]|on|activ|prend|encend)/.test(w)) si = TGEV_poner_(true);
+  else if (/^(no|off|desactiv|apag)/.test(w)) si = TGEV_poner_(false);
+  else si = TGEV_activo_();
+  return si ? '📺 En vivo: ACTIVADO. Cuando el robot llene una guía (vista previa, emitir o leer la factura) le mando un enlace para mirar su pantalla mientras trabaja ' +
+      '(se actualiza sola cada 2–3 s; solo se mira, no se toca nada). Para apagarlo escriba «en vivo no».'
+    : '📺 En vivo: DESACTIVADO. El robot trabaja sin transmitir. Para verlo mientras trabaja escriba «en vivo sí».';
+}
+
+var TGEV_HTML_ = [
+  '<!DOCTYPE html><html><head><base target="_top"><meta charset="utf-8"><style>',
+  'body{margin:0;background:#11161c;color:#e0e6eb;font-family:Arial,Helvetica,sans-serif}',
+  '.bar{position:sticky;top:0;display:flex;gap:10px;align-items:center;padding:8px 12px;background:#1b232c;font-size:13px;flex-wrap:wrap}',
+  '.dot{width:10px;height:10px;border-radius:50%;background:#78909c;flex:none}.dot.on{background:#43a047;box-shadow:0 0 6px #43a047}.dot.off{background:#e53935}',
+  '#paso{color:#b0bec5;flex:1;min-width:200px}#img{display:block;max-width:100%;margin:0 auto;background:#fff}',
+  '.vacio{padding:60px 16px;text-align:center;color:#90a4ae}</style></head><body>',
+  '<div class="bar"><span class="dot" id="dot"></span><b id="est">Conectando…</b><span id="paso"></span></div>',
+  '<div id="caja"><div class="vacio" id="vacio">Esperando la primera imagen del robot (arranca en 1–2 minutos: prepara el navegador e ingresa)…</div></div>',
+  '<script>',
+  'var TOK = <?= tok ?>, visto = 0, img = null, ult = 0;',
+  'function hace(ms){var s=Math.round(ms/1000);return s<60?s+" s":Math.round(s/60)+" min";}',
+  'function pinta(r){var d=document.getElementById("dot"),e=document.getElementById("est");',
+  ' if(r.vencido){d.className="dot off";e.textContent="Este enlace ya venció.";document.getElementById("vacio").textContent="Pida otra vez la guía con el modo en vivo activo para tener un enlace nuevo.";return false;}',
+  ' if(r.img){if(!img){img=document.createElement("img");img.id="img";var v=document.getElementById("vacio");v.parentNode.replaceChild(img,v);}img.src="data:image/jpeg;base64,"+r.img;visto=r.seq;}',
+  ' var edad=r.t?r.ahora-r.t:0;',
+  ' if(!r.t){d.className="dot";e.textContent="Esperando al robot…";}',
+  ' else if(edad<20000){d.className="dot on";e.textContent="En vivo";}',
+  ' else{d.className="dot";e.textContent="Sin cambios hace "+hace(edad)+" (terminó, está esperando su ✅ o se detuvo)";}',
+  ' document.getElementById("paso").textContent=r.paso?"· "+r.paso:"";return true;}',
+  'function pide(){google.script.run.withSuccessHandler(function(r){if(pinta(r))setTimeout(pide,2000);})',
+  ' .withFailureHandler(function(){setTimeout(pide,5000);}).TGEV_cuadro(TOK,visto);}',
+  'pide();',
+  '</script></body></html>'
+].join('\n');

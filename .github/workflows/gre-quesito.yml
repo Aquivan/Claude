@@ -70,7 +70,7 @@ jobs:
       - name: Preparar navegador
         timeout-minutes: 5
         run: |
-          pip install -q playwright==1.47.0
+          pip install -q playwright==1.47.0 websockets==13.1
           command -v pdftotext >/dev/null || sudo apt-get install -y -qq poppler-utils >/dev/null 2>&1 || true
           CH=$(command -v google-chrome || command -v google-chrome-stable || true)
           if [ -n "$CH" ]; then echo "CHROMIUM=$CH" >> "$GITHUB_ENV"; else timeout 240 python -m playwright install --with-deps chromium; fi

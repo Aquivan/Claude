@@ -32,6 +32,12 @@ import urllib.request
 
 from playwright.sync_api import sync_playwright
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "guias", "scripts"))
+try:
+    import en_vivo   # 📺 la pantalla al bot, si la persona lo activó
+except Exception:
+    en_vivo = None
+
 CID = "4f3b88b3-d9d6-402a-b85d-6a0bc857746a"
 SEC = f"https://api-seguridad.sunat.gob.pe/v1/clientessol/{CID}/oauth2"
 ORIG = "https://e-menu.sunat.gob.pe/cl-ti-itmenu/AutenticaMenuInternet.htm"
@@ -1126,7 +1132,9 @@ def main():
     if modo == "pdf":
         numero = str(r.get("gre") or "")
         with sync_playwright() as p:
-            nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None)
+            nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None, args=en_vivo.args() if en_vivo else [])
+            if en_vivo:
+                en_vivo.iniciar(bot, PASO_ACTUAL)
             pag = None
             try:
                 ctx, pag, fr = ingresar(nav, ruc, usuario, clave, MENU_CONSULTA, "consultagre", "GRE emitidas")
@@ -1153,7 +1161,9 @@ def main():
     paso(f"Caso recibido · modo {modo} · {len(c['bienes'])} bien(es)")
 
     with sync_playwright() as p:
-        nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None)
+        nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None, args=en_vivo.args() if en_vivo else [])
+        if en_vivo:
+            en_vivo.iniciar(bot, PASO_ACTUAL)
         pag = fr = None
         try:
             # SUNAT a veces dice «en estos momentos no se puede acceder a los servicios… reintentar en 5 minutos»:
