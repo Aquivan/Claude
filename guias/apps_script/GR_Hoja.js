@@ -113,8 +113,9 @@ function GR_hojaGuias_(ss) {
   sh.getRange(GR_FILA1_, 1, sh.getMaxRows() - GR_FILA1_ + 1, sh.getMaxColumns()).clearDataValidations();
   GR_reacomodar_(sh, 2, GR_COLS_.map(function (c) { return c.t; }));
   if (sh.getMaxRows() < 500) sh.insertRowsAfter(sh.getMaxRows(), 500 - sh.getMaxRows());
-  // Fila 1: bandas por grupo.
-  sh.getRange(1, 1, 1, n).breakApart();
+  // Fila 1: bandas por grupo. Primero se descongelan las columnas: una banda no puede quedar mitad fija y mitad móvil.
+  sh.setFrozenColumns(0);
+  sh.getRange(1, 1, 1, Math.max(n, sh.getLastColumn())).breakApart();
   var ini = 0;
   for (var i = 1; i <= n; i++) {
     if (i < n && GR_COLS_[i].g === GR_COLS_[ini].g) continue;
@@ -140,7 +141,7 @@ function GR_hojaGuias_(ss) {
     if (c.k === 'obsFinal') datos.setWrap(true).setFontSize(9);
   });
   sh.setRowHeight(1, 26); sh.setRowHeight(2, 44);
-  sh.setFrozenRows(2); sh.setFrozenColumns(3);
+  sh.setFrozenRows(2); sh.setFrozenColumns(GR_COLS_.filter(function (c) { return c.g === 'id'; }).length);   // fija toda la banda 🆔 GUÍA
   sh.getRange(GR_FILA1_, 1, sh.getMaxRows() - GR_FILA1_ + 1, n).setVerticalAlignment('middle');
   sh.getRange(GR_FILA1_, GR_col_('id'), sh.getMaxRows() - GR_FILA1_ + 1, 1).setFontColor('#607d8b').setFontSize(9);
   sh.getRange(GR_FILA1_, GR_col_('estado'), sh.getMaxRows() - GR_FILA1_ + 1, 1).setWrap(true).setFontSize(9);
