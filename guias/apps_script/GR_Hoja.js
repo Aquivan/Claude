@@ -175,7 +175,9 @@ function GR_formatoCondicional_(sh) {
   };
   var f = GR_FILA1_;
   gris(rango('truc', 'mtc'), '=LEFT($' + L('modalidad') + f + ',2)="02"');                                   // privado: sin transportista
-  gris(rango('placa', 'clic'), '=OR(LEFT($' + L('modalidad') + f + ',2)="01",$' + L('m1') + f + '="SI")');   // público o M1/L: sin vehículo
+  gris(rango('placa', 'clic'), '=$' + L('m1') + f + '="SI"');   // M1/L: sin vehículo ni conductor
+  reglas.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(LEFT($' + L('modalidad') + f + ',2)="01",$' + L('m1') + f + '<>"SI")')
+    .setBackground('#f3f8f3').setFontColor('#546e7a').setRanges([rango('placa', 'clic')]).build());   // público: opcional (tono suave, no gris)
   gris(rango('motivoTxt'), '=LEFT($' + L('motivo') + f + ',2)<>"13"');
   gris(rango('pest'), '=LEFT($' + L('motivo') + f + ',2)<>"04"');
   gris(rango('lest'), '=LEFT($' + L('motivo') + f + ',2)<>"04"');
