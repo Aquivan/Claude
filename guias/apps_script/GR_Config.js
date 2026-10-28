@@ -19,7 +19,7 @@ var GR_LIS_ = 'Listas';
 var GR_REG_ = '🧾 Registro';
 var GR_AYU_ = '📖 Ayuda';
 var GR_FILA1_ = 3;
-var GR_VERSION_ = 9;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
+var GR_VERSION_ = 10;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
 
 // Catálogos SUNAT (anexo 8 de la R.S. 097-2012 y modificatorias).
 var GR_MOTIVOS_ = ['01 - Venta', '02 - Compra', '03 - Venta con entrega a terceros', '04 - Traslado entre establecimientos de la misma empresa',
@@ -39,7 +39,7 @@ var GR_ESTADOS_ = { BORRADOR: '✏️ Borrador', LISTA: '✅ Lista para emitir',
 // Grupos de columnas: título de la banda (fila 1) y color.
 var GR_GRUPOS_ = {
   id: ['🆔 GUÍA', '#37474f'], comp: ['🧾 COMPROBANTE', '#546e7a'], dest: ['👤 DESTINATARIO', '#1565c0'], tras: ['🚚 TRASLADO', '#e65100'],
-  pub: ['🏢 TRANSPORTISTA (público)', '#6a1b9a'], priv: ['🚗 VEHÍCULO Y CONDUCTOR (privado)', '#2e7d32'],
+  pub: ['🏢 TRANSPORTISTA (público)', '#6a1b9a'], priv: ['🚗 VEHÍCULO Y CONDUCTOR (privado: obligatorio · público: opcional)', '#2e7d32'],
   par: ['📍 PARTIDA', '#00695c'], lle: ['🏁 LLEGADA', '#00838f'], otro: ['📝 OTROS', '#5d4037'], res: ['✅ RESULTADO (lo llena el robot)', '#263238'],
 };
 
@@ -76,7 +76,7 @@ var GR_COLS_ = [
   { k: 'truc', t: 'RUC transportista', v: 'cat:tra:A', g: 'pub', w: 105, f: '@', n: 'Solo transporte público. Si está en 🚛 Transportistas, llena el nombre y el MTC.' },
   { k: 'tnom', t: 'Razón social transportista', v: 'cat:tra:B', g: 'pub', w: 220 },
   { k: 'mtc', t: 'N° registro MTC', v: 'cat:tra:C', g: 'pub', w: 95, f: '@', n: 'Registro del transportista en el MTC (si lo tiene).' },
-  { k: 'placa', t: 'Placa principal', v: 'cat:veh:A', g: 'priv', w: 80, n: 'Solo transporte privado. Ej. ABC-123 (sin espacios). Si está en 🚗 Vehículos, se revisa.' },
+  { k: 'placa', t: 'Placa principal', v: 'cat:veh:A', g: 'priv', w: 80, n: 'Privado: obligatorio. Público: OPCIONAL — si el transportista le da la placa y el chofer, póngalos y van en la guía (🚛 Buscar en el MTC trae sus placas y certificados). Ej. ABC-123.' },
   { k: 'placa2', t: 'Placa secundaria', v: 'cat:veh:A', g: 'priv', w: 80, n: 'Opcional (carreta, remolque).' },
   { k: 'mtcveh', t: 'Cert. habilitación MTC', v: 'cat:veh:F', g: 'priv', w: 140, f: '@', n: 'Certificado de habilitación vehicular (MTC) de las placas, ej. 15M26029908E/15M26029906E. Se llena desde 🚗 Vehículos y va en el campo del vehículo en la guía.' },
   { k: 'cdni', t: 'DNI conductor', v: 'cat:con:A', g: 'priv', w: 85, f: '@', n: 'Si está en 👤 Conductores, llena nombres, apellidos y licencia.' },

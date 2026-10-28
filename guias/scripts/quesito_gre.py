@@ -406,22 +406,24 @@ def llenar(pag, c):
             poner(pag, "mtc", t["mtc"])
     placas = [re.sub(r"[^A-Z0-9]", "", p.upper()) for p in (t.get("placas") or [])]
     conductores = t.get("conductores") or []
-    if privado or t.get("registrar_vehiculos"):
-        if not placas or not conductores:
-            raise Alto("Faltan la placa y el chofer (DNI y licencia). No se creó nada.")
-        poner(pag, "transportista_placa_numero", placas[0])
-        if (t.get("constancias") or [None])[0]:
-            poner(pag, "tuc_vehiculo_principal", t["constancias"][0])
-        ch = conductores[0]
-        dni = re.sub(r"\D", "", str(ch.get("dni") or ""))
-        if len(dni) != 8:
-            raise Alto("El DNI del chofer no tiene 8 dígitos. No se creó nada.")
-        elegir(pag, "conductor_documento_tipo", "DNI")
-        poner(pag, "conductor_documento_numero", dni)
-        nombres, apellidos = separar_nombre(ch.get("nombre"))
-        poner(pag, "conductor_nombre", nombres)
-        poner(pag, "conductor_apellidos", apellidos)
-        poner(pag, "conductor_numero_licencia", ch.get("licencia") or "")
+    if privado and (not placas or not conductores):
+        raise Alto("Faltan la placa y el chofer (DNI y licencia). No se creó nada.")
+    if placas or conductores:   # privado: obligatorios · público: opcionales (los que dio el transportista)
+        if placas:
+            poner(pag, "transportista_placa_numero", placas[0])
+            if (t.get("constancias") or [None])[0]:
+                poner(pag, "tuc_vehiculo_principal", t["constancias"][0])
+        if conductores:
+            ch = conductores[0]
+            dni = re.sub(r"\D", "", str(ch.get("dni") or ""))
+            if len(dni) != 8:
+                raise Alto("El DNI del chofer no tiene 8 dígitos. No se creó nada.")
+            elegir(pag, "conductor_documento_tipo", "DNI")
+            poner(pag, "conductor_documento_numero", dni)
+            nombres, apellidos = separar_nombre(ch.get("nombre"))
+            poner(pag, "conductor_nombre", nombres)
+            poner(pag, "conductor_apellidos", apellidos)
+            poner(pag, "conductor_numero_licencia", ch.get("licencia") or "")
         for k, pl in enumerate(placas[1:3], start=1):   # Quesito acepta hasta 2 vehículos secundarios
             cons = t.get("constancias") or []
             if not secundario(pag, r"Agregar\s+veh[ií]culo", {"placa": pl, "tuc": cons[k] if len(cons) > k else ""}):

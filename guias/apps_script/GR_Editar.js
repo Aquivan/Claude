@@ -378,6 +378,15 @@ function GR_validar_(r, ctx) {
     if (!GR_rucValido_(txt('truc'))) F.push(txt('truc') ? 'RUC transportista inválido' : 'RUC transportista');
     if (!txt('tnom')) F.push('razón social transportista');
     if (emp && txt('truc') === emp.ruc) A.push('el transportista es la misma empresa: eso es transporte PRIVADO');
+    // Vehículo y chofer del transportista: OPCIONALES (si se ponen, se revisan y van en la guía)
+    var algo = ['placa', 'placa2', 'cdni', 'cnom', 'cape', 'clic'].some(function (k) { return txt(k); });
+    if (algo && txt('m1') !== 'SI') {
+      if (txt('placa') && !/^[A-Z0-9]{3}-?[A-Z0-9]{3}$/.test(txt('placa'))) A.push('placa del transportista (ej. ABC-123)');
+      if (txt('cdni') && !/^\d{8}$/.test(txt('cdni'))) A.push('DNI del chofer (8 dígitos)');
+      var chofer = /^\d{8}$/.test(txt('cdni')) && txt('cnom') && txt('cape') && txt('clic');
+      if (txt('cdni') && !chofer) A.push('chofer incompleto (DNI, nombres, apellidos y licencia)');
+      if (txt('via') === 'SUNAT' && (!!txt('placa') !== !!chofer)) A.push('en SUNAT el vehículo y el chofer del transportista se registran juntos: ponga los dos o ninguno');
+    }
   } else if (mod === '02' && txt('m1') !== 'SI') {
     if (!/^[A-Z0-9]{3}-?[A-Z0-9]{3}$/.test(txt('placa'))) F.push(txt('placa') ? 'placa (ej. ABC-123)' : 'placa');
     if (txt('placa2') && !/^[A-Z0-9]{3}-?[A-Z0-9]{3}$/.test(txt('placa2'))) F.push('placa secundaria');
