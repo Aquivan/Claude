@@ -284,7 +284,7 @@ function GR_validar_(r, ctx) {
   var doc = txt('docrel') || 'Factura';
   if (doc !== 'Ninguno') {
     var soloCot = txt('via') !== 'SUNAT' && /\d/.test(txt('cotizacion')) && !txt('numero');   // Quesito busca la factura desde la cotización
-    if (soloCot) A.push('sin N° de factura: se busca por la cotización (📥 Traer de Quesito lo completa)');
+    if (soloCot) A.push('sin N° de factura: se busca por la cotización (📥 Traer datos de la factura lo completa)');
     else if (!/^[A-Z0-9]{4}$/.test(txt('serie'))) F.push('serie (4 caracteres)');
     else if (doc === 'Factura' && !/^[FE]/.test(txt('serie'))) A.push('serie de factura empieza con F o E');
     else if (doc === 'Boleta' && !/^[BE]/.test(txt('serie'))) A.push('serie de boleta empieza con B o E');
@@ -347,7 +347,7 @@ function GR_validar_(r, ctx) {
   if (quesito && !(Number(r.bultos) >= 1)) F.push('N° bultos (Quesito lo pide)');
   if (quesito && doc === 'Ninguno') F.push('en Quesito la guía sale de la factura: ponga la factura o elija Emitir en = SUNAT');
   if (quesito && cod2('motivo') !== '01') A.push('el robot de Quesito por ahora solo hace ventas (motivo 01): use SUNAT para este motivo');
-  if (!quesito && !(ctx.prod[txt('id')] || []).length) F.push('productos en 📦 para SUNAT (🔎 Traer de la factura los llena)');
+  if (!quesito && !(ctx.prod[txt('id')] || []).length) F.push('productos en 📦 para SUNAT (📥 Traer datos de la factura los llena)');
   if (String(txt('m1')).toUpperCase() === 'SI') A.push('vehículo M1/L: el robot aún no lo marca, revise en la vista previa');
   if (GR_codUbigeo_(txt('pubi')) && GR_codUbigeo_(txt('pubi')) === GR_codUbigeo_(txt('lubi')) && GR_norm_(txt('pdir')) === GR_norm_(txt('ldir'))) F.push('partida y llegada son iguales');
   return { faltas: F, avisos: A };

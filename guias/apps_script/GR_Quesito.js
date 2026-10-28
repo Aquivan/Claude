@@ -1,36 +1,74 @@
 /**
- * 🚚 Guías — 📥 Traer de Quesito: con solo la empresa y el N° de factura (o de cotización) el robot de Quesito
- * (gre-quesito.yml, modo leer: NO crea nada) lee lo que trae la factura: cliente, su dirección y los productos con
- * sus cantidades. La fila se completa sola; lo que ya estaba escrito se respeta.
+ * 🚚 Guías — 📥 Traer datos de la factura: con solo la empresa y el N° de factura (o de cotización) se completa la fila
+ * (cliente, dirección, productos y cantidades). Lo que ya estaba escrito se respeta.
+ *   1. 🔎 SIRE de ventas (lo baja el robot de GitHub): al instante, sin sesión. Cliente y productos.
+ *   2. 📥 Quesito (gre-quesito.yml, modo leer: NO crea nada), solo cuando hace falta: factura que aún no está en el
+ *      SIRE (la de hoy), solo la cotización, productos que se distinguen por el lote, o falta la dirección de llegada.
+ *   Guías por SUNAT (empresas sin Quesito): solo el SIRE.
  * La columna "Producto y cantidad" dice qué lleva la guía sin llenar 📦 Productos:
  *   vacío o «total» = todo lo de la factura · «M&D 325 lote 1507: 10000; barra 5000» = solo eso.
  * Funciones GR_.
  */
 
-function GR_menuLeerQuesito() {
+function GR_menuLeerQuesito() { GR_menuTraerDatos(); }   // nombre anterior del menú
+
+function GR_menuTraerDatos() {
   var ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet();
   if (sh.getName() !== GR_HOJA_ || sh.getActiveRange().getRow() < GR_FILA1_) return ui.alert('Seleccione una o varias filas de la pestaña ' + GR_HOJA_ + '.');
-  var rg = sh.getActiveRange(), ctx = GR_contexto_(ss), msgs = [], pedidas = 0;
-  GR_leerGuias_(sh, Math.max(rg.getRow(), GR_FILA1_), rg.getLastRow()).slice(0, 10).forEach(function (x) {
-    var r = x.r, t = function (k) { return String(r[k] == null ? '' : r[k]).trim(); };
+  var rg = sh.getActiveRange(), msgs = [], pedidas = 0;
+  var filas = GR_leerGuias_(sh, Math.max(rg.getRow(), GR_FILA1_), rg.getLastRow()).slice(0, 10).map(function (x) { return x.fila; });
+  filas.forEach(function (fila) {
+    var x = GR_leerGuias_(sh, fila, fila)[0], r = x.r, t = function (k) { return String(r[k] == null ? '' : r[k]).trim(); };
     if (!r.id) return;
-    var emp = ctx.emp[t('empresa')];
+    var ctx = GR_contexto_(ss), emp = ctx.emp[t('empresa')];
     if (!emp) return msgs.push(r.id + ': falta la empresa.');
     if (/^(🚚|⏳)/.test(t('estado'))) return msgs.push(r.id + ': ya está ' + (t('estado').indexOf('🚚') === 0 ? 'emitida' : 'emitiéndose') + '.');
-    var fac = /^[A-Z0-9]{4}$/.test(t('serie').toUpperCase()) && /^\d+$/.test(t('numero')) ? t('serie').toUpperCase() + '-' + t('numero') : '';
-    var cot = t('cotizacion').replace(/\D/g, '');
+    var serie = t('serie').toUpperCase(), numero = t('numero').replace(/\D/g, '');
+    var fac = /^[A-Z0-9]{4}$/.test(serie) && numero ? serie + '-' + Number(numero) : '';
+    var cot = t('cotizacion').replace(/\D/g, ''), quesito = t('via') !== 'SUNAT';
     if (!fac && !cot) return msgs.push(r.id + ': ponga el N° de factura (serie y número) o el N° de cotización.');
+    // 1) 🔎 SIRE: al instante
+    var sire = null, porQue = [];
+    if (fac) {
+      try { var b = GR_buscarFactura_(emp.ruc, serie, numero, r.fecha, []); if (b.f) sire = b.f; else porQue.push('no está en el SIRE todavía'); }
+      catch (e) { porQue.push('SIRE: ' + e.message); }
+    } else porQue.push('solo hay cotización');
+    var m = '';
+    if (sire) {
+      var items = sire.items || [], nombres = items.map(function (it) { return GR_norm_(it.desc); });
+      var dudosos = items.length > 1 && nombres.some(function (n, i) { return nombres.indexOf(n) !== i; });   // mismo producto, distinto lote
+      var d = { fuente: 'sire', factura: fac, cliente_pdf: { ruc: sire.ruc, nombre: sire.cliente },
+        lineas: dudosos && quesito ? [] : items.map(function (it) { return { texto: it.desc, cantidad: it.cant }; }) };
+      try { m = GR_aplicarLeido_(ss, fila, d); } catch (e) { m = '⚠️ ' + e.message; }
+      var y = GR_leerGuias_(sh, fila, fila)[0].r;
+      if (quesito && dudosos) porQue.push('productos que se distinguen por el lote');
+      else if (quesito && !String(y.ldir || '').trim()) porQue.push('falta la dirección de llegada');
+      else {   // con el SIRE basta
+        sh.getRange(fila, GR_col_('msg')).setValue(m);
+        sh.getRange(fila, GR_col_('actualizado')).setValue(new Date());
+        return msgs.push(r.id + ': 🔎 ' + m.replace(/^\S+\s/, ''));
+      }
+    }
+    if (!quesito) {   // guía por SUNAT: no hay Quesito que mirar
+      sh.getRange(fila, GR_col_('msg')).setValue(m || '⚠️ ' + porQue.join('; ') + '. Vuelva a intentar cuando el robot baje el SIRE, o llene los productos en 📦.');
+      return msgs.push(r.id + ': ' + (m ? '🔎 listo' : '⚠️ ' + porQue.join('; ')));
+    }
+    // 2) 📥 Quesito: solo lo que falta (no crea nada)
     var c = GR_cob_('leer', { caso: t('caso'), hoja: r.id, datos: { empresa_ruc: emp.ruc, via: 'quesito', motivo: 'Venta', cotizacion: fac ? '' : cot,
       documento: fac ? { tipo: 'Factura', numero: fac, ruc_emisor: emp.ruc } : null } });
-    if (!c.ok || !c.caso) return msgs.push(r.id + ': ⚠️ ' + (c.error || 'el bot no aceptó el pedido'));
-    sh.getRange(x.fila, GR_col_('caso')).setValue(c.caso);
-    sh.getRange(x.fila, GR_col_('msg')).setValue('📥 Leyendo en Quesito ' + (fac ? 'la factura ' + fac : 'la cotización ' + cot) + '… (1–3 min, no se crea nada)');
-    sh.getRange(x.fila, GR_col_('actualizado')).setValue(new Date());
+    if (!c.ok || !c.caso) {
+      sh.getRange(fila, GR_col_('msg')).setValue((m ? m + ' ' : '') + '⚠️ Quesito: ' + (c.error || 'el bot no aceptó el pedido'));
+      return msgs.push(r.id + ': ' + (m ? '🔎 del SIRE; ' : '') + '⚠️ Quesito: ' + (c.error || 'el bot no aceptó el pedido'));
+    }
+    sh.getRange(fila, GR_col_('caso')).setValue(c.caso);
+    sh.getRange(fila, GR_col_('msg')).setValue('📥 Leyendo en Quesito ' + (fac ? 'la factura ' + fac : 'la cotización ' + cot) + ' (' + porQue.join('; ') + ')… 1–3 min, no se crea nada.' +
+      (m ? ' Ya puse lo del SIRE.' : ''));
+    sh.getRange(fila, GR_col_('actualizado')).setValue(new Date());
     pedidas++;
-    msgs.push(r.id + ': 📥 leyendo ' + (fac || 'cotización ' + cot) + '…');
+    msgs.push(r.id + ': ' + (sire ? '🔎 cliente del SIRE; ' : '') + '📥 Quesito (' + porQue.join('; ') + ')…');
   });
   if (pedidas) GR_programarRevision_();
-  ss.toast(msgs.join('\n') || 'No había guías en esas filas.', '📥 Traer de Quesito', 10);
+  ss.toast(msgs.join('\n') || 'No había guías en esas filas.', '📥 Traer datos de la factura', 12);
 }
 
 /** "M&D 325 lote 1507: 10000; barra 5000" → [{desc, cant}]; vacío o "total" → []. Lanza un error si falta la cantidad. */
@@ -120,9 +158,12 @@ function GR_aplicarLeido_(ss, fila, d) {
   }
   // Productos: todo lo de la factura o lo que dice "Producto y cantidad"
   var ls = (d.lineas || []).map(GR_lineaQuesito_), prods = ctx.prod[t('id')] || [], previa = GR_facturaGuardada_(t('id'));
-  if (prods.length && previa && previa !== String(d.factura || '')) { GR_reemplazarProductos_(ss, t('id'), []); prods = []; }   // eran de otra factura
-  if (ls.length) GR_guardarFactura_(t('id'), ls, d.factura);   // para 📦 Elegir productos y para «Producto y cantidad»
-  if (!ls.length) ojo.push('Quesito no trajo productos de la factura');
+  // Otra factura, o lo de Quesito (con lotes) reemplaza lo del SIRE: 📦 se vuelve a armar
+  if (prods.length && ls.length && (previa && previa !== String(d.factura || '') || d.fuente !== 'sire' && GR_fuenteGuardada_(t('id')) === 'sire')) {
+    GR_reemplazarProductos_(ss, t('id'), []); prods = [];
+  }
+  if (ls.length) GR_guardarFactura_(t('id'), ls, d.factura, d.fuente);   // para 📦 Elegir productos y para «Producto y cantidad»
+  if (!ls.length && d.fuente !== 'sire') ojo.push('Quesito no trajo productos de la factura');
   else if (!prods.length) {
     var pedido = GR_partirPedido_(x.pedido), filas = [];
     if (!pedido.length) {
@@ -143,8 +184,8 @@ function GR_aplicarLeido_(ss, fila, d) {
   GR_procesarFilas_(ss, fila, fila, ['ldir', 'lubi', 'productos', 'total']);
   // Lo que puso 📥 (para quitarlo solo si después cambian la factura y nadie lo tocó)
   try { PropertiesService.getDocumentProperties().setProperty('GR_AUTO_' + t('id'), JSON.stringify(Object.assign({ factura: String(d.factura || '') }, puestos))); } catch (e) {}
-  GR_registrar_(t('id'), '📥 De Quesito', (d.factura || '') + (d.cotizacion ? ' (cotización ' + d.cotizacion + ')' : '') + ' · ' + hecho.join(', '));
-  return '📥 De Quesito: ' + (d.factura || '') + (hecho.length ? ' → ' + hecho.join(', ') : ' (ya estaba completa)') + (ojo.length ? '. Ojo: ' + ojo.join('; ') : '') + '.';
+  GR_registrar_(t('id'), d.fuente === 'sire' ? '🔎 Del SIRE' : '📥 De Quesito', (d.factura || '') + (d.cotizacion ? ' (cotización ' + d.cotizacion + ')' : '') + ' · ' + hecho.join(', '));
+  return (d.fuente === 'sire' ? '🔎 Del SIRE: ' : '📥 De Quesito: ') + (d.factura || '') + (hecho.length ? ' → ' + hecho.join(', ') : ' (ya estaba completa)') + (ojo.length ? '. Ojo: ' + ojo.join('; ') : '') + '.';
 }
 
 /** Agrega las líneas a 📦 Productos de esa guía (al final). */
@@ -159,9 +200,9 @@ function GR_agregarProductos_(ss, id, filas) {
 /* ---------------- 📦 Elegir productos y cantidades (ventana) ---------------- */
 
 /** Líneas de la factura de una guía (las que trajo 📥; si no hay, las de 📦 completas). */
-function GR_guardarFactura_(id, ls, factura) {
+function GR_guardarFactura_(id, ls, factura, fuente) {
   try {
-    PropertiesService.getDocumentProperties().setProperty('GR_FAC_' + id, JSON.stringify({ f: String(factura || ''), l: ls.slice(0, 40).map(function (l) {
+    PropertiesService.getDocumentProperties().setProperty('GR_FAC_' + id, JSON.stringify({ f: String(factura || ''), s: fuente || 'quesito', l: ls.slice(0, 40).map(function (l) {
       return { desc: String(l.desc).slice(0, 200), unidad: l.unidad, cant: Number(l.cant) || 0, lote: String(l.lote || '').slice(0, 60) }; }) }));
   } catch (e) { console.warn('GR_guardarFactura_: ' + e.message); }
 }
@@ -169,6 +210,11 @@ function GR_guardarFactura_(id, ls, factura) {
 /** Factura de la que salieron los datos guardados de esta guía ('' si no se sabe). */
 function GR_facturaGuardada_(id) {
   try { var v = JSON.parse(PropertiesService.getDocumentProperties().getProperty('GR_FAC_' + id) || 'null'); return v && !Array.isArray(v) ? v.f || '' : ''; }
+  catch (e) { return ''; }
+}
+
+function GR_fuenteGuardada_(id) {
+  try { var v = JSON.parse(PropertiesService.getDocumentProperties().getProperty('GR_FAC_' + id) || 'null'); return v && !Array.isArray(v) ? v.s || 'quesito' : ''; }
   catch (e) { return ''; }
 }
 
@@ -190,7 +236,7 @@ function GR_olvidarFactura_(ss, sh, fila, id) {
   });
   if (String(r.pedido || '').trim()) { sh.getRange(fila, GR_col_('pedido')).setValue(''); quitado.push('«Producto y cantidad»'); }
   sh.getRange(fila, GR_col_('total')).setValue('SI');
-  var m = '🔄 Cambió la factura: quité lo que era de la anterior (' + (quitado.join(', ') || 'datos guardados') + '). Use 🚚 Guías → 📥 Traer de Quesito.' +
+  var m = '🔄 Cambió la factura: quité lo que era de la anterior (' + (quitado.join(', ') || 'datos guardados') + '). Use 🚚 Guías → 📥 Traer datos de la factura.' +
     (!auto.factura && r.ndest ? ' Revise también el cliente.' : '');
   sh.getRange(fila, GR_col_('msg')).setValue(m);
   return m;

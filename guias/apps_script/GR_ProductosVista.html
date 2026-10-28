@@ -40,10 +40,10 @@ var ID = <?= idGuia ?>, D = null;
 var fmt = function (n) { return Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 3 }); };
 function pintar() {
   if (!D.lineas.length) {
-    document.getElementById('app').innerHTML = '<div class="aviso">Esta guía aún no tiene productos. Cierre esta ventana y use <b>🚚 Guías → 📥 Traer de Quesito</b>: trae las líneas de la factura y aquí elige cuáles van y cuánto.</div>';
+    document.getElementById('app').innerHTML = '<div class="aviso">Esta guía aún no tiene productos. Cierre esta ventana y use <b>🚚 Guías → 📥 Traer datos de la factura</b>: trae las líneas de la factura y aquí elige cuáles van y cuánto.</div>';
     return;
   }
-  var h = (D.deQuesito ? '' : '<div class="aviso">Muestro lo que está en 📦 Productos. Para ver todas las líneas de la factura use antes <b>📥 Traer de Quesito</b>.</div>') +
+  var h = (D.deQuesito ? '' : '<div class="aviso">Muestro lo que está en 📦 Productos. Para ver todas las líneas de la factura use antes <b>📥 Traer datos de la factura</b>.</div>') +
     '<div class="barra"><button class="chip" onclick="todo(true)">✔ Todo lo de la factura</button><button class="chip" onclick="todo(false)">✖ Ninguno</button><span class="tot" id="tot"></span></div>' +
     '<table><tr><th></th><th>Producto</th><th style="text-align:right">En la factura</th><th>Cantidad en esta guía</th></tr>';
   D.lineas.forEach(function (l, k) {
