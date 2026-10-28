@@ -25,6 +25,12 @@ on:
         description: "Número de la factura"
         required: true
         default: "3648"
+      ingreso:
+        description: "Cómo entrar: sesion (la copiada del Chrome) o clave (correo + contraseña: prueba si pide captcha)"
+        required: false
+        default: sesion
+        type: choice
+        options: [sesion, clave]
 
 run-name: "Explorar Quesito · ${{ inputs.ruc }} · ${{ inputs.serie }}-${{ inputs.numero }}"
 
@@ -95,7 +101,7 @@ jobs:
         env:
           QUESITO_CORREO: ${{ secrets.QUESITO_CORREO }}
           QUESITO_CLAVE: ${{ secrets.QUESITO_CLAVE }}
-          QUESITO_SESION: ${{ secrets.QUESITO_SESION }}   # 🍪 sesión copiada del Chrome (sin captcha); si está, se usa primero
+          QUESITO_SESION: ${{ inputs.ingreso != 'clave' && secrets.QUESITO_SESION || '' }}   # 🍪 sesión copiada del Chrome (sin captcha); con ingreso=clave se prueba correo + contraseña
           SERIE: ${{ inputs.serie }}
           NUMERO: ${{ inputs.numero }}
           GITHUB_TOKEN: ${{ github.token }}
