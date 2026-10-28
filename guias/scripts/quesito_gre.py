@@ -315,11 +315,13 @@ def secundario(pag, boton, datos):
     """«+ Agregar vehículo / conductor» (solo arma campos en la pantalla) y llena los campos nuevos que aparecen.
     datos: {"placa": ...} o {"documento_numero", "nombre", "apellidos", "licencia"}; la clave se busca en el nombre del campo."""
     antes = set(pag.evaluate("() => [...document.querySelectorAll('input, select')].map(e => e.name).filter(Boolean)"))
+    mostrar_todo(pag)   # el botón está dentro de una sección plegada (acordeón): se abre para verlo
     b = pag.get_by_text(re.compile(boton, re.I))
-    vis = [b.nth(i) for i in range(b.count()) if b.nth(i).is_visible()]
-    if not vis:
+    if not b.count():
+        paso("Secundario: no encontré el botón «" + boton + "»")
         return False
-    vis[0].evaluate("e => e.click()")
+    vis = [b.nth(i) for i in range(b.count()) if b.nth(i).is_visible()] or [b.nth(b.count() - 1)]
+    vis[0].evaluate("e => e.click()")   # clic de la página (aunque siga oculto): solo arma los campos
     pag.wait_for_timeout(800)
     nuevos = [n for n in pag.evaluate("() => [...document.querySelectorAll('input, select')].filter(e => e.type !== 'hidden').map(e => e.name).filter(Boolean)")
               if n not in antes]
