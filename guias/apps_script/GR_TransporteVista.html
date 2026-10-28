@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Google Sans", Roboto, Arial, sans-serif; font-size: 13px; color: #263238; margin: 0; padding: 12px 16px; background: #f4f6f8; }
+  .barra { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  input[type=text] { padding: 8px 10px; border: 1px solid #cfd8dc; border-radius: 8px; font: inherit; width: 260px; }
+  .btn { border: 0; border-radius: 8px; padding: 9px 16px; font: inherit; cursor: pointer; }
+  .pri { background: #1565c0; color: #fff; font-weight: 600; } .pri:disabled { background: #90caf9; }
+  .sec { background: #eceff1; color: #37474f; }
+  .card { background: #fff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+  .tit { font-size: 15px; font-weight: 700; } .sub { color: #607d8b; font-size: 12px; margin-top: 3px; }
+  .ok { color: #2e7d32; } .mal { color: #c62828; }
+  .chip { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+  .verde { background: #e8f5e9; color: #2e7d32; } .rojo { background: #ffebee; color: #c62828; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th { text-align: left; font-size: 11px; color: #607d8b; padding: 5px 4px; border-bottom: 1px solid #e0e0e0; }
+  td { padding: 6px 4px; border-bottom: 1px solid #f2f2f2; }
+  .rol select { padding: 4px; border-radius: 6px; border: 1px solid #cfd8dc; font: inherit; }
+  label.op { display: inline-flex; gap: 6px; align-items: center; margin-right: 14px; font-size: 12px; }
+  .aviso { background: #fff8e1; color: #6d4c00; padding: 8px 12px; border-radius: 8px; font-size: 12px; margin-bottom: 10px; }
+  .pie { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 8px; }
+  .pie .msg { margin-right: auto; font-size: 12px; }
+  #res { max-height: 430px; overflow: auto; }
+  .vacio { color: #90a4ae; text-align: center; padding: 30px; }
+</style>
+</head>
+<body>
+<div class="barra">
+  <input type="text" id="q" placeholder="RUC del transportista o placa (ej. Z7B807)">
+  <button class="btn pri" id="buscar" onclick="buscar()">🔎 Buscar en el MTC</button>
+</div>
+<div id="res"><div class="vacio">Busque por <b>RUC del transportista</b> (sale su N° de registro MTC y TODOS sus vehículos con su certificado) o por <b>placa</b> (sale a qué empresa pertenece).<br>Consulta pública del Registro Nacional de Transporte de Carga del MTC.</div></div>
+<div class="pie"><span class="msg" id="msg"></span>
+  <button class="btn sec" onclick="google.script.host.close()">Cerrar</button>
+  <button class="btn pri" id="guardar" onclick="guardar()" disabled>Guardar</button>
+</div>
+<script>
+var C = JSON.parse(<?= ctxJson ?>), D = null, EI = 0;
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+document.getElementById('q').value = C.ruc || C.placa || '';
+document.getElementById('q').addEventListener('keydown', function (e) { if (e.key === 'Enter') buscar(); });
+if (C.ruc || C.placa) buscar();
+function buscar() {
+  var b = document.getElementById('buscar'); b.disabled = true; b.textContent = '⏳ Consultando…';
+  document.getElementById('res').innerHTML = '<div class="vacio">Consultando el MTC… (10–20 segundos)</div>';
+  google.script.run.withSuccessHandler(function (d) { b.disabled = false; b.textContent = '🔎 Buscar en el MTC'; D = d; EI = 0; pintar(); })
+    .withFailureHandler(function (e) { b.disabled = false; b.textContent = '🔎 Buscar en el MTC'; document.getElementById('res').innerHTML = '<div class="aviso">⚠️ ' + esc(e.message) + '</div>'; })
+    .GR_buscarTransporte(document.getElementById('q').value);
+}
+function pintar() {
+  if (!D.empresas.length) { document.getElementById('res').innerHTML = '<div class="aviso">El MTC no tiene registrada ' + (D.tipo === 'ruc' ? 'esa empresa como transportista de carga' : 'esa placa en ninguna empresa de carga') + '. ' +
+    'Si es su propio vehículo (transporte privado) es normal: ponga la placa y el certificado a mano.</div>'; return; }
+  var h = '';
+  if (D.empresas.length > 1) h += '<div class="aviso">La placa ' + esc(D.valor) + ' figura en ' + D.empresas.length + ' empresas. Elija con cuál trabaja: ' +
+    D.empresas.map(function (e, i) { return '<label class="op"><input type="radio" name="emp" value="' + i + '"' + (i === EI ? ' checked' : '') + ' onchange="EI=' + i + ';pintar()"> ' + esc(e.nombre || e.ruc) + '</label>'; }).join('') + '</div>';
+  var e = D.empresas[EI], hab = /habilitad/i.test(e.estado || '');
+  h += '<div class="card"><div class="tit">' + esc(e.nombre) + ' <span class="chip ' + (hab ? 'verde' : 'rojo') + '">' + esc(e.estado || '¿?') + (e.vigente ? ' · hasta ' + esc(e.vigente) : '') + '</span></div>' +
+    '<div class="sub">RUC ' + esc(e.ruc) + ' · N° registro MTC <b>' + esc(e.codigo) + '</b> · ' + esc(e.modalidad || '') + '</div>' +
+    '<div class="sub">' + esc(e.direccion || '') + '</div>' +
+    (e.error ? '<div class="mal">⚠️ ' + esc(e.error) + '</div>' : '') +
+    '<div style="margin-top:8px"><label class="op"><input type="checkbox" id="gEmp" checked onchange="botones()"> Guardar en 🚛 Transportistas</label>' +
+    (C.id ? '<label class="op"><input type="checkbox" id="usarEmp" checked onchange="botones()"> Usar como transportista (público) en la guía ' + esc(C.id) + '</label>' : '') + '</div></div>';
+  h += '<div class="card"><b>Vehículos</b> (' + (e.vehiculos || []).length + ')<table><tr><th>Guardar</th><th>Placa</th><th>Certificado MTC</th><th>Tipo</th><th>Año</th><th>Ejes</th><th>Carga útil</th>' + (C.id ? '<th>En la guía</th>' : '') + '</tr>';
+  (e.vehiculos || []).forEach(function (v, i) {
+    var pre = D.tipo === 'placa' && v.placa === D.valor;
+    h += '<tr><td><input type="checkbox" id="v' + i + '" checked onchange="botones()"></td><td><b>' + esc(v.placa) + '</b></td><td>' + esc(v.constancia) + '</td><td>' + esc(v.categoria) + '</td><td>' + esc(v.anio) + '</td><td>' + esc(v.ejes) +
+      '</td><td>' + esc(v.carga) + '</td>' + (C.id ? '<td class="rol"><select id="r' + i + '" onchange="botones()"><option value="">—</option><option value="p"' + (pre ? ' selected' : '') + '>Principal</option><option value="s">Secundaria</option></select></td>' : '') + '</tr>';
+  });
+  h += '</table><div class="sub">Tipo N = camión/tracto · O = remolque/semirremolque (suele ir como placa secundaria).</div></div>';
+  document.getElementById('res').innerHTML = h;
+  botones();
+}
+function botones() {
+  var b = document.getElementById('guardar'), e = D && D.empresas[EI];
+  b.disabled = !e;
+  if (!e) return;
+  var n = (e.vehiculos || []).filter(function (v, i) { return document.getElementById('v' + i).checked; }).length;
+  b.textContent = 'Guardar' + (document.getElementById('gEmp').checked ? ' transportista' : '') + (n ? ' y ' + n + ' vehículo(s)' : '') + (C.id ? ' y poner en la guía' : '');
+}
+function guardar() {
+  var e = D.empresas[EI], m = document.getElementById('msg'), b = document.getElementById('guardar');
+  var veh = (e.vehiculos || []).filter(function (v, i) { return document.getElementById('v' + i).checked; });
+  var rol = function (r) { var x = (e.vehiculos || []).filter(function (v, i) { var s = document.getElementById('r' + i); return s && s.value === r; })[0]; return x ? x.placa : ''; };
+  var usar = C.id && document.getElementById('usarEmp') && document.getElementById('usarEmp').checked;
+  b.disabled = true; m.className = 'msg'; m.textContent = 'Guardando…';
+  google.script.run.withSuccessHandler(function (r) {
+      m.className = 'msg ok'; m.textContent = '✅ ' + (r.hechos.length ? 'Agregado: ' + r.hechos.join(', ') : 'Ya estaba todo (se completó lo que faltaba)') + (r.guia ? ' · puesto en la guía ' + r.guia : '') + '.';
+      setTimeout(function () { google.script.host.close(); }, 1500); })
+    .withFailureHandler(function (er) { b.disabled = false; m.className = 'msg mal'; m.textContent = '⚠️ ' + er.message; })
+    .GR_guardarTransporte({ empresa: { ruc: e.ruc, nombre: e.nombre, codigo: e.codigo }, guardarEmpresa: document.getElementById('gEmp').checked, vehiculos: veh,
+      id: C.id, principal: rol('p'), secundaria: rol('s'), modo: usar ? 'publico' : (rol('p') ? 'privado' : '') });
+}
+</script>
+</body>
+</html>
