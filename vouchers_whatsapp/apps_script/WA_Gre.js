@@ -97,6 +97,19 @@ function WA_greTexto_(m, de, nombre, cuerpo) {
   if (/^\s*\/?(pdf|m[aá]nd[ae]me el pdf|env[ií]a(me)? el pdf|reenv[ií]a(me)? el pdf)\b/i.test(cuerpo)) return false;   // lo contesta Cobranzas
   var t = WA_greTanda_(de), vigente = WA_greVigente_(t);
   var listo = /^\s*(listo|ya|eso es todo|termin[eé]|env[ií]a(la)?|arma(la)?)\s*[.!]*\s*$/i.test(cuerpo);
+  // 🛑 "olvidar", "detener", "cancelar"…: cierra la guía que se estaba juntando (no se emite nada).
+  if (vigente && /^\s*\/?(olvid\w*|deten\w*|det[eé]n|cancel\w*|anul\w*|salir|par[ae]r?|basta|no\s+(quiero|va)|borra\w*|descarta\w*)\b/i.test(cuerpo)) {
+    WA_greCerrar_(de, t);
+    WA_enviarTexto_(de, '🗑 Listo: dejé de juntar la guía nueva. No se emitió nada.');
+    return true;
+  }
+  // Una guía que ya existe ("emitir guía fab56cac", o «emitir guía» respondiendo a su vista previa): la atiende Cobranzas.
+  var caso = /\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{8}\b/i.test(cuerpo);
+  var soloEmitir = /^\s*\/?(emitir|emite|em[ií]tel[ao]|emitirl[ao])(\s+(la\s+)?gu[ií]a)?\s*[.!]*\s*$/i.test(cuerpo);
+  if (caso || soloEmitir) {
+    if (vigente && !(t.ids || []).length) WA_greCerrar_(de, t);   // la guía "nueva" vacía que se abrió por error
+    if (caso || !vigente || !(t.ids || []).length) return false;
+  }
   if (vigente) {
     if (!listo) WA_greAnotarTexto_(de, cuerpo);
     t = WA_greTanda_(de);
@@ -120,6 +133,13 @@ function WA_greTexto_(m, de, nombre, cuerpo) {
   WA_enviarTexto_(de, '🚚 *Guía de remisión*: mande (o reenvíe) la factura, el ticket y la tarjeta del transportista, y escríbame o dícteme lo que sepa. ' +
     'Un minuto después de su último mensaje armo la propuesta (o escriba *listo*). Nada se emite sin su confirmación.');
   return true;
+}
+
+/** Cierra la guía que se estaba juntando: borra lo anotado y manda a la papelera los archivos temporales. */
+function WA_greCerrar_(de, t) {
+  t = t || WA_greTanda_(de);
+  (t && t.ids || []).forEach(function (id) { try { DriveApp.getFileById(id).setTrashed(true); } catch (e) {} });
+  ((t && t.claves) || []).concat(['WA_GRE_' + de]).forEach(function (k) { WA_props_().deleteProperty(k); });
 }
 
 /** Manda los archivos y TODO lo escrito a Cobranzas (la IA lo analiza junto). */
