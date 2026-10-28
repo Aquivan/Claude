@@ -783,7 +783,7 @@ function TGG_atajoWA_(ss, q, clave) {
     }
   }
   // «Emitir» / «emítela» a secas, justo después de la vista previa de una guía: es esa guía (no las retenciones por emitir).
-  var sola = /^\s*\/?(emitir|emite|em[ií]tel[ao]|emitirl[ao]|s[ií],?\s*emit\w*|ok,?\s*emit\w*)\s*[.!]*\s*$/i.test(texto);
+  var sola = /^\s*\/?(emitir|emite|em[ií]tel[ao]|emitirl[ao]|s[ií],?\s*emit\w*|ok,?\s*emit\w*)(\s+(la\s+)?gu[ií]a)?\s*[.!]*\s*$/i.test(texto);
   var ab = sola && !(q.adjuntos || []).length && TGG_abierta_(clave), cab = ab && TGG_leer_(ss, ab);
   if (cab && cab.estado === 'Vista previa lista') return TGG_botonWA_({ id: cab.id }, null, 'em', clave.slice(2));
   if (!(/^\/?gu[ií]a\b/i.test(texto) || (TGG_PIDE_RX_.test(texto) && /\b(emit|hac|haz|gener|sac|arm|necesit|quiero)/i.test(texto)))) return null;
