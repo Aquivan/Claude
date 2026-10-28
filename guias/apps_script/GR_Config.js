@@ -19,7 +19,7 @@ var GR_LIS_ = 'Listas';
 var GR_REG_ = '🧾 Registro';
 var GR_AYU_ = '📖 Ayuda';
 var GR_FILA1_ = 3;
-var GR_VERSION_ = 5;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
+var GR_VERSION_ = 6;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
 
 // Catálogos SUNAT (anexo 8 de la R.S. 097-2012 y modificatorias).
 var GR_MOTIVOS_ = ['01 - Venta', '02 - Compra', '03 - Venta con entrega a terceros', '04 - Traslado entre establecimientos de la misma empresa',
@@ -65,7 +65,9 @@ var GR_COLS_ = [
   { k: 'motivo', t: 'Motivo de traslado', g: 'tras', w: 170, v: GR_MOTIVOS_, n: 'Catálogo 20 de SUNAT. Lo normal: 01 - Venta.' },
   { k: 'motivoTxt', t: 'Descripción (motivo 13)', g: 'tras', w: 150, n: 'Solo si el motivo es 13 - Otros: describa el motivo.' },
   { k: 'modalidad', t: 'Modalidad', g: 'tras', w: 150, v: GR_MODALIDAD_, n: '01 Público = lo lleva un transportista (llene 🏢). 02 Privado = vehículo propio (llene 🚗).' },
+  { k: 'femision', t: 'Fecha de emisión (opcional)', g: 'tras', w: 95, v: 'fecha', f: 'dd/mm/yyyy', n: 'Vacío = HOY (lo normal). Solo si la guía debe llevar otra fecha de emisión. SUNAT no acepta una guía con fecha de emisión pasada.' },
   { k: 'fecha', t: 'Fecha inicio traslado', g: 'tras', w: 95, v: 'fecha', f: 'dd/mm/yyyy', n: 'Día en que sale la mercadería. SUNAT no acepta una fecha anterior a la emisión de la guía.' },
+  { k: 'fentrega', t: 'Entrega al transportista (opcional)', g: 'tras', w: 95, v: 'fecha', f: 'dd/mm/yyyy', n: 'Vacío = el mismo día del inicio del traslado. Solo si se entrega la carga al transportista otro día.' },
   { k: 'total', t: '¿Todo lo de la factura?', g: 'tras', w: 95, v: GR_SINO_, n: 'SI = la guía lleva TODOS los productos de la factura. NO = solo una parte: ponga los productos y cantidades en 📦 Productos.' },
   { k: 'peso', t: 'Peso bruto', g: 'tras', w: 80, f: '#,##0.00', n: 'Peso bruto total de ESTA guía. Si los productos de 📦 tienen peso, se suma solo.' },
   { k: 'upeso', t: 'Unidad', g: 'tras', w: 65, v: GR_PESO_, n: 'KGM (kilos) o TNE (toneladas).' },
@@ -91,7 +93,7 @@ var GR_COLS_ = [
   { k: 'lest', t: 'Cód. local llegada', g: 'lle', w: 75, f: '@', n: 'Solo motivo 04 (traslado entre establecimientos de la misma empresa).' },
   { k: 'obs', t: 'Observaciones', g: 'otro', w: 220, n: 'Texto libre que sale en la guía (ej. lotes, referencia del pedido).' },
   { k: 'obsFinal', t: 'Observaciones que irá en la guía (automático)', g: 'otro', w: 320,
-    n: 'Lo arma la hoja: sus observaciones + cotización, N° MTC, placas y conductor (Quesito no tiene campos propios para esos datos, así quedan en la guía). Es lo que el robot pondrá en Observaciones.' },
+    n: 'Lo arma la hoja: sus observaciones + la cotización. Placas, conductor y MTC NO se repiten aquí: van en sus propios campos de la guía (si el robot no pudiera ponerlos en su campo, los agrega aquí solo). Es lo que el robot pondrá en Observaciones.' },
   { k: 'productos', t: 'Productos (de 📦)', g: 'otro', w: 200, n: 'Resumen automático de 📦 Productos para esta guía (solo si es parcial o sin factura).' },
   { k: 'guia', t: 'N° guía emitida', g: 'res', w: 95 },
   { k: 'femi', t: 'Emitida el', g: 'res', w: 115, f: 'dd/mm/yyyy hh:mm' },

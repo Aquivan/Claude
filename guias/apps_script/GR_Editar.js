@@ -246,14 +246,7 @@ function GR_observaciones_(r) {
   var t = function (k) { return String(r[k] == null ? '' : r[k]).trim(); }, p = [];
   if (t('obs')) p.push(t('obs').replace(/\.\s*$/, ''));
   if (t('cotizacion')) p.push('Cotización N° ' + t('cotizacion'));
-  var mod = t('modalidad').slice(0, 2);
-  if (mod === '01' && t('mtc')) p.push('N° Registro MTC: ' + t('mtc'));
-  if (mod === '02' && t('m1') !== 'SI') {
-    if (t('mtcveh')) p.push('N° Registro MTC: ' + t('mtcveh'));
-    if (t('placa')) p.push('Placa N°1: ' + t('placa'));
-    if (t('placa2')) p.push('Placa N°2: ' + t('placa2'));
-    if (t('cnom') || t('cape')) p.push('Conductor: ' + (t('cnom') + ' ' + t('cape')).trim() + (t('cdni') ? ', DNI ' + t('cdni') : '') + (t('clic') ? ', Licencia ' + t('clic') : ''));
-  }
+  // Placas, conductor y MTC tienen su propio campo en la guía (Quesito y SUNAT): no se repiten aquí.
   return p.length ? p.join('. ') + '.' : '';
 }
 
@@ -310,6 +303,15 @@ function GR_validar_(r, ctx) {
   if (!mod) F.push('modalidad (público/privado)');
   if (!(r.fecha instanceof Date)) F.push('fecha de inicio');
   else if (r.fecha < ctx.hoy) A.push('fecha de inicio ya pasó (SUNAT no acepta una anterior a la emisión)');
+  // Fechas opcionales: emisión (vacío = hoy) y entrega al transportista (vacío = inicio del traslado)
+  var fe = r.femision instanceof Date ? r.femision : null, fen = r.fentrega instanceof Date ? r.fentrega : null;
+  if (txt('femision') && !fe) F.push('fecha de emisión (dd/mm/aaaa o vacía = hoy)');
+  if (fe && fe < ctx.hoy) F.push('fecha de emisión pasada (SUNAT no la acepta; déjela vacía = hoy)');
+  else if (fe && fe > ctx.hoy) A.push('fecha de emisión distinta de hoy: el robot la pone, pero revise que Quesito/SUNAT la acepten');
+  if (fe && r.fecha instanceof Date && r.fecha < fe) F.push('inicio del traslado antes de la emisión');
+  if (txt('fentrega') && !fen) F.push('fecha de entrega al transportista (dd/mm/aaaa o vacía)');
+  if (fen && r.fecha instanceof Date && fen < r.fecha) A.push('entrega al transportista antes del inicio del traslado');
+  if (txt('via') === 'SUNAT' && fe) A.push('en SUNAT SOL la emisión es siempre del día: la fecha de emisión no se usa');
   if (!(Number(r.peso) > 0)) F.push('peso bruto');
   if (!txt('upeso')) F.push('unidad de peso');
   if (txt('bultos') !== '' && !(Number(r.bultos) >= 0 && Number(r.bultos) % 1 === 0)) F.push('N° bultos (entero)');
@@ -339,6 +341,7 @@ function GR_validar_(r, ctx) {
     var nom = x === 'p' ? 'partida' : 'llegada', c = GR_codUbigeo_(txt(x + 'ubi'));
     if (!c || !ub[c]) F.push('ubigeo ' + nom);
     if (txt(x + 'dir').length < 5) F.push('dirección ' + nom);
+    else if (/^\s*(otros?|-+|\.+|s\/?n|sin\s+direcci[oó]n|no\s+(tiene|indica|registra|domiciliado)|ninguna?|varios)\s*\.?\s*$/i.test(txt(x + 'dir'))) F.push('dirección ' + nom + ' real (dice «' + txt(x + 'dir') + '»)');
     if (mot === '04' && !/^\d{4}$/.test(txt(x + 'est'))) F.push('cód. local ' + nom + ' (motivo 04)');
   });
   // La llegada es una dirección de 📍 de OTRO cliente (quedó de otra guía o de otra factura)

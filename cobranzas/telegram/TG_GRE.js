@@ -74,6 +74,8 @@ function TGG_paraRobot_(c) {
     todo_factura: !!c.todo_factura, observaciones: c.observaciones || '' };
   if (c.cotizacion) o.cotizacion = String(c.cotizacion);   // 🧀 Quesito: la factura se busca desde la cotización
   if (c.pedido) o.pedido = String(c.pedido);               // 🧀 "M&D 325 lote 1507: 10000; barra 5000" o "total"
+  if (c.fecha_emision) o.fecha_emision = String(c.fecha_emision);   // vacío = hoy
+  if (c.fecha_entrega) o.fecha_entrega = String(c.fecha_entrega);   // vacío = el día del traslado
   return JSON.stringify(o);
 }
 
