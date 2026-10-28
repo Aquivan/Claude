@@ -1382,8 +1382,14 @@ jobs:
               for line in lines:
                   qty_val = "1"
                   desc_val = ""
+                  cod_val = ""   # código del producto (CÓD. de la factura, ej. "M&D 310")
                   for elem in line.iter():
                       t = get_tag_name(elem)
+                      if t == "SellersItemIdentification" and not cod_val:
+                          for sub in elem.iter():
+                              if get_tag_name(sub) == "ID" and sub.text and sub.text.strip():
+                                  cod_val = sub.text.strip()
+                                  break
                       if t in ("InvoicedQuantity", "CreditedQuantity", "DebitedQuantity", "Quantity"):
                           if elem.text and elem.text.strip():
                               qty_val = elem.text.strip()
@@ -1404,6 +1410,9 @@ jobs:
                       pass
 
                   desc_val = " ".join(desc_val.replace("|", "-").split())
+                  cod_val = " ".join(cod_val.replace("|", "-").split())
+                  if desc_val and cod_val and not desc_val.upper().startswith(cod_val.upper()):
+                      desc_val = cod_val + " " + desc_val   # el código va delante: "M&D 310 ARROZ FORTIFICADO…"
                   if desc_val:
                       descs.append(desc_val)
                       qtys.append(qty_val)

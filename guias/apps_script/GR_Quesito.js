@@ -41,7 +41,9 @@ function GR_menuTraerDatos() {
         lineas: dudosos && quesito ? [] : items.map(function (it) { return { texto: it.desc, cantidad: it.cant }; }) };
       try { m = GR_aplicarLeido_(ss, fila, d); } catch (e) { m = '⚠️ ' + e.message; }
       var y = GR_leerGuias_(sh, fila, fila)[0].r;
+      var sinCod = items.length && !items.every(function (it) { return /^\s*[A-Z&]{1,6}[\s-]?\d{2,5}\b/i.test(it.desc); });   // SIRE antiguo: sin el CÓD.
       if (quesito && dudosos) porQue.push('productos que se distinguen por el lote');
+      else if (quesito && sinCod) porQue.push('el SIRE no trae el código del producto');
       else if (quesito && !String(y.ldir || '').trim()) porQue.push('falta la dirección de llegada');
       else {   // con el SIRE basta
         sh.getRange(fila, GR_col_('msg')).setValue(m);
@@ -146,7 +148,9 @@ function GR_aplicarLeido_(ss, fila, d) {
   if (ruc && t('ndest') === '') {
     poner('tdest', ruc.length === 11 ? GR_TIPODOC_[0] : GR_TIPODOC_[1]); poner('ndest', ruc); poner('dest', nom);
     hecho.push('cliente ' + (nom || ruc));
-  }
+  } else if (ruc && t('ndest').replace(/\D/g, '') === ruc && t('dest') === '' && nom) {   // ya tenía el RUC: falta solo el nombre
+    poner('dest', nom); hecho.push('nombre del cliente');
+  } else if (ruc && t('ndest').replace(/\D/g, '') !== ruc) ojo.push('el cliente de la fila (' + t('ndest') + ') no es el de la factura (' + ruc + ')');
   GR_procesarFilas_(ss, fila, fila, ['ndest', 'serie', 'numero']);   // 📍 Direcciones del cliente (si ya la tiene) llena la llegada
   x = GR_leerGuias_(sh, fila, fila)[0].r;
   // Llegada: si el cliente no tiene dirección en 📍, la de la factura (dirección fiscal: revísela si se entrega en otro lado)
