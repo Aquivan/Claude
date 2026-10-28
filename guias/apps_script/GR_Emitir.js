@@ -59,13 +59,16 @@ function GR_casoDeFila_(r, ctx) {
     placas: placas, constancias: t('mtcveh').split(/[\/,;\s]+/).filter(String), registrar_vehiculos: privado || !!placas.length,
     conductores: t('cdni') ? [{ dni: t('cdni').replace(/\D/g, ''), nombre: (t('cape') ? t('cape') + ', ' : '') + t('cnom'), licencia: t('clic') }] : []
   } : { modo: 'publico', ruc: t('truc').replace(/\D/g, ''), nombre: t('tnom'), mtc: t('mtc'), placas: [], conductores: [], constancias: [] };
-  var doc = t('docrel') || 'Factura';
+  var doc = t('docrel') || 'Factura', quesito = t('via') !== 'SUNAT';
+  var pedido = quesito && !prods.length ? GR_partirPedido_(t('pedido')) : [];
+  var conFactura = doc !== 'Ninguno' && t('serie') && t('numero');
   return {
     empresa_ruc: emp.ruc, motivo: GR_MOTIVO_CASO_[mot], contraparte: { ruc: t('ndest').replace(/\D/g, ''), nombre: t('dest') },
-    documento: doc === 'Ninguno' ? null : { tipo: doc === 'Boleta' ? 'Boleta de Venta' : 'Factura', numero: t('serie').toUpperCase() + '-' + t('numero'), ruc_emisor: emp.ruc },
-    bienes: prods, todo_factura: t('total').toUpperCase() !== 'NO' && doc !== 'Ninguno', peso_kg: peso, bultos: Number(r.bultos) || null,
+    documento: !conFactura ? null : { tipo: doc === 'Boleta' ? 'Boleta de Venta' : 'Factura', numero: t('serie').toUpperCase() + '-' + t('numero'), ruc_emisor: emp.ruc },
+    bienes: prods, todo_factura: t('total').toUpperCase() !== 'NO' && doc !== 'Ninguno' && !pedido.length, peso_kg: peso, bultos: Number(r.bultos) || null,
+    cotizacion: quesito && !conFactura ? t('cotizacion').replace(/\D/g, '') : '', pedido: pedido.length ? t('pedido') : '',
     partida: punto('p'), llegada: punto('l'), transporte: transporte, fecha: fecha, observaciones: t('obsFinal') || t('obs'),
-    via: t('via') === 'SUNAT' ? '' : 'quesito'
+    via: quesito ? 'quesito' : ''
   };
 }
 
@@ -83,7 +86,7 @@ function GR_pedirRobot_(modo) {
   var donde = String(r.via) === 'SUNAT' ? 'SUNAT SOL' : 'Quesito';
   if (modo === 'emitir') {
     var ok = ui.alert('✅ Emitir la guía ' + r.id + ' en ' + donde,
-      'Es una operación REAL ante SUNAT. Empresa ' + r.empresa + ' · ' + r.docrel + ' ' + r.serie + '-' + r.numero + ' · ' + r.dest +
+      'Es una operación REAL ante SUNAT. Empresa ' + r.empresa + ' · ' + (r.numero ? r.docrel + ' ' + r.serie + '-' + r.numero : 'cotización ' + r.cotizacion) + ' · ' + (r.dest || '(cliente de la factura)') +
       '\nLlegada: ' + r.ldir + '\n\nSe emite tal como está la fila ahora (si después la cambia, no se emite). ¿Emitir?', ui.ButtonSet.YES_NO);
     if (ok !== ui.Button.YES) return;
   }
@@ -123,7 +126,7 @@ function GR_revisarResultados() {
   if (ult < GR_FILA1_) return 0;
   var filas = GR_leerGuias_(sh, GR_FILA1_, ult).filter(function (x) {
     var e = String(x.r.estado);
-    return x.r.caso && (e.indexOf(GR_ESTADOS_.VISTA) === 0 || e.indexOf(GR_ESTADOS_.EMITIENDO) === 0);
+    return x.r.caso && (e.indexOf(GR_ESTADOS_.VISTA) === 0 || e.indexOf(GR_ESTADOS_.EMITIENDO) === 0 || String(x.r.msg).indexOf('📥 Leyendo') === 0);
   });
   if (!filas.length) { GR_apagarRevision_(); return 0; }
   var r = GR_cob_('estado', { casos: filas.map(function (x) { return String(x.r.caso); }) });
@@ -134,6 +137,16 @@ function GR_revisarResultados() {
     if (!e) return;
     var poner = function (k, v) { if (String(x.r[k]) !== String(v)) sh.getRange(x.fila, col(k)).setValue(v); };
     var donde = e.via === 'quesito' ? 'Quesito' : 'SUNAT';
+    if (String(x.r.msg).indexOf('📥 Leyendo') === 0) {   // 📥 Traer de Quesito (no se emitió nada)
+      if (e.estado === 'Leído de Quesito' && e.leido) {
+        var m;
+        try { m = GR_aplicarLeido_(ss, x.fila, e.leido); } catch (err) { m = '⚠️ 📥 Quesito leyó la factura pero no pude completar la fila: ' + err.message; }
+        sh.getRange(x.fila, col('msg')).setValue(m);
+      } else if (e.estado === 'No leído') sh.getRange(x.fila, col('msg')).setValue('⚠️ 📥 ' + String(e.error || 'no se pudo leer en Quesito').slice(0, 480));
+      else enCurso++;
+      sh.getRange(x.fila, col('actualizado')).setValue(new Date());
+      return;
+    }
     if (e.estado === 'Emitida') {
       poner('estado', GR_ESTADOS_.EMITIDA); poner('guia', e.gre || ''); poner('sunat', 'Emitida en ' + donde);
       if (!x.r.femi) poner('femi', new Date());

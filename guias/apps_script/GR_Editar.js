@@ -129,8 +129,13 @@ function GR_autollenar_(r, cambiadas, ctx) {
   if (r.serie) r.serie = String(r.serie).toUpperCase().replace(/\s/g, '');
   if (r.numero !== '' && /^\d+$/.test(String(r.numero).trim())) r.numero = Number(r.numero);
   if (cambio('serie') && /^B/.test(r.serie) && r.docrel === 'Factura') r.docrel = 'Boleta';
+  // "Producto y cantidad": «total» o vacío = todo lo de la factura; con productos = solo una parte
+  if (cambio('pedido') && !(ctx.prod[r.id] || []).length) {
+    var ped = []; try { ped = GR_partirPedido_(r.pedido); } catch (e) {}
+    r.total = ped.length ? 'NO' : 'SI';
+  }
   var emp = ctx.emp[String(r.empresa).trim()];
-  if (emp && !r.serie && r.docrel === 'Factura' && emp.serieFact) r.serie = emp.serieFact;
+  if (emp && !r.serie && r.docrel === 'Factura' && emp.serieFact && !(String(r.cotizacion).trim() && !r.numero)) r.serie = emp.serieFact;
   // Locales de 📍 Direcciones (varios almacenes por empresa, direcciones de clientes)
   var pl = ctx.local[String(r.plocal).trim()];
   if (pl && (cambio('plocal') || !r.pubi)) { r.pubi = pl.ubi; r.pdir = pl.dir; r.pest = pl.est || r.pest; }
@@ -247,10 +252,12 @@ function GR_validar_(r, ctx) {
   // Documento relacionado
   var doc = txt('docrel') || 'Factura';
   if (doc !== 'Ninguno') {
-    if (!/^[A-Z0-9]{4}$/.test(txt('serie'))) F.push('serie (4 caracteres)');
+    var soloCot = txt('via') !== 'SUNAT' && /\d/.test(txt('cotizacion')) && !txt('numero');   // Quesito busca la factura desde la cotización
+    if (soloCot) A.push('sin N° de factura: se busca por la cotización (📥 Traer de Quesito lo completa)');
+    else if (!/^[A-Z0-9]{4}$/.test(txt('serie'))) F.push('serie (4 caracteres)');
     else if (doc === 'Factura' && !/^[FE]/.test(txt('serie'))) A.push('serie de factura empieza con F o E');
     else if (doc === 'Boleta' && !/^[BE]/.test(txt('serie'))) A.push('serie de boleta empieza con B o E');
-    if (!/^\d{1,8}$/.test(txt('numero'))) F.push('número de ' + doc.toLowerCase());
+    if (!soloCot && !/^\d{1,8}$/.test(txt('numero'))) F.push('número de ' + doc.toLowerCase());
   }
   // Destinatario
   // Con factura/boleta, Quesito toma el destinatario del comprobante: aquí es opcional (si se pone, se revisa).
@@ -276,8 +283,9 @@ function GR_validar_(r, ctx) {
   if (!txt('upeso')) F.push('unidad de peso');
   if (txt('bultos') !== '' && !(Number(r.bultos) >= 0 && Number(r.bultos) % 1 === 0)) F.push('N° bultos (entero)');
   var parcial = txt('total') === 'NO' || doc === 'Ninguno';
-  var prods = ctx.prod[txt('id')] || [];
-  if (parcial && !prods.length) F.push('productos en 📦 Productos');
+  var prods = ctx.prod[txt('id')] || [], pedido = [];
+  try { pedido = GR_partirPedido_(r.pedido); } catch (e) { F.push('producto y cantidad: ' + e.message); }
+  if (parcial && !prods.length && !(pedido.length && txt('via') !== 'SUNAT')) F.push('productos en 📦 Productos (o escriba «Producto y cantidad»)');
   if (prods.some(function (p) { return !(p.cant > 0) || !String(p.desc).trim() || (doc === 'Ninguno' && !p.unidad); })) F.push('productos sin descripción o cantidad');
   // Transporte
   if (mod === '01') {
