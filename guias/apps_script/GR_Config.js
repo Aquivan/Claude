@@ -19,7 +19,7 @@ var GR_LIS_ = 'Listas';
 var GR_REG_ = '🧾 Registro';
 var GR_AYU_ = '📖 Ayuda';
 var GR_FILA1_ = 3;
-var GR_VERSION_ = 6;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
+var GR_VERSION_ = 7;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
 
 // Catálogos SUNAT (anexo 8 de la R.S. 097-2012 y modificatorias).
 var GR_MOTIVOS_ = ['01 - Venta', '02 - Compra', '03 - Venta con entrega a terceros', '04 - Traslado entre establecimientos de la misma empresa',
@@ -85,11 +85,12 @@ var GR_COLS_ = [
   { k: 'clic', t: 'Licencia', g: 'priv', w: 90, f: '@', n: 'Licencia de conducir (ej. Q12345678).' },
   { k: 'plocal', t: 'Local de partida', g: 'par', w: 170, v: 'locales', n: 'Almacén o local de donde sale (📍 Direcciones, uso Partida). Al elegirlo se llenan el distrito, la dirección y el código de local. Si lo deja vacío, se usa la dirección de la empresa.' },
   { k: 'pubi', t: 'Ubigeo partida', g: 'par', w: 190, v: 'ubigeo', n: 'Se llena con la dirección de la empresa (🏢 Empresas). Elija o escriba el distrito o el código de 6 dígitos.' },
-  { k: 'pdir', t: 'Dirección partida', g: 'par', w: 240 },
+  { k: 'pdir', t: 'Dirección partida', g: 'par', w: 240, v: 'direcciones', n: 'Elija de la lista (sus direcciones de 📍 Direcciones) o escriba una nueva con «- DISTRITO - PROVINCIA - DEPARTAMENTO» al final.' },
   { k: 'pest', t: 'Cód. local partida', g: 'par', w: 75, f: '@', n: 'Código de establecimiento anexo de SUNAT (0000 = domicilio fiscal). Obligatorio en el motivo 04.' },
   { k: 'llocal', t: 'Local de llegada', g: 'lle', w: 170, v: 'locales', n: 'Dirección del cliente o almacén de destino (📍 Direcciones). Al elegirla se llenan el distrito, la dirección y el código de local.' },
   { k: 'lubi', t: 'Ubigeo llegada', g: 'lle', w: 190, v: 'ubigeo', n: 'Distrito de destino. Si el cliente ya tiene dirección en 📍 Direcciones, se llena sola.' },
-  { k: 'ldir', t: 'Dirección llegada', g: 'lle', w: 240 },
+  { k: 'ldir', t: 'Dirección llegada', g: 'lle', w: 240, v: 'direcciones', n: 'Elija de la lista (las de 📍 Direcciones: al elegirla se llenan el local, el distrito y el cliente) o escriba una nueva. ' +
+    'Para traer los almacenes de un RUC: 🚚 Guías → 📍 Buscar direcciones por RUC.' },
   { k: 'lest', t: 'Cód. local llegada', g: 'lle', w: 75, f: '@', n: 'Solo motivo 04 (traslado entre establecimientos de la misma empresa).' },
   { k: 'obs', t: 'Observaciones', g: 'otro', w: 220, n: 'Texto libre que sale en la guía (ej. lotes, referencia del pedido).' },
   { k: 'obsFinal', t: 'Observaciones que irá en la guía (automático)', g: 'otro', w: 320,
