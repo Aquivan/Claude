@@ -35,10 +35,10 @@ function doGet() {
 }
 
 /** true si la clave ya se vio (y la marca). */
-function TG_yaVisto_(clave) {
+function TG_yaVisto_(clave, segundos) {
   var c = CacheService.getScriptCache();
   if (c.get('tg_v_' + clave)) return true;
-  c.put('tg_v_' + clave, '1', 21600);
+  c.put('tg_v_' + clave, '1', segundos || 21600);
   return false;
 }
 
