@@ -29,7 +29,7 @@ function onOpen() {
   var props = PropertiesService.getDocumentProperties();
   if (ss.getSheetByName(GR_HOJA_) && props.getProperty('GR_VERSION') !== String(GR_VERSION_)) {
     try { GR_preparar_(ss); props.setProperty('GR_VERSION', String(GR_VERSION_)); ss.toast('La hoja se actualizó (columnas y listas nuevas). No se borró ningún dato.', '🚚 Guías', 8); }
-    catch (e) { ss.toast('Use 🚚 Guías → 🧰 Preparar / reparar la hoja. (' + e.message + ')', '🚚 Guías', 15); }
+    catch (e) { ss.toast('La hoja necesita actualizarse: use el menú 🚚 Guías → 🧰 Preparar / reparar la hoja (no borra datos).', '🚚 Guías', 30); }
   }
   if (!ss.getSheetByName(GR_HOJA_)) {
     try { GR_preparar_(ss); props.setProperty('GR_VERSION', String(GR_VERSION_)); ss.toast('La hoja quedó lista. Empiece por 🏢 Empresas (serie de guía y dirección de partida).', '🚚 Guías', 10); }
