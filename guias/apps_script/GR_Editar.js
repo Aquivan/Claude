@@ -168,6 +168,13 @@ function GR_autollenar_(r, cambiadas, ctx) {
   // Locales de 📍 Direcciones (varios almacenes por empresa, direcciones de clientes)
   var pl = ctx.local[String(r.plocal).trim()];
   if (pl && (cambio('plocal') || !r.pubi)) { r.pubi = pl.ubi; r.pdir = pl.dir; r.pest = pl.est || r.pest; }
+  // Dirección elegida de la lista (la de 📍 Direcciones): se completa como si se hubiera elegido el local
+  [['p', 'pdir'], ['l', 'ldir']].forEach(function (x) {
+    if (!cambio(x[1]) || !String(r[x[1]]).trim()) return;
+    var dd = GR_norm_(r[x[1]]), q = ctx.dir.filter(function (d) { return GR_norm_(d.dir) === dd; })[0];
+    if (q) { r[x[0] + 'local'] = q.local || r[x[0] + 'local']; r[x[0] + 'ubi'] = q.ubi || r[x[0] + 'ubi']; if (q.est) r[x[0] + 'est'] = q.est;
+      if (x[0] === 'l' && !r.ndest && q.doc && (!emp || q.doc !== emp.ruc)) { r.ndest = q.doc; if (!r.dest) r.dest = q.nom; } }
+  });
   var ll = ctx.local[String(r.llocal).trim()];
   if (ll && (cambio('llocal') || !r.lubi)) {
     r.lubi = ll.ubi; r.ldir = ll.dir; r.lest = ll.est || r.lest;
@@ -362,6 +369,32 @@ function GR_validar_(r, ctx) {
 
 /* ============================================================ productos y catálogos */
 
+/**
+ * 📍 Direcciones: RUC/DNI revisado (col. B), ubigeo por nombre (col. E) y, si falta, un nombre de local
+ * («BKF CORPORACION · COMAS») para que aparezca en las listas de «Local de partida / llegada» de las guías.
+ */
+function GR_normalizarDirecciones_(sh, f0, f1) {
+  f0 = Math.max(2, f0); f1 = Math.min(f1, sh.getLastRow());
+  if (f1 < f0) return;
+  var v = sh.getRange(f0, 1, f1 - f0 + 1, 6).getValues(), todos = sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]).trim(); }) : [];
+  v.forEach(function (r, i) {
+    var f = f0 + i, doc = String(r[1]).replace(/\D/g, ''), cd = sh.getRange(f, 2);
+    if (!String(r[1]).trim() && !String(r[5]).trim() && !String(r[0]).trim()) { cd.setBackground(null).setNote(''); return; }
+    if (String(r[1]).trim() && doc !== String(r[1]).trim()) cd.setValue(doc);
+    var ok = !doc || (doc.length === 11 ? GR_rucValido_(doc) : /^\d{8}$/.test(doc));
+    cd.setBackground(ok ? null : '#ffcdd2').setNote(ok ? '' : (doc.length === 11 ? 'RUC inválido: no cuadra el dígito verificador.' : 'RUC de 11 o DNI de 8 dígitos.'));
+    var cu = sh.getRange(f, 5), u = String(r[4]);
+    if (u) { var et = GR_codUbigeo_(u) ? GR_ubigeos_()[GR_codUbigeo_(u)] : GR_buscarUbigeo_(u); if (et && et !== u) { cu.setValue(et); u = et; } }
+    else if (String(r[5]).trim()) { var eu = GR_ubigeoDeTexto_(r[5]); if (eu) { cu.setValue(eu); u = eu; } }
+    if (!String(r[0]).trim() && (String(r[2]).trim() || doc)) {   // sin nombre de local: se arma uno
+      var dist = ((u.match(/·\s*([^(]+)\(/) || [])[1] || '').trim();
+      var base = (String(r[2]).trim().split(/\s+/).slice(0, 2).join(' ') || doc) + (dist ? ' · ' + dist : ''), loc = base, n = 2;
+      while (todos.indexOf(loc) >= 0) loc = base + ' ' + n++;
+      sh.getRange(f, 1).setValue(loc); todos.push(loc);
+    }
+  });
+}
+
 /** Recalcula las guías con esos IDs (cuando cambian sus productos). */
 function GR_actualizarPorIds_(ss, ids) {
   ids = ids.filter(function (x) { return /^G-\d+$/.test(x); });
@@ -375,6 +408,7 @@ function GR_actualizarPorIds_(ss, ids) {
 /** En los catálogos: RUC/DNI/placa ordenados y aviso en rojo si el RUC no es válido. */
 function GR_normalizarCatalogo_(sh, rango) {
   var n = sh.getName();
+  if (n === GR_DIR_) return GR_normalizarDirecciones_(sh, rango.getRow(), rango.getLastRow());   // la 1.ª columna es el nombre del local, no el RUC
   for (var f = rango.getRow(); f <= rango.getLastRow(); f++) {
     var c = sh.getRange(f, 1), v = String(c.getValue()).trim();
     if (!v) { c.setBackground(null).setNote(''); continue; }

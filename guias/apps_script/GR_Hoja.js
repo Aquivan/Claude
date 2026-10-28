@@ -198,6 +198,7 @@ function GR_validacionesGuias_(ss, sh) {
       .setHelpText('Elija el distrito de la lista, o escriba su nombre (ej. "santa anita") o el código de 6 dígitos y se completa solo.');
     else if (c.v === 'fecha') b.requireDate().setAllowInvalid(false).setHelpText('Fecha, ej. 28/08/2026.');
     else if (c.v === 'locales') b.requireValueInRange(dir.getRange('A2:A'), true).setAllowInvalid(true).setHelpText('Elija un local de 📍 Direcciones (o deje vacío y escriba la dirección).');
+    else if (c.v === 'direcciones') b.requireValueInRange(dir.getRange('F2:F'), true).setAllowInvalid(true).setHelpText('Elija una dirección de 📍 Direcciones o escriba una nueva.');
     r.setDataValidation(b.build());
   });
 }
@@ -269,6 +270,7 @@ function GR_validacionesCatalogos_(ss) {
   v.getRange(2, 4, v.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInRange(e.getRange('A2:A'), true).setAllowInvalid(true).build());
   lista(ss.getSheetByName(GR_CON_), 5, GR_SINO_);
   var d = ss.getSheetByName(GR_DIR_); lista(d, 4, ['Llegada', 'Partida', 'Ambos']); ubigeo(d, 5);
+  try { GR_normalizarDirecciones_(d, 2, d.getLastRow()); } catch (e) { console.warn('Direcciones: ' + e.message); }   // locales sin nombre
   d.getRange(2, 2, d.getMaxRows() - 1, 1).setNumberFormat('@'); d.getRange(2, 7, d.getMaxRows() - 1, 1).setNumberFormat('@');
   // Serie de factura por defecto (FQQ1) en las empresas que ya estaban sin ella.
   if (e.getLastRow() > 1) e.getRange(2, 1, e.getLastRow() - 1, 10).getValues().forEach(function (f, i) {
