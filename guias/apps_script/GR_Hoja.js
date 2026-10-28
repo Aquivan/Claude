@@ -14,6 +14,7 @@ function onOpen() {
     .addItem('📥 Traer datos de la factura (SIRE o Quesito)', 'GR_menuTraerDatos')
     .addItem('📦 Elegir productos y cantidades de la guía', 'GR_menuElegirProductos')
     .addItem('📄 Ver la factura de la guía (vista previa)', 'GR_menuVerFactura')
+    .addItem('📍 Buscar direcciones por RUC (locales en SUNAT)', 'GR_menuBuscarDirecciones')
     .addSeparator()
     .addItem('👁 Vista previa de la guía seleccionada (no emite)', 'GR_menuVista')
     .addItem('✅ Emitir la guía seleccionada', 'GR_menuEmitir')
