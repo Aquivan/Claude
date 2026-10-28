@@ -30,7 +30,8 @@ function TG_ok_() {
   return HtmlService.createHtmlOutput('OK');
 }
 
-function doGet() {
+function doGet(e) {
+  if (e && e.parameter && e.parameter.vivo) return TGEV_pagina_(e.parameter.vivo);   // 📺 el robot en vivo (TG_EnVivo.js)
   return HtmlService.createHtmlOutput('<p style="font-family:sans-serif">🤖 Asistente de Cuentas por Cobrar y Pagar: activo.</p>');
 }
 
@@ -117,6 +118,8 @@ function TG_manejar_(u) {
   var atajo = TG_ATAJOS_[texto];
   if (atajo) return TG_comando_(ctx, atajo);
   if (TGQ_RX_.test(texto)) return TGQ_tg_(ctx, texto);   // 📋 "procesados hoy sonia" (TG_Procesados.js)
+  var vivo = TGEV_comando_(texto);   // 📺 «en vivo sí/no»: ver la pantalla del robot de guías (TG_EnVivo.js)
+  if (vivo) return TG_enviar_(chatId, TG_esc_(vivo));
   if (TGG_datoTG_(ctx, texto)) return;   // 🚚 dato suelto para la guía abierta ("es privado", "peso 30000")
   if (TGG_atajoTG_(ctx, texto)) return;   // 🚚 "emite la guía de remisión" (antes o después de las fotos) · "listo"
   if (TGR_constanciaTG_(ctx, texto)) return;   // 📄 «envíame la constancia de retención de la F003-37515 / del voucher Fotos!362 / del E001-90»

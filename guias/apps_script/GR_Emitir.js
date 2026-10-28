@@ -105,6 +105,7 @@ function GR_pedirRobot_(modo) {
     sh.getRange(fila, col('msg')).setValue('⚠️ ' + (p.error || 'no se pudo pedir'));
     return ui.alert('No se pudo pedir al robot: ' + (p.error || ''));
   }
+  if (p.vivo) GR_abrirVivo_(p.vivo, r.id);   // 📺 modo en vivo activo
   var ahora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'HH:mm');
   sh.getRange(fila, col('estado')).setValue(modo === 'emitir' ? GR_ESTADOS_.EMITIENDO + ' en ' + donde + ' (' + ahora + ')' : GR_ESTADOS_.VISTA + ' pedida en ' + donde + ' (' + ahora + ')');
   sh.getRange(fila, col('msg')).setValue(modo === 'emitir' ? 'Emitiendo… el resultado llega aquí solo (en 1–2 min) y al Telegram del administrador.'
@@ -174,4 +175,33 @@ function GR_revisarResultados() {
 
 function GR_apagarRevision_() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'GR_revisarResultados') ScriptApp.deleteTrigger(t); });
+}
+
+/* ---------------- 📺 ver el robot en vivo (la pantalla de Quesito / SUNAT mientras trabaja) ---------------- */
+
+function GR_menuEnVivo() {
+  var ui = SpreadsheetApp.getUi(), r = GR_cob_('vivo', {});
+  if (!r.ok) return ui.alert('No pude hablar con el bot: ' + (r.error || ''));
+  var si = ui.alert('📺 Ver el robot en vivo', 'Ahora está ' + (r.activo ? 'ACTIVADO' : 'DESACTIVADO') + '.\n\n' +
+    'Activado: cada vez que el robot llene una guía (vista previa, emitir o leer la factura) se abre una ventana con la pantalla del robot, ' +
+    'que se actualiza sola cada 2–3 segundos (solo se mira, no se toca nada). Vale también para Telegram y WhatsApp.\n\n¿' +
+    (r.activo ? 'Desactivarlo' : 'Activarlo') + '?', ui.ButtonSet.YES_NO);
+  if (si !== ui.Button.YES) return;
+  var x = GR_cob_('vivo', { activar: !r.activo });
+  SpreadsheetApp.getActive().toast(x.ok ? (x.activo ? '📺 En vivo ACTIVADO' : 'En vivo desactivado') : '⚠️ ' + (x.error || ''), '🚚 Guías', 6);
+}
+
+function GR_menuAbrirVivo() {
+  var u = PropertiesService.getDocumentProperties().getProperty('GR_VIVO_URL');
+  if (!u) return SpreadsheetApp.getUi().alert('Todavía no hay transmisión. Active 📺 Ver el robot en vivo y pida una vista previa, emitir o traer datos.');
+  GR_abrirVivo_(u, '');
+}
+
+function GR_abrirVivo_(url, id) {
+  PropertiesService.getDocumentProperties().setProperty('GR_VIVO_URL', url);
+  var e = function (t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var h = '<div style="font-family:Arial;font-size:13px;margin-bottom:6px">El robot arranca en 1–2 min. ' +
+    '<a href="' + e(url) + '" target="_blank">Abrir en pestaña aparte ↗</a> (más grande)</div>' +
+    '<iframe src="' + e(url) + '" style="width:100%;height:600px;border:1px solid #cfd8dc;border-radius:6px"></iframe>';
+  SpreadsheetApp.getUi().showModelessDialog(HtmlService.createHtmlOutput(h).setWidth(1000).setHeight(680), '📺 Robot en vivo' + (id ? ' · guía ' + id : ''));
 }

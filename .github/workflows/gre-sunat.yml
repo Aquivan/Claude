@@ -40,6 +40,7 @@ jobs:
         with:
           sparse-checkout: |
             gre_sunat/scripts
+            guias/scripts/en_vivo.py
             cobranzas/.clasp.json
           sparse-checkout-cone-mode: false
       - name: Dirección del bot
@@ -67,7 +68,7 @@ jobs:
       - name: Preparar navegador
         timeout-minutes: 5
         run: |
-          pip install -q playwright==1.47.0
+          pip install -q playwright==1.47.0 websockets==13.1
           CH=$(command -v google-chrome || command -v google-chrome-stable || true)
           if [ -n "$CH" ]; then echo "CHROMIUM=$CH" >> "$GITHUB_ENV"; else timeout 240 python -m playwright install --with-deps chromium; fi
       - name: GRE ${{ inputs.modo }}

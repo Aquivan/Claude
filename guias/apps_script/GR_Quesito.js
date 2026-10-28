@@ -71,6 +71,7 @@ function GR_traerDatosFila_(ss, sh, fila) {
       return msgs.push(r.id + ': ' + (m ? '🔎 del SIRE; ' : '') + '⚠️ Quesito: ' + (c.error || 'el bot no aceptó el pedido'));
     }
     sh.getRange(fila, GR_col_('caso')).setValue(c.caso);
+    if (c.vivo) PropertiesService.getDocumentProperties().setProperty('GR_VIVO_URL', c.vivo);   // 📺 se abre con «Abrir la última transmisión»
     var ojoM = (m.match(/Ojo: .*$/) || [''])[0];
     sh.getRange(fila, GR_col_('msg')).setValue('📥 Leyendo en Quesito ' + (fac ? 'la factura ' + fac : 'la cotización ' + cot) + ' (' + porQue.join('; ') + ')… 1–3 min, no se crea nada.' +
       (m ? ' Ya puse lo del SIRE.' + (ojoM ? ' ' + ojoM : '') : ''));
