@@ -64,7 +64,7 @@ function TGGH_caso_(ss, q) {
   if (c && /Emitida|Emitiendo/.test(c.estado || '')) return { ok: false, error: 'ese caso ya está ' + c.estado.toLowerCase() + (c.gre ? ' (' + c.gre + ')' : '') };
   if (!c) c = { id: Utilities.getUuid().replace(/-/g, '').slice(0, 8), creado: new Date().toISOString(), archivos: [], mensajes: [] };
   if (c.espera_run) c.decision = 'cerrar';   // una vista previa anterior que espera: se cierra sin emitir
-  ['motivo', 'contraparte', 'documento', 'bienes', 'peso_kg', 'bultos', 'partida', 'llegada', 'transporte', 'fecha', 'observaciones', 'via', 'todo_factura', 'cotizacion', 'pedido']
+  ['motivo', 'contraparte', 'documento', 'bienes', 'peso_kg', 'bultos', 'partida', 'llegada', 'transporte', 'fecha', 'observaciones', 'via', 'todo_factura', 'cotizacion', 'pedido', 'fecha_emision', 'fecha_entrega']
     .forEach(function (k) { c[k] = d[k]; });
   c.empresa_ruc = ruc; c.empresa = empresas[ruc];
   c.origen = 'hoja'; c.hoja = String(q.hoja || '');

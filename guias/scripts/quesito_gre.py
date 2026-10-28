@@ -44,6 +44,7 @@ MOTIVOS = {"venta": "01", "compra": "02", "traslado entre establecimientos de la
 ESPERA_MIN = 12
 PASO = [""]
 NOTAS = []   # avisos para la persona (lo que no se pudo poner, lo que conviene revisar)
+EXTRA_OBS = []   # lo que no se pudo poner en su propio campo (va en Observaciones)
 
 
 class Alto(Exception):
@@ -372,9 +373,20 @@ def llenar(pag, c):
     privado = t.get("modo") == "privado"
     elegir(pag, "transport_mode_id", "02" if privado else "01")
     pag.wait_for_timeout(800)
+    if c.get("fecha_emision"):   # vacío en la hoja = hoy (lo que Quesito ya trae)
+        puesta = False
+        for nombre in ("fecha_de_emision", "fecha_emision"):
+            try:
+                fecha_form(pag, nombre, c["fecha_emision"])
+                puesta = True
+                break
+            except Alto:
+                continue
+        if not puesta:
+            NOTAS.append(f"No encontré la fecha de emisión en Quesito: quedó la de hoy (no {c['fecha_emision']}).")
     if c.get("fecha"):
         fecha_form(pag, "fecha_de_inicio_de_traslado", c["fecha"])
-        fecha_form(pag, "fecha_de_entrega_al_transportista", c["fecha"])
+        fecha_form(pag, "fecha_de_entrega_al_transportista", c.get("fecha_entrega") or c["fecha"])   # vacío = el día del traslado
     if num(c.get("peso_kg")) <= 0:
         raise Alto("Falta el peso bruto (kg). No se creó nada.")
     if num(c.get("bultos")) < 1:
@@ -413,12 +425,14 @@ def llenar(pag, c):
         for k, pl in enumerate(placas[1:3], start=1):   # Quesito acepta hasta 2 vehículos secundarios
             cons = t.get("constancias") or []
             if not secundario(pag, r"Agregar\s+veh[ií]culo", {"placa": pl, "tuc": cons[k] if len(cons) > k else ""}):
-                NOTAS.append(f"No pude poner la placa secundaria {pl}: agréguela en Quesito con «+ Agregar vehículo».")
+                NOTAS.append(f"No pude poner la placa secundaria {pl} en su campo: va en Observaciones.")
+                EXTRA_OBS.append(f"Placa N°{k + 1}: {pl}" + (f" (MTC {cons[k]})" if len(cons) > k else ""))
         for ch2 in conductores[1:3]:
             nom2, ape2 = separar_nombre(ch2.get("nombre") or "")
             if not secundario(pag, r"Agregar\s+conductor", {"documento_numero": re.sub(r"\D", "", str(ch2.get("dni") or "")), "nombre": nom2,
                                                               "apellidos": ape2, "licencia": ch2.get("licencia") or ""}):
-                NOTAS.append("No pude poner el conductor secundario: agréguelo en Quesito con «+ Agregar conductor».")
+                NOTAS.append("No pude poner el conductor secundario en su campo: va en Observaciones.")
+                EXTRA_OBS.append(f"Conductor 2: {ch2.get('nombre') or ''}, DNI {ch2.get('dni') or ''}, Licencia {ch2.get('licencia') or ''}")
     # Partida: Quesito trae la del local; se cambia solo si el caso dice otra dirección clara.
     act = pag.evaluate(f"() => (document.querySelector(\"input[name='{F}[partida_direccion]']\") || {{}}).value || ''")
     pd = (c.get("partida") or {}).get("direccion") or ""
@@ -437,8 +451,9 @@ def llenar(pag, c):
                    "(ej. «Av. Los Frutales 123, Santa Anita, Lima, Lima»). No se creó nada.")
     poner(pag, "llegada_direccion", ll.get("direccion"))
     poner(pag, "llegada_ubigeo", ub)
-    if c.get("observaciones"):
-        pag.evaluate(f"(v) => {{ const e = document.querySelector(\"textarea[name='{F}[observaciones]']\"); if (e) e.value = v; }}", str(c["observaciones"])[:250])
+    obs = ". ".join([x for x in [str(c.get("observaciones") or "").strip().rstrip(".")] + EXTRA_OBS if x])   # solo lo que no tiene campo propio
+    if obs:
+        pag.evaluate(f"(v) => {{ const e = document.querySelector(\"textarea[name='{F}[observaciones]']\"); if (e) e.value = v; }}", (obs + ".")[:250])
     paso("Formulario lleno")
 
 
@@ -510,6 +525,10 @@ def factura_de_cotizacion(pag, cot):
     raise Alto(f"No encontré la cotización {cot} en Quesito de esta empresa (últimos 3 meses). No se creó nada.")
 
 
+# "OTROS", "-", "SIN DIRECCION"…: la factura no trae una dirección de verdad
+SIN_DIRECCION = re.compile(r"(?i)^\s*(otros?|-+|\.+|s/?n|sin\s+direcci[oó]n|no\s+(tiene|indica|registra|domiciliado)|ninguna?|varios)\s*\.?\s*$")
+
+
 def datos_pdf(txt, propio=""):
     """Cliente según el texto del PDF de la factura: {nombre, ruc, direccion} (lo que se encuentre con seguridad).
     El nombre debe tener letras (no "Cód. cliente: 5032565" ni un teléfono); el RUC no puede ser el de la propia empresa."""
@@ -529,7 +548,7 @@ def datos_pdf(txt, propio=""):
             out["ruc"] = m.group(1)
             break
     m = re.search(r"DIRECCI[OÓ]N\s*(?:DEL\s+CLIENTE)?\s*:\s*(.+)", txt, re.I)
-    if m and len(re.findall(r"[A-Za-z]", corta(m.group(1)))) >= 5:
+    if m and len(re.findall(r"[A-Za-z]", corta(m.group(1)))) >= 5 and not SIN_DIRECCION.match(corta(m.group(1))):
         out["direccion"] = corta(m.group(1))
     return out
 

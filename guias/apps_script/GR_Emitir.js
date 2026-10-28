@@ -45,7 +45,8 @@ function GR_casoDeFila_(r, ctx) {
   var emp = ctx.emp[t('empresa')], mot = t('motivo').slice(0, 2);
   if (!emp) throw new Error('la empresa no está en 🏢 Empresas.');
   if (!GR_MOTIVO_CASO_[mot]) throw new Error('el motivo ' + t('motivo') + ' todavía no lo hacen los robots.');
-  var fecha = r.fecha instanceof Date ? Utilities.formatDate(r.fecha, Session.getScriptTimeZone(), 'dd/MM/yyyy') : t('fecha');
+  var dma = function (k) { return r[k] instanceof Date ? Utilities.formatDate(r[k], Session.getScriptTimeZone(), 'dd/MM/yyyy') : t(k); };
+  var fecha = dma('fecha');
   var peso = Number(r.peso) || 0;
   if (/^TNE/.test(t('upeso'))) peso = peso * 1000;
   var prods = (ctx.prod[t('id')] || []).map(function (p) { return { descripcion: String(p.desc || ''), unidad: String(p.unidad || 'NIU'), cantidad: Number(p.cant) || 0 }; });
@@ -69,7 +70,8 @@ function GR_casoDeFila_(r, ctx) {
     bienes: prods, todo_factura: t('total').toUpperCase() !== 'NO' && doc !== 'Ninguno' && !pedido.length, peso_kg: peso, bultos: Number(r.bultos) || null,
     cotizacion: quesito && !conFactura ? t('cotizacion').replace(/\D/g, '') : '', pedido: pedido.length ? t('pedido') : '',
     partida: punto('p'), llegada: punto('l'), transporte: transporte, fecha: fecha, observaciones: t('obsFinal') || t('obs'),
-    via: quesito ? 'quesito' : ''
+    via: quesito ? 'quesito' : '',
+    fecha_emision: quesito ? dma('femision') : '', fecha_entrega: dma('fentrega')
   };
 }
 
