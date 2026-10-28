@@ -88,6 +88,29 @@ function GR_domicilioFiscal_(ruc) {
   } catch (e) { return null; }
 }
 
+/** 📍 Direcciones de ese RUC sin nombre: se completa el nombre y el local "20447969531 · JULIACA" pasa a "CORPORACION GRANIX · JULIACA". */
+function GR_completarNombres_(sh, ruc, nombre) {
+  if (!nombre || sh.getLastRow() < 2) return 0;
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues(), corto = nombre.split(/\s+/).slice(0, 2).join(' '), n = 0;
+  var g = SpreadsheetApp.getActive().getSheetByName(GR_HOJA_);
+  v.forEach(function (r, i) {
+    if (String(r[1]).replace(/\D/g, '') !== ruc) return;
+    if (!String(r[2]).trim()) { sh.getRange(i + 2, 3).setValue(nombre); n++; }
+    var loc = String(r[0]);
+    if (loc.indexOf(ruc) === 0) {   // el local se llamaba con el RUC: se renombra (y también en las guías que lo usan)
+      var nuevo = loc.replace(ruc, corto);
+      sh.getRange(i + 2, 1).setValue(nuevo);
+      if (g && g.getLastRow() >= GR_FILA1_) ['plocal', 'llocal'].forEach(function (k) {
+        var c = g.getRange(GR_FILA1_, GR_col_(k), g.getLastRow() - GR_FILA1_ + 1, 1), vals = c.getValues(), cambio = false;
+        vals.forEach(function (x) { if (String(x[0]) === loc) { x[0] = nuevo; cambio = true; } });
+        if (cambio) c.setValues(vals);
+      });
+      n++;
+    }
+  });
+  return n;
+}
+
 /** Lo que muestra la ventana: los locales de SUNAT y los que ya están en 📍 Direcciones para ese RUC. */
 function GR_buscarDirecciones(ruc) {
   ruc = String(ruc || '').replace(/\D/g, '');
@@ -97,6 +120,7 @@ function GR_buscarDirecciones(ruc) {
   var fiscal = GR_domicilioFiscal_(ruc), anexos = (fiscal ? [fiscal] : []).concat(GR_anexosDe_(ruc)), norm = ya.map(function (d) { return GR_norm_(d.direccion); });
   anexos.forEach(function (a) { a.yaEsta = norm.indexOf(GR_norm_(a.direccion)) >= 0; });
   var nombre = (ctx.dir.filter(function (d) { return d.doc === ruc && d.nom; })[0] || {}).nom || (fiscal && fiscal.nombre) || '';
+  if (nombre) GR_completarNombres_(ss.getSheetByName(GR_DIR_), ruc, String(nombre));   // arregla las que quedaron sin nombre
   return { ruc: ruc, nombre: String(nombre), anexos: anexos, ya: ya, estado: fiscal ? fiscal.estado + ' · ' + fiscal.condicion : '' };
 }
 
@@ -106,7 +130,9 @@ function GR_buscarDirecciones(ruc) {
  */
 function GR_agregarDirecciones(d) {
   var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(GR_DIR_), ctx = GR_contexto_(ss), ruc = String(d.ruc || '').replace(/\D/g, '');
-  var nombre = String(d.nombre || '').trim(), existentes = ctx.dir.map(function (x) { return x.doc + '|' + GR_norm_(x.dir); });
+  var nombre = String(d.nombre || '').trim();
+  if (!nombre) { var fz = GR_domicilioFiscal_(ruc); nombre = fz && fz.nombre || ''; }   // el nombre de SUNAT si no lo escribieron
+  var existentes = ctx.dir.map(function (x) { return x.doc + '|' + GR_norm_(x.dir); });
   var locales = ctx.dir.map(function (x) { return x.local; }), nuevas = [], usado = null;
   (d.items || []).forEach(function (it, i) {
     var etq = GR_ubigeos_()[GR_codUbigeo_(it.ubigeo)] || it.ubigeo || '';
@@ -120,6 +146,7 @@ function GR_agregarDirecciones(d) {
     } else local = (ctx.dir.filter(function (x) { return x.doc === ruc && GR_norm_(x.dir) === GR_norm_(it.direccion); })[0] || {}).local || '';
     if (i === Number(d.usar)) usado = { local: local, etq: etq, dir: it.direccion };
   });
+  GR_completarNombres_(sh, ruc, nombre);   // filas de ese RUC que quedaron sin nombre (o con el RUC como local)
   if (nuevas.length) {
     var ult = 1, last = sh.getLastRow();   // última fila con local, RUC o dirección (las listas desplegables no cuentan)
     if (last >= 2) sh.getRange(2, 1, last - 1, 6).getValues().forEach(function (r, i) { if (String(r[0]).trim() || String(r[1]).trim() || String(r[5]).trim()) ult = i + 2; });
