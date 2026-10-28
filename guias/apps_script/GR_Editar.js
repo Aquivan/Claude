@@ -19,7 +19,7 @@ function onEdit(e) {
  */
 function GR_aprender_(ss, f0, f1, cambiadas) {
   var toca = function (ks) { return ks.some(function (k) { return cambiadas.indexOf(k) >= 0; }); };
-  if (!toca(['cdni', 'cnom', 'cape', 'clic', 'placa', 'placa2', 'mtcveh', 'truc', 'tnom', 'mtc'])) return;
+  if (!toca(['cdni', 'cnom', 'cape', 'clic', 'placa', 'placa2', 'mtcveh', 'mtcveh2', 'truc', 'tnom', 'mtc'])) return;
   var sh = ss.getSheetByName(GR_HOJA_), ctx = GR_contexto_(ss), nuevos = [];
   var agregar = function (hoja, fila) { var h = ss.getSheetByName(hoja), ult = 1, last = h.getLastRow();
     if (last >= 2) h.getRange(2, 1, last - 1, 1).getValues().forEach(function (r, i) { if (String(r[0]).trim()) ult = i + 2; });
@@ -31,7 +31,7 @@ function GR_aprender_(ss, f0, f1, cambiadas) {
     if (/^\d{8}$/.test(dni) && !ctx.con[dni] && t('cnom') && t('cape') && t('clic')) {
       agregar(GR_CON_, [dni, t('cnom'), t('cape'), t('clic').toUpperCase(), 'SI']); ctx.con[dni] = {}; nuevos.push('conductor ' + t('cnom'));
     }
-    var mtcs = t('mtcveh').split(/[\/,;]+/).map(function (z) { return z.trim(); });
+    var mtcs = [t('mtcveh'), t('mtcveh2')];
     [t('placa'), t('placa2')].forEach(function (pl, i) {
       pl = GR_placa_(pl);
       if (!/^[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(pl) || ctx.veh[pl]) return;
@@ -259,10 +259,13 @@ function GR_autollenar_(r, cambiadas, ctx) {
     if (!r.modalidad) r.modalidad = GR_MODALIDAD_[1];
   }
   if (r.placa2) r.placa2 = GR_placa_(r.placa2);
-  if (r.placa && !r.mtcveh) {
-    var mt = [ctx.veh[r.placa], ctx.veh[r.placa2]].filter(function (x) { return x && x.mtc; }).map(function (x) { return x.mtc; });
-    if (mt.length) r.mtcveh = mt.join('/');
-  }
+  // Certificado MTC de cada placa (en su columna). Lo de antes en una sola celda «A/B» se separa.
+  if (/[\/,;]/.test(String(r.mtcveh)) && !r.mtcveh2) { var pz = String(r.mtcveh).split(/[\/,;]+/); r.mtcveh = pz[0].trim(); r.mtcveh2 = (pz[1] || '').trim(); }
+  [['placa', 'mtcveh'], ['placa2', 'mtcveh2']].forEach(function (x) {
+    var vv = ctx.veh[r[x[0]]];
+    if (r[x[0]] && vv && vv.mtc && (!r[x[1]] || cambio(x[0]))) r[x[1]] = vv.mtc;   // al cambiar la placa, su certificado
+    if (!r[x[0]] && cambio(x[0])) r[x[1]] = '';
+  });
   if (r.cdni !== '') {
     r.cdni = String(r.cdni).replace(/\D/g, '');
     var co = ctx.con[r.cdni];

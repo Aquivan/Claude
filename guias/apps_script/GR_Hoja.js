@@ -122,7 +122,7 @@ function GR_hojaGuias_(ss) {
   if (sh.getMaxColumns() < n) sh.insertColumnsAfter(sh.getMaxColumns(), n - sh.getMaxColumns());
   // Las listas viejas se quitan ANTES de mover datos (si no, un dato movido choca con la lista de la columna vieja).
   sh.getRange(GR_FILA1_, 1, sh.getMaxRows() - GR_FILA1_ + 1, sh.getMaxColumns()).clearDataValidations();
-  GR_reacomodar_(sh, 2, GR_COLS_.map(function (c) { return c.t; }));
+  GR_reacomodar_(sh, 2, GR_COLS_.map(function (c) { return c.t; }), { 'Cert. habilitación MTC': 'Cert. MTC placa principal' });   // título anterior
   if (sh.getMaxRows() < 500) sh.insertRowsAfter(sh.getMaxRows(), 500 - sh.getMaxRows());
   // Fila 1: bandas por grupo. Primero se descongelan las columnas: una banda no puede quedar mitad fija y mitad móvil.
   sh.setFrozenColumns(0);
