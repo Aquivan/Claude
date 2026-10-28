@@ -13,6 +13,38 @@ function onEdit(e) {
   }
 }
 
+/**
+ * Lo nuevo que se escribe en una guía se guarda en su pestaña para la próxima vez:
+ * chofer completo → 👤 Conductores · placa → 🚗 Vehículos (con su certificado MTC) · transportista → 🚛 Transportistas.
+ */
+function GR_aprender_(ss, f0, f1, cambiadas) {
+  var toca = function (ks) { return ks.some(function (k) { return cambiadas.indexOf(k) >= 0; }); };
+  if (!toca(['cdni', 'cnom', 'cape', 'clic', 'placa', 'placa2', 'mtcveh', 'truc', 'tnom', 'mtc'])) return;
+  var sh = ss.getSheetByName(GR_HOJA_), ctx = GR_contexto_(ss), nuevos = [];
+  var agregar = function (hoja, fila) { var h = ss.getSheetByName(hoja), ult = 1, last = h.getLastRow();
+    if (last >= 2) h.getRange(2, 1, last - 1, 1).getValues().forEach(function (r, i) { if (String(r[0]).trim()) ult = i + 2; });
+    h.getRange(ult + 1, 1, 1, fila.length).setValues([fila]); };
+  GR_leerGuias_(sh, f0, f1).forEach(function (x) {
+    var r = x.r, t = function (k) { return String(r[k] == null ? '' : r[k]).trim(); };
+    if (!r.id) return;
+    var dni = t('cdni').replace(/\D/g, '');
+    if (/^\d{8}$/.test(dni) && !ctx.con[dni] && t('cnom') && t('cape') && t('clic')) {
+      agregar(GR_CON_, [dni, t('cnom'), t('cape'), t('clic').toUpperCase(), 'SI']); ctx.con[dni] = {}; nuevos.push('conductor ' + t('cnom'));
+    }
+    var mtcs = t('mtcveh').split(/[\/,;]+/).map(function (z) { return z.trim(); });
+    [t('placa'), t('placa2')].forEach(function (pl, i) {
+      pl = GR_placa_(pl);
+      if (!/^[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(pl) || ctx.veh[pl]) return;
+      agregar(GR_VEH_, [pl, '', 'NO', t('empresa'), 'SI', mtcs[i] || '']); ctx.veh[pl] = {}; nuevos.push('placa ' + pl);
+    });
+    var ruc = t('truc').replace(/\D/g, '');
+    if (GR_rucValido_(ruc) && !ctx.tra[ruc] && t('tnom')) {
+      agregar(GR_TRA_, [ruc, t('tnom'), t('mtc'), 'SI']); ctx.tra[ruc] = {}; nuevos.push('transportista ' + t('tnom'));
+    }
+  });
+  if (nuevos.length) ss.toast('Guardado para la próxima vez: ' + nuevos.join(', ') + '.', '🚚 Guías', 6);
+}
+
 function GR_alEditar_(e) {
   if (!e || !e.range) return;
   var sh = e.range.getSheet(), n = sh.getName(), ss = sh.getParent();
@@ -36,6 +68,7 @@ function GR_alEditar_(e) {
       });
     }
     GR_procesarFilas_(ss, f0, f1, cambiadas);
+    try { GR_aprender_(ss, f0, f1, cambiadas); } catch (err) { console.warn('aprender: ' + err.message); }
   } else if (n === GR_PROD_) {
     var ids = sh.getRange(Math.max(2, e.range.getRow()), 1, e.range.getNumRows(), 1).getValues().map(function (r) { return String(r[0]); });
     if (e.oldValue) ids.push(String(e.oldValue));
@@ -198,6 +231,18 @@ function GR_autollenar_(r, cambiadas, ctx) {
       var lle = dirs.filter(function (d) { return /llegada|ambos/i.test(d.uso); });
       if (!r.lubi && !r.ldir && lle.length === 1) { r.lubi = lle[0].ubi; r.ldir = lle[0].dir; if (!r.lest) r.lest = lle[0].est; }
     }
+  }
+  // Elegido por nombre (de la lista): se completa el resto
+  if (cambio('tnom') && r.tnom && !r.truc) Object.keys(ctx.tra).some(function (k) {
+    if (GR_norm_(ctx.tra[k].nom) !== GR_norm_(r.tnom)) return false; r.truc = k; return true; });
+  if ((cambio('cnom') || cambio('cape') || cambio('clic')) && !r.cdni) Object.keys(ctx.con).some(function (k) {
+    var c = ctx.con[k];
+    var igual = (cambio('clic') && r.clic && String(c.lic).toUpperCase() === String(r.clic).toUpperCase()) ||
+      (cambio('cnom') && r.cnom && GR_norm_(c.nom) === GR_norm_(r.cnom)) || (cambio('cape') && r.cape && GR_norm_(c.ape) === GR_norm_(r.cape));
+    if (!igual) return false; r.cdni = k; return true; });
+  if (cambio('dest') && r.dest && !r.ndest) {
+    var dq = ctx.dir.filter(function (d) { return d.doc && GR_norm_(d.nom) === GR_norm_(r.dest); })[0];
+    if (dq) r.ndest = dq.doc;
   }
   // Transportista
   if (r.truc !== '') {
