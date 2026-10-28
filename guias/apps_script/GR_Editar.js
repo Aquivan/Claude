@@ -300,7 +300,7 @@ function GR_autollenar_(r, cambiadas, ctx) {
 function GR_observaciones_(r) {
   var t = function (k) { return String(r[k] == null ? '' : r[k]).trim(); }, p = [];
   if (t('obs')) p.push(t('obs').replace(/\.\s*$/, ''));
-  if (t('cotizacion')) p.push('Cotización N° ' + t('cotizacion'));
+  if (t('cotizacion') && t('cotobs').toUpperCase() === 'SI') p.push('Cotización N° ' + t('cotizacion'));   // por defecto NO va
   // Placas, conductor y MTC tienen su propio campo en la guía (Quesito y SUNAT): no se repiten aquí.
   return p.length ? p.join('. ') + '.' : '';
 }
