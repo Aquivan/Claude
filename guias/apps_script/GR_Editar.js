@@ -7,7 +7,10 @@
 var GR_FIJOS_ = [GR_ESTADOS_.EMITIENDO, GR_ESTADOS_.EMITIDA, GR_ESTADOS_.ANULADA];
 
 function onEdit(e) {
-  try { GR_alEditar_(e); } catch (err) { console.warn('onEdit: ' + (err && err.stack || err)); }
+  try { GR_alEditar_(e); } catch (err) {
+    console.warn('onEdit: ' + (err && err.stack || err));
+    if (/versión anterior/.test(String(err && err.message))) try { e.source.toast(err.message, '🚚 Guías', 15); } catch (x) {}
+  }
 }
 
 function GR_alEditar_(e) {
@@ -28,8 +31,20 @@ function GR_alEditar_(e) {
   }
 }
 
+/** Las columnas de la hoja son las del código (si no, nada se lee ni se escribe: iría a la columna equivocada). */
+var GR_AL_DIA_ = false;
+function GR_hojaAlDia_(sh) {
+  if (GR_AL_DIA_) return;
+  var tit = sh.getRange(2, 1, 1, GR_COLS_.length).getValues()[0].map(function (t) { return String(t).trim(); });
+  var mal = GR_COLS_.filter(function (c, j) { return tit[j] !== c.t; });
+  if (mal.length) throw new Error('la hoja tiene columnas de una versión anterior (falta «' + mal[0].t + '»). ' +
+    'Use el menú 🚚 Guías → 🧰 Preparar / reparar la hoja (no borra datos) y vuelva a intentar.');
+  GR_AL_DIA_ = true;
+}
+
 /** Lee la hoja de 🚚 Guías como objetos {fila, r:{clave: valor}}. */
 function GR_leerGuias_(sh, f0, f1) {
+  GR_hojaAlDia_(sh);
   var v = sh.getRange(f0, 1, f1 - f0 + 1, GR_COLS_.length).getValues();
   return v.map(function (fila, i) {
     var r = {};
