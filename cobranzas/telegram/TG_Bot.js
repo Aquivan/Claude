@@ -42,6 +42,11 @@ function TG_yaVisto_(clave) {
   return false;
 }
 
+/** Deja de recordar una acción (cuando falló: el mismo botón vuelve a servir). */
+function TG_olvidar_(clave) {
+  try { CacheService.getScriptCache().remove('tg_v_' + clave); } catch (e) {}
+}
+
 function TG_manejar_(u) {
   var ss = TG_ss_();
   if (u.callback_query) return TG_alBoton_(ss, u.callback_query);
