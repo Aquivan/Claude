@@ -12,6 +12,7 @@ function onOpen() {
     .addItem('🔍 Revisar todas las guías', 'GR_menuRevisar')
     .addItem('📦 Ver productos de la guía seleccionada', 'GR_menuProductos')
     .addItem('📥 Traer de Quesito: cliente y productos (factura o cotización)', 'GR_menuLeerQuesito')
+    .addItem('📦 Elegir productos y cantidades de la guía', 'GR_menuElegirProductos')
     .addItem('🔎 Traer cliente y productos de la factura (seleccionadas)', 'GR_menuTraerFactura')
     .addSeparator()
     .addItem('👁 Vista previa de la guía seleccionada (no emite)', 'GR_menuVista')

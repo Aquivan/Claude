@@ -79,7 +79,8 @@ function GR_calzarPedido_(pedido, lineas) {
 
 /** Una línea del formulario de Quesito ("M&D 325 BARRA … NIU 19200 … LOTE 1507 FV 150527") → producto de 📦. */
 function GR_lineaQuesito_(l) {
-  var t = String(l.texto || '').replace(/\b(Eliminar|Quitar|Borrar)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+  var t = String(l.texto || '').replace(/\b(Eliminar|Quitar|Borrar)\b/gi, ' ').replace(/Producto\s*-\s*Servicio\s*\(CAT[AÁ]LOGO\)/gi, ' ')
+    .replace(/\bDetalle adicional\b|\bCantidad\b|\bDAM\b|M[AÁ]S INFO|\bU\.M\.|\bElegir\b/gi, ' ').replace(/\s+/g, ' ').trim();
   var u = t.match(/\b(NIU|KGM|BX|BG|SA|PK|TNE|LTR|GLL|BO|CA|DZN|MTR|ZZ)\b/);
   var lote = t.match(/\bLOTE\b[\s:.N°º]*[\w-]+(\s+F\.?\s*V\.?[\s:.]*[\w\/-]+)?/i);
   var unidad = GR_UNIDADES_.filter(function (x) { return u && x.indexOf(u[1] + ' ') === 0; })[0] || GR_UNIDADES_[0];
@@ -118,6 +119,7 @@ function GR_aplicarLeido_(ss, fila, d) {
   }
   // Productos: todo lo de la factura o lo que dice "Producto y cantidad"
   var ls = (d.lineas || []).map(GR_lineaQuesito_), prods = ctx.prod[t('id')] || [];
+  if (ls.length) GR_guardarFactura_(t('id'), ls);   // para 📦 Elegir productos y para «Producto y cantidad»
   if (!ls.length) ojo.push('Quesito no trajo productos de la factura');
   else if (!prods.length) {
     var pedido = GR_partirPedido_(x.pedido), filas = [];
@@ -148,4 +150,106 @@ function GR_agregarProductos_(ss, id, filas) {
   var v = filas.map(function (f, i) { return [id, i + 1, '', f.p.desc, f.p.unidad, f.cant, f.p.lote, '', '', f.completa]; });
   if (p.getMaxRows() < ult + v.length) p.insertRowsAfter(p.getMaxRows(), ult + v.length - p.getMaxRows() + 50);
   p.getRange(ult + 1, 1, v.length, 10).setValues(v);
+}
+
+/* ---------------- 📦 Elegir productos y cantidades (ventana) ---------------- */
+
+/** Líneas de la factura de una guía (las que trajo 📥; si no hay, las de 📦 completas). */
+function GR_guardarFactura_(id, ls) {
+  try {
+    PropertiesService.getDocumentProperties().setProperty('GR_FAC_' + id, JSON.stringify(ls.slice(0, 40).map(function (l) {
+      return { desc: String(l.desc).slice(0, 200), unidad: l.unidad, cant: Number(l.cant) || 0, lote: String(l.lote || '').slice(0, 60) }; })));
+  } catch (e) { console.warn('GR_guardarFactura_: ' + e.message); }
+}
+
+function GR_facturaDe_(ss, id) {
+  try { var v = PropertiesService.getDocumentProperties().getProperty('GR_FAC_' + id); if (v) return { lineas: JSON.parse(v), deQuesito: true }; } catch (e) {}
+  var ps = GR_contexto_(ss).prod[id] || [];
+  return { lineas: ps.map(function (p) { return { desc: String(p.desc), unidad: GR_UNIDADES_.filter(function (u) { return u.indexOf(p.unidad + ' ') === 0; })[0] || GR_UNIDADES_[0],
+    cant: p.completa === 'SI' ? p.cant : 0, lote: String(p.lote || '') }; }), deQuesito: false };
+}
+
+/** Nombre corto para mostrar: "M&D 325 BARRA A BASE DE EXTRUIDOS" (sin lote ni cantidad). */
+function GR_corto_(l) {
+  var d = String(l.desc || '').replace(String(l.lote || '-'), ' ').replace(/\bNIU\b|\bKGM\b/g, ' ').replace(/\b\d[\d.,]*\b(?!\S*[A-Za-z])/g, function (m) {
+    return /^\d{3}$/.test(m) ? m : ' '; }).replace(/\s+/g, ' ').trim();
+  return d.replace(/\s+S\/\.?$/, '').slice(0, 70);
+}
+
+function GR_menuElegirProductos() {
+  var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), ui = SpreadsheetApp.getUi();
+  var f = sh.getActiveRange().getRow(), id = sh.getName() === GR_HOJA_ && f >= GR_FILA1_ ? String(sh.getRange(f, 1).getValue()) : '';
+  if (!id) return ui.alert('Seleccione la fila de la guía en ' + GR_HOJA_ + '.');
+  var t = HtmlService.createTemplateFromFile('GR_ProductosVista');
+  t.idGuia = id;
+  ui.showModalDialog(t.evaluate().setWidth(760).setHeight(520), '📦 Productos de la guía ' + id);
+}
+
+/** Lo que muestra la ventana: líneas de la factura y lo que ya va en la guía. */
+function GR_datosProductos(id) {
+  var ss = SpreadsheetApp.getActive(), fac = GR_facturaDe_(ss, id), ps = GR_contexto_(ss).prod[id] || [];
+  var usadas = {};
+  var lineas = fac.lineas.map(function (l, i) {
+    var p = null;
+    for (var j = 0; j < ps.length && !p; j++) if (!usadas[j] && String(ps[j].desc) === String(l.desc)) { usadas[j] = true; p = ps[j]; }
+    return { i: i, nombre: GR_corto_(l), lote: l.lote, unidad: String(l.unidad).split(' - ')[0], factura: l.cant, va: !!p || !ps.length, cant: p ? p.cant : l.cant };
+  });
+  return { id: id, lineas: lineas, deQuesito: fac.deQuesito };
+}
+
+/** Guarda lo elegido: 📦 Productos de la guía, «Producto y cantidad» y «¿Todo lo de la factura?». */
+function GR_guardarProductos(id, elegidos) {
+  var ss = SpreadsheetApp.getActive(), fac = GR_facturaDe_(ss, id).lineas;
+  var filas = (elegidos || []).filter(function (e) { return fac[e.i] && Number(e.cant) > 0; }).map(function (e) {
+    var l = fac[e.i];
+    return { p: l, cant: Number(e.cant), completa: l.cant && Math.abs(Number(e.cant) - l.cant) < 1e-9 ? 'SI' : 'NO' };
+  });
+  if (!filas.length) throw new Error('Elija al menos un producto con cantidad.');
+  var malas = filas.filter(function (f) { return f.p.cant && f.cant > f.p.cant + 1e-9; });
+  if (malas.length) throw new Error('«' + GR_corto_(malas[0].p) + '» lleva más (' + malas[0].cant + ') que la factura (' + malas[0].p.cant + ').');
+  GR_reemplazarProductos_(ss, id, filas);
+  var todo = filas.length === fac.length && filas.every(function (f) { return f.completa === 'SI'; });
+  var sh = ss.getSheetByName(GR_HOJA_), fila = GR_filaDe_(sh, id);
+  if (fila) {
+    sh.getRange(fila, GR_col_('pedido')).setValue(todo ? 'total' : GR_textoPedido_(filas));
+    sh.getRange(fila, GR_col_('total')).setValue(todo ? 'SI' : 'NO');
+    GR_procesarFilas_(ss, fila, fila, ['productos', 'total']);
+  }
+  GR_registrar_(id, '📦 Productos elegidos', filas.length + ' de ' + fac.length + (todo ? ' (todo)' : ''));
+  return { ok: true, texto: todo ? 'Todo lo de la factura' : filas.length + ' de ' + fac.length + ' producto(s)' };
+}
+
+/** "M&D 325 lote 1507: 19200; M&D 325 lote 2108: 30000" (lo que se lee en «Producto y cantidad»). */
+function GR_textoPedido_(filas) {
+  return filas.map(function (f) {
+    var cod = (GR_corto_(f.p).match(/^\S+(\s+\d{2,})?/) || [GR_corto_(f.p)])[0];
+    var lote = (String(f.p.lote).match(/LOTE[\s:.N°º]*([\w-]+)/i) || [])[1];
+    return (cod + (lote ? ' lote ' + lote : '')).trim() + ': ' + f.cant;
+  }).join('; ');
+}
+
+/** Cambia las líneas de 📦 Productos de una guía por estas (las demás guías no se tocan). */
+function GR_reemplazarProductos_(ss, id, filas) {
+  var p = ss.getSheetByName(GR_PROD_), ult = GR_ultimaFilaProductos_(p);
+  var v = ult >= 2 ? p.getRange(2, 1, ult - 1, 10).getValues() : [];
+  var otras = v.filter(function (r) { return String(r[0]).trim() !== id && String(r).replace(/,/g, '').trim() !== ''; });
+  var nuevas = filas.map(function (f, i) { return [id, i + 1, '', f.p.desc, f.p.unidad, f.cant, f.p.lote, '', '', f.completa]; });
+  var todo = otras.concat(nuevas);
+  if (v.length) p.getRange(2, 1, v.length, 10).clearContent();
+  if (p.getMaxRows() < todo.length + 1) p.insertRowsAfter(p.getMaxRows(), todo.length + 51 - p.getMaxRows());
+  if (todo.length) p.getRange(2, 1, todo.length, 10).setValues(todo);
+}
+
+/** Al escribir «Producto y cantidad» a mano: 📦 Productos se pone igual (si se conoce la factura). */
+function GR_pedidoA_Productos_(ss, id, texto) {
+  var fac = GR_facturaDe_(ss, id);
+  if (!fac.lineas.length) return;
+  if (!fac.deQuesito) GR_guardarFactura_(id, fac.lineas);
+  var ped = GR_partirPedido_(texto), filas;
+  if (!ped.length) filas = fac.lineas.filter(function (l) { return l.cant > 0; }).map(function (l) { return { p: l, cant: l.cant, completa: 'SI' }; });
+  else filas = GR_calzarPedido_(ped, fac.lineas).map(function (q) {
+    var l = fac.lineas[q.i];
+    return { p: l, cant: q.cant, completa: l.cant && Math.abs(q.cant - l.cant) < 1e-9 ? 'SI' : 'NO' };
+  });
+  if (filas.length) GR_reemplazarProductos_(ss, id, filas);
 }

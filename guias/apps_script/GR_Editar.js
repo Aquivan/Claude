@@ -21,6 +21,12 @@ function GR_alEditar_(e) {
     if (f1 < f0) return;
     var c0 = e.range.getColumn(), c1 = e.range.getLastColumn();
     var cambiadas = GR_COLS_.filter(function (c, j) { return j + 1 >= c0 && j + 1 <= c1; }).map(function (c) { return c.k; });
+    if (cambiadas.indexOf('pedido') >= 0) {   // «Producto y cantidad» escrito a mano → 📦 Productos igual
+      sh.getRange(f0, 1, f1 - f0 + 1, GR_col_('pedido')).getValues().forEach(function (v) {
+        var id = String(v[0]);
+        if (/^G-\d+$/.test(id)) try { GR_pedidoA_Productos_(ss, id, v[GR_col_('pedido') - 1]); } catch (err) { console.warn('pedido ' + id + ': ' + err.message); }
+      });
+    }
     GR_procesarFilas_(ss, f0, f1, cambiadas);
   } else if (n === GR_PROD_) {
     var ids = sh.getRange(Math.max(2, e.range.getRow()), 1, e.range.getNumRows(), 1).getValues().map(function (r) { return String(r[0]); });
@@ -245,7 +251,9 @@ function GR_observaciones_(r) {
 
 function GR_resumenProductos_(ps) {
   if (!ps.length) return '';
-  return ps.length + ' producto(s): ' + ps.slice(0, 3).map(function (p) { return p.cant + ' ' + p.unidad + ' ' + String(p.desc).slice(0, 30); }).join(' · ') + (ps.length > 3 ? ' …' : '');
+  var n = function (x) { return Number(x).toLocaleString('en-US'); };
+  return ps.length + ' producto(s): ' + ps.slice(0, 3).map(function (p) {
+    return n(p.cant) + ' ' + p.unidad + ' ' + GR_corto_(p).slice(0, 28) + (p.lote ? ' (' + String(p.lote).slice(0, 20) + ')' : ''); }).join(' · ') + (ps.length > 3 ? ' …' : '');
 }
 
 /* ============================================================ revisión (Estado) */
