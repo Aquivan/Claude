@@ -17,6 +17,7 @@
   .item.si { border-color: #a5d6a7; }
   .item .txt { flex: 1; min-width: 0; }
   .dir { font-weight: 600; } .ubi { color: #00796b; font-size: 12px; margin-top: 2px; }
+  .fis { font-size: 11px; background: #e3f2fd; color: #1565c0; padding: 2px 8px; border-radius: 10px; margin-right: 4px; }
   .ya { font-size: 11px; background: #e8f5e9; color: #2e7d32; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
   select { padding: 6px; border: 1px solid #cfd8dc; border-radius: 6px; font: inherit; }
   .usar { font-size: 12px; color: #1565c0; white-space: nowrap; }
@@ -60,11 +61,12 @@ function buscar() {
 function pintar() {
   if (!document.getElementById('nombre').value && D.nombre) document.getElementById('nombre').value = D.nombre;
   var h = '', usoDef = C.para === 'p' ? 'Partida' : 'Llegada';
-  document.getElementById('info').innerHTML = C.id ? '<div class="aviso">Marque <b>«usar en la guía»</b> (guía ' + esc(C.id) + ') en el local que va como ' + (C.para === 'p' ? 'PARTIDA' : 'LLEGADA') + '.</div>' : '';
+  var est = D.estado ? '<div class="aviso" style="background:#eef6ff;color:#1a4d80">RUC ' + esc(D.ruc) + ' · ' + esc(D.nombre || '') + ' · ' + esc(D.estado) + '</div>' : '';
+  document.getElementById('info').innerHTML = est + (C.id ? '<div class="aviso">Marque <b>«usar en la guía»</b> (guía ' + esc(C.id) + ') en el local que va como ' + (C.para === 'p' ? 'PARTIDA' : 'LLEGADA') + '.</div>' : '');
   if (!D.anexos.length) h = '<div class="vacio">SUNAT no tiene locales anexos para el RUC ' + esc(D.ruc) + ' (solo su domicilio fiscal, que viene en la factura).</div>';
   D.anexos.forEach(function (a, i) {
     h += '<div class="item' + (a.yaEsta ? '' : '') + '" id="it' + i + '"><input type="checkbox" id="c' + i + '" ' + (a.yaEsta ? 'checked disabled' : '') + ' onchange="marcar()">' +
-      '<div class="txt"><div class="dir">' + esc(a.direccion) + (a.yaEsta ? '<span class="ya">ya está en 📍</span>' : '') + '</div><div class="ubi">' + esc(a.etiqueta) + '</div></div>' +
+      '<div class="txt"><div class="dir">' + (a.fiscal ? '<span class="fis">🏛 Domicilio fiscal</span> ' : '') + esc(a.direccion) + (a.yaEsta ? '<span class="ya">ya está en 📍</span>' : '') + '</div><div class="ubi">' + esc(a.etiqueta) + '</div></div>' +
       '<select id="u' + i + '"><option' + (usoDef === 'Llegada' ? ' selected' : '') + '>Llegada</option><option' + (usoDef === 'Partida' ? ' selected' : '') + '>Partida</option><option>Ambos</option></select>' +
       (C.id ? '<label class="usar"><input type="radio" name="usar" value="' + i + '" onchange="marcarUsar(' + i + ')"> usar en la guía</label>' : '') + '</div>';
   });
@@ -85,7 +87,7 @@ function guardar() {
     var elegido = document.getElementById('c' + i).checked || (usar && Number(usar.value) === i);
     if (!elegido) return;
     if (usar && Number(usar.value) === i) idxUsar = items.length;
-    items.push({ direccion: a.direccion, ubigeo: a.etiqueta, uso: document.getElementById('u' + i).value });
+    items.push({ direccion: a.direccion, ubigeo: a.etiqueta, uso: document.getElementById('u' + i).value, fiscal: !!a.fiscal });
   });
   var b = document.getElementById('guardar'); b.disabled = true; m.className = 'msg'; m.textContent = 'Guardando…';
   google.script.run.withSuccessHandler(function (r) {
