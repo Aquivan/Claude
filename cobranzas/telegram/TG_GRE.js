@@ -97,7 +97,7 @@ var TGG_SISTEMA_ = [
   ' "documento": {"tipo":"Factura|Boleta de Venta","numero":"F251-00056475","ruc_emisor"} o null,',
   ' "bienes": [{"descripcion","unidad":"código SUNAT","cantidad":número}], "peso_kg": número, "bultos": número o null,',
   ' "partida": {"ruc":"RUC del dueño del local o vacío","direccion"}, "llegada": {"ruc","direccion"},',
-  ' "transporte": {"modo":"publico|privado","ruc","nombre","mtc","constancias":["231800409","231800410"],"registrar_vehiculos":true,',
+  ' "transporte": {"modo":"publico|privado","ruc","nombre","mtc","constancias":["15M25007676E","231800410"],"registrar_vehiculos":true,',
   '   "placas":["AON949","VFY983"],"conductores":[{"nombre","dni","licencia"}],"sin_mtc":false},',
   ' "fecha": "dd/mm/aaaa", "preguntas": ["solo lo que de verdad falta"]}',
   'REGLAS:',
@@ -112,7 +112,7 @@ var TGG_SISTEMA_ = [
   '5. Bienes: las líneas de la factura, en su orden, con unidad SUNAT y cantidad. Si la persona pide una parte ("solo líneas 1 a 5",',
   '   "la mitad", "200 de la línea 3") aplícalo; "total" o nada = todas. Si el ticket coincide con la factura, es el total: no preguntes.',
   '6. peso_kg = peso bruto total (TOTAL GENERAL del ticket/balanza en kg) o el que diga la persona. bultos = total de paquetes/unidades del ticket.',
-  '7. Tarjeta del transportista → público: RUC, razón social, TODAS las constancias/registros MTC, placas EN ORDEN (primero el tracto o',
+  '7. Tarjeta del transportista → público: RUC, razón social, TODAS las constancias/registros MTC (COPIA EXACTA, con sus letras: "15M25007676E", nunca solo los dígitos), placas EN ORDEN (primero el tracto o',
   '   principal, luego la carreta; si una placa está tachada y corregida a mano, usa la corregida; las placas peruanas tienen 3 caracteres +',
   '   3 números y el 2.º carácter puede ser letra o NÚMERO, ej. A0N949 con cero, F1A123: copia cero/O tal como se ve; si la persona',
   '   escribe la placa, usa EXACTAMENTE la suya), y el chofer con su licencia (letra + 8 dígitos, ej. D00516821). Si no aparece el DNI, el DNI son esos 8 dígitos.',
@@ -201,8 +201,10 @@ function TGG_analizar_(ss, c) {
     var igual = function (x) { return x.replace(/0/g, 'O') === w.replace(/0/g, 'O'); };
     t.placas = t.placas.map(function (x) { return igual(x) ? w : x; });
   });
-  t.constancias = (t.constancias || []).map(dig).filter(function (x) { return x.length >= 5; });
-  t.mtc = String(t.mtc || t.constancias[0] || '').trim();
+  // Constancias / certificados MTC tal cual, con sus letras (15M25007676E ≠ 1525007676): solo se quitan espacios y guiones.
+  var alfa = function (x) { return String(x == null ? '' : x).toUpperCase().replace(/[^A-Z0-9]/g, ''); };
+  t.constancias = (t.constancias || []).map(alfa).filter(function (x, i, a) { return x.length >= 5 && a.indexOf(x) === i; });
+  t.mtc = alfa(t.mtc || t.constancias[0] || '');
   t.sin_mtc = t.sin_mtc === true;
   t.conductores = (t.conductores || []).filter(function (x) { return x && (x.dni || x.licencia); }).map(function (x) {
     var lic = String(x.licencia || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
