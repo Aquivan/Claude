@@ -70,7 +70,8 @@ function TGG_leer_(ss, id) {
 /** Lo que recibe el robot (texto exacto: su huella es la clave para emitir). */
 function TGG_paraRobot_(c) {
   return JSON.stringify({ id: c.id, empresa_ruc: c.empresa_ruc, motivo: c.motivo, contraparte: c.contraparte, documento: c.documento,
-    bienes: c.bienes, peso_kg: c.peso_kg, bultos: c.bultos || null, partida: c.partida, llegada: c.llegada, transporte: c.transporte, fecha: c.fecha, via: c.via || '' });
+    bienes: c.bienes, peso_kg: c.peso_kg, bultos: c.bultos || null, partida: c.partida, llegada: c.llegada, transporte: c.transporte, fecha: c.fecha, via: c.via || '',
+    todo_factura: !!c.todo_factura, observaciones: c.observaciones || '' });
 }
 
 function TGG_huella_(c) {
@@ -245,7 +246,7 @@ function TGG_relanzar_(ss, c, chat) {
 function TGG_faltan_(c) {
   var f = [];
   if (!c.empresa_ruc) f.push('Falta la empresa que emite la guía.');
-  if (!(c.bienes || []).length) f.push('Faltan los bienes.');
+  if (!(c.bienes || []).length && !(c.via === 'quesito' && c.todo_factura)) f.push('Faltan los bienes.');   // en Quesito "todo lo de la factura" no necesita la lista
   if (!(Number(c.peso_kg) > 0)) f.push('Falta el peso.');
   if (!c.partida || !c.partida.direccion) f.push('Falta el punto de partida.');
   if (!c.llegada || !c.llegada.direccion) f.push('Falta el punto de llegada.');
@@ -464,6 +465,9 @@ function TGG_gh_(q) {
   var cache = CacheService.getScriptCache();
   if (q.accion === 'gre_vista') {
     c.estado = 'Vista previa lista';
+    if (c.origen === 'hoja' && q.imagen) {   // 🚚 la hoja de Guías muestra el enlace de la foto
+      try { c.vista_img = IMP_carpeta_(ss).createFile(Utilities.newBlob(Utilities.base64Decode(q.imagen), 'image/jpeg', 'Vista previa guía ' + (c.hoja || c.id) + '.jpg')).getId(); } catch (e) {}
+    }
     TGG_guardar_(ss, c);
     var notas = (q.notas || []).map(String).filter(Boolean).slice(0, 5);
     TGG_avisar_(c, '👁 Vista previa en ' + TGG_donde_(c) + ' (no se emitió nada) · caso ' + c.id +

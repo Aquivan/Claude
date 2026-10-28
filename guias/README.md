@@ -32,6 +32,14 @@ las guías en [Quesito](https://www.quesito.pe) con un robot (próxima etapa) y 
 2. Telegram y WhatsApp: "guía para la factura FQQ1-3525" → completa lo que falta preguntando → 👁 / ✅.
 3. Importar el Excel actual y, después, facturas.
 
+## 👁 / ✅ Emitir desde la hoja
+
+Menú **🚚 Guías → 👁 Vista previa de la guía seleccionada** y **✅ Emitir la guía seleccionada** (`GR_Emitir.js`): la fila
+(✅ Lista para emitir) se manda al bot de Cobranzas (`?canal=gr`, `cobranzas/telegram/TG_GuiasHoja.js`) como el mismo caso de
+guía de Telegram/WhatsApp, con el robot que diga **«Emitir en»** (Quesito o SUNAT). La foto de la vista previa llega al Telegram
+del administrador (con su ✅) y su enlace a la fila; cada minuto, mientras haya guías en curso, la hoja trae Estado, N° de guía,
+PDF y mensaje (o 🔄 Traer resultados). Emitir pide confirmar y solo emite si la fila no cambió después.
+
 ## 🧀 Emitir la guía en Quesito (robot)
 
 Workflow **"GRE - Quesito (Remitente)"** (`gre-quesito.yml`, script `guias/scripts/quesito_gre.py`), pedido por el bot de

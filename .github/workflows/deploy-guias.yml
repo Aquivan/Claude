@@ -16,6 +16,7 @@ on:
       - claude/tender-wozniak-vnf3iq
     paths:
       - 'guias/apps_script/**'
+      - '.github/workflows/deploy-guias.yml'
   workflow_dispatch:
     inputs:
       accion:
@@ -102,6 +103,22 @@ jobs:
               if diff -q --strip-trailing-cr "$r" "$f" >/dev/null; then echo "IGUAL      $f"; else echo "DIFERENTE  $f"; fi
             else echo "NUEVO      $f"; fi
           done
+
+      # 🚚 La hoja pide 👁/✅ al bot de Cobranzas: su dirección se pone al subir (no queda en el repositorio).
+      - name: Dirección del bot de Cobranzas
+        if: hashFiles('guias/apps_script/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir')
+        run: |
+          ID=$(cd ../../cobranzas && clasp --json list-deployments 2>/dev/null | python3 -c "
+          import json,sys
+          t=sys.stdin.read()
+          try: d=json.loads(t[t.index('['):])
+          except Exception: d=[]
+          b=[x for x in d if (x.get('description') or '').startswith('Asistente Telegram')]
+          print(b[0]['deploymentId'] if b else '')")
+          if [ -z "$ID" ]; then echo "::warning::No encontré la aplicación web del bot: 👁/✅ desde la hoja no funcionarán."; exit 0; fi
+          echo "::add-mask::$ID"
+          sed -i "s#__COBRANZAS_URL__#https://script.google.com/macros/s/$ID/exec#" GR_Emitir.js
+          grep -q "__COBRANZAS_URL__" GR_Emitir.js && { echo "::error::No se puso la dirección"; exit 1; } || echo "Dirección del bot puesta."
 
       - name: Subir el codigo a la hoja
         if: hashFiles('guias/apps_script/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir')

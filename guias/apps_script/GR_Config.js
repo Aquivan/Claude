@@ -19,7 +19,7 @@ var GR_LIS_ = 'Listas';
 var GR_REG_ = '🧾 Registro';
 var GR_AYU_ = '📖 Ayuda';
 var GR_FILA1_ = 3;
-var GR_VERSION_ = 2;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
+var GR_VERSION_ = 3;   // súbalo cuando cambien columnas o listas: la hoja se repara sola al abrir   // primera fila de datos (1 = grupos, 2 = títulos)
 
 // Catálogos SUNAT (anexo 8 de la R.S. 097-2012 y modificatorias).
 var GR_MOTIVOS_ = ['01 - Venta', '02 - Compra', '03 - Venta con entrega a terceros', '04 - Traslado entre establecimientos de la misma empresa',
@@ -51,6 +51,7 @@ var GR_COLS_ = [
   { k: 'id', t: 'ID', g: 'id', w: 78, n: 'Se pone solo al llenar la fila (G-000001). No lo cambie.' },
   { k: 'estado', t: 'Estado', g: 'id', w: 210, n: '✏️ Borrador = falta algo (dice qué). ✅ Lista = se puede emitir. El resto lo pone el robot.' },
   { k: 'empresa', t: 'Empresa (remitente)', g: 'id', w: 120, v: 'empresas', n: 'Empresa que emite la guía (pestaña 🏢 Empresas). Llena sola el punto de partida.' },
+  { k: 'via', t: 'Emitir en', g: 'id', w: 85, v: ['Quesito', 'SUNAT'], n: 'Quesito = desde la factura emitida en Quesito (lo normal en ventas). SUNAT = en SOL (compras y otros motivos). Menú 🚚 Guías → 👁 Vista previa / ✅ Emitir.' },
   { k: 'cotizacion', t: 'N° cotización', g: 'comp', w: 90, n: 'Opcional. Ayuda a ubicar la factura en Quesito ("Relacionado: Cotización N").' },
   { k: 'docrel', t: 'Doc. relacionado', g: 'comp', w: 100, v: GR_DOCREL_, n: 'Factura o boleta de la que sale la guía (Quesito la genera desde ella y trae cliente y productos). "Ninguno" = guía sin comprobante: llene los productos.' },
   { k: 'serie', t: 'Serie', g: 'comp', w: 62, n: '4 caracteres, tal cual en Quesito (ej. F001, FQQ1, E001).' },
@@ -95,6 +96,7 @@ var GR_COLS_ = [
   { k: 'pdf', t: 'PDF', g: 'res', w: 70 },
   { k: 'ticket', t: 'Ticket SUNAT', g: 'res', w: 120 },
   { k: 'msg', t: 'Mensaje / error', g: 'res', w: 240 },
+  { k: 'caso', t: 'Caso (bot)', g: 'res', w: 80, n: 'Código del caso en el bot de Cobranzas (lo pone 👁 Vista previa). El mismo caso se ve en Telegram/WhatsApp.' },
   { k: 'actualizado', t: 'Actualizado', g: 'res', w: 115, f: 'dd/mm/yyyy hh:mm' },
 ];
 

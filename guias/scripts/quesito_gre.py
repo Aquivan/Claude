@@ -224,6 +224,9 @@ def productos(pag, c):
     bs = c.get("bienes") or []
     if not ls:
         raise Alto("Quesito no trajo productos de la factura. No se creó nada.")
+    if c.get("todo_factura") and not bs:   # la hoja dijo "¿Todo lo de la factura? = SI": quedan todas las líneas
+        paso(f"Productos: los {len(ls)} de la factura (todo)")
+        return
     if len(bs) == len(ls) and all(abs(num(b.get("cantidad")) - num(l["cantidad"])) < 1e-6 for b, l in zip(bs, ls)):
         paso(f"Productos: los {len(ls)} de la factura, completos")
         return
