@@ -83,6 +83,7 @@
 // de quien mira; si no se puede, la imagen de la celda. Los datos se corrigen aquí y, tras confirmar, van a la celda.
 if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 var DOC = document, VIEW = window;
+var SEL = { hoja: '', fila: 0 };   // última selección vista en la hoja (≠ fila mostrada si se usó ◀ ▶)
 var actual = { hoja: '', fila: 0 }, D = null, turno = 0, PASE = null, PASE_T = 0, ARCH = {}, CAMBIOS = {}, ESPERA = null;
 function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function carga(si) { var c = DOC.getElementById('carga'); if (c) c.style.display = si ? 'block' : 'none'; }
@@ -103,11 +104,12 @@ function mirar() {
   if (document.hidden) return setTimeout(mirar, 1500);
   google.script.run.withSuccessHandler(function (d) {
     if (d && !d.igual) {
+      SEL = { hoja: d.hoja, fila: d.fila };
       if (nCambios()) { ESPERA = d; aviso('⚠️ Tiene ' + nCambios() + ' cambio(s) sin guardar en la fila ' + actual.fila + '. Guárdelos o toque Descartar para ver la fila ' + d.fila + '.'); }
       else pintar(d);
     }
     setTimeout(mirar, 500);
-  }).withFailureHandler(function () { setTimeout(mirar, 2500); }).VV_estado(actual.hoja, actual.fila);
+  }).withFailureHandler(function () { setTimeout(mirar, 2500); }).VV_estado(SEL.hoja, SEL.fila);
 }
 function aviso(t, ok) { var m = DOC.getElementById('msg'); m.textContent = t || ''; m.style.color = ok ? '#2e7d32' : (t && /⚠️/.test(t) ? '#c62828' : '#546e7a'); }
 
@@ -305,7 +307,12 @@ function guardar() {
 function mover(paso) {
   if (!actual.hoja) return;
   if (nCambios()) return aviso('⚠️ Primero guarde o descarte los cambios.');
-  google.script.run.withSuccessHandler(function () {}).VV_ir(actual.hoja, actual.fila + paso);   // el cambio de fila lo ve mirar()
+  var h = actual.hoja, f = actual.fila + paso;
+  if (f < 2) return;
+  DOC.getElementById('donde').textContent = h + ' · fila ' + f + '…';
+  google.script.run.withSuccessHandler(function (d) { if (d && !d.vacio) pintar(d); else aviso('No hay más filas.'); })
+    .withFailureHandler(function (e) { aviso('⚠️ ' + e.message); }).VV_datos(h, f);   // carga la fila directo
+  google.script.run.VV_ir(h, f);   // y también mueve la selección de la hoja (si Sheets lo permite)
 }
 /* ---------- copiar la imagen del voucher (al portapapeles; si el navegador no deja, se muestra para copiar o bajar) ---------- */
 function blobImagen() {
