@@ -183,3 +183,32 @@ function TGPC_comando_(texto) {
       '\nPara volver a GitHub: «en pc no».'
     : '🖥 Quesito en su PC: DESACTIVADO. El robot trabaja en GitHub (con la sesión copiada). Para usar su PC: «en pc sí».' + est;
 }
+
+/* ============================================================ 🔑 Sesión de Quesito renovada por el robot
+ * Cuando la persona inicia sesión por el 🎥 video, el robot cifra la sesión nueva con la llave pública del Environment
+ * (el RUC) y aquí solo se entrega a GitHub como secreto QUESITO_SESION: el bot nunca ve la sesión en claro. */
+
+function TGEV_llave_(cfg, c) {
+  try {
+    var k = TG_gh_(cfg, '/environments/' + encodeURIComponent(c.empresa_ruc) + '/secrets/public-key');
+    return { ok: true, key: k.key, key_id: k.key_id };
+  } catch (e) { return { ok: false, error: TGEV_permiso_(e) }; }
+}
+
+function TGEV_guardarSesion_(cfg, c, q) {
+  var v = String(q.valor || ''), id = String(q.key_id || '');
+  if (!v || !id || v.length > 60000) return { ok: false, error: 'datos' };
+  try {
+    TG_gh_(cfg, '/environments/' + encodeURIComponent(c.empresa_ruc) + '/secrets/QUESITO_SESION', 'put', { encrypted_value: v, key_id: id });
+    return { ok: true };
+  } catch (e) {
+    var m = TGEV_permiso_(e);
+    try { TGG_avisar_(c, '⚠️ Entró a Quesito, pero no pude guardar la sesión para la próxima vez: ' + m, null, false); } catch (x) {}
+    return { ok: false, error: m };
+  }
+}
+
+function TGEV_permiso_(e) {
+  var m = String(e && e.message || e);
+  return /HTTP 40[13]/.test(m) ? 'el token de GitHub necesita los permisos «Environments: Read and write» y «Secrets: Read and write».' : m.slice(0, 150);
+}

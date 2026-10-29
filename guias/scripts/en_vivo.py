@@ -160,6 +160,16 @@ def lanzar(p, pantalla, **kw):
     return p.chromium.launch(headless=True, args=a, **kw)
 
 
+def zoom(veces=3):
+    """Agranda la página en el Chrome visible (ctrl + «+»), para que en el celular se vea grande."""
+    import shutil
+    import subprocess
+    if shutil.which("xdotool"):
+        for _ in range(veces):
+            subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+plus"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+            time.sleep(0.3)
+
+
 def zoom_normal(pag=None):
     """Vuelve el Chrome visible al 100 % (si la persona agrandó con dos dedos en el video, la página queda «de celular»)."""
     import shutil
