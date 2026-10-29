@@ -19,7 +19,7 @@ function TGEV_iniciar_(c) {
   var cache = CacheService.getScriptCache(), tok = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
   cache.put('tgv_t_' + tok, String(c.id), 21600);
   cache.put('tgv_on_' + c.id, '1', 3600);
-  cache.remove('tgv_m_' + c.id);
+  cache.removeAll(['tgv_m_' + c.id, 'tgv_v_' + c.id]);   // nada de la corrida anterior (su video ya se apagó)
   var url = TGEV_url_() + '?vivo=' + tok;
   try { TGG_avisar_(c, '📺 Véalo en vivo: ' + url + '\nEn GitHub pasa solo a 🎥 video y puede hacer clic y escribir; en su PC mire la ventana de Chrome. El enlace vence en unas horas.', null, false); } catch (e) {}   // también si la guía vino de la hoja
   return url;
@@ -50,6 +50,7 @@ function TGEV_infoRobot_(q) {
   var caso = String(q.caso || '');
   if (!caso || !TGEV_activo_()) return { ok: true, vivo: false };
   CacheService.getScriptCache().put('tgv_on_' + caso, '1', 3600);   // también corridas lanzadas a mano (pruebas)
+  CacheService.getScriptCache().remove('tgv_v_' + caso);   // el robot empieza: el video anterior ya no existe
   return { ok: true, vivo: true };
 }
 
@@ -122,7 +123,7 @@ var TGEV_HTML_ = [
   'function hace(ms){var s=Math.round(ms/1000);return s<60?s+" s":Math.round(s/60)+" min";}',
   'function pinta(r){var d=document.getElementById("dot"),e=document.getElementById("est");',
   ' if(r.vencido){d.className="dot off";e.textContent="Este enlace ya venció.";document.getElementById("vacio").textContent="Pida otra vez la guía con el modo en vivo activo para tener un enlace nuevo.";return false;}',
-  ' if(r.vnc&&!VNC){VNC=r.vnc;if(!fotoSola)video(true);}',
+  ' if(r.vnc!==VNC){VNC=r.vnc||"";if(VNC&&!fotoSola)video(true);else if(!VNC&&enVideo)video(false);}',
   ' if(r.img&&!enVideo){if(!img){img=document.createElement("img");img.id="img";var v=document.getElementById("vacio");v.parentNode.replaceChild(img,v);}img.src="data:image/jpeg;base64,"+r.img;visto=r.seq;}',
   ' var edad=r.t?r.ahora-r.t:0;',
   ' if(!r.t){d.className="dot";e.textContent="Esperando al robot…";}',
