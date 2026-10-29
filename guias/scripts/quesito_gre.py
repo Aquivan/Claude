@@ -44,6 +44,14 @@ MOTIVOS = {"venta": "01", "compra": "02", "traslado entre establecimientos de la
            "devolucion": "06", "otros": "13", "venta sujeta a confirmacion del comprador": "14"}
 ESPERA_MIN = 12
 PASO = [""]
+EN_PC = os.environ.get("EN_PC") == "1"   # 🖥 corre en la PC de la persona (ejecutor pc-quesito): Chrome visible
+
+
+def perfil_pc(ruc):
+    """Carpeta del perfil de Chrome del robot en la PC (uno por empresa). Ahí queda la sesión de Quesito."""
+    d = os.path.join(os.path.expanduser("~"), "RobotQuesito", "perfil-" + re.sub(r"\D", "", ruc or "x"))
+    os.makedirs(d, exist_ok=True)
+    return d
 ACEPTAR = [False]   # solo mientras se quita una línea de producto: se acepta su «¿Seguro?»
 NOTAS = []   # avisos para la persona (lo que no se pudo poner, lo que conviene revisar)
 EXTRA_OBS = []   # lo que no se pudo poner en su propio campo (va en Observaciones)
@@ -601,7 +609,11 @@ def cliente_pdf(pag, fila):
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             f.write(r.body())
-        txt = subprocess.run(["pdftotext", "-layout", f.name, "-"], capture_output=True, text=True, timeout=30).stdout
+        try:
+            txt = subprocess.run(["pdftotext", "-layout", f.name, "-"], capture_output=True, text=True, timeout=30).stdout
+        except FileNotFoundError:   # 🖥 en la PC (Windows) no hay pdftotext: pypdf
+            from pypdf import PdfReader
+            txt = "\n".join((pg.extract_text(extraction_mode="layout") or "") for pg in PdfReader(f.name).pages)
         out = datos_pdf(txt, os.environ.get("RUC", ""))
         if len(r.body()) < 4_000_000:   # 📄 la factura misma, para verla desde la hoja (va al Drive del bot, nunca a GitHub)
             out["_pdf"] = base64.b64encode(r.body()).decode()
@@ -650,7 +662,7 @@ def main():
     if modo == "emitir" and os.environ.get("CONFIRMAR", "") != huella:
         fin(False, "La confirmación no corresponde a este caso (¿se cambió algo después de aprobar?). No se creó nada.")
         sys.exit("Clave de confirmación incorrecta")
-    if not sesion:
+    if not sesion and not EN_PC:
         fin(False, "Falta la sesión de Quesito de esta empresa (secreto QUESITO_SESION). No se creó nada.")
         sys.exit(1)
     d = c.get("documento") or {}
@@ -663,10 +675,16 @@ def main():
     paso(f"Caso recibido · modo {modo} · " + (f"factura {serie}-{numero}" if m else f"cotización {cot}") + f" · {len(c.get('bienes') or [])} bien(es)")
 
     with sync_playwright() as p:
-        nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None, args=en_vivo.args())
+        if EN_PC:   # 🖥 en la PC de la persona: Chrome VISIBLE con un perfil propio del robot (la sesión de Quesito queda guardada ahí)
+            nav = ctx = p.chromium.launch_persistent_context(perfil_pc(ruc), channel="chrome", headless=False, locale="es-PE",
+                                                             viewport={"width": 1366, "height": 900}, args=en_vivo.args())
+            pag = ctx.pages[0] if ctx.pages else ctx.new_page()
+            paso("🖥 Chrome abierto en la PC (mire la pantalla)")
+        else:
+            nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None, args=en_vivo.args())
+            ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
+            pag = ctx.new_page()
         en_vivo.iniciar(bot, PASO)
-        ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
-        pag = ctx.new_page()
         pag.on("dialog", lambda dl: (print("  Confirmación aceptada (quitar línea)"), dl.accept()) if ACEPTAR[0] else (print("  Ventana de confirmación rechazada"), dl.dismiss()))
         permitir = [False]   # 🔒 hasta que la persona apruebe, ningún envío de datos sale del formulario
 
@@ -681,12 +699,28 @@ def main():
         tocado = [False]   # ya se tocó «Crear»: desde aquí nunca se dice "no se creó nada"
         ctx.route("**/*", red)
         try:
-            ctx.add_cookies(leer_sesion(sesion))
+            fuera = lambda: "/login" in pag.url or pag.locator("input[type=password]:visible").count() > 0
+            if not EN_PC:
+                ctx.add_cookies(leer_sesion(sesion))
             pag.goto(BASE + "/invoices", wait_until="networkidle", timeout=60000)
-            if "/login" in pag.url or pag.locator("input[type=password]:visible").count():
-                raise Alto("La sesión guardada de Quesito venció: entre a Quesito en su Chrome, cópiela con Cookie-Editor (Export → JSON) "
-                           "y péguela en el secreto QUESITO_SESION de la empresa en GitHub. No se creó nada.")
-            paso("Dentro de Quesito (sesión guardada)")
+            if EN_PC and fuera() and sesion:   # el perfil de la PC aún no tiene sesión: se prueba la copiada
+                ctx.add_cookies(leer_sesion(sesion))
+                pag.goto(BASE + "/invoices", wait_until="networkidle", timeout=60000)
+            if EN_PC and fuera():   # 🖥 la persona inicia sesión en la ventana (desde su PC el captcha sí pasa); queda guardada en el perfil
+                bot({"accion": "gre_aviso", "texto": "🖥 Inicie sesión en Quesito en la ventana de Chrome que se abrió en su PC (correo, clave y captcha). "
+                     "Lo espero 5 minutos; después sigo solo. Solo hace falta la primera vez."})
+                paso("Esperando que inicie sesión en la ventana de Chrome")
+                hasta = time.time() + 300
+                while time.time() < hasta and fuera():
+                    pag.wait_for_timeout(3000)
+                pag.wait_for_timeout(2000)
+            if fuera():
+                raise Alto(("No se inició sesión en Quesito en la ventana de su PC (esperé 5 minutos)." if EN_PC else
+                            "La sesión guardada de Quesito venció: entre a Quesito en su Chrome, cópiela con Cookie-Editor (Export → JSON) "
+                            "y péguela en el secreto QUESITO_SESION de la empresa en GitHub.") + " No se creó nada.")
+            if "/invoices" not in pag.url:
+                pag.goto(BASE + "/invoices", wait_until="networkidle", timeout=60000)
+            paso("Dentro de Quesito" + (" (perfil de la PC)" if EN_PC else " (sesión guardada)"))
             if not serie:   # solo la cotización: su factura relacionada
                 serie, numero = factura_de_cotizacion(pag, cot)
                 paso(f"La cotización {cot} es la factura {serie}-{numero}")

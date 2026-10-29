@@ -105,7 +105,9 @@ function GR_pedirRobot_(modo) {
     sh.getRange(fila, col('msg')).setValue('⚠️ ' + (p.error || 'no se pudo pedir'));
     return ui.alert('No se pudo pedir al robot: ' + (p.error || ''));
   }
-  if (p.vivo) GR_abrirVivo_(p.vivo, r.id);   // 📺 modo en vivo activo
+  if (p.vivo && p.donde !== 'pc') GR_abrirVivo_(p.vivo, r.id);   // 📺 modo en vivo activo (en la PC se ve el Chrome mismo)
+  if (p.donde === 'pc') ss.toast('🖥 Se hace en su PC: mire la ventana de Chrome que se abre (no la use mientras trabaja).', '🚚 Guías', 10);
+  else if (p.pc_motivo) ss.toast('🖥 No pude usar su PC (' + p.pc_motivo + '): se hace en GitHub.', '🚚 Guías', 10);
   var ahora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'HH:mm');
   sh.getRange(fila, col('estado')).setValue(modo === 'emitir' ? GR_ESTADOS_.EMITIENDO + ' en ' + donde + ' (' + ahora + ')' : GR_ESTADOS_.VISTA + ' pedida en ' + donde + ' (' + ahora + ')');
   sh.getRange(fila, col('msg')).setValue(modo === 'emitir' ? 'Emitiendo… el resultado llega aquí solo (en 1–2 min) y al Telegram del administrador.'
@@ -204,4 +206,19 @@ function GR_abrirVivo_(url, id) {
     '<a href="' + e(url) + '" target="_blank">Abrir en pestaña aparte ↗</a> (más grande)</div>' +
     '<iframe src="' + e(url) + '" style="width:100%;height:600px;border:1px solid #cfd8dc;border-radius:6px"></iframe>';
   SpreadsheetApp.getUi().showModelessDialog(HtmlService.createHtmlOutput(h).setWidth(1000).setHeight(680), '📺 Robot en vivo' + (id ? ' · guía ' + id : ''));
+}
+
+/* ---------------- 🖥 Quesito en la PC (ejecutor pc-quesito: Chrome visible en la pantalla) ---------------- */
+
+function GR_menuEnPc() {
+  var ui = SpreadsheetApp.getUi(), r = GR_cob_('pc', {});
+  if (!r.ok) return ui.alert('No pude hablar con el bot: ' + (r.error || ''));
+  var e = r.estado || {};
+  var si = ui.alert('🖥 Quesito en mi PC', 'Ahora está ' + (r.activo ? 'ACTIVADO' : 'DESACTIVADO') + '. La PC: ' + (e.ok ? '🟢 ' : '⚪ ') + (e.motivo || '?') + '.\n\n' +
+    'Activado: las guías por Quesito (vista previa, emitir, traer datos) se hacen en su PC, con Chrome visible, mientras esté abierta la ventana ' +
+    '«Robot de guías» (run.cmd). Si la PC está apagada, se usa GitHub como siempre. La primera vez inicie sesión en Quesito en esa ventana de Chrome.' +
+    '\n\n¿' + (r.activo ? 'Desactivarlo' : 'Activarlo') + '?', ui.ButtonSet.YES_NO);
+  if (si !== ui.Button.YES) return;
+  var x = GR_cob_('pc', { activar: !r.activo });
+  SpreadsheetApp.getActive().toast(x.ok ? (x.activo ? '🖥 Quesito en su PC: ACTIVADO' : 'Quesito en GitHub (PC desactivada)') : '⚠️ ' + (x.error || ''), '🚚 Guías', 6);
 }

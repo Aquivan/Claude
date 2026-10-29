@@ -26,6 +26,12 @@ on:
         description: "Huella de confirmación (la pone el bot). Obligatoria para emitir."
         required: false
         default: ''
+      donde:
+        description: "github (servidor de GitHub) o pc (🖥 la PC con el ejecutor pc-quesito: Chrome visible)"
+        required: false
+        default: github
+        type: choice
+        options: [github, pc]
 permissions:
   contents: read
 concurrency:
@@ -34,7 +40,7 @@ concurrency:
 jobs:
   gre:
     name: "GRE Quesito ${{ inputs.modo }} (${{ inputs.ruc }})"
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.donde == 'pc' && fromJSON('["self-hosted","pc-quesito"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
     environment: ${{ inputs.ruc }}
     steps:
@@ -45,7 +51,14 @@ jobs:
             guias/apps_script/GR_Ubigeos.js
             cobranzas/.clasp.json
           sparse-checkout-cone-mode: false
+      - name: Dirección del bot (PC)
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: python guias/scripts/bot_url.py
       - name: Dirección del bot
+        if: runner.os != 'Windows'
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
         run: |
@@ -65,16 +78,35 @@ jobs:
           echo "::add-mask::$ID"
           echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5   # Python fijo: el servidor ya trae 3.14 y playwright 1.47 no instala ahí
+        if: runner.os != 'Windows'
         with:
           python-version: "3.12"
+      - name: Preparar (PC)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: python -m pip install -q --disable-pip-version-check playwright==1.47.0 websockets==13.1 pypdf
       - name: Preparar navegador
+        if: runner.os != 'Windows'
         timeout-minutes: 5
         run: |
           pip install -q playwright==1.47.0 websockets==13.1
           command -v pdftotext >/dev/null || sudo apt-get install -y -qq poppler-utils >/dev/null 2>&1 || true
           CH=$(command -v google-chrome || command -v google-chrome-stable || true)
           if [ -n "$CH" ]; then echo "CHROMIUM=$CH" >> "$GITHUB_ENV"; else timeout 240 python -m playwright install --with-deps chromium; fi
+      - name: GRE Quesito ${{ inputs.modo }} (🖥 en la PC)
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          QUESITO_SESION: ${{ secrets.QUESITO_SESION }}
+          RUC: ${{ inputs.ruc }}
+          CASO: ${{ inputs.caso }}
+          MODO: ${{ inputs.modo }}
+          CONFIRMAR: ${{ inputs.confirmar }}
+          EN_PC: '1'
+          PYTHONIOENCODING: utf-8
+        run: python guias/scripts/quesito_gre.py
       - name: GRE Quesito ${{ inputs.modo }}
+        if: runner.os != 'Windows'
         env:
           QUESITO_SESION: ${{ secrets.QUESITO_SESION }}
           RUC: ${{ inputs.ruc }}
@@ -82,8 +114,18 @@ jobs:
           MODO: ${{ inputs.modo }}
           CONFIRMAR: ${{ inputs.confirmar }}
         run: python guias/scripts/quesito_gre.py
+      - name: Avisar si el robot se cayó (PC)
+        if: failure() && runner.os == 'Windows'
+        shell: powershell
+        env:
+          CASO: ${{ inputs.caso }}
+        run: |
+          if (-not $env:BOT_URL) { exit 0 }
+          if (Test-Path "$env:RUNNER_TEMP\gre_avisado") { exit 0 }
+          $c = @{ accion = 'gre_fin'; run = "$env:GITHUB_RUN_ID"; caso = "$env:CASO"; ok = $false; cayo = $true; texto = 'El robot de Quesito (en la PC) se detuvo antes de terminar. No se creo nada (salvo que el aviso anterior diga lo contrario).' } | ConvertTo-Json
+          try { Invoke-RestMethod -Method Post -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($c)) -Uri "${env:BOT_URL}?canal=gh" | Out-Null } catch {}
       - name: Avisar si el robot se cayó
-        if: failure()
+        if: failure() && runner.os != 'Windows'
         env:
           CASO: ${{ inputs.caso }}
         run: |
