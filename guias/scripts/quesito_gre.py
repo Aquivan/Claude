@@ -744,13 +744,23 @@ def main():
             cli = cliente_pdf(pag, fila.first) if modo == "leer" else {}
             fila_txt = re.sub(r"\s+", " ", fila.first.inner_text())[:300] if modo == "leer" else ""
             opc = fila.first.get_by_text(re.compile(r"Opciones", re.I)).first
-            try:
-                opc.click(timeout=8000)
-            except Exception:
-                opc.evaluate("e => e.click()")
-            pag.wait_for_timeout(1200)
             gen = pag.get_by_text(re.compile(r"Generar\s+GU[IÍ]A\s+DE\s+REMISI[OÓ]N\s+REMITENTE", re.I))
-            vis = [gen.nth(i) for i in range(gen.count()) if gen.nth(i).is_visible()]
+            vis = []
+            for intento in range(3):   # el menú se carga aparte (/dynamics/invoice_options): en la PC a veces tarda o se cierra
+                try:
+                    opc.click(timeout=8000)
+                except Exception:
+                    opc.evaluate("e => e.click()")
+                for _ in range(16):
+                    pag.wait_for_timeout(500)
+                    vis = [gen.nth(i) for i in range(gen.count()) if gen.nth(i).is_visible()]
+                    if vis:
+                        break
+                if vis:
+                    break
+                paso(f"Opciones de la factura: el menú no cargó, vuelvo a abrirlo ({intento + 1})")
+                pag.keyboard.press("Escape")
+                pag.wait_for_timeout(800)
             if not vis:
                 raise Alto("En Opciones de la factura no apareció «Generar GUIA DE REMISIÓN REMITENTE». No se creó nada.")
             en_formulario[0] = True
