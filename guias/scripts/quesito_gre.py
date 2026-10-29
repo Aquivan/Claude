@@ -724,6 +724,9 @@ def main():
                     bot({"accion": "gre_aviso", "texto": "✅ Ya entró a Quesito. Desde ahora NO toque la pantalla: sigo yo solo."})
                     paso("La persona inició sesión: sigo solo")
                     pag.wait_for_timeout(6000)   # que deje de tocar y Quesito termine de cargar (avisos, PIN)
+                    if pantalla:
+                        tam = en_vivo.zoom_normal(pag)   # si agrandó con dos dedos, la página quedó «de celular»
+                        paso(f"Pantalla al 100 % (ancho {tam[0] if tam else '?'})")
                     for _ in range(2):
                         pag.keyboard.press("Escape")   # cierra avisos o ventanas que Quesito muestra al entrar
                         pag.wait_for_timeout(500)
@@ -758,6 +761,10 @@ def main():
                 raise Alto(f"No encontré la factura {serie}-{numero} en Quesito de esta empresa. No se creó nada.")
             cli = cliente_pdf(pag, fila.first) if modo == "leer" else {}
             fila_txt = re.sub(r"\s+", " ", fila.first.inner_text())[:300] if modo == "leer" else ""
+            if pantalla:
+                en_vivo.zoom_normal()   # por si tocaron el video con dos dedos (zoom): el menú Opciones necesita la página de escritorio
+                pag.wait_for_timeout(800)
+                fila = pag.locator("tr", has_text=serie).filter(has_text=re.compile(r"\b0*" + numero + r"\b"))
             opc = fila.first.get_by_text(re.compile(r"Opciones", re.I)).first
             gen = pag.get_by_text(re.compile(r"Generar\s+GU[IÍ]A\s+DE\s+REMISI[OÓ]N\s+REMITENTE", re.I))
             vis = []

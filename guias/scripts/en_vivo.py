@@ -94,9 +94,9 @@ def video(bot, ancho=1366, alto=1000):
             return False
         print("  🎥 Video en vivo: preparando la pantalla…", flush=True)
         q = lambda *c: subprocess.run(list(c), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=240)
-        if not (shutil.which("x11vnc") and shutil.which("websockify") and os.path.isdir("/usr/share/novnc")):
+        if not (shutil.which("x11vnc") and shutil.which("websockify") and shutil.which("xdotool") and os.path.isdir("/usr/share/novnc")):
             q("sudo", "apt-get", "update", "-qq")
-            q("sudo", "apt-get", "install", "-y", "-qq", "xvfb", "x11vnc", "novnc", "websockify")
+            q("sudo", "apt-get", "install", "-y", "-qq", "xvfb", "x11vnc", "novnc", "websockify", "xdotool")
         cf = "/tmp/cloudflared"
         if not os.path.exists(cf):
             q("curl", "-fsSL", "-o", cf, "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64")
@@ -158,3 +158,18 @@ def lanzar(p, pantalla, **kw):
         except Exception as e:
             print("  🎥 Chrome visible no abrió (" + type(e).__name__ + "); sigo sin video.", flush=True)
     return p.chromium.launch(headless=True, args=a, **kw)
+
+
+def zoom_normal(pag=None):
+    """Vuelve el Chrome visible al 100 % (si la persona agrandó con dos dedos en el video, la página queda «de celular»)."""
+    import shutil
+    import subprocess
+    if shutil.which("xdotool"):
+        for _ in range(2):
+            subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+            time.sleep(0.4)
+    if pag is not None:
+        try:
+            return pag.evaluate("() => [innerWidth, Math.round(devicePixelRatio * 100)]")
+        except Exception:
+            return None
