@@ -152,8 +152,9 @@ def lanzar(p, pantalla, **kw):
     import os
     a = args() + (args_video() if pantalla else [])
     if pantalla:
-        try:
-            return p.chromium.launch(headless=False, args=a, env=dict(os.environ), **kw)
+        try:   # visible y sin las marcas de «navegador automatizado» (para que una persona pueda iniciar sesión con captcha)
+            return p.chromium.launch(headless=False, args=a + ["--disable-blink-features=AutomationControlled"], env=dict(os.environ),
+                                     ignore_default_args=["--enable-automation"], **kw)
         except Exception as e:
             print("  🎥 Chrome visible no abrió (" + type(e).__name__ + "); sigo sin video.", flush=True)
     return p.chromium.launch(headless=True, args=a, **kw)
