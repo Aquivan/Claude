@@ -86,10 +86,18 @@ async function repararImagenesEnHoja_(hoja, inicio, LIMITE) {
       if (verPdf || vacia) {
         pendientes.push({
           fila:          i + 2,
+          vacia:         vacia && !verPdf,
           archivo:       (valores[i][1] || '').toString().trim(), // K
           pagina:        parseInt(valores[i][3], 10) || 0          // M
         });
       }
+    }
+
+    // Proteccion: si de pronto "faltan" muchas imagenes a la vez, algo raro pasa (no reprocesar toda la hoja).
+    const nVacias = pendientes.filter(function (x) { return x.vacia; }).length;
+    if (nVacias > 50) {
+      Logger.log('AVISO: ' + nVacias + ' celdas J vacias en ' + hoja.getName() + '. Solo se reparan las de "Ver PDF"; revise la hoja.');
+      for (let k = pendientes.length - 1; k >= 0; k--) if (pendientes[k].vacia) pendientes.splice(k, 1);
     }
 
     if (pendientes.length === 0) {
