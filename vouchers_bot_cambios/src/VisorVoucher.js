@@ -14,9 +14,10 @@ function VV_abrir() {
 }
 
 /** Ventana grande (flotante, se puede mover): el mismo visor. */
-function VV_abrirGrande() {
+function VV_abrirGrande(ancho, alto) {
+  ancho = Math.max(700, Math.min(Number(ancho) || 1180, 3000)); alto = Math.max(450, Math.min(Number(alto) || 720, 2000));
   SpreadsheetApp.getUi().showModelessDialog(
-    HtmlService.createHtmlOutputFromFile('VisorVoucherVista').setWidth(1180).setHeight(720), '👁 Visor de voucher');
+    HtmlService.createHtmlOutputFromFile('VisorVoucherVista').setWidth(ancho).setHeight(alto), '👁 Visor de voucher');
 }
 
 /** Hoja y fila seleccionadas ahora (el panel pregunta ~2 veces por segundo). */
