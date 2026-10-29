@@ -243,9 +243,10 @@ function ventanaAparte() {
 function espejo() {   // copia el voucher que se ve aquí a la ventana aparte
   if (!POP || POP.closed) return;
   var t = POP.document.getElementById('t'); if (t && D) t.textContent = D.hoja + ' · fila ' + D.fila + (D.pagina ? ' · pág. ' + D.pagina : '') + (D.archivo ? ' · ' + D.archivo : '');
-  blobImagen().then(function (b) {
-    var i = POP && !POP.closed && POP.document.getElementById('i'); if (!i) return;
-    var viejo = i.src; i.src = URL.createObjectURL(b); if (/^blob:/.test(viejo)) URL.revokeObjectURL(viejo);
+  blobImagen().then(function (b) {   // como data: (la ventana aparte no puede leer los blob: de esta página)
+    var r = new FileReader();
+    r.onload = function () { var i = POP && !POP.closed && POP.document.getElementById('i'); if (i) i.src = r.result; };
+    r.readAsDataURL(b);
   }).catch(function () {});
 }
 
