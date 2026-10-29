@@ -3,6 +3,7 @@
 <head>
 <base target="_blank">
 <meta charset="utf-8">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #263238; margin: 0; padding: 8px; background: #f4f6f8; }
@@ -10,10 +11,12 @@
   .barra b { flex: 1; font-size: 12px; min-width: 90px; }
   button { border: 1px solid #cfd8dc; background: #fff; border-radius: 6px; padding: 5px 8px; font: inherit; cursor: pointer; }
   button:hover { background: #e3f2fd; }
-  #marco { background: #fff; border: 1px solid #d0d7de; border-radius: 6px; overflow: auto; text-align: center; max-height: 70vh; }
-  #marco img { display: block; width: 100%; height: auto; cursor: zoom-in; }
-  #marco.zoom img { width: 220%; max-width: none; cursor: zoom-out; }
+  #marco { position: relative; background: #fff; border: 1px solid #d0d7de; border-radius: 6px; overflow: auto; text-align: center; max-height: 78vh; min-height: 120px; }
+  #marco canvas, #marco img { display: block; width: 100%; height: auto; cursor: zoom-in; }
+  #marco.zoom canvas, #marco.zoom img { width: 230%; max-width: none; cursor: zoom-out; }
+  #carga { position: absolute; top: 6px; right: 8px; background: rgba(38,50,56,.8); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; display: none; }
   .vacio { padding: 40px 10px; color: #78909c; }
+  .origen { font-size: 10px; color: #90a4ae; text-align: right; margin-top: 2px; }
   table { width: 100%; border-collapse: collapse; margin-top: 6px; background: #fff; }
   td { border-bottom: 1px solid #eceff1; padding: 4px 6px; vertical-align: top; }
   td.k { color: #607d8b; width: 38%; }
@@ -25,46 +28,86 @@
   <button onclick="mover(-1)" title="Fila anterior">◀</button>
   <button onclick="mover(1)" title="Fila siguiente">▶</button>
   <b id="donde">Haga clic en una fila…</b>
-  <button onclick="pdf()" title="Abrir el archivo original en Drive">📄 Original</button>
-  <button onclick="google.script.run.VV_abrirGrande()" title="Abrir en ventana grande (se puede mover)">⤢</button>
+  <button onclick="abrirOriginal()" title="Abrir el archivo original en Drive">📄</button>
+  <button onclick="google.script.run.VV_abrirGrande()" title="Abrir en ventana flotante grande (se puede mover)">⤢</button>
 </div>
-<div id="marco"><div class="vacio">Haga clic en cualquier celda de una fila de vouchers y aquí aparece su imagen en grande.</div></div>
+<div id="marco"><div class="vacio">Haga clic en cualquier celda de una fila de vouchers y aquí aparece el voucher original en grande.</div><span id="carga">cargando…</span></div>
+<div class="origen" id="origen"></div>
 <table id="datos"></table>
-<div class="gris">Clic en la imagen = agrandar / achicar. Se actualiza solo al cambiar de fila. Para apagarlo, cierre este panel.</div>
+<div class="gris">Clic en el voucher = agrandar / achicar. Cambia solo al cambiar de fila. Para apagarlo, cierre esta ventana.</div>
 <script>
-var actual = { hoja: '', fila: 0 }, cargando = false, D = null;
+// El voucher se muestra desde el ARCHIVO ORIGINAL (la página exacta del PDF o la foto), bajado de Drive con la cuenta
+// de quien mira; si no se puede, la imagen de la celda. Los PDF quedan en memoria: otra fila del mismo PDF es inmediata.
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+var actual = { hoja: '', fila: 0 }, D = null, turno = 0, PASE = null, PASE_T = 0, ARCH = {};
 function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function carga(si) { document.getElementById('carga').style.display = si ? 'block' : 'none'; }
 function mirar() {
-  if (document.hidden || cargando) return setTimeout(mirar, 1200);
-  google.script.run.withSuccessHandler(function (s) {
-    if (s && (s.hoja !== actual.hoja || s.fila !== actual.fila)) cargar(s.hoja, s.fila);
-    setTimeout(mirar, 1000);
-  }).withFailureHandler(function () { setTimeout(mirar, 3000); }).VV_seleccion();
+  if (document.hidden) return setTimeout(mirar, 1500);
+  google.script.run.withSuccessHandler(function (d) {
+    if (d && !d.igual) pintar(d);
+    setTimeout(mirar, 500);
+  }).withFailureHandler(function () { setTimeout(mirar, 2500); }).VV_estado(actual.hoja, actual.fila);
 }
-function cargar(hoja, fila) {
-  actual = { hoja: hoja, fila: fila }; cargando = true;
-  document.getElementById('donde').textContent = hoja + ' · fila ' + fila + '…';
-  google.script.run.withSuccessHandler(pintar).withFailureHandler(function (e) { cargando = false; document.getElementById('donde').textContent = '⚠️ ' + e.message; }).VV_datos(hoja, fila);
+function pase() {
+  if (PASE && Date.now() - PASE_T < 40 * 60000) return Promise.resolve(PASE);
+  return new Promise(function (ok, mal) { google.script.run.withSuccessHandler(function (t) { PASE = t; PASE_T = Date.now(); ok(t); }).withFailureHandler(mal).VV_pase(); });
+}
+function bajar(id, mime) {   // el archivo ya listo para mostrar (se recuerda en memoria)
+  if (!ARCH[id]) ARCH[id] = pase().then(function (t) {
+    return fetch('https://www.googleapis.com/drive/v3/files/' + id + '?alt=media', { headers: { Authorization: 'Bearer ' + t } })
+      .then(function (r) { if (!r.ok) throw new Error('Drive ' + r.status); return r.arrayBuffer(); });
+  }).then(function (buf) {
+    return window.pdfjsLib && /pdf/i.test(String(mime || '')) ? pdfjsLib.getDocument({ data: buf }).promise.then(function (doc) { return { pdf: doc }; }) : { buf: buf };
+  });
+  ARCH[id].catch(function () { delete ARCH[id]; });
+  return ARCH[id];
 }
 function pintar(d) {
-  cargando = false; D = d;
-  if (d.hoja !== actual.hoja || d.fila !== actual.fila) return;   // ya cambió de fila
+  var t = ++turno; D = d; actual = { hoja: d.hoja, fila: d.fila };
   document.getElementById('donde').textContent = d.hoja + ' · fila ' + d.fila + (d.pagina ? ' · pág. ' + d.pagina : '');
-  var m = document.getElementById('marco'); m.className = '';
-  if (d.vacio) m.innerHTML = '<div class="vacio">Esa fila no tiene voucher.</div>';
-  else if (d.img) { m.innerHTML = '<img id="img" alt="voucher">'; var i = document.getElementById('img'); i.src = d.img; i.onclick = function () { m.className = m.className ? '' : 'zoom'; }; }
-  else m.innerHTML = '<div class="vacio">' + (d.texto ? esc(d.texto) + '<br>' : 'Sin imagen en la celda.<br>') + (d.archivo ? 'Use 📄 Original para ver el archivo.' : '') + '</div>';
   document.getElementById('datos').innerHTML = (d.campos || []).map(function (c) { return '<tr><td class="k">' + esc(c[0]) + '</td><td>' + esc(c[1]) + '</td></tr>'; }).join('') +
     (d.archivo ? '<tr><td class="k">Archivo</td><td>' + esc(d.archivo) + '</td></tr>' : '');
+  var m = document.getElementById('marco'), o = document.getElementById('origen');
+  if (d.vacio) { m.className = ''; m.innerHTML = '<div class="vacio">Esa fila no tiene voucher.</div><span id="carga">cargando…</span>'; o.textContent = ''; return; }
+  // 1) al instante: la imagen de la celda (si hay), mientras baja el original
+  m.className = ''; m.innerHTML = (d.img ? '<img src="' + esc(d.img) + '">' : '<div class="vacio">' + esc(d.texto || 'Cargando el original…') + '</div>') + '<span id="carga">cargando…</span>';
+  o.textContent = d.img ? 'imagen de la celda' : '';
+  m.querySelectorAll('img').forEach(zoomable);
+  if (!d.original || !d.original.id) { o.textContent = d.img ? 'imagen de la celda (no encontré el original en Drive)' : 'no encontré el original en Drive'; return; }
+  carga(true);
+  // 2) el original: página exacta del PDF o la foto, en alta resolución
+  var mime = String(d.original.mime || '');
+  bajar(d.original.id, mime).then(function (a) {
+    if (t !== turno) return;
+    if (a.pdf) {
+      var n = Math.min(Math.max(parseInt(d.pagina, 10) || 1, 1), a.pdf.numPages);
+      return a.pdf.getPage(n).then(function (pg) {
+        if (t !== turno) return;
+        var ancho = Math.max(m.clientWidth, 300) * 2.3 * (window.devicePixelRatio || 1);
+        var vp = pg.getViewport({ scale: ancho / pg.getViewport({ scale: 1 }).width });
+        var c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+        return pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(function () {
+          if (t !== turno) return;
+          m.className = ''; m.innerHTML = '<span id="carga">cargando…</span>'; m.insertBefore(c, m.firstChild); zoomable(c);
+          o.textContent = 'original · página ' + n + ' de ' + a.pdf.numPages;
+        });
+      });
+    }
+    var url = URL.createObjectURL(new Blob([a.buf], { type: mime || 'image/jpeg' }));
+    m.className = ''; m.innerHTML = '<img src="' + url + '"><span id="carga">cargando…</span>'; zoomable(m.querySelector('img'));
+    o.textContent = 'original (foto)';
+  }).catch(function (e) {
+    if (t === turno) o.textContent = (d.img ? 'imagen de la celda' : '') + ' · no pude bajar el original (' + e.message + ')';
+  }).then(function () { if (t === turno) carga(false); });
 }
+function zoomable(el) { if (el) el.onclick = function () { var m = document.getElementById('marco'); m.className = m.className ? '' : 'zoom'; }; }
 function mover(paso) {
   if (!actual.hoja) return;
-  google.script.run.withSuccessHandler(function (f) { if (f) cargar(actual.hoja, f); }).VV_ir(actual.hoja, actual.fila + paso);
+  google.script.run.withSuccessHandler(function () {}).VV_ir(actual.hoja, actual.fila + paso);   // el cambio de fila lo ve mirar()
 }
-function pdf() {
-  if (!D || !D.archivo) return;
-  var w = window.open('', '_blank');
-  google.script.run.withSuccessHandler(function (u) { if (u && w) w.location = u; else { if (w) w.close(); alert('No encontré el archivo «' + D.archivo + '» en Drive.'); } }).VV_urlArchivo(D.archivo);
+function abrirOriginal() {
+  if (D && D.original && D.original.id) window.open('https://drive.google.com/file/d/' + D.original.id + '/view', '_blank');
 }
 mirar();
 </script>
