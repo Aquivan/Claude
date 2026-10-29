@@ -6,21 +6,36 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #263238; margin: 0; padding: 8px; background: #f4f6f8; }
+  html, body { height: 100%; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #263238; margin: 0; padding: 8px; background: #f4f6f8; display: flex; flex-direction: column; }
   .barra { display: flex; gap: 4px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
-  .barra b { flex: 1; font-size: 12px; min-width: 90px; }
+  .barra b { flex: 1; font-size: 12px; min-width: 110px; }
   button { border: 1px solid #cfd8dc; background: #fff; border-radius: 6px; padding: 5px 8px; font: inherit; cursor: pointer; }
-  button:hover { background: #e3f2fd; }
-  #marco { position: relative; background: #fff; border: 1px solid #d0d7de; border-radius: 6px; overflow: auto; text-align: center; max-height: 78vh; min-height: 120px; }
+  button:hover { background: #e3f2fd; } button.on { background: #1565c0; color: #fff; border-color: #1565c0; }
+  button.pri { background: #1565c0; color: #fff; border-color: #1565c0; font-weight: bold; } button:disabled { opacity: .5; cursor: default; }
+  .cuerpo { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 8px; }
+  body.m-imagen .cuerpo { grid-template-columns: 1fr; } body.m-imagen #lado { display: none; }
+  body.m-datos .cuerpo { grid-template-columns: 1fr; } body.m-datos #izq { display: none; }
+  body.angosto .cuerpo { grid-template-columns: 1fr; overflow: auto; }
+  #izq { display: flex; flex-direction: column; min-height: 0; }
+  #marco { position: relative; flex: 1; background: #fff; border: 1px solid #d0d7de; border-radius: 6px; overflow: auto; text-align: center; min-height: 200px; }
   #marco canvas, #marco img { display: block; width: 100%; height: auto; cursor: zoom-in; }
   #marco.zoom canvas, #marco.zoom img { width: 230%; max-width: none; cursor: zoom-out; }
   #carga { position: absolute; top: 6px; right: 8px; background: rgba(38,50,56,.8); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; display: none; }
   .vacio { padding: 40px 10px; color: #78909c; }
   .origen { font-size: 10px; color: #90a4ae; text-align: right; margin-top: 2px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 6px; background: #fff; }
-  td { border-bottom: 1px solid #eceff1; padding: 4px 6px; vertical-align: top; }
-  td.k { color: #607d8b; width: 38%; }
-  .gris { color: #90a4ae; font-size: 11px; margin-top: 6px; }
+  #lado { display: flex; flex-direction: column; min-height: 0; background: #fff; border: 1px solid #d0d7de; border-radius: 6px; }
+  #campos { flex: 1; overflow: auto; padding: 6px 8px; }
+  .f { display: grid; grid-template-columns: 38% 1fr; gap: 6px; align-items: center; padding: 3px 0; border-bottom: 1px solid #f0f3f5; }
+  .f label { color: #607d8b; font-size: 11px; }
+  .f input[type=text], .f select { width: 100%; padding: 4px 6px; border: 1px solid #e0e6ea; border-radius: 5px; font: inherit; background: #fbfcfd; }
+  .f input:focus, .f select:focus { outline: none; border-color: #1e88e5; background: #fff; }
+  .f .cambio { border-color: #fb8c00 !important; background: #fff8e1 !important; }
+  .f .fx { color: #90a4ae; }
+  #pie { border-top: 1px solid #eceff1; padding: 6px 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  #msg { flex: 1; font-size: 11px; min-width: 120px; }
+  .conf { background: #fff8e1; border: 1px solid #ffe0b2; border-radius: 6px; padding: 6px 8px; margin: 6px 8px; font-size: 11px; }
+  .conf s { color: #9e9e9e; } .conf b { color: #1b5e20; }
 </style>
 </head>
 <body>
@@ -28,32 +43,63 @@
   <button onclick="mover(-1)" title="Fila anterior">◀</button>
   <button onclick="mover(1)" title="Fila siguiente">▶</button>
   <b id="donde">Haga clic en una fila…</b>
+  <button id="b-imagen" onclick="modo('imagen')" title="Solo la imagen, grande">🖼</button>
+  <button id="b-ambos" onclick="modo('ambos')" title="Imagen y datos lado a lado">🖼 📋</button>
+  <button id="b-datos" onclick="modo('datos')" title="Solo los datos">📋</button>
+  <button onclick="copiar()" title="Copiar la imagen del voucher (para pegar en WhatsApp, Telegram o un correo)">📋 Copiar</button>
   <button onclick="abrirOriginal()" title="Abrir el archivo original en Drive">📄</button>
   <button onclick="google.script.run.VV_abrirGrande()" title="Abrir en ventana flotante grande (se puede mover)">⤢</button>
 </div>
-<div id="marco"><div class="vacio">Haga clic en cualquier celda de una fila de vouchers y aquí aparece el voucher original en grande.</div><span id="carga">cargando…</span></div>
-<div class="origen" id="origen"></div>
-<table id="datos"></table>
-<div class="gris">Clic en el voucher = agrandar / achicar. Cambia solo al cambiar de fila. Para apagarlo, cierre esta ventana.</div>
+<div class="cuerpo">
+  <div id="izq">
+    <div id="marco"><div class="vacio">Haga clic en cualquier celda de una fila de vouchers y aquí aparece el voucher original.</div><span id="carga">cargando…</span></div>
+    <div class="origen" id="origen"></div>
+  </div>
+  <div id="lado">
+    <div id="campos"><div class="vacio">Los datos de la fila aparecen aquí y se pueden corregir.</div></div>
+    <div id="conf"></div>
+    <div id="pie"><span id="msg"></span><button id="deshacer" onclick="descartar()" disabled>Descartar</button><button class="pri" id="guardar" onclick="revisar()" disabled>💾 Guardar</button></div>
+  </div>
+</div>
 <script>
 // El voucher se muestra desde el ARCHIVO ORIGINAL (la página exacta del PDF o la foto), bajado de Drive con la cuenta
-// de quien mira; si no se puede, la imagen de la celda. Los PDF quedan en memoria: otra fila del mismo PDF es inmediata.
+// de quien mira; si no se puede, la imagen de la celda. Los datos se corrigen aquí y, tras confirmar, van a la celda.
 if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-var actual = { hoja: '', fila: 0 }, D = null, turno = 0, PASE = null, PASE_T = 0, ARCH = {};
+var actual = { hoja: '', fila: 0 }, D = null, turno = 0, PASE = null, PASE_T = 0, ARCH = {}, CAMBIOS = {}, ESPERA = null;
 function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-function carga(si) { document.getElementById('carga').style.display = si ? 'block' : 'none'; }
+function carga(si) { var c = document.getElementById('carga'); if (c) c.style.display = si ? 'block' : 'none'; }
+function nCambios() { return Object.keys(CAMBIOS).length; }
+
+/* ---------- vista: solo imagen / ambos / solo datos (se recuerda) ---------- */
+function modo(m) {
+  document.body.classList.remove('m-imagen', 'm-ambos', 'm-datos'); document.body.classList.add('m-' + m);
+  ['imagen', 'ambos', 'datos'].forEach(function (x) { document.getElementById('b-' + x).className = x === m ? 'on' : ''; });
+  try { localStorage.setItem('vv_modo', m); } catch (e) {}
+  if (D && m !== 'datos') setTimeout(function () { if (D) mostrarImagen(D, turno); }, 50);   // re-dibuja al nuevo ancho
+}
+function ajustar() { document.body.classList.toggle('angosto', window.innerWidth < 640); }
+window.addEventListener('resize', ajustar); ajustar();
+(function () { var m = 'ambos'; try { m = localStorage.getItem('vv_modo') || 'ambos'; } catch (e) {} modo(m); })();
+
+/* ---------- sigue la fila seleccionada ---------- */
 function mirar() {
   if (document.hidden) return setTimeout(mirar, 1500);
   google.script.run.withSuccessHandler(function (d) {
-    if (d && !d.igual) pintar(d);
+    if (d && !d.igual) {
+      if (nCambios()) { ESPERA = d; aviso('⚠️ Tiene ' + nCambios() + ' cambio(s) sin guardar en la fila ' + actual.fila + '. Guárdelos o toque Descartar para ver la fila ' + d.fila + '.'); }
+      else pintar(d);
+    }
     setTimeout(mirar, 500);
   }).withFailureHandler(function () { setTimeout(mirar, 2500); }).VV_estado(actual.hoja, actual.fila);
 }
+function aviso(t, ok) { var m = document.getElementById('msg'); m.textContent = t || ''; m.style.color = ok ? '#2e7d32' : (t && /⚠️/.test(t) ? '#c62828' : '#546e7a'); }
+
+/* ---------- el original desde Drive ---------- */
 function pase() {
   if (PASE && Date.now() - PASE_T < 40 * 60000) return Promise.resolve(PASE);
   return new Promise(function (ok, mal) { google.script.run.withSuccessHandler(function (t) { PASE = t; PASE_T = Date.now(); ok(t); }).withFailureHandler(mal).VV_pase(); });
 }
-function bajar(id, mime) {   // el archivo ya listo para mostrar (se recuerda en memoria)
+function bajar(id, mime) {
   if (!ARCH[id]) ARCH[id] = pase().then(function (t) {
     return fetch('https://www.googleapis.com/drive/v3/files/' + id + '?alt=media', { headers: { Authorization: 'Bearer ' + t } })
       .then(function (r) { if (!r.ok) throw new Error('Drive ' + r.status); return r.arrayBuffer(); });
@@ -63,20 +109,15 @@ function bajar(id, mime) {   // el archivo ya listo para mostrar (se recuerda en
   ARCH[id].catch(function () { delete ARCH[id]; });
   return ARCH[id];
 }
-function pintar(d) {
-  var t = ++turno; D = d; actual = { hoja: d.hoja, fila: d.fila };
-  document.getElementById('donde').textContent = d.hoja + ' · fila ' + d.fila + (d.pagina ? ' · pág. ' + d.pagina : '');
-  document.getElementById('datos').innerHTML = (d.campos || []).map(function (c) { return '<tr><td class="k">' + esc(c[0]) + '</td><td>' + esc(c[1]) + '</td></tr>'; }).join('') +
-    (d.archivo ? '<tr><td class="k">Archivo</td><td>' + esc(d.archivo) + '</td></tr>' : '');
+function mostrarImagen(d, t) {
   var m = document.getElementById('marco'), o = document.getElementById('origen');
   if (d.vacio) { m.className = ''; m.innerHTML = '<div class="vacio">Esa fila no tiene voucher.</div><span id="carga">cargando…</span>'; o.textContent = ''; return; }
-  // 1) al instante: la imagen de la celda (si hay), mientras baja el original
-  m.className = ''; m.innerHTML = (d.img ? '<img src="' + esc(d.img) + '">' : '<div class="vacio">' + esc(d.texto || 'Cargando el original…') + '</div>') + '<span id="carga">cargando…</span>';
-  o.textContent = d.img ? 'imagen de la celda' : '';
-  m.querySelectorAll('img').forEach(zoomable);
+  if (!m.querySelector('canvas,img')) {   // al instante: la imagen de la celda, mientras baja el original
+    m.className = ''; m.innerHTML = (d.img ? '<img src="' + esc(d.img) + '">' : '<div class="vacio">' + esc(d.texto || 'Cargando el original…') + '</div>') + '<span id="carga">cargando…</span>';
+    o.textContent = d.img ? 'imagen de la celda' : ''; zoomable(m.querySelector('img'));
+  }
   if (!d.original || !d.original.id) { o.textContent = d.img ? 'imagen de la celda (no encontré el original en Drive)' : 'no encontré el original en Drive'; return; }
   carga(true);
-  // 2) el original: página exacta del PDF o la foto, en alta resolución
   var mime = String(d.original.mime || '');
   bajar(d.original.id, mime).then(function (a) {
     if (t !== turno) return;
@@ -89,22 +130,95 @@ function pintar(d) {
         var c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
         return pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(function () {
           if (t !== turno) return;
-          m.className = ''; m.innerHTML = '<span id="carga">cargando…</span>'; m.insertBefore(c, m.firstChild); zoomable(c);
+          var z = m.className; m.innerHTML = '<span id="carga">cargando…</span>'; m.insertBefore(c, m.firstChild); m.className = z; zoomable(c);
           o.textContent = 'original · página ' + n + ' de ' + a.pdf.numPages;
         });
       });
     }
     var url = URL.createObjectURL(new Blob([a.buf], { type: mime || 'image/jpeg' }));
-    m.className = ''; m.innerHTML = '<img src="' + url + '"><span id="carga">cargando…</span>'; zoomable(m.querySelector('img'));
+    m.innerHTML = '<img src="' + url + '"><span id="carga">cargando…</span>'; zoomable(m.querySelector('img'));
     o.textContent = 'original (foto)';
   }).catch(function (e) {
     if (t === turno) o.textContent = (d.img ? 'imagen de la celda' : '') + ' · no pude bajar el original (' + e.message + ')';
   }).then(function () { if (t === turno) carga(false); });
 }
 function zoomable(el) { if (el) el.onclick = function () { var m = document.getElementById('marco'); m.className = m.className ? '' : 'zoom'; }; }
+
+/* ---------- pintar fila: imagen + datos editables ---------- */
+function pintar(d) {
+  var t = ++turno; D = d; actual = { hoja: d.hoja, fila: d.fila }; CAMBIOS = {}; ESPERA = null;
+  document.getElementById('donde').textContent = d.hoja + ' · fila ' + d.fila + (d.pagina ? ' · pág. ' + d.pagina : '');
+  document.getElementById('marco').innerHTML = '<span id="carga">cargando…</span>';
+  document.getElementById('conf').innerHTML = ''; aviso(''); botones();
+  var h = '';
+  (d.cols || []).forEach(function (c) {
+    var id = 'c' + c.c, ctl;
+    if (c.tipo === 'formula') ctl = '<span class="fx" title="Fórmula: no se edita aquí">' + esc(c.v) + '</span>';
+    else if (c.tipo === 'check') ctl = '<input type="checkbox" id="' + id + '" data-c="' + c.c + '"' + (c.v ? ' checked' : '') + '>';
+    else if (c.tipo === 'lista') { var ops = (c.op || []).slice(); if (c.v && ops.indexOf(c.v) < 0) ops.unshift(c.v);
+      ctl = '<select id="' + id + '" data-c="' + c.c + '"><option value=""></option>' + ops.map(function (o) { return '<option' + (o === c.v ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>'; }
+    else ctl = '<input type="text" id="' + id + '" data-c="' + c.c + '" value="' + esc(c.v) + '"' + (c.tipo === 'fecha' ? ' placeholder="dd/mm/aaaa"' : '') + '>';
+    h += '<div class="f"><label for="' + id + '">' + esc(c.t) + '</label>' + ctl + '</div>';
+  });
+  document.getElementById('campos').innerHTML = d.vacio ? '<div class="vacio">Esa fila no tiene datos.</div>' : h;
+  document.querySelectorAll('#campos [data-c]').forEach(function (e) { e.addEventListener('input', marcar); e.addEventListener('change', marcar); });
+  if (!document.body.classList.contains('m-datos')) mostrarImagen(d, t);
+}
+function original(c) { var x = (D.cols || []).filter(function (k) { return String(k.c) === String(c); })[0]; return x ? x.v : ''; }
+function titulo(c) { var x = (D.cols || []).filter(function (k) { return String(k.c) === String(c); })[0]; return x ? x.t : 'Col ' + c; }
+function marcar(ev) {
+  var e = ev.target, c = e.dataset.c, v = e.type === 'checkbox' ? e.checked : e.value.trim(), o = original(c);
+  var igual = e.type === 'checkbox' ? v === o : String(v) === String(o).trim();
+  if (igual) delete CAMBIOS[c]; else CAMBIOS[c] = v;
+  e.classList.toggle('cambio', !igual); document.getElementById('conf').innerHTML = ''; botones();
+  aviso(nCambios() ? nCambios() + ' cambio(s) sin guardar' : '');
+}
+function botones() { var n = nCambios(); document.getElementById('guardar').disabled = !n; document.getElementById('deshacer').disabled = !n; }
+function descartar() {
+  CAMBIOS = {}; if (ESPERA) return pintar(ESPERA);
+  pintar(D);
+}
+function revisar() {   // confirmación «antes → ahora»
+  var h = '<b style="color:#263238">¿Guardar en la fila ' + D.fila + '?</b><br>';
+  Object.keys(CAMBIOS).forEach(function (c) { var o = original(c), n = CAMBIOS[c];
+    h += esc(titulo(c)) + ': <s>' + esc(o === true ? '✔' : o === false ? '☐' : (o || '(vacío)')) + '</s> → <b>' + esc(n === true ? '✔' : n === false ? '☐' : (n || '(vacío)')) + '</b><br>'; });
+  h += '<div style="margin-top:6px;display:flex;gap:6px"><button onclick="document.getElementById(\'conf\').innerHTML=\'\'">Volver</button><button class="pri" id="ok" onclick="guardar()">✅ Confirmar</button></div>';
+  document.getElementById('conf').innerHTML = '<div class="conf">' + h + '</div>';
+}
+function guardar() {
+  var b = document.getElementById('ok'); b.disabled = true; aviso('Guardando…');
+  google.script.run.withSuccessHandler(function (d) {
+    var n = nCambios(); CAMBIOS = {}; pintar(d); aviso('✅ Guardado en la hoja (' + n + ' cambio(s)).', true);
+  }).withFailureHandler(function (e) { b.disabled = false; aviso('⚠️ ' + e.message); }).VV_guardar(D.hoja, D.fila, D.clave, CAMBIOS);
+}
 function mover(paso) {
   if (!actual.hoja) return;
+  if (nCambios()) return aviso('⚠️ Primero guarde o descarte los cambios.');
   google.script.run.withSuccessHandler(function () {}).VV_ir(actual.hoja, actual.fila + paso);   // el cambio de fila lo ve mirar()
+}
+/* ---------- copiar la imagen del voucher (al portapapeles; si el navegador no deja, se muestra para copiar o bajar) ---------- */
+function blobImagen() {
+  var c = document.querySelector('#marco canvas'), i = document.querySelector('#marco img');
+  if (c) return new Promise(function (ok) { c.toBlob(ok, 'image/png'); });
+  if (!i) return Promise.reject(new Error('no hay imagen'));
+  return new Promise(function (ok, mal) {
+    try { var k = document.createElement('canvas'); k.width = i.naturalWidth; k.height = i.naturalHeight; k.getContext('2d').drawImage(i, 0, 0); k.toBlob(function (b) { b ? ok(b) : mal(new Error('imagen')); }, 'image/png'); }
+    catch (e) { mal(e); }
+  });
+}
+function copiar() {
+  blobImagen().then(function (b) {
+    var mostrar = function () {
+      var url = URL.createObjectURL(b), o = document.createElement('div');
+      o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9;overflow:auto;padding:12px;text-align:center';
+      o.innerHTML = '<div style="color:#fff;margin-bottom:8px">Clic derecho sobre la imagen → «Copiar imagen» (o <a style="color:#90caf9" download="voucher fila ' + (D ? D.fila : '') + '.png" href="' + url + '">descárguela</a>) ' +
+        '<button style="margin-left:8px">Cerrar</button></div><img style="max-width:100%;background:#fff" src="' + url + '">';
+      o.querySelector('button').onclick = function () { o.remove(); };
+      document.body.appendChild(o);
+    };
+    try { navigator.clipboard.write([new ClipboardItem({ 'image/png': b })]).then(function () { aviso('✅ Imagen copiada: péguela con Ctrl+V.', true); }, mostrar); }
+    catch (e) { mostrar(); }
+  }).catch(function () { aviso('⚠️ Todavía no hay imagen para copiar.'); });
 }
 function abrirOriginal() {
   if (D && D.original && D.original.id) window.open('https://drive.google.com/file/d/' + D.original.id + '/view', '_blank');
