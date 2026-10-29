@@ -662,7 +662,7 @@ def main():
     if modo == "emitir" and os.environ.get("CONFIRMAR", "") != huella:
         fin(False, "La confirmación no corresponde a este caso (¿se cambió algo después de aprobar?). No se creó nada.")
         sys.exit("Clave de confirmación incorrecta")
-    if not sesion and not EN_PC:
+    if not sesion and not EN_PC and os.environ.get("SIN_SESION") != "si":
         fin(False, "Falta la sesión de Quesito de esta empresa (secreto QUESITO_SESION). No se creó nada.")
         sys.exit(1)
     d = c.get("documento") or {}
@@ -675,15 +675,18 @@ def main():
     paso(f"Caso recibido · modo {modo} · " + (f"factura {serie}-{numero}" if m else f"cotización {cot}") + f" · {len(c.get('bienes') or [])} bien(es)")
 
     with sync_playwright() as p:
+        pantalla = False
         if EN_PC:   # 🖥 en la PC de la persona: Chrome VISIBLE con un perfil propio del robot (la sesión de Quesito queda guardada ahí)
             nav = ctx = p.chromium.launch_persistent_context(perfil_pc(ruc), channel="chrome", headless=False, locale="es-PE",
-                                                             viewport={"width": 1366, "height": 900}, args=en_vivo.args())
+                                                             viewport={"width": 1366, "height": 900},
+                                                             args=en_vivo.args() + ["--disable-blink-features=AutomationControlled"],
+                                                             ignore_default_args=["--enable-automation"])
             pag = ctx.pages[0] if ctx.pages else ctx.new_page()
             paso("🖥 Chrome abierto en la PC (mire la pantalla)")
         else:
             pantalla = en_vivo.video(bot)   # 🎥 si «en vivo» está activo: Chrome visible transmitido en video (se puede tocar)
             nav = en_vivo.lanzar(p, pantalla, executable_path=os.environ.get("CHROMIUM") or None)
-            ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
+            ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", **({} if pantalla else {"user_agent": UA}))   # con video: su huella real
             pag = ctx.new_page()
         en_vivo.iniciar(bot, PASO)
         pag.on("dialog", lambda dl: (print("  Confirmación aceptada (quitar línea)"), dl.accept()) if ACEPTAR[0] else (print("  Ventana de confirmación rechazada"), dl.dismiss()))
@@ -701,22 +704,26 @@ def main():
         ctx.route("**/*", red)
         try:
             fuera = lambda: "/login" in pag.url or pag.locator("input[type=password]:visible").count() > 0
-            if not EN_PC:
+            sin_sesion = os.environ.get("SIN_SESION") == "si"   # prueba: entrar a mano (por el video) aunque haya sesión guardada
+            if not EN_PC and sesion and not sin_sesion:
                 ctx.add_cookies(leer_sesion(sesion))
             pag.goto(BASE + "/invoices", wait_until="networkidle", timeout=60000)
             if EN_PC and fuera() and sesion:   # el perfil de la PC aún no tiene sesión: se prueba la copiada
                 ctx.add_cookies(leer_sesion(sesion))
                 pag.goto(BASE + "/invoices", wait_until="networkidle", timeout=60000)
-            if EN_PC and fuera():   # 🖥 la persona inicia sesión en la ventana (desde su PC el captcha sí pasa); queda guardada en el perfil
-                bot({"accion": "gre_aviso", "texto": "🖥 Inicie sesión en Quesito en la ventana de Chrome que se abrió en su PC (correo, clave y captcha). "
-                     "Lo espero 5 minutos; después sigo solo. Solo hace falta la primera vez."})
-                paso("Esperando que inicie sesión en la ventana de Chrome")
-                hasta = time.time() + 300
+            if (EN_PC or pantalla) and fuera():   # la persona inicia sesión: 🖥 en la ventana de su PC, o 🎥 desde el video (GitHub)
+                bot({"accion": "gre_aviso", "texto": ("🖥 Inicie sesión en Quesito en la ventana de Chrome que se abrió en su PC (correo, clave y captcha). "
+                     "Lo espero 5 minutos; después sigo solo. Solo hace falta la primera vez.") if EN_PC else
+                     ("🎥 La sesión de Quesito no sirve: inicie sesión usted desde el enlace 🎥 Video en vivo (correo, clave y captcha). "
+                      "Lo espero 8 minutos; cuando entre, sigo solo.")})
+                paso("Esperando que inicie sesión " + ("en la ventana de Chrome" if EN_PC else "por el video"))
+                hasta = time.time() + (300 if EN_PC else 480)
                 while time.time() < hasta and fuera():
                     pag.wait_for_timeout(3000)
                 pag.wait_for_timeout(2000)
             if fuera():
                 raise Alto(("No se inició sesión en Quesito en la ventana de su PC (esperé 5 minutos)." if EN_PC else
+                            "No se inició sesión en Quesito por el video (esperé 8 minutos)." if pantalla else
                             "La sesión guardada de Quesito venció: entre a Quesito en su Chrome, cópiela con Cookie-Editor (Export → JSON) "
                             "y péguela en el secreto QUESITO_SESION de la empresa en GitHub.") + " No se creó nada.")
             if "/invoices" not in pag.url:

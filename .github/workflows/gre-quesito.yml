@@ -26,6 +26,12 @@ on:
         description: "Huella de confirmación (la pone el bot). Obligatoria para emitir."
         required: false
         default: ''
+      sin_sesion:
+        description: "Prueba: no usar la sesión guardada (para entrar a mano por el video 🎥)"
+        required: false
+        default: 'no'
+        type: choice
+        options: ['no', 'si']
       donde:
         description: "github (servidor de GitHub) o pc (🖥 la PC con el ejecutor pc-quesito: Chrome visible)"
         required: false
@@ -113,6 +119,7 @@ jobs:
           CASO: ${{ inputs.caso }}
           MODO: ${{ inputs.modo }}
           CONFIRMAR: ${{ inputs.confirmar }}
+          SIN_SESION: ${{ inputs.sin_sesion }}
         run: python guias/scripts/quesito_gre.py
       - name: Avisar si el robot se cayó (PC)
         if: failure() && runner.os == 'Windows'

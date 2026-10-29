@@ -48,7 +48,9 @@ function TGEV_cuadroDelRobot_(q) {
 /** ¿Transmitir esta corrida? (el robot pregunta antes de preparar el video). */
 function TGEV_infoRobot_(q) {
   var caso = String(q.caso || '');
-  return { ok: true, vivo: !!(caso && TGEV_activo_() && CacheService.getScriptCache().get('tgv_on_' + caso)) };
+  if (!caso || !TGEV_activo_()) return { ok: true, vivo: false };
+  CacheService.getScriptCache().put('tgv_on_' + caso, '1', 3600);   // también corridas lanzadas a mano (pruebas)
+  return { ok: true, vivo: true };
 }
 
 /** 🎥 El robot de GitHub avisa que su video (noVNC por túnel temporal) está listo: la página 📺 pasa sola al video. */
