@@ -720,6 +720,13 @@ def main():
                 hasta = time.time() + (300 if EN_PC else 480)
                 while time.time() < hasta and fuera():
                     pag.wait_for_timeout(3000)
+                if not fuera():
+                    bot({"accion": "gre_aviso", "texto": "✅ Ya entró a Quesito. Desde ahora NO toque la pantalla: sigo yo solo."})
+                    paso("La persona inició sesión: sigo solo")
+                    pag.wait_for_timeout(6000)   # que deje de tocar y Quesito termine de cargar (avisos, PIN)
+                    for _ in range(2):
+                        pag.keyboard.press("Escape")   # cierra avisos o ventanas que Quesito muestra al entrar
+                        pag.wait_for_timeout(500)
                 pag.wait_for_timeout(2000)
             if fuera():
                 raise Alto(("No se inició sesión en Quesito en la ventana de su PC (esperé 5 minutos)." if EN_PC else
