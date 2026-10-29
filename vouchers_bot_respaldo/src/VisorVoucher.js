@@ -19,11 +19,35 @@ function VV_abrirGrande() {
     HtmlService.createHtmlOutputFromFile('VisorVoucherVista').setWidth(900).setHeight(680), '👁 Visor de voucher');
 }
 
-/** Hoja y fila seleccionadas ahora (el panel pregunta cada ~1 s). */
+/** Hoja y fila seleccionadas ahora (el panel pregunta ~2 veces por segundo). */
 function VV_seleccion() {
   const sh = SpreadsheetApp.getActiveSheet();
   const r = sh.getActiveRange();
   return { hoja: sh.getName(), fila: r ? r.getRow() : 0 };
+}
+
+/** Si la fila seleccionada cambio, devuelve sus datos; si no, {igual:true} (una sola llamada: mas rapido). */
+function VV_estado(hoja, fila) {
+  const s = VV_seleccion();
+  if (s.hoja === hoja && s.fila === fila) return { igual: true };
+  return VV_datos(s.hoja, s.fila);
+}
+
+/** Pase de un rato para que el visor baje el archivo original directo de Drive (solo en el navegador de quien mira). */
+function VV_pase() {
+  return ScriptApp.getOAuthToken();
+}
+
+/** ID del archivo original en Drive por su nombre (se recuerda 6 h para no buscar cada vez). */
+function VV_idArchivo_(nombre) {
+  if (!nombre) return null;
+  const cache = CacheService.getScriptCache(), k = 'vv_id_' + Utilities.base64EncodeWebSafe(nombre).slice(0, 200);
+  const g = cache.get(k);
+  if (g) return JSON.parse(g);
+  const f = buscarArchivoPorNombre(nombre);
+  const r = f ? { id: f.getId(), mime: f.getMimeType() } : null;
+  if (r) cache.put(k, JSON.stringify(r), 21600);
+  return r;
 }
 
 /** Datos de una fila: imagen de la columna J, archivo (K), pagina (M) y las primeras columnas. */
@@ -45,7 +69,8 @@ function VV_datos(hoja, fila) {
   return {
     hoja: hoja, fila: fila, img: img,
     texto: img ? '' : String(val[9] || '').trim(),   // "Ver PDF (...)" o vacio
-    archivo: String(val[10] || '').trim(), pagina: String(val[12] || '').trim(), campos: campos
+    archivo: String(val[10] || '').trim(), pagina: String(val[12] || '').trim(), campos: campos,
+    original: VV_idArchivo_(String(val[10] || '').trim())   // {id, mime}: el visor lo baja de Drive y muestra la pagina exacta
   };
 }
 
