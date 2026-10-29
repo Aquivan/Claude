@@ -110,7 +110,7 @@ def video(bot, ancho=1366, alto=1000):
         _correr(["Xvfb", ":99", "-screen", "0", f"{ancho}x{alto}x24", "-nolisten", "tcp"])
         time.sleep(1.5)
         clave = secrets.token_urlsafe(6)[:8]   # VNC admite hasta 8 caracteres
-        _correr(["x11vnc", "-display", ":99", "-rfbport", "5900", "-localhost", "-forever", "-shared", "-quiet", "-passwd", clave])
+        _correr(["x11vnc", "-display", ":99", "-rfbport", "5900", "-localhost", "-forever", "-shared", "-quiet", "-cursor", "arrow", "-passwd", clave])   # flecha del mouse visible
         _correr(["websockify", "--web", "/usr/share/novnc", "6080", "localhost:5900"])
         log = open("/tmp/cf.log", "w")   # la dirección del túnel queda aquí, no en el registro de GitHub
         _correr([cf, "tunnel", "--no-autoupdate", "--url", "http://localhost:6080"], salida=log)
@@ -124,7 +124,7 @@ def video(bot, ancho=1366, alto=1000):
         if not url:
             print("  🎥 El túnel no respondió; sigo con fotos.", flush=True)
             return True   # la pantalla igual sirve (las fotos salen de ahí)
-        enlace = f"{url}/vnc.html?autoconnect=1&resize=scale&reconnect=1&password={clave}"
+        enlace = f"{url}/vnc.html?autoconnect=1&resize=scale&reconnect=1&show_dot=1&password={clave}"
         r = bot({"accion": "gre_vivo_vnc", "url": enlace}) or {}
         print("  🎥 Video en vivo listo (el enlace va solo al bot)." if r.get("ok") else "  🎥 El bot no recibió el video.", flush=True)
         return True
