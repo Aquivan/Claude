@@ -28,17 +28,25 @@
   .btn { border: 0; border-radius: 8px; padding: 9px 16px; font: inherit; cursor: pointer; }
   .pri { background: #1565c0; color: #fff; font-weight: bold; } .pri:disabled { background: #90caf9; } .sec { background: #fff; border: 1px solid #cfd8dc; }
   #msg { margin-right: auto; font-size: 12px; }
+  .ed { max-width: 880px; margin: 0 auto; background: #fff; border: 1px solid #d0d7de; padding: 14px 18px; }
+  .ed h4 { margin: 14px 0 6px; font-size: 12px; color: #37474f; border-bottom: 1px solid #eceff1; padding-bottom: 3px; }
+  .ed .g { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px 14px; }
+  .ed label { display: block; font-size: 11px; color: #546e7a; margin-bottom: 2px; }
+  .ed input, .ed select, .ed textarea { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cfd8dc; border-radius: 6px; font: inherit; }
+  .ed .cambio { border-color: #fb8c00; background: #fff8e1; }
+  .conf td { font-size: 12px; } .conf .viejo { color: #9e9e9e; text-decoration: line-through; } .conf .nuevo { color: #1b5e20; font-weight: bold; }
 </style>
 </head>
 <body>
 <div id="app">Armando la guía…</div>
 <script>
-var ID = <?= idGuia ?>;
+var ID = <?= idGuia ?>, D = null;
 function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function v(x, falta) { return x ? esc(x) : /^(opcional|—)/.test(falta || '') ? '<span class="gris">' + esc(falta) + '</span>' : '<span class="falta">' + (falta || 'FALTA') + '</span>'; }
 function fila(k, x, falta) { return '<tr><td class="k">' + k + '</td><td>' + (falta === false ? esc(x || '—') : v(x, falta)) + '</td></tr>'; }
 function fmt(n) { var x = Number(String(n).replace(/,/g, '')); return isNaN(x) ? esc(n) : x.toLocaleString('en-US', { maximumFractionDigits: 3 }); }
 function pintar(d) {
+  D = d;
   var h = '<div class="avisos">';
   if (d.faltas.length) h += '<div class="av f">✏️ <b>Falta completar:</b> ' + esc(d.faltas.join(', ')) + '</div>';
   if (d.avisos.length) h += '<div class="av a">⚠️ <b>Revise:</b> ' + esc(d.avisos.join(' · ')) + '</div>';
@@ -73,6 +81,7 @@ function pintar(d) {
   h += '<h3>OBSERVACIONES</h3><table><tr><td>' + (d.observaciones ? esc(d.observaciones) : '<span class="gris">(ninguna)</span>') + '</td></tr></table>';
   h += '<div class="pie">Borrador generado desde la hoja «Guías de Remisión · Grupo» (guía ' + esc(d.id) + '). La guía oficial la crea ' + esc(d.donde) + ' al emitir.</div></div>';
   h += '<div class="barra"><span id="msg"></span><button class="btn sec" onclick="google.script.host.close()">Cerrar</button>' +
+       (d.fijo ? '' : '<button class="btn sec" onclick="editar()">✏️ Corregir datos</button>') +
        '<button class="btn sec" id="img" onclick="imagen()">🖼 Copiar como imagen</button>' +
        '<button class="btn pri" id="pdf" onclick="pdf()">📄 Guardar PDF en Drive</button></div>';
   document.getElementById('app').innerHTML = h;
@@ -107,6 +116,60 @@ function cargarH2c(fn) {
   s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
   s.onload = fn; s.onerror = function () { document.getElementById('img').disabled = false; document.getElementById('msg').textContent = '⚠️ No se pudo cargar el generador de imagen.'; };
   document.head.appendChild(s);
+}
+/* ✏️ Corregir desde el borrador: se edita, se revisa la lista «antes → ahora» y solo con ✅ Confirmar se guarda en la fila. */
+function editar() {
+  var h = '<div class="ed"><b>✏️ Corregir la guía ' + esc(ID) + '</b> <span class="gris">— cambie lo que necesite; lo que cambie se marca en naranja. Nada se guarda hasta que confirme.</span>';
+  D.editar.forEach(function (g) {
+    h += '<h4>' + esc(g.titulo) + '</h4><div class="g">';
+    g.campos.forEach(function (c) {
+      var id = 'f_' + c.k, ctl;
+      if (c.op) {
+        var ops = c.op.slice(); if (c.v && ops.indexOf(c.v) < 0) ops.unshift(c.v);
+        ctl = '<select id="' + id + '" data-k="' + c.k + '"><option value=""></option>' + ops.map(function (o) { return '<option' + (o === c.v ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>';
+      } else if (c.k === 'obs' || c.k === 'pedido') ctl = '<textarea id="' + id + '" data-k="' + c.k + '" rows="2">' + esc(c.v) + '</textarea>';
+      else ctl = '<input id="' + id + '" data-k="' + c.k + '" value="' + esc(c.v) + '"' + (c.fecha ? ' placeholder="dd/mm/aaaa"' : '') + '>';
+      h += '<div' + (c.k === 'obs' || c.k === 'pedido' ? ' style="grid-column:1/-1"' : '') + '><label title="' + esc(c.n) + '">' + esc(c.t) + '</label>' + ctl + '</div>';
+    });
+    h += '</div>';
+  });
+  h += '</div><div class="barra"><span id="msg"></span><button class="btn sec" onclick="pintar(D)">Cancelar</button>' +
+       '<button class="btn pri" onclick="revisar()">Revisar cambios →</button></div>';
+  document.getElementById('app').innerHTML = h;
+  document.querySelectorAll('.ed [data-k]').forEach(function (e) { e.addEventListener('input', function () { e.classList.toggle('cambio', e.value.trim() !== original(e.dataset.k)); }); e.addEventListener('change', function () { e.classList.toggle('cambio', e.value.trim() !== original(e.dataset.k)); }); });
+}
+function original(k) { var v = ''; D.editar.forEach(function (g) { g.campos.forEach(function (c) { if (c.k === k) v = String(c.v || '').trim(); }); }); return v; }
+function titulo(k) { var v = k; D.editar.forEach(function (g) { g.campos.forEach(function (c) { if (c.k === k) v = c.t; }); }); return v; }
+var CAMBIOS = null, PANTALLA = '';
+function revisar() {
+  CAMBIOS = {}; var n = 0;
+  document.querySelectorAll('.ed [data-k]').forEach(function (e) { var v = e.value.trim(); if (v !== original(e.dataset.k)) { CAMBIOS[e.dataset.k] = v; n++; } });
+  if (!n) { document.getElementById('msg').textContent = 'No cambió nada.'; return; }
+  PANTALLA = document.getElementById('app').innerHTML;
+  var vals = {}; document.querySelectorAll('.ed [data-k]').forEach(function (e) { vals[e.dataset.k] = e.value; });
+  var h = '<div class="ed"><b>¿Guardar estos ' + n + ' cambio(s) en la guía ' + esc(ID) + '?</b><table class="conf" style="margin-top:10px"><tr><th>Campo</th><th>Antes</th><th>Ahora</th></tr>';
+  Object.keys(CAMBIOS).forEach(function (k) { h += '<tr><td>' + esc(titulo(k)) + '</td><td class="viejo">' + (esc(original(k)) || '(vacío)') + '</td><td class="nuevo">' + (esc(CAMBIOS[k]) || '(vacío)') + '</td></tr>'; });
+  h += '</table><p class="gris">Se guarda en la fila de la hoja (como si lo escribiera allí: se completan solos los datos que dependan de esto). ' +
+       'Si ya pidió la vista previa en Quesito o SUNAT, vuelva a pedirla para que el robot use los cambios.</p></div>' +
+       '<div class="barra"><span id="msg"></span><button class="btn sec" onclick="volver()">← Volver a corregir</button>' +
+       '<button class="btn pri" id="ok" onclick="guardar()">✅ Confirmar y guardar</button></div>';
+  document.getElementById('app').innerHTML = h;
+  window._vals = vals;
+}
+function volver() {
+  document.getElementById('app').innerHTML = PANTALLA;
+  document.querySelectorAll('.ed [data-k]').forEach(function (e) { if (window._vals && e.dataset.k in window._vals) e.value = window._vals[e.dataset.k]; e.classList.toggle('cambio', e.value.trim() !== original(e.dataset.k));
+    e.addEventListener('input', function () { e.classList.toggle('cambio', e.value.trim() !== original(e.dataset.k)); }); e.addEventListener('change', function () { e.classList.toggle('cambio', e.value.trim() !== original(e.dataset.k)); }); });
+}
+function guardar() {
+  var b = document.getElementById('ok'), m = document.getElementById('msg');
+  b.disabled = true; m.textContent = 'Guardando y revisando la guía…';
+  google.script.run.withSuccessHandler(function (d) {
+      pintar(d);
+      document.getElementById('msg').innerHTML = '✅ Guardado (' + Object.keys(CAMBIOS).length + ' cambio(s)). Así queda ahora.' + (/Vista previa/.test(d.estado) ? '' : '');
+    })
+    .withFailureHandler(function (e) { b.disabled = false; m.textContent = '⚠️ ' + e.message; })
+    .GR_guardarBorrador(ID, CAMBIOS);
 }
 function pdf() {
   var b = document.getElementById('pdf'), m = document.getElementById('msg');
