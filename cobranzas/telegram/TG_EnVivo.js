@@ -58,6 +58,8 @@ function TGEV_vncDelRobot_(q) {
   var cache = CacheService.getScriptCache();
   if (!caso || !cache.get('tgv_on_' + caso)) return { ok: false, error: 'en vivo apagado' };
   cache.put('tgv_v_' + caso, url, 3600);
+  // También directo al chat: este enlace no pasa por Google (con varias cuentas de Google abiertas, la página 📺 a veces no abre).
+  try { var c = TGG_leer_(TG_ss_(), caso); if (c) TGG_avisar_(c, '🎥 Video en vivo (puede hacer clic y escribir): ' + url + '\nSolo dura mientras el robot trabaja.', null, false); } catch (e) {}
   return { ok: true };
 }
 
