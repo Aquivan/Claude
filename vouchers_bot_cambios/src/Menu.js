@@ -7,6 +7,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🤖 Vouchers')
     .addItem('▶ Procesar Nuevos Archivos (carpeta Drive)', 'procesarVouchers')
+    .addItem('👁 Visor de voucher (clic en una fila = imagen en grande)', 'VV_abrir')
     .addSeparator()
     .addItem('⚙️ Verificar Configuracion', 'verificarConfiguracion')
     .addItem('⏰ Activar procesamiento automatico', 'crearTriggerAutomatico')

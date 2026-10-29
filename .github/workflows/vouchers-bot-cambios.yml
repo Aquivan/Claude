@@ -74,7 +74,11 @@ jobs:
           errores = []
           for f in sorted(os.listdir(cambios)):
               vivo = buscar(f)
-              if not vivo: errores.append(f + ': no está en la hoja'); continue
+              if not vivo:
+                  if os.path.exists(os.path.join(base, f)):
+                      errores.append(f + ': no está en la hoja (¿se borró a mano?)'); continue
+                  print('================ ' + f + ' (ARCHIVO NUEVO) ================')
+                  shutil.copy(os.path.join(cambios, f), os.path.join(hoja, f)); continue
               actual = open(vivo, encoding='utf-8').read()
               esperado = open(os.path.join(base, f), encoding='utf-8').read()
               nuevo = open(os.path.join(cambios, f), encoding='utf-8').read()
