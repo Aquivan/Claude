@@ -53,7 +53,8 @@
   <button id="b-datos" onclick="modo('datos')" title="Solo los datos">📋</button>
   <button onclick="copiar()" title="Copiar la imagen del voucher (para pegar en WhatsApp, Telegram o un correo)">📋 Copiar</button>
   <button onclick="abrirOriginal()" title="Abrir el archivo original en Drive">📄</button>
-  <button onclick="maximizar()" title="Ventana grande del tamaño de su pantalla (otro clic: tamaño normal)">⤢</button>
+  <button onclick="ventanaAparte()" title="Abrir el voucher en una ventana aparte del navegador: se agranda o achica arrastrando el borde, se maximiza o se lleva a otro monitor">🗗 Ventana aparte</button>
+  <button onclick="maximizar()" title="Agrandar esta ventana al máximo que permite Google Sheets (otro clic: tamaño normal)">⤢</button>
 </div>
 <div class="cuerpo">
   <div id="izq">
@@ -134,19 +135,19 @@ function mostrarImagen(d, t) {
       var n = Math.min(Math.max(parseInt(d.pagina, 10) || 1, 1), a.pdf.numPages);
       return a.pdf.getPage(n).then(function (pg) {
         if (t !== turno) return;
-        var ancho = Math.max(m.clientWidth, 300) * 2.3 * (window.devicePixelRatio || 1);
+        var ancho = Math.max(m.clientWidth, (POP && !POP.closed) ? POP.innerWidth : 0, 300) * 2.3 * (window.devicePixelRatio || 1);   // nítido también en la ventana aparte
         var vp = pg.getViewport({ scale: ancho / pg.getViewport({ scale: 1 }).width });
         var c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
         return pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(function () {
           if (t !== turno) return;
           m.innerHTML = '<span id="carga">cargando…</span>'; m.insertBefore(c, m.firstChild); zoomable(c);
-          o.textContent = 'original · página ' + n + ' de ' + a.pdf.numPages;
+          o.textContent = 'original · página ' + n + ' de ' + a.pdf.numPages; espejo();
         });
       });
     }
     var url = URL.createObjectURL(new Blob([a.buf], { type: mime || 'image/jpeg' }));
     m.innerHTML = '<img src="' + url + '"><span id="carga">cargando…</span>'; zoomable(m.querySelector('img'));
-    o.textContent = 'original (foto)';
+    o.textContent = 'original (foto)'; var im = m.querySelector('img'); if (im) im.addEventListener('load', espejo);
   }).catch(function (e) {
     if (t === turno) o.textContent = (d.img ? 'imagen de la celda' : '') + ' · no pude bajar el original (' + e.message + ')';
   }).then(function () { if (t === turno) carga(false); });
@@ -161,7 +162,7 @@ function aplicar() {
 }
 function zoom(d) { Z = Math.min(6, Math.max(0.3, Math.round((Z + d * (Z < 1 ? 0.1 : 0.25)) * 100) / 100)); aplicar(); }
 function ajuste(a) { AJ = a; Z = 1; aplicar(); document.getElementById('marco').scrollTo(0, 0); }
-function girar() { ROT = (ROT + 90) % 360; var el = document.querySelector('#marco canvas, #marco img'); if (el) mostrarGirado(el); }
+function girar() { ROT = (ROT + 90) % 360; var el = document.querySelector('#marco canvas, #marco img'); if (el) mostrarGirado(el); espejo(); }
 function mostrarGirado(fuente) {   // dibuja la imagen girada en un canvas nuevo (así el tamaño y el desplazamiento siguen bien)
   var src = fuente._orig || fuente, w = src.naturalWidth || src.width, h = src.naturalHeight || src.height;
   if (!ROT) { if (fuente._orig) fuente.parentNode.replaceChild(src, fuente); return; }
@@ -189,7 +190,44 @@ function zoomable(el) {
 })();
 function maximizar() {
   var grande = window.innerWidth < (screen.availWidth - 200);
-  google.script.run.VV_abrirGrande(grande ? screen.availWidth - 40 : 1180, grande ? screen.availHeight - 170 : 720);
+  google.script.run.VV_abrirGrande(grande ? screen.availWidth - 20 : 1180, grande ? screen.availHeight - 120 : 720);
+}
+
+/* ---------- 🗗 ventana aparte: una ventana REAL del navegador (se agranda arrastrando el borde, se maximiza, va a otro
+   monitor). Muestra el voucher actual y cambia sola con la fila; esta ventana del visor debe seguir abierta. ---------- */
+var POP = null;
+var POP_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Voucher</title><style>' +
+  'html,body{margin:0;height:100%;background:#263238;font-family:Arial,sans-serif}' +
+  '#b{position:fixed;top:0;left:0;right:0;display:flex;gap:4px;align-items:center;padding:6px 8px;background:#37474f;color:#eceff1;font-size:12px;z-index:2}' +
+  '#b button{border:0;border-radius:5px;padding:4px 9px;cursor:pointer;font:inherit}#t{flex:1}' +
+  '#m{position:absolute;top:38px;left:0;right:0;bottom:0;overflow:auto;cursor:grab;text-align:center}' +
+  '#i{display:block;margin:0 auto;background:#fff;width:calc(var(--z,1)*100%)}#m.alto #i{width:auto;height:calc(var(--z,1)*100%)}' +
+  '</style></head><body><div id="b"><span id="t">Voucher</span><button id="menos">−</button><span id="pz">100%</span><button id="mas">+</button>' +
+  '<button id="ancho">↔ Ancho</button><button id="alto">↕ Página</button></div><div id="m"><img id="i"></div></body></html>';
+function ventanaAparte() {
+  if (POP && !POP.closed) { POP.focus(); return espejo(); }
+  POP = window.open('', 'vv_voucher', 'width=' + Math.round(screen.availWidth * 0.45) + ',height=' + (screen.availHeight - 80) + ',left=' + Math.round(screen.availWidth * 0.55) + ',top=0,resizable=yes');
+  if (!POP) return aviso('⚠️ El navegador bloqueó la ventana: permita las ventanas emergentes de este sitio (ícono en la barra de direcciones) y vuelva a tocar 🗗.');
+  POP.document.open(); POP.document.write(POP_HTML); POP.document.close();
+  var d = POP.document, m = d.getElementById('m'), z = 1, x0, y0, sx, sy, mov = false;
+  var poner = function () { m.style.setProperty('--z', z); d.getElementById('pz').textContent = Math.round(z * 100) + '%'; };
+  d.getElementById('mas').onclick = function () { z = Math.min(6, z + 0.25); poner(); };
+  d.getElementById('menos').onclick = function () { z = Math.max(0.3, z - 0.25); poner(); };
+  d.getElementById('ancho').onclick = function () { m.classList.remove('alto'); z = 1; poner(); };
+  d.getElementById('alto').onclick = function () { m.classList.add('alto'); z = 1; poner(); };
+  m.addEventListener('mousedown', function (e) { mov = true; x0 = e.clientX; y0 = e.clientY; sx = m.scrollLeft; sy = m.scrollTop; e.preventDefault(); });
+  POP.addEventListener('mousemove', function (e) { if (mov) { m.scrollLeft = sx - (e.clientX - x0); m.scrollTop = sy - (e.clientY - y0); } });
+  POP.addEventListener('mouseup', function () { mov = false; });
+  m.addEventListener('wheel', function (e) { if (e.ctrlKey) { e.preventDefault(); z = Math.min(6, Math.max(0.3, z + (e.deltaY < 0 ? 0.25 : -0.25))); poner(); } }, { passive: false });
+  espejo();
+}
+function espejo() {   // copia el voucher que se ve aquí a la ventana aparte
+  if (!POP || POP.closed) return;
+  var t = POP.document.getElementById('t'); if (t && D) t.textContent = D.hoja + ' · fila ' + D.fila + (D.pagina ? ' · pág. ' + D.pagina : '') + (D.archivo ? ' · ' + D.archivo : '');
+  blobImagen().then(function (b) {
+    var i = POP && !POP.closed && POP.document.getElementById('i'); if (!i) return;
+    var viejo = i.src; i.src = URL.createObjectURL(b); if (/^blob:/.test(viejo)) URL.revokeObjectURL(viejo);
+  }).catch(function () {});
 }
 
 /* ---------- pintar fila: imagen + datos editables ---------- */
@@ -210,7 +248,7 @@ function pintar(d) {
   });
   document.getElementById('campos').innerHTML = d.vacio ? '<div class="vacio">Esa fila no tiene datos.</div>' : h;
   document.querySelectorAll('#campos [data-c]').forEach(function (e) { e.addEventListener('input', marcar); e.addEventListener('change', marcar); });
-  if (!document.body.classList.contains('m-datos')) mostrarImagen(d, t);
+  if (!document.body.classList.contains('m-datos') || (POP && !POP.closed)) mostrarImagen(d, t);   // con ventana aparte, aunque aquí se vean solo datos
 }
 function original(c) { var x = (D.cols || []).filter(function (k) { return String(k.c) === String(c); })[0]; return x ? x.v : ''; }
 function titulo(c) { var x = (D.cols || []).filter(function (k) { return String(k.c) === String(c); })[0]; return x ? x.t : 'Col ' + c; }
