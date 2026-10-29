@@ -1,5 +1,5 @@
 // ============================================================
-// REPARACION DE IMAGENES FALTANTES ("Ver PDF (Voucher N)")
+// REPARACION DE IMAGENES FALTANTES ("Ver PDF (Voucher N)" o celda J vacia)
 // ------------------------------------------------------------
 // Corre POR SEPARADO del procesamiento principal. Revisa la hoja buscando
 // filas donde la columna J quedo como texto en vez de imagen, localiza el
@@ -73,17 +73,31 @@ async function repararImagenesEnHoja_(hoja, inicio, LIMITE) {
     // Leemos J (Voucher Imagen), K (Archivo Original), M (Pagina) de una vez.
     const rango   = hoja.getRange(2, 10, ultimaFila - 1, 4); // columnas J..M
     const valores = rango.getValues();
+    const formulasJ = hoja.getRange(2, 10, ultimaFila - 1, 1).getFormulas();
 
+    // Pendiente = J dice "Ver PDF (...)" o J quedo VACIA (sin imagen ni formula) teniendo su archivo en K.
+    // Una celda con imagen devuelve un objeto CellImage (no texto), asi que nunca se toma como vacia.
     const pendientes = [];
     for (let i = 0; i < valores.length; i++) {
       const val = valores[i][0]; // columna J
-      if (typeof val === 'string' && val.indexOf('Ver PDF') === 0) {
+      const archivoK = (valores[i][1] || '').toString().trim();
+      const verPdf = typeof val === 'string' && val.indexOf('Ver PDF') === 0;
+      const vacia  = (val === '' || val === null) && !formulasJ[i][0] && archivoK !== '';
+      if (verPdf || vacia) {
         pendientes.push({
           fila:          i + 2,
+          vacia:         vacia && !verPdf,
           archivo:       (valores[i][1] || '').toString().trim(), // K
           pagina:        parseInt(valores[i][3], 10) || 0          // M
         });
       }
+    }
+
+    // Proteccion: si de pronto "faltan" muchas imagenes a la vez, algo raro pasa (no reprocesar toda la hoja).
+    const nVacias = pendientes.filter(function (x) { return x.vacia; }).length;
+    if (nVacias > 50) {
+      Logger.log('AVISO: ' + nVacias + ' celdas J vacias en ' + hoja.getName() + '. Solo se reparan las de "Ver PDF"; revise la hoja.');
+      for (let k = pendientes.length - 1; k >= 0; k--) if (pendientes[k].vacia) pendientes.splice(k, 1);
     }
 
     if (pendientes.length === 0) {
@@ -169,7 +183,7 @@ function notificarReparacionTelegram_(reparadas, fallidas, pendientesRestantes) 
   if (!CFG.TELEGRAM_BOT_TOKEN || CFG.TELEGRAM_ALLOWED_CHAT_IDS.length === 0) return;
 
   let texto = '🔧 Reparacion automatica de imagenes:\n';
-  if (reparadas > 0) texto += '✅ ' + reparadas + ' imagen(es) que habian quedado como texto ("Ver PDF") ya se corrigieron.\n';
+  if (reparadas > 0) texto += '✅ ' + reparadas + ' imagen(es) que habian quedado como texto ("Ver PDF") o vacias ya se corrigieron.\n';
   if (fallidas > 0)  texto += '⚠️ ' + fallidas + ' no se pudieron reparar todavia, se reintentan en la proxima pasada.\n';
   if (pendientesRestantes > 0) texto += '⏳ Quedan ' + pendientesRestantes + ' pendientes para la siguiente corrida.';
 

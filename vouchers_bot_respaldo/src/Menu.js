@@ -12,7 +12,7 @@ function onOpen() {
     .addItem('⏰ Activar procesamiento automatico', 'crearTriggerAutomatico')
     .addItem('⏸ Desactivar procesamiento automatico', 'eliminarTriggerAutomatico')
     .addSeparator()
-    .addItem('🔧 Reparar imagenes faltantes (Ver PDF)', 'repararImagenesFaltantes')
+    .addItem('🔧 Reparar imagenes faltantes (Ver PDF o vacias)', 'repararImagenesFaltantes')
     .addItem('⏰ Activar reparacion automatica (cada 30 min)', 'crearTriggerReparacion')
     .addItem('⏸ Desactivar reparacion automatica', 'eliminarTriggerReparacion')
     .addSeparator()
