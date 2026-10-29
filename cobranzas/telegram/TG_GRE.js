@@ -371,6 +371,7 @@ function TGG_pedir_(ss, c, modo) {
       c.decision = 'cerrar';   // pidió otra vista previa: la que espera se cierra sin emitir
     }
   } finally { lock.releaseLock(); }
+  TGG_cerrarOtraEspera_(ss, c);   // Quesito/SUNAT atienden una guía a la vez por empresa: la vista previa de OTRA guía que espera se cierra (no emite)
   c.estado = modo === 'emitir' ? 'Emitiendo' : 'Vista previa…';
   c.solo_leer = false;
   c.huella = TGG_huella_(c);
@@ -488,6 +489,7 @@ function TGG_gh_(q) {
       var e = TGG_leer_(ss, c.id) || c;
       if (e.espera_run !== run) { e.espera_run = run; e.decision = ''; e.confirmar = ''; }
       if (q.hasta) e.espera_hasta = Number(q.hasta);
+      CacheService.getScriptCache().put('tgg_esp_' + e.empresa_ruc, e.id, 900);   // la vista previa que espera de esta empresa (otra guía la cierra)
       var d = { ok: true, decision: e.decision || '', confirmar: e.decision === 'emitir' ? e.confirmar : '' };
       if (q.fin || d.decision) { e.espera_run = ''; e.espera_hasta = 0; if (d.decision !== 'emitir') e.decision = ''; }
       TGG_guardar_(ss, e);
@@ -850,4 +852,21 @@ function TGG_botonWA_(acc, k, op, numero) {
     return TGG_respWA_('⚠️ ' + e.message, c); }
   return TGG_respWA_((modo === 'emitir' ? '🚚 *Emitiendo* la guía en ' + TGG_donde_(c) : '👁 *Preparando la vista previa* en ' + TGG_donde_(c) + ' (no se emite)') +
     ' · caso ' + c.id + (como === 'misma' ? '\nEn la misma pantalla de la vista previa: en menos de un minuto le mando el resultado.' : '\nTarda 2–4 minutos; le mando aquí la foto o el resultado.'));
+}
+
+
+/** Si otra guía de la misma empresa tiene su vista previa abierta esperando ✅, se cierra sin emitir para que la nueva no quede en cola. */
+function TGG_cerrarOtraEspera_(ss, c) {
+  var cache = CacheService.getScriptCache(), otro = cache.get('tgg_esp_' + c.empresa_ruc);
+  if (!otro || otro === c.id) return;
+  var lk = LockService.getUserLock();
+  if (!lk.tryLock(20000)) return;
+  try {
+    var e = TGG_leer_(ss, otro);
+    if (e && e.espera_run && Number(e.espera_hasta || 0) > Date.now() && e.decision !== 'emitir') {
+      e.decision = 'cerrar'; TGG_guardar_(ss, e);
+      try { TGG_avisar_(e, '⏹ Cerré la vista previa de la guía caso ' + e.id + ' (no se emitió) para atender otra guía de la misma empresa.', null, false); } catch (x) {}
+    }
+    cache.remove('tgg_esp_' + c.empresa_ruc);
+  } finally { lk.releaseLock(); }
 }
