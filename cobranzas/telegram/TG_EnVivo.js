@@ -21,7 +21,7 @@ function TGEV_iniciar_(c) {
   cache.put('tgv_on_' + c.id, '1', 3600);
   cache.remove('tgv_m_' + c.id);
   var url = TGEV_url_() + '?vivo=' + tok;
-  if (c.origen !== 'hoja') try { TGG_avisar_(c, '📺 Véalo en vivo (solo mirar; el enlace vence en unas horas): ' + url, null, false); } catch (e) {}
+  try { TGG_avisar_(c, '📺 Véalo en vivo: ' + url + '\nEn GitHub pasa solo a 🎥 video y puede hacer clic y escribir; en su PC mire la ventana de Chrome. El enlace vence en unas horas.', null, false); } catch (e) {}   // también si la guía vino de la hoja
   return url;
 }
 
