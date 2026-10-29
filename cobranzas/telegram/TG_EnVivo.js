@@ -109,3 +109,52 @@ var TGEV_HTML_ = [
   'pide();',
   '</script></body></html>'
 ].join('\n');
+
+/* ============================================================ 🖥 Quesito en la PC de la persona (ejecutor pc-quesito)
+ * «en pc sí» / «en pc no» (o 🖥 en la hoja): las guías por Quesito corren en la PC (Chrome visible) si el ejecutor está
+ * encendido (run.cmd abierto). Si la PC está apagada o no se puede saber, se usa GitHub como siempre. */
+
+var TGPC_PROP_ = 'GRE_EN_PC';
+function TGPC_activo_() { return PropertiesService.getScriptProperties().getProperty(TGPC_PROP_) === 'SI'; }
+function TGPC_poner_(si) { PropertiesService.getScriptProperties().setProperty(TGPC_PROP_, si ? 'SI' : 'NO'); return !!si; }
+
+/** ¿El ejecutor pc-quesito está conectado? {ok, motivo}. Se recuerda 1 minuto. */
+function TGPC_estado_(cfg) {
+  var cache = CacheService.getScriptCache(), k = 'tgpc_estado', x = cache.get(k);
+  if (x) return JSON.parse(x);
+  var r;
+  try {
+    var rs = (TG_gh_(cfg, '/actions/runners?per_page=50').runners || []).filter(function (u) {
+      return (u.labels || []).some(function (l) { return l.name === 'pc-quesito'; }); });
+    var on = rs.filter(function (u) { return u.status === 'online'; });
+    r = on.length ? { ok: true, motivo: on[0].busy ? 'ocupada con otra guía (espera su turno)' : 'encendida' }
+      : { ok: false, motivo: rs.length ? 'la PC no está conectada (abra «Robot de guías (encender)» / run.cmd)' : 'no hay ejecutor pc-quesito registrado' };
+  } catch (e) {
+    r = { ok: false, motivo: 'no puedo ver si la PC está encendida: el token de GitHub necesita el permiso «Administration: Read-only»' };
+  }
+  cache.put(k, JSON.stringify(r), 60);
+  return r;
+}
+
+/** 'pc' o 'github' para una corrida de Quesito (y avisa por qué, si estaba activo pero no se puede). */
+function TGPC_donde_(cfg, c) {
+  if (!TGPC_activo_()) return 'github';
+  var e = TGPC_estado_(cfg);
+  if (c) c.pc_motivo = e.ok ? '' : e.motivo;
+  return e.ok ? 'pc' : 'github';
+}
+
+function TGPC_comando_(texto) {
+  var m = String(texto || '').trim().match(/^\/?(?:usar\s+(?:mi\s+)?|en\s+(?:mi\s+)?)pc\b\s*[:,]?\s*(s[ií]|no|on|off|activ\w*|desactiv\w*|apag\w*|encend\w*)?\s*[.!]*$/i);
+  if (!m) return null;
+  var w = (m[1] || '').toLowerCase(), si;
+  if (/^(s[ií]|on|activ|encend)/.test(w)) si = TGPC_poner_(true);
+  else if (/^(no|off|desactiv|apag)/.test(w)) si = TGPC_poner_(false);
+  else si = TGPC_activo_();
+  var est = '';
+  try { var e = TGPC_estado_(TG_cfg_(TG_ss_())); est = '\nAhora la PC: ' + (e.ok ? '🟢 ' : '⚪ ') + e.motivo + '.'; } catch (x) {}
+  return si ? '🖥 Quesito en su PC: ACTIVADO. Las guías por Quesito se harán en su PC, con Chrome visible en la pantalla, mientras esté abierta la ventana ' +
+      '«Robot de guías» (run.cmd). Si la PC está apagada, uso GitHub como siempre. La primera vez inicie sesión en Quesito en esa ventana de Chrome.' + est +
+      '\nPara volver a GitHub: «en pc no».'
+    : '🖥 Quesito en su PC: DESACTIVADO. El robot trabaja en GitHub (con la sesión copiada). Para usar su PC: «en pc sí».' + est;
+}

@@ -28,7 +28,7 @@ function TGGH_doPost_(e) {
       if (!c) return TGW_json_({ ok: false, error: 'caso desconocido' });
       if (q.modo === 'emitir' && c.estado === 'Emitida') return TGW_json_({ ok: false, error: 'ya está emitida (' + c.gre + ')' });
       var como = TGG_pedir_(ss, c, q.modo === 'emitir' ? 'emitir' : 'vista');
-      return TGW_json_({ ok: true, como: como || '', vivo: c.vivo_url || '' });
+      return TGW_json_({ ok: true, como: como || '', vivo: c.vivo_url || '', donde: c.donde || '', pc_motivo: c.pc_motivo || '' });
     }
     if (p.accion === 'leer') {   // 📥 solo leer la factura (o cotización) en Quesito: cliente y productos para completar la fila
       var r = TGGH_caso_(ss, q);
@@ -36,8 +36,13 @@ function TGGH_doPost_(e) {
       var cl = TGG_leer_(ss, r.caso), cfg = TG_cfg_(ss);
       cl.estado = 'Leyendo Quesito…'; cl.solo_leer = true; cl.leido = null; cl.ultimo_error = '';
       TGG_guardar_(ss, cl);
-      TG_gh_(cfg, '/actions/workflows/' + TGG_WF_QUESITO_ + '/dispatches', 'post', { ref: cfg.rama, inputs: { ruc: cl.empresa_ruc, caso: cl.id, modo: 'leer', confirmar: '' } });
-      return TGW_json_({ ok: true, caso: cl.id, vivo: TGEV_iniciar_(cl) });
+      var dn = TGPC_donde_(cfg, cl);   // 🖥 en la PC si lo activó y está encendida
+      TG_gh_(cfg, '/actions/workflows/' + TGG_WF_QUESITO_ + '/dispatches', 'post', { ref: cfg.rama, inputs: { ruc: cl.empresa_ruc, caso: cl.id, modo: 'leer', confirmar: '', donde: dn } });
+      return TGW_json_({ ok: true, caso: cl.id, vivo: TGEV_iniciar_(cl), donde: dn });
+    }
+    if (p.accion === 'pc') {   // 🖥 Quesito en la PC
+      if (q.activar != null) TGPC_poner_(!!q.activar);
+      return TGW_json_({ ok: true, activo: TGPC_activo_(), estado: TGPC_estado_(TG_cfg_(ss)) });
     }
     if (p.accion === 'vivo') return TGW_json_({ ok: true, activo: q.activar == null ? TGEV_activo_() : TGEV_poner_(!!q.activar) });   // 📺 en vivo
     if (p.accion === 'estado') {

@@ -118,7 +118,7 @@ function TG_manejar_(u) {
   var atajo = TG_ATAJOS_[texto];
   if (atajo) return TG_comando_(ctx, atajo);
   if (TGQ_RX_.test(texto)) return TGQ_tg_(ctx, texto);   // 📋 "procesados hoy sonia" (TG_Procesados.js)
-  var vivo = TGEV_comando_(texto);   // 📺 «en vivo sí/no»: ver la pantalla del robot de guías (TG_EnVivo.js)
+  var vivo = TGEV_comando_(texto) || TGPC_comando_(texto);   // 📺 «en vivo sí/no» · 🖥 «en pc sí/no» (TG_EnVivo.js)
   if (vivo) return TG_enviar_(chatId, TG_esc_(vivo));
   if (TGG_datoTG_(ctx, texto)) return;   // 🚚 dato suelto para la guía abierta ("es privado", "peso 30000")
   if (TGG_atajoTG_(ctx, texto)) return;   // 🚚 "emite la guía de remisión" (antes o después de las fotos) · "listo"

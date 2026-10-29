@@ -22,6 +22,7 @@ function onOpen() {
     .addSubMenu(ui.createMenu('📺 Ver el robot en vivo')
       .addItem('Activar / desactivar', 'GR_menuEnVivo')
       .addItem('Abrir la última transmisión', 'GR_menuAbrirVivo'))
+    .addItem('🖥 Quesito en mi PC (activar / desactivar)', 'GR_menuEnPc')
     .addItem('📋 Resumen del día (emitidas y por emitir)', 'GR_menuResumen')
     .addSubMenu(ui.createMenu('👁 Ver')
       .addItem('📄 La factura de la guía', 'GR_menuVerFactura')

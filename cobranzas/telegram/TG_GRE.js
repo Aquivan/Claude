@@ -375,8 +375,13 @@ function TGG_pedir_(ss, c, modo) {
   c.solo_leer = false;
   c.huella = TGG_huella_(c);
   TGG_guardar_(ss, c);
-  TG_gh_(cfg, '/actions/workflows/' + (c.via === 'quesito' ? TGG_WF_QUESITO_ : TGG_WF_) + '/dispatches', 'post', { ref: cfg.rama, inputs: {
-    ruc: c.empresa_ruc, caso: c.id, modo: modo, confirmar: modo === 'emitir' ? c.huella : '' } });
+  var ins = { ruc: c.empresa_ruc, caso: c.id, modo: modo, confirmar: modo === 'emitir' ? c.huella : '' };
+  if (c.via === 'quesito') ins.donde = TGPC_donde_(cfg, c);   // 🖥 en la PC de la persona, si lo activó y está encendida
+  TG_gh_(cfg, '/actions/workflows/' + (c.via === 'quesito' ? TGG_WF_QUESITO_ : TGG_WF_) + '/dispatches', 'post', { ref: cfg.rama, inputs: ins });
+  c.donde = ins.donde || 'github';
+  if (c.origen !== 'hoja' && (ins.donde === 'pc' || c.pc_motivo)) try {
+    TGG_avisar_(c, ins.donde === 'pc' ? '🖥 Lo hago en su PC: mire la ventana de Chrome que se abre (no la cierre ni la use mientras trabaja).'
+      : '🖥 No pude usar su PC (' + c.pc_motivo + '): lo hago en GitHub.', null, false); } catch (e) {}
   c.vivo_url = TGEV_iniciar_(c);   // 📺 si el modo en vivo está activo
 }
 
@@ -755,7 +760,7 @@ function TGG_respWA_(texto, c) {
 /** WhatsApp: corrección pendiente, "guía" con fotos, "emitir guía <caso>". null si no es de guías. */
 function TGG_atajoWA_(ss, q, clave) {
   var texto = String(q.texto || '').trim(), ses = TG_sesion_(clave);
-  var ev = !(q.adjuntos || []).length && TGEV_comando_(texto);   // 📺 «en vivo sí/no»
+  var ev = !(q.adjuntos || []).length && (TGEV_comando_(texto) || TGPC_comando_(texto));   // 📺 «en vivo sí/no» · 🖥 «en pc sí/no»
   if (ev) return TGG_respWA_(ev);
   var pp = !(q.adjuntos || []).length && TGG_pedidoPdf_(ss, texto, clave);   // 📄 "pdf guía …": manda el PDF adjunto
   if (pp) {
