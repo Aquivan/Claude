@@ -681,7 +681,9 @@ def main():
             pag = ctx.pages[0] if ctx.pages else ctx.new_page()
             paso("🖥 Chrome abierto en la PC (mire la pantalla)")
         else:
-            nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None, args=en_vivo.args())
+            pantalla = en_vivo.video(bot)   # 🎥 si «en vivo» está activo: Chrome visible transmitido en video (se puede tocar)
+            nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None, headless=not pantalla,
+                                    args=en_vivo.args() + (en_vivo.args_video() if pantalla else []))
             ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
             pag = ctx.new_page()
         en_vivo.iniciar(bot, PASO)
@@ -820,6 +822,7 @@ def main():
             sys.exit(1)
         finally:
             nav.close()
+            en_vivo.apagar()
 
 
 if __name__ == "__main__":
