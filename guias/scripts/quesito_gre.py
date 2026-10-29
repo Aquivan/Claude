@@ -44,6 +44,7 @@ MOTIVOS = {"venta": "01", "compra": "02", "traslado entre establecimientos de la
            "devolucion": "06", "otros": "13", "venta sujeta a confirmacion del comprador": "14"}
 ESPERA_MIN = 12
 PASO = [""]
+ACEPTAR = [False]   # solo mientras se quita una línea de producto: se acepta su «¿Seguro?»
 NOTAS = []   # avisos para la persona (lo que no se pudo poner, lo que conviene revisar)
 EXTRA_OBS = []   # lo que no se pudo poner en su propio campo (va en Observaciones)
 
@@ -229,11 +230,34 @@ def lineas(pag):
 
 
 def eliminar_linea(pag, i):
+    """Quita una línea de producto con su botón (en Quesito es un botón rojo con un tacho, sin texto).
+    La caja de la línea es el contenedor más grande que tiene SOLO esa cantidad. Si Quesito pide confirmar, se acepta
+    (solo para este clic). Si no hay botón, se hace lo mismo que él: marcar _destroy u ocultar/quitar la línea."""
     caja = pag.locator(f"input[name='{F}[despatch_advice_lines_attributes][{i}][cantidad]']").first
-    ok = caja.evaluate("""e => { const c = e.closest('.nested-fields, .fields, tr, .row, .item') || e.parentElement;
-        const a = [...c.querySelectorAll('a, button')].find(x => /eliminar|quitar|borrar/i.test(x.innerText || x.title || ''));
-        if (!a) return false; a.click(); return true; }""")
-    if not ok:
+    ACEPTAR[0] = True
+    try:
+        como = caja.evaluate("""(e) => {
+            const esCant = x => /\\[despatch_advice_lines_attributes\\]\\[\\d+\\]\\[cantidad\\]$/.test(x.name || '');
+            let c = e.parentElement, buena = null;
+            for (let k = 0; c && k < 8; c = c.parentElement, k++) {
+              if ([...c.querySelectorAll('input')].filter(esCant).length !== 1) break;
+              buena = c;
+              if (c.matches('.nested-fields, .fields, tr, .item')) break;
+            }
+            if (!buena) return '';
+            const ctl = [...buena.querySelectorAll('a, button, input[type=button], span[onclick], i[onclick]')].find(x =>
+              /eliminar|quitar|borrar|remove|delete|destroy|trash/i.test([x.innerText, x.title, x.getAttribute('aria-label'), x.className,
+                x.getAttribute('onclick'), x.getAttribute('data-action'), x.innerHTML.slice(0, 300)].join(' ')) ||
+              /\\b(btn-danger|bg-danger|text-danger)\\b/i.test(x.className || ''));
+            if (ctl) { ctl.click(); return 'boton'; }
+            const d = buena.querySelector('input[name$="[_destroy]"]');
+            if (d) { d.value = '1'; buena.style.display = 'none'; return 'destroy'; }
+            buena.remove(); return 'quitada';
+        }""")
+        pag.wait_for_timeout(800)
+    finally:
+        ACEPTAR[0] = False
+    if not como or any(l["i"] == i for l in lineas(pag)):
         raise Alto("No pude quitar una línea de producto en Quesito (guía parcial). No se creó nada.")
     pag.wait_for_timeout(600)
 
@@ -643,7 +667,7 @@ def main():
         en_vivo.iniciar(bot, PASO)
         ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
         pag = ctx.new_page()
-        pag.on("dialog", lambda dl: (print("  Ventana de confirmación rechazada"), dl.dismiss()))
+        pag.on("dialog", lambda dl: (print("  Confirmación aceptada (quitar línea)"), dl.accept()) if ACEPTAR[0] else (print("  Ventana de confirmación rechazada"), dl.dismiss()))
         permitir = [False]   # 🔒 hasta que la persona apruebe, ningún envío de datos sale del formulario
 
         def red(route, req):
