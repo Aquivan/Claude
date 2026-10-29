@@ -95,7 +95,7 @@ jobs:
         if: runner.os != 'Windows'
         timeout-minutes: 5
         run: |
-          pip install -q playwright==1.47.0 websockets==13.1
+          pip install -q playwright==1.47.0 websockets==13.1 pynacl
           command -v pdftotext >/dev/null || sudo apt-get install -y -qq poppler-utils >/dev/null 2>&1 || true
           CH=$(command -v google-chrome || command -v google-chrome-stable || true)
           if [ -n "$CH" ]; then echo "CHROMIUM=$CH" >> "$GITHUB_ENV"; else timeout 240 python -m playwright install --with-deps chromium; fi
@@ -120,6 +120,8 @@ jobs:
           MODO: ${{ inputs.modo }}
           CONFIRMAR: ${{ inputs.confirmar }}
           SIN_SESION: ${{ inputs.sin_sesion }}
+          QUESITO_CORREO: ${{ secrets.QUESITO_CORREO }}   # 🎥 si la sesión no sirve: el robot escribe correo y clave, la persona solo el captcha
+          QUESITO_CLAVE: ${{ secrets.QUESITO_CLAVE }}
         run: python guias/scripts/quesito_gre.py
       - name: Avisar si el robot se cayó (PC)
         if: failure() && runner.os == 'Windows'

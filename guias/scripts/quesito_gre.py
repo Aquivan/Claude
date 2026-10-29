@@ -47,6 +47,80 @@ PASO = [""]
 EN_PC = os.environ.get("EN_PC") == "1"   # 🖥 corre en la PC de la persona (ejecutor pc-quesito): Chrome visible
 
 
+def entrar_asistido(pag, bot, fuera, minutos=10):
+    """Ingreso a Quesito con ayuda de la persona por el 🎥 video: el robot escribe el correo y la clave (secretos
+    QUESITO_CORREO / QUESITO_CLAVE, nunca se imprimen) y pulsa Continuar / Ingresar; la persona SOLO resuelve el captcha.
+    Mientras tanto la página se agranda (zoom) para que en el celular se vea bien; al final vuelve al 100 %."""
+    correo, clave = os.environ.get("QUESITO_CORREO", ""), os.environ.get("QUESITO_CLAVE", "")
+    bot({"accion": "gre_aviso", "texto": "🎥 Quesito pide iniciar sesión. " + ("Yo pongo el correo y la clave; si aparece el captcha, resuélvalo usted en el enlace 🎥 Video en vivo (solo eso). "
+         if correo and clave else "Inicie sesión usted en el enlace 🎥 Video en vivo (correo, clave y captcha). ") + f"Lo espero {minutos} minutos."})
+    paso("Ingreso a Quesito (" + ("correo y clave automáticos; captcha la persona" if correo and clave else "lo hace la persona") + ")")
+    en_vivo.zoom(3)   # más grande en el video (para el celular)
+    vis = lambda sel: pag.locator(sel).first if pag.locator(sel).count() and pag.locator(sel).first.is_visible() else None
+    hasta, ultimo, aviso_cap = time.time() + minutos * 60, 0, False
+    while time.time() < hasta and fuera():
+        pag.wait_for_timeout(2500)
+        if not (correo and clave):
+            continue
+        try:
+            reto = pag.locator("iframe[src*='api2/bframe']").first
+            cap = pag.locator("iframe[src*='api2/anchor']:not([src*='size=invisible'])")
+            token = pag.evaluate("() => [...document.querySelectorAll('textarea[name=g-recaptcha-response]')].some(t => t.value)")
+            if cap.count() and cap.first.is_visible() and not token:
+                if not aviso_cap:
+                    bot({"accion": "gre_aviso", "texto": "🧩 Apareció el captcha: resuélvalo en el video (toque «No soy un robot» y, si pide, las imágenes)."})
+                    paso("Esperando que la persona resuelva el captcha")
+                    aviso_cap = True
+                continue
+            if reto.count() and reto.is_visible():
+                continue
+            mail = vis("input[type=email], input[name*=mail i], input[name*=correo i], input[name*=usuario i]")
+            if mail and not mail.input_value():
+                mail.fill(correo)
+            pw = vis("input[type=password]")
+            if pw and not pw.input_value():
+                pw.fill(clave)
+            if time.time() - ultimo > 6:   # no apurar: un clic cada 6 s como mucho
+                b = vis("button:has-text('Ingresar'), button:has-text('Iniciar'), button:has-text('Continuar'), input[type=submit]")
+                if b:
+                    b.click(timeout=5000)
+                    ultimo = time.time()
+        except Exception:
+            pass
+    tam = en_vivo.zoom_normal(pag)
+    paso(f"Pantalla al 100 % (ancho {tam[0] if tam else '?'})")
+    if not fuera():
+        bot({"accion": "gre_aviso", "texto": "✅ Ya entró a Quesito. Desde ahora NO toque la pantalla: sigo yo solo."})
+        paso("Dentro de Quesito (ingreso con ayuda)")
+        pag.wait_for_timeout(4000)
+        for _ in range(2):
+            pag.keyboard.press("Escape")
+            pag.wait_for_timeout(400)
+
+
+def guardar_sesion(ctx, bot):
+    """Guarda la sesión nueva de Quesito en el secreto QUESITO_SESION de la empresa (cifrada aquí mismo con la llave pública
+    de GitHub: el bot solo la entrega, nunca la ve). Si no se puede, la guía sigue igual."""
+    try:
+        from nacl import encoding, public
+        galletas = [{"name": c["name"], "value": c["value"], "domain": c["domain"], "path": c.get("path", "/"), "secure": c.get("secure", True),
+                     "httpOnly": c.get("httpOnly", False), "sameSite": {"Strict": "strict", "Lax": "lax", "None": "no_restriction"}.get(c.get("sameSite"), "lax"),
+                     **({"expirationDate": c["expires"]} if c.get("expires", -1) and c.get("expires", -1) > 0 else {})}
+                    for c in ctx.cookies() if "quesito" in c.get("domain", "")]
+        if not galletas:
+            return
+        r = bot({"accion": "gre_llave"}) or {}
+        if not r.get("key"):
+            paso("Sesión: no la pude guardar (" + str(r.get("error", "sin llave"))[:80] + ")")
+            return
+        caja = public.SealedBox(public.PublicKey(r["key"].encode(), encoding.Base64Encoder()))
+        valor = base64.b64encode(caja.encrypt(json.dumps(galletas).encode())).decode()
+        g = bot({"accion": "gre_guardar_sesion", "key_id": r.get("key_id"), "valor": valor}) or {}
+        paso("Sesión de Quesito guardada para las próximas corridas" if g.get("ok") else "Sesión: no la pude guardar (" + str(g.get("error", ""))[:80] + ")")
+    except Exception as e:
+        paso("Sesión: no la pude guardar (" + type(e).__name__ + ")")
+
+
 def perfil_pc(ruc):
     """Carpeta del perfil de Chrome del robot en la PC (uno por empresa). Ahí queda la sesión de Quesito."""
     d = os.path.join(os.path.expanduser("~"), "RobotQuesito", "perfil-" + re.sub(r"\D", "", ruc or "x"))
@@ -711,7 +785,11 @@ def main():
             if EN_PC and fuera() and sesion:   # el perfil de la PC aún no tiene sesión: se prueba la copiada
                 ctx.add_cookies(leer_sesion(sesion))
                 pag.goto(BASE + "/invoices", wait_until="networkidle", timeout=60000)
-            if (EN_PC or pantalla) and fuera():   # la persona inicia sesión: 🖥 en la ventana de su PC, o 🎥 desde el video (GitHub)
+            if pantalla and fuera() and not EN_PC:
+                entrar_asistido(pag, bot, fuera)   # 🎥 GitHub: correo y clave los pone el robot; la persona solo el captcha (por el video)
+                if not fuera():
+                    guardar_sesion(ctx, bot)   # la sesión nueva queda en QUESITO_SESION: las próximas corridas entran solas
+            if EN_PC and fuera():   # la persona inicia sesión: 🖥 en la ventana de su PC, o 🎥 desde el video (GitHub)
                 bot({"accion": "gre_aviso", "texto": ("🖥 Inicie sesión en Quesito en la ventana de Chrome que se abrió en su PC (correo, clave y captcha). "
                      "Lo espero 5 minutos; después sigo solo. Solo hace falta la primera vez.") if EN_PC else
                      ("🎥 La sesión de Quesito no sirve: inicie sesión usted desde el enlace 🎥 Video en vivo (correo, clave y captcha). "
@@ -733,7 +811,7 @@ def main():
                 pag.wait_for_timeout(2000)
             if fuera():
                 raise Alto(("No se inició sesión en Quesito en la ventana de su PC (esperé 5 minutos)." if EN_PC else
-                            "No se inició sesión en Quesito por el video (esperé 8 minutos)." if pantalla else
+                            "No se inició sesión en Quesito por el video (esperé 10 minutos)." if pantalla else
                             "La sesión guardada de Quesito venció: entre a Quesito en su Chrome, cópiela con Cookie-Editor (Export → JSON) "
                             "y péguela en el secreto QUESITO_SESION de la empresa en GitHub.") + " No se creó nada.")
             if "/invoices" not in pag.url:
