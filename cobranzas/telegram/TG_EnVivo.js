@@ -26,8 +26,7 @@ function TGEV_iniciar_(c) {
 }
 
 function TGEV_url_() {
-  var u = String(ScriptApp.getService().getUrl() || '');
-  return u.replace(/\/dev$/, '/exec');
+  return TG_urlWebApp_();   // la misma dirección pública que usa Telegram (la de la implementación vigente)
 }
 
 /** Foto que manda el robot (doPost canal=gh, ya validada la corrida). */
