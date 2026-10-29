@@ -465,6 +465,8 @@ function TGG_gh_(q) {
   var ss = TG_ss_(), cfg = TG_cfg_(ss), run = String(q.run || '').replace(/\D/g, '');
   if (!run || !TGC_runValido_(cfg, run, /(^|\/)gre-(sunat|quesito)\.ya?ml$/)) return { ok: false, error: 'Forbidden' };   // 🧀 también el robot de Quesito
   if (q.accion === 'gre_vivo') return TGEV_cuadroDelRobot_(q);   // 📺 foto de la pantalla (TG_EnVivo.js)
+  if (q.accion === 'gre_vivo_info') return TGEV_infoRobot_(q);   // 🎥 ¿preparar el video?
+  if (q.accion === 'gre_vivo_vnc') return TGEV_vncDelRobot_(q);   // 🎥 el video está listo
   var c = TGG_leer_(ss, String(q.caso || ''));
   if (!c) return { ok: false, error: 'caso desconocido' };
   if (q.accion === 'gre_caso') return { ok: true, datos: TGG_paraRobot_(c), gre: c.gre || '' };

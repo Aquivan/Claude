@@ -46,6 +46,22 @@ function TGEV_cuadroDelRobot_(q) {
   return { ok: true, vivo: true };
 }
 
+/** ¿Transmitir esta corrida? (el robot pregunta antes de preparar el video). */
+function TGEV_infoRobot_(q) {
+  var caso = String(q.caso || '');
+  return { ok: true, vivo: !!(caso && TGEV_activo_() && CacheService.getScriptCache().get('tgv_on_' + caso)) };
+}
+
+/** 🎥 El robot de GitHub avisa que su video (noVNC por túnel temporal) está listo: la página 📺 pasa sola al video. */
+function TGEV_vncDelRobot_(q) {
+  var caso = String(q.caso || ''), url = String(q.url || '');
+  if (!/^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/vnc\.html\?[\w=&%.-]+$/i.test(url)) return { ok: false, error: 'enlace no válido' };
+  var cache = CacheService.getScriptCache();
+  if (!caso || !cache.get('tgv_on_' + caso)) return { ok: false, error: 'en vivo apagado' };
+  cache.put('tgv_v_' + caso, url, 3600);
+  return { ok: true };
+}
+
 /** doGet ?vivo=… : la página que mira. */
 function TGEV_pagina_(tok) {
   var t = HtmlService.createTemplate(TGEV_HTML_);
@@ -61,7 +77,7 @@ function TGEV_cuadro(tok, visto) {
   if (!caso) return { vencido: true };
   var m = {};
   try { m = JSON.parse(cache.get('tgv_m_' + caso) || '{}'); } catch (e) {}
-  var r = { caso: caso, seq: m.seq || 0, t: m.t || 0, paso: m.paso || '', ahora: Date.now() };
+  var r = { caso: caso, seq: m.seq || 0, t: m.t || 0, paso: m.paso || '', ahora: Date.now(), vnc: cache.get('tgv_v_' + caso) || '' };
   if (!m.seq || Number(visto) === m.seq) return r;
   var ks = [];
   for (var i = 0; i < m.n; i++) ks.push('tgv_i_' + caso + '_' + m.seq % 2 + '_' + i);
@@ -80,7 +96,7 @@ function TGEV_comando_(texto) {
   else if (/^(no|off|desactiv|apag)/.test(w)) si = TGEV_poner_(false);
   else si = TGEV_activo_();
   return si ? '📺 En vivo: ACTIVADO. Cuando el robot llene una guía (vista previa, emitir o leer la factura) le mando un enlace para mirar su pantalla mientras trabaja ' +
-      '(se actualiza sola cada 2–3 s; solo se mira, no se toca nada). Para apagarlo escriba «en vivo no».'
+      '(cuando corre en GitHub se ve en 🎥 video y puede tocar la pantalla si hace falta; si no, fotos cada 2–3 s). Para apagarlo escriba «en vivo no».'
     : '📺 En vivo: DESACTIVADO. El robot trabaja sin transmitir. Para verlo mientras trabaja escriba «en vivo sí».';
 }
 
@@ -90,18 +106,24 @@ var TGEV_HTML_ = [
   '.bar{position:sticky;top:0;display:flex;gap:10px;align-items:center;padding:8px 12px;background:#1b232c;font-size:13px;flex-wrap:wrap}',
   '.dot{width:10px;height:10px;border-radius:50%;background:#78909c;flex:none}.dot.on{background:#43a047;box-shadow:0 0 6px #43a047}.dot.off{background:#e53935}',
   '#paso{color:#b0bec5;flex:1;min-width:200px}#img{display:block;max-width:100%;margin:0 auto;background:#fff}',
+  '#vid{display:block;width:100%;height:calc(100vh - 44px);border:0;background:#000}.bar a,.bar button{color:#90caf9;background:none;border:1px solid #37474f;border-radius:6px;padding:3px 8px;font:inherit;cursor:pointer;text-decoration:none}',
   '.vacio{padding:60px 16px;text-align:center;color:#90a4ae}</style></head><body>',
-  '<div class="bar"><span class="dot" id="dot"></span><b id="est">Conectando…</b><span id="paso"></span></div>',
+  '<div class="bar"><span class="dot" id="dot"></span><b id="est">Conectando…</b><span id="paso"></span><span id="modo"></span></div>',
   '<div id="caja"><div class="vacio" id="vacio">Esperando la primera imagen del robot (arranca en 1–2 minutos: prepara el navegador e ingresa)…</div></div>',
   '<script>',
-  'var TOK = <?= tok ?>, visto = 0, img = null, ult = 0;',
+  'var TOK = <?= tok ?>, visto = 0, img = null, ult = 0, VNC = "", enVideo = false, fotoSola = false;',
+  'function video(si){var c=document.getElementById("caja");enVideo=si;',
+  ' if(si){c.innerHTML=\'<iframe id="vid" allow="clipboard-read; clipboard-write" src="\'+VNC+\'"></iframe>\';img=null;}',
+  ' else{c.innerHTML=\'<div class="vacio" id="vacio">Cargando la foto…</div>\';visto=0;}',
+  ' document.getElementById("modo").innerHTML=si?\'<button onclick="fotoSola=true;video(false)">Ver fotos</button> <a target="_blank" href="\'+VNC+\'">Abrir aparte ↗</a>\':(VNC?\'<button onclick="fotoSola=false;video(true)">🎥 Ver video (y tocar)</button>\':"");}',
   'function hace(ms){var s=Math.round(ms/1000);return s<60?s+" s":Math.round(s/60)+" min";}',
   'function pinta(r){var d=document.getElementById("dot"),e=document.getElementById("est");',
   ' if(r.vencido){d.className="dot off";e.textContent="Este enlace ya venció.";document.getElementById("vacio").textContent="Pida otra vez la guía con el modo en vivo activo para tener un enlace nuevo.";return false;}',
-  ' if(r.img){if(!img){img=document.createElement("img");img.id="img";var v=document.getElementById("vacio");v.parentNode.replaceChild(img,v);}img.src="data:image/jpeg;base64,"+r.img;visto=r.seq;}',
+  ' if(r.vnc&&!VNC){VNC=r.vnc;if(!fotoSola)video(true);}',
+  ' if(r.img&&!enVideo){if(!img){img=document.createElement("img");img.id="img";var v=document.getElementById("vacio");v.parentNode.replaceChild(img,v);}img.src="data:image/jpeg;base64,"+r.img;visto=r.seq;}',
   ' var edad=r.t?r.ahora-r.t:0;',
   ' if(!r.t){d.className="dot";e.textContent="Esperando al robot…";}',
-  ' else if(edad<20000){d.className="dot on";e.textContent="En vivo";}',
+  ' else if(edad<20000||enVideo){d.className="dot on";e.textContent=enVideo?"🎥 En vivo (puede hacer clic y escribir)":"En vivo";}',
   ' else{d.className="dot";e.textContent="Sin cambios hace "+hace(edad)+" (terminó, está esperando su ✅ o se detuvo)";}',
   ' document.getElementById("paso").textContent=r.paso?"· "+r.paso:"";return true;}',
   'function pide(){google.script.run.withSuccessHandler(function(r){if(pinta(r))setTimeout(pide,2000);})',
