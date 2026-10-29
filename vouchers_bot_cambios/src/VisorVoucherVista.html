@@ -18,7 +18,13 @@
   #div:hover { background: linear-gradient(90deg, transparent 2px, #1e88e5 2px, #1e88e5 6px, transparent 6px); }
   body.m-imagen .cuerpo, body.m-datos .cuerpo { grid-template-columns: 1fr; } body.m-imagen #lado, body.m-imagen #div { display: none; }
   body.m-datos #izq, body.m-datos #div { display: none; }
-  body.angosto .cuerpo { grid-template-columns: 1fr; overflow: auto; } body.angosto #div { display: none; }
+  body.angosto .cuerpo { grid-template-columns: 1fr; overflow: auto; align-content: start; } body.angosto #div { display: none; }
+  body.angosto .cuerpo { grid-auto-rows: max-content; } body.angosto #izq { min-height: max-content; }
+  body.angosto #marco { flex: none; height: var(--alto, 320px); }
+  body.angosto #lado { min-height: 260px; }
+  #divh { display: none; flex: none; height: 10px; cursor: row-resize; margin: 2px 0; background: linear-gradient(180deg, transparent 4px, #cfd8dc 4px, #cfd8dc 6px, transparent 6px); }
+  #divh:hover { background: linear-gradient(180deg, transparent 3px, #1e88e5 3px, #1e88e5 7px, transparent 7px); }
+  body.angosto #divh { display: block; } body.angosto.m-datos #divh { display: none; }
   .herr { display: flex; gap: 3px; margin-bottom: 4px; align-items: center; flex-wrap: wrap; }
   .herr button { padding: 2px 7px; } .herr span { color: #78909c; font-size: 11px; min-width: 38px; text-align: center; }
   #izq { display: flex; flex-direction: column; min-height: 0; }
@@ -63,6 +69,7 @@
       <button onclick="girar()" title="Girar 90° (fotos de lado)">⟳</button><span style="flex:1"></span><span style="font-size:10px">arrastre la imagen para moverla</span></div>
     <div id="marco"><div class="vacio">Haga clic en cualquier celda de una fila de vouchers y aquí aparece el voucher original.</div><span id="carga">cargando…</span></div>
     <div class="origen" id="origen"></div>
+    <div id="divh" title="Arrastre hacia abajo para agrandar la imagen, hacia arriba para ver más datos"></div>
   </div>
   <div id="div" title="Arrastre para dar más espacio a la imagen o a los datos"></div>
   <div id="lado">
@@ -186,6 +193,18 @@ function zoomable(el) {
   d.addEventListener('mousedown', function (e) { arr = true; e.preventDefault(); });
   window.addEventListener('mousemove', function (e) { if (!arr) return; var r = cu.getBoundingClientRect(), p = Math.min(85, Math.max(25, (e.clientX - r.left) / r.width * 100)); cu.style.setProperty('--izq', p + '%'); });
   window.addEventListener('mouseup', function () { if (arr) { arr = false; try { localStorage.setItem('vv_izq', cu.style.getPropertyValue('--izq')); } catch (e) {} } });
+  // panel angosto (lateral): barra horizontal para repartir el alto entre la imagen y los datos
+  var dh = document.getElementById('divh'), mh = document.getElementById('marco'), arrh = false, y1, h1;
+  try { var gh = localStorage.getItem('vv_alto'); if (gh) mh.style.setProperty('--alto', gh); } catch (e) {}
+  var empezar = function (y) { arrh = true; y1 = y; h1 = mh.getBoundingClientRect().height; };
+  var mover2 = function (y) { if (arrh) mh.style.setProperty('--alto', Math.max(120, Math.min(window.innerHeight * 1.5, h1 + (y - y1))) + 'px'); };
+  var soltar = function () { if (arrh) { arrh = false; try { localStorage.setItem('vv_alto', mh.style.getPropertyValue('--alto')); } catch (e) {} } };
+  dh.addEventListener('mousedown', function (e) { empezar(e.clientY); e.preventDefault(); });
+  window.addEventListener('mousemove', function (e) { mover2(e.clientY); });
+  window.addEventListener('mouseup', soltar);
+  dh.addEventListener('touchstart', function (e) { empezar(e.touches[0].clientY); e.preventDefault(); }, { passive: false });
+  window.addEventListener('touchmove', function (e) { if (arrh) mover2(e.touches[0].clientY); });
+  window.addEventListener('touchend', soltar);
   aplicar();
 })();
 function maximizar() {
