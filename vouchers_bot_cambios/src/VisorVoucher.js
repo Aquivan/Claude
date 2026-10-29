@@ -10,13 +10,13 @@
 
 function VV_abrir() {
   SpreadsheetApp.getUi().showSidebar(
-    HtmlService.createHtmlOutputFromFile('VisorVoucher').setTitle('👁 Visor de voucher'));
+    HtmlService.createHtmlOutputFromFile('VisorVoucherVista').setTitle('👁 Visor de voucher'));
 }
 
 /** Ventana grande (flotante, se puede mover): el mismo visor. */
 function VV_abrirGrande() {
   SpreadsheetApp.getUi().showModelessDialog(
-    HtmlService.createHtmlOutputFromFile('VisorVoucher').setWidth(900).setHeight(680), '👁 Visor de voucher');
+    HtmlService.createHtmlOutputFromFile('VisorVoucherVista').setWidth(900).setHeight(680), '👁 Visor de voucher');
 }
 
 /** Hoja y fila seleccionadas ahora (el panel pregunta cada ~1 s). */
