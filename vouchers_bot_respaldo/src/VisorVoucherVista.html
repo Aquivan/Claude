@@ -13,14 +13,19 @@
   button { border: 1px solid #cfd8dc; background: #fff; border-radius: 6px; padding: 5px 8px; font: inherit; cursor: pointer; }
   button:hover { background: #e3f2fd; } button.on { background: #1565c0; color: #fff; border-color: #1565c0; }
   button.pri { background: #1565c0; color: #fff; border-color: #1565c0; font-weight: bold; } button:disabled { opacity: .5; cursor: default; }
-  .cuerpo { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 8px; }
-  body.m-imagen .cuerpo { grid-template-columns: 1fr; } body.m-imagen #lado { display: none; }
-  body.m-datos .cuerpo { grid-template-columns: 1fr; } body.m-datos #izq { display: none; }
-  body.angosto .cuerpo { grid-template-columns: 1fr; overflow: auto; }
+  .cuerpo { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--izq, 60%) 8px minmax(220px, 1fr); }
+  #div { cursor: col-resize; background: linear-gradient(90deg, transparent 3px, #cfd8dc 3px, #cfd8dc 5px, transparent 5px); }
+  #div:hover { background: linear-gradient(90deg, transparent 2px, #1e88e5 2px, #1e88e5 6px, transparent 6px); }
+  body.m-imagen .cuerpo, body.m-datos .cuerpo { grid-template-columns: 1fr; } body.m-imagen #lado, body.m-imagen #div { display: none; }
+  body.m-datos #izq, body.m-datos #div { display: none; }
+  body.angosto .cuerpo { grid-template-columns: 1fr; overflow: auto; } body.angosto #div { display: none; }
+  .herr { display: flex; gap: 3px; margin-bottom: 4px; align-items: center; flex-wrap: wrap; }
+  .herr button { padding: 2px 7px; } .herr span { color: #78909c; font-size: 11px; min-width: 38px; text-align: center; }
   #izq { display: flex; flex-direction: column; min-height: 0; }
   #marco { position: relative; flex: 1; background: #fff; border: 1px solid #d0d7de; border-radius: 6px; overflow: auto; text-align: center; min-height: 200px; }
-  #marco canvas, #marco img { display: block; width: 100%; height: auto; cursor: zoom-in; }
-  #marco.zoom canvas, #marco.zoom img { width: 230%; max-width: none; cursor: zoom-out; }
+  #marco canvas, #marco img { display: block; width: calc(var(--z, 1) * 100%); max-width: none; height: auto; cursor: grab; margin: 0 auto; }
+  #marco.alto canvas, #marco.alto img { width: auto; height: calc(var(--z, 1) * 100%); }
+  #marco.arrastra canvas, #marco.arrastra img { cursor: grabbing; }
   #carga { position: absolute; top: 6px; right: 8px; background: rgba(38,50,56,.8); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; display: none; }
   .vacio { padding: 40px 10px; color: #78909c; }
   .origen { font-size: 10px; color: #90a4ae; text-align: right; margin-top: 2px; }
@@ -48,13 +53,17 @@
   <button id="b-datos" onclick="modo('datos')" title="Solo los datos">📋</button>
   <button onclick="copiar()" title="Copiar la imagen del voucher (para pegar en WhatsApp, Telegram o un correo)">📋 Copiar</button>
   <button onclick="abrirOriginal()" title="Abrir el archivo original en Drive">📄</button>
-  <button onclick="google.script.run.VV_abrirGrande()" title="Abrir en ventana flotante grande (se puede mover)">⤢</button>
+  <button onclick="maximizar()" title="Ventana grande del tamaño de su pantalla (otro clic: tamaño normal)">⤢</button>
 </div>
 <div class="cuerpo">
   <div id="izq">
+    <div class="herr"><button onclick="zoom(-1)" title="Achicar">−</button><span id="pz">100%</span><button onclick="zoom(1)" title="Agrandar (también Ctrl + rueda del mouse)">+</button>
+      <button onclick="ajuste('ancho')" title="Ajustar al ancho">↔ Ancho</button><button onclick="ajuste('alto')" title="Ver la página completa">↕ Página</button>
+      <button onclick="girar()" title="Girar 90° (fotos de lado)">⟳</button><span style="flex:1"></span><span style="font-size:10px">arrastre la imagen para moverla</span></div>
     <div id="marco"><div class="vacio">Haga clic en cualquier celda de una fila de vouchers y aquí aparece el voucher original.</div><span id="carga">cargando…</span></div>
     <div class="origen" id="origen"></div>
   </div>
+  <div id="div" title="Arrastre para dar más espacio a la imagen o a los datos"></div>
   <div id="lado">
     <div id="campos"><div class="vacio">Los datos de la fila aparecen aquí y se pueden corregir.</div></div>
     <div id="conf"></div>
@@ -111,9 +120,9 @@ function bajar(id, mime) {
 }
 function mostrarImagen(d, t) {
   var m = document.getElementById('marco'), o = document.getElementById('origen');
-  if (d.vacio) { m.className = ''; m.innerHTML = '<div class="vacio">Esa fila no tiene voucher.</div><span id="carga">cargando…</span>'; o.textContent = ''; return; }
+  if (d.vacio) { m.innerHTML = '<div class="vacio">Esa fila no tiene voucher.</div><span id="carga">cargando…</span>'; o.textContent = ''; return; }
   if (!m.querySelector('canvas,img')) {   // al instante: la imagen de la celda, mientras baja el original
-    m.className = ''; m.innerHTML = (d.img ? '<img src="' + esc(d.img) + '">' : '<div class="vacio">' + esc(d.texto || 'Cargando el original…') + '</div>') + '<span id="carga">cargando…</span>';
+    m.innerHTML = (d.img ? '<img src="' + esc(d.img) + '">' : '<div class="vacio">' + esc(d.texto || 'Cargando el original…') + '</div>') + '<span id="carga">cargando…</span>';
     o.textContent = d.img ? 'imagen de la celda' : ''; zoomable(m.querySelector('img'));
   }
   if (!d.original || !d.original.id) { o.textContent = d.img ? 'imagen de la celda (no encontré el original en Drive)' : 'no encontré el original en Drive'; return; }
@@ -130,7 +139,7 @@ function mostrarImagen(d, t) {
         var c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
         return pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(function () {
           if (t !== turno) return;
-          var z = m.className; m.innerHTML = '<span id="carga">cargando…</span>'; m.insertBefore(c, m.firstChild); m.className = z; zoomable(c);
+          m.innerHTML = '<span id="carga">cargando…</span>'; m.insertBefore(c, m.firstChild); zoomable(c);
           o.textContent = 'original · página ' + n + ' de ' + a.pdf.numPages;
         });
       });
@@ -142,7 +151,46 @@ function mostrarImagen(d, t) {
     if (t === turno) o.textContent = (d.img ? 'imagen de la celda' : '') + ' · no pude bajar el original (' + e.message + ')';
   }).then(function () { if (t === turno) carga(false); });
 }
-function zoomable(el) { if (el) el.onclick = function () { var m = document.getElementById('marco'); m.className = m.className ? '' : 'zoom'; }; }
+/* ---------- tamaño de la imagen: zoom, ajustar, girar, arrastrar; divisor; maximizar ---------- */
+var Z = 1, AJ = 'ancho', ROT = 0;
+try { Z = Number(localStorage.getItem('vv_z')) || 1; AJ = localStorage.getItem('vv_aj') || 'ancho'; } catch (e) {}
+function aplicar() {
+  var m = document.getElementById('marco'); m.style.setProperty('--z', Z); m.classList.toggle('alto', AJ === 'alto');
+  document.getElementById('pz').textContent = Math.round(Z * 100) + '%';
+  try { localStorage.setItem('vv_z', Z); localStorage.setItem('vv_aj', AJ); } catch (e) {}
+}
+function zoom(d) { Z = Math.min(6, Math.max(0.3, Math.round((Z + d * (Z < 1 ? 0.1 : 0.25)) * 100) / 100)); aplicar(); }
+function ajuste(a) { AJ = a; Z = 1; aplicar(); document.getElementById('marco').scrollTo(0, 0); }
+function girar() { ROT = (ROT + 90) % 360; var el = document.querySelector('#marco canvas, #marco img'); if (el) mostrarGirado(el); }
+function mostrarGirado(fuente) {   // dibuja la imagen girada en un canvas nuevo (así el tamaño y el desplazamiento siguen bien)
+  var src = fuente._orig || fuente, w = src.naturalWidth || src.width, h = src.naturalHeight || src.height;
+  if (!ROT) { if (fuente._orig) fuente.parentNode.replaceChild(src, fuente); return; }
+  var c = document.createElement('canvas'), r = ROT % 180 !== 0; c.width = r ? h : w; c.height = r ? w : h;
+  var x = c.getContext('2d'); x.translate(c.width / 2, c.height / 2); x.rotate(ROT * Math.PI / 180); x.drawImage(src, -w / 2, -h / 2);
+  c._orig = src; fuente.parentNode.replaceChild(c, fuente);
+}
+function zoomable(el) {
+  if (!el) return;
+  if (ROT) { if (el.tagName === 'IMG' && !el.complete) el.onload = function () { mostrarGirado(el); }; else mostrarGirado(el); }
+  el.ondblclick = function () { Z = Z > 1 ? 1 : 2.3; aplicar(); };
+}
+(function () {   // arrastrar para mover, Ctrl + rueda para zoom
+  var m = document.getElementById('marco'), x0, y0, sx, sy, mov = false;
+  m.addEventListener('mousedown', function (e) { if (e.button) return; mov = true; x0 = e.clientX; y0 = e.clientY; sx = m.scrollLeft; sy = m.scrollTop; m.classList.add('arrastra'); e.preventDefault(); });
+  window.addEventListener('mousemove', function (e) { if (mov) { m.scrollLeft = sx - (e.clientX - x0); m.scrollTop = sy - (e.clientY - y0); } });
+  window.addEventListener('mouseup', function () { mov = false; m.classList.remove('arrastra'); });
+  m.addEventListener('wheel', function (e) { if (e.ctrlKey) { e.preventDefault(); zoom(e.deltaY < 0 ? 1 : -1); } }, { passive: false });
+  var d = document.getElementById('div'), arr = false, cu = document.querySelector('.cuerpo');
+  try { var g = localStorage.getItem('vv_izq'); if (g) cu.style.setProperty('--izq', g); } catch (e) {}
+  d.addEventListener('mousedown', function (e) { arr = true; e.preventDefault(); });
+  window.addEventListener('mousemove', function (e) { if (!arr) return; var r = cu.getBoundingClientRect(), p = Math.min(85, Math.max(25, (e.clientX - r.left) / r.width * 100)); cu.style.setProperty('--izq', p + '%'); });
+  window.addEventListener('mouseup', function () { if (arr) { arr = false; try { localStorage.setItem('vv_izq', cu.style.getPropertyValue('--izq')); } catch (e) {} } });
+  aplicar();
+})();
+function maximizar() {
+  var grande = window.innerWidth < (screen.availWidth - 200);
+  google.script.run.VV_abrirGrande(grande ? screen.availWidth - 40 : 1180, grande ? screen.availHeight - 170 : 720);
+}
 
 /* ---------- pintar fila: imagen + datos editables ---------- */
 function pintar(d) {
