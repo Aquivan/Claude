@@ -16,7 +16,7 @@ function VV_abrir() {
 /** Ventana grande (flotante, se puede mover): el mismo visor. */
 function VV_abrirGrande() {
   SpreadsheetApp.getUi().showModelessDialog(
-    HtmlService.createHtmlOutputFromFile('VisorVoucherVista').setWidth(900).setHeight(680), '👁 Visor de voucher');
+    HtmlService.createHtmlOutputFromFile('VisorVoucherVista').setWidth(1180).setHeight(720), '👁 Visor de voucher');
 }
 
 /** Hoja y fila seleccionadas ahora (el panel pregunta ~2 veces por segundo). */
@@ -50,28 +50,67 @@ function VV_idArchivo_(nombre) {
   return r;
 }
 
-/** Datos de una fila: imagen de la columna J, archivo (K), pagina (M) y las primeras columnas. */
+/** Datos de una fila: el original (K, pagina M), la imagen de la celda (J) y TODAS las columnas para ver y corregir. */
 function VV_datos(hoja, fila) {
   const sh = SpreadsheetApp.getActive().getSheetByName(hoja);
   if (!sh || fila < 2 || fila > sh.getLastRow()) return { hoja: hoja, fila: fila, vacio: true };
-  const nCol = Math.min(sh.getLastColumn(), 13);
+  const nCol = sh.getLastColumn();
+  const rg = sh.getRange(fila, 1, 1, nCol);
   const tit = sh.getRange(1, 1, 1, nCol).getDisplayValues()[0];
-  const val = sh.getRange(fila, 1, 1, nCol).getDisplayValues()[0];
+  const ver = rg.getDisplayValues()[0], crudo = rg.getValues()[0], formulas = rg.getFormulas()[0], reglas = rg.getDataValidations()[0];
   let img = '';
   try {
-    const c = sh.getRange(fila, 10).getValue();   // J: imagen en la celda (CellImage)
-    if (c && typeof c === 'object') img = (c.getContentUrl && c.getContentUrl()) || (c.getUrl && c.getUrl()) || '';
+    const c = crudo[9];   // J: imagen en la celda (CellImage)
+    if (c && typeof c === 'object' && !(c instanceof Date)) img = (c.getContentUrl && c.getContentUrl()) || (c.getUrl && c.getUrl()) || '';
   } catch (e) {}
-  const campos = [];
-  for (let i = 0; i < Math.min(9, nCol); i++) {
-    if (String(val[i]).trim()) campos.push([String(tit[i] || ('Col ' + (i + 1))).trim(), String(val[i]).trim()]);
+  const cols = [];
+  for (let i = 0; i < nCol; i++) {
+    if (i === 9) continue;   // J es la imagen
+    const t = String(tit[i] || '').trim();
+    if (!t && !String(ver[i]).trim()) continue;
+    const c = { c: i + 1, t: t || ('Col ' + (i + 1)), v: String(ver[i]), tipo: 'texto' };
+    const r = reglas[i];
+    if (formulas[i]) c.tipo = 'formula';
+    else if (r && r.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.CHECKBOX) { c.tipo = 'check'; c.v = crudo[i] === true; }
+    else if (r && r.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) { c.tipo = 'lista'; c.op = (r.getCriteriaValues()[0] || []).map(String); }
+    else if (r && r.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.VALUE_IN_RANGE) {
+      try { c.tipo = 'lista'; c.op = r.getCriteriaValues()[0].getDisplayValues().map(function (x) { return String(x[0]); }).filter(String).slice(0, 300); } catch (e) { c.tipo = 'texto'; }
+    }
+    else if (crudo[i] instanceof Date) c.tipo = 'fecha';
+    else if (typeof crudo[i] === 'number') c.tipo = 'numero';
+    cols.push(c);
   }
   return {
     hoja: hoja, fila: fila, img: img,
-    texto: img ? '' : String(val[9] || '').trim(),   // "Ver PDF (...)" o vacio
-    archivo: String(val[10] || '').trim(), pagina: String(val[12] || '').trim(), campos: campos,
-    original: VV_idArchivo_(String(val[10] || '').trim())   // {id, mime}: el visor lo baja de Drive y muestra la pagina exacta
+    texto: img ? '' : String(ver[9] || '').trim(),   // "Ver PDF (...)" o vacio
+    archivo: String(ver[10] || '').trim(), pagina: String(ver[12] || '').trim(), cols: cols,
+    clave: { b: String(ver[1]), k: String(ver[10]) },   // para comprobar al guardar que sigue siendo el mismo voucher
+    original: VV_idArchivo_(String(ver[10] || '').trim())   // {id, mime}: el visor lo baja de Drive y muestra la pagina exacta
   };
+}
+
+/** Guarda lo corregido en el visor (ya confirmado por la persona). cambios = {columna: valor}. Devuelve los datos nuevos. */
+function VV_guardar(hoja, fila, clave, cambios) {
+  const sh = SpreadsheetApp.getActive().getSheetByName(hoja);
+  if (!sh) throw new Error('No encontré la pestaña ' + hoja + '.');
+  const ver = sh.getRange(fila, 1, 1, Math.max(11, sh.getLastColumn())).getDisplayValues()[0];
+  if (!clave || String(ver[1]) !== String(clave.b) || String(ver[10]) !== String(clave.k)) {
+    throw new Error('La fila ' + fila + ' ya no es el mismo voucher (¿se ordenó la hoja o entraron filas nuevas?). No guardé nada: vuelva a seleccionarlo.');
+  }
+  Object.keys(cambios || {}).forEach(function (k) {
+    const col = parseInt(k, 10);
+    if (!(col >= 1) || col === 10) return;
+    const celda = sh.getRange(fila, col);
+    if (celda.getFormula()) return;   // las formulas no se tocan
+    let v = cambios[k], m;
+    if (v === true || v === false) { celda.setValue(v); return; }
+    v = String(v == null ? '' : v).trim();
+    const antes = celda.getValue();
+    if (antes instanceof Date && (m = v.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/))) v = new Date(Number(m[3].length === 2 ? '20' + m[3] : m[3]), Number(m[2]) - 1, Number(m[1]));
+    else if (typeof antes === 'number' && v !== '' && !isNaN(Number(v.replace(/,/g, '')))) v = Number(v.replace(/,/g, ''));
+    celda.setValue(v);
+  });
+  return VV_datos(hoja, fila);
 }
 
 /** Ir a otra fila de la misma pestaña (botones ◀ ▶ del visor). */
