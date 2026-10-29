@@ -144,3 +144,16 @@ def apagar():
             p.terminate()
         except Exception:
             pass
+
+
+def lanzar(p, pantalla, **kw):
+    """chromium.launch con la pantalla virtual (le pasa DISPLAY: el proceso de Playwright arrancó antes de crearla).
+    Si el Chrome visible no abre, se lanza normal (sin video): la guía nunca se detiene por esto."""
+    import os
+    a = args() + (args_video() if pantalla else [])
+    if pantalla:
+        try:
+            return p.chromium.launch(headless=False, args=a, env=dict(os.environ), **kw)
+        except Exception as e:
+            print("  🎥 Chrome visible no abrió (" + type(e).__name__ + "); sigo sin video.", flush=True)
+    return p.chromium.launch(headless=True, args=a, **kw)

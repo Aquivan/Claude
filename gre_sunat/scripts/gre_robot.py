@@ -1133,8 +1133,8 @@ def main():
         numero = str(r.get("gre") or "")
         with sync_playwright() as p:
             pantalla = en_vivo.video(bot) if en_vivo else False   # 🎥 video en vivo (si está activo)
-            nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None, headless=not pantalla,
-                                    args=(en_vivo.args() + (en_vivo.args_video() if pantalla else [])) if en_vivo else [])
+            nav = en_vivo.lanzar(p, pantalla, executable_path=os.environ.get("CHROMIUM") or None) if en_vivo \
+                else p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None)
             if en_vivo:
                 en_vivo.iniciar(bot, PASO_ACTUAL)
             pag = None
@@ -1164,8 +1164,8 @@ def main():
 
     with sync_playwright() as p:
         pantalla = en_vivo.video(bot) if en_vivo else False   # 🎥 video en vivo (si está activo)
-        nav = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None, headless=not pantalla,
-                                args=(en_vivo.args() + (en_vivo.args_video() if pantalla else [])) if en_vivo else [])
+        nav = en_vivo.lanzar(p, pantalla, executable_path=os.environ.get("CHROMIUM") or None) if en_vivo \
+            else p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None)
         if en_vivo:
             en_vivo.iniciar(bot, PASO_ACTUAL)
         pag = fr = None
