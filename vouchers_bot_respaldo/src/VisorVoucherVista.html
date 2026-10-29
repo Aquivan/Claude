@@ -82,20 +82,20 @@
 // El voucher se muestra desde el ARCHIVO ORIGINAL (la página exacta del PDF o la foto), bajado de Drive con la cuenta
 // de quien mira; si no se puede, la imagen de la celda. Los datos se corrigen aquí y, tras confirmar, van a la celda.
 if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+var DOC = document, VIEW = window;
 var actual = { hoja: '', fila: 0 }, D = null, turno = 0, PASE = null, PASE_T = 0, ARCH = {}, CAMBIOS = {}, ESPERA = null;
 function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-function carga(si) { var c = document.getElementById('carga'); if (c) c.style.display = si ? 'block' : 'none'; }
+function carga(si) { var c = DOC.getElementById('carga'); if (c) c.style.display = si ? 'block' : 'none'; }
 function nCambios() { return Object.keys(CAMBIOS).length; }
 
 /* ---------- vista: solo imagen / ambos / solo datos (se recuerda) ---------- */
 function modo(m) {
-  document.body.classList.remove('m-imagen', 'm-ambos', 'm-datos'); document.body.classList.add('m-' + m);
-  ['imagen', 'ambos', 'datos'].forEach(function (x) { document.getElementById('b-' + x).className = x === m ? 'on' : ''; });
+  DOC.body.classList.remove('m-imagen', 'm-ambos', 'm-datos'); DOC.body.classList.add('m-' + m);
+  ['imagen', 'ambos', 'datos'].forEach(function (x) { DOC.getElementById('b-' + x).className = x === m ? 'on' : ''; });
   try { localStorage.setItem('vv_modo', m); } catch (e) {}
   if (D && m !== 'datos') setTimeout(function () { if (D) mostrarImagen(D, turno); }, 50);   // re-dibuja al nuevo ancho
 }
-function ajustar() { document.body.classList.toggle('angosto', window.innerWidth < 640); }
-window.addEventListener('resize', ajustar); ajustar();
+function ajustar() { DOC.body.classList.toggle('angosto', VIEW.innerWidth < 640); }
 (function () { var m = 'ambos'; try { m = localStorage.getItem('vv_modo') || 'ambos'; } catch (e) {} modo(m); })();
 
 /* ---------- sigue la fila seleccionada ---------- */
@@ -109,7 +109,7 @@ function mirar() {
     setTimeout(mirar, 500);
   }).withFailureHandler(function () { setTimeout(mirar, 2500); }).VV_estado(actual.hoja, actual.fila);
 }
-function aviso(t, ok) { var m = document.getElementById('msg'); m.textContent = t || ''; m.style.color = ok ? '#2e7d32' : (t && /⚠️/.test(t) ? '#c62828' : '#546e7a'); }
+function aviso(t, ok) { var m = DOC.getElementById('msg'); m.textContent = t || ''; m.style.color = ok ? '#2e7d32' : (t && /⚠️/.test(t) ? '#c62828' : '#546e7a'); }
 
 /* ---------- el original desde Drive ---------- */
 function pase() {
@@ -127,7 +127,7 @@ function bajar(id, mime) {
   return ARCH[id];
 }
 function mostrarImagen(d, t) {
-  var m = document.getElementById('marco'), o = document.getElementById('origen');
+  var m = DOC.getElementById('marco'), o = DOC.getElementById('origen');
   if (d.vacio) { m.innerHTML = '<div class="vacio">Esa fila no tiene voucher.</div><span id="carga">cargando…</span>'; o.textContent = ''; return; }
   if (!m.querySelector('canvas,img')) {   // al instante: la imagen de la celda, mientras baja el original
     m.innerHTML = (d.img ? '<img src="' + esc(d.img) + '">' : '<div class="vacio">' + esc(d.texto || 'Cargando el original…') + '</div>') + '<span id="carga">cargando…</span>';
@@ -144,7 +144,7 @@ function mostrarImagen(d, t) {
         if (t !== turno) return;
         var ancho = Math.max(m.clientWidth, (POP && !POP.closed) ? POP.innerWidth : 0, 300) * 2.3 * (window.devicePixelRatio || 1);   // nítido también en la ventana aparte
         var vp = pg.getViewport({ scale: ancho / pg.getViewport({ scale: 1 }).width });
-        var c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+        var c = DOC.createElement('canvas'); c.width = vp.width; c.height = vp.height;
         return pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(function () {
           if (t !== turno) return;
           m.innerHTML = '<span id="carga">cargando…</span>'; m.insertBefore(c, m.firstChild); zoomable(c);
@@ -152,9 +152,11 @@ function mostrarImagen(d, t) {
         });
       });
     }
-    var url = URL.createObjectURL(new Blob([a.buf], { type: mime || 'image/jpeg' }));
+    return urlDe(new Blob([a.buf], { type: mime || 'image/jpeg' })).then(function (url) {
+    if (t !== turno) return;
     m.innerHTML = '<img src="' + url + '"><span id="carga">cargando…</span>'; zoomable(m.querySelector('img'));
-    o.textContent = 'original (foto)'; var im = m.querySelector('img'); if (im) im.addEventListener('load', espejo);
+    o.textContent = 'original (foto)';
+    });
   }).catch(function (e) {
     if (t === turno) o.textContent = (d.img ? 'imagen de la celda' : '') + ' · no pude bajar el original (' + e.message + ')';
   }).then(function () { if (t === turno) carga(false); });
@@ -163,17 +165,17 @@ function mostrarImagen(d, t) {
 var Z = 1, AJ = 'ancho', ROT = 0;
 try { Z = Number(localStorage.getItem('vv_z')) || 1; AJ = localStorage.getItem('vv_aj') || 'ancho'; } catch (e) {}
 function aplicar() {
-  var m = document.getElementById('marco'); m.style.setProperty('--z', Z); m.classList.toggle('alto', AJ === 'alto');
-  document.getElementById('pz').textContent = Math.round(Z * 100) + '%';
+  var m = DOC.getElementById('marco'); m.style.setProperty('--z', Z); m.classList.toggle('alto', AJ === 'alto');
+  DOC.getElementById('pz').textContent = Math.round(Z * 100) + '%';
   try { localStorage.setItem('vv_z', Z); localStorage.setItem('vv_aj', AJ); } catch (e) {}
 }
 function zoom(d) { Z = Math.min(6, Math.max(0.3, Math.round((Z + d * (Z < 1 ? 0.1 : 0.25)) * 100) / 100)); aplicar(); }
-function ajuste(a) { AJ = a; Z = 1; aplicar(); document.getElementById('marco').scrollTo(0, 0); }
-function girar() { ROT = (ROT + 90) % 360; var el = document.querySelector('#marco canvas, #marco img'); if (el) mostrarGirado(el); espejo(); }
+function ajuste(a) { AJ = a; Z = 1; aplicar(); DOC.getElementById('marco').scrollTo(0, 0); }
+function girar() { ROT = (ROT + 90) % 360; var el = DOC.querySelector('#marco canvas, #marco img'); if (el) mostrarGirado(el); espejo(); }
 function mostrarGirado(fuente) {   // dibuja la imagen girada en un canvas nuevo (así el tamaño y el desplazamiento siguen bien)
   var src = fuente._orig || fuente, w = src.naturalWidth || src.width, h = src.naturalHeight || src.height;
   if (!ROT) { if (fuente._orig) fuente.parentNode.replaceChild(src, fuente); return; }
-  var c = document.createElement('canvas'), r = ROT % 180 !== 0; c.width = r ? h : w; c.height = r ? w : h;
+  var c = DOC.createElement('canvas'), r = ROT % 180 !== 0; c.width = r ? h : w; c.height = r ? w : h;
   var x = c.getContext('2d'); x.translate(c.width / 2, c.height / 2); x.rotate(ROT * Math.PI / 180); x.drawImage(src, -w / 2, -h / 2);
   c._orig = src; fuente.parentNode.replaceChild(c, fuente);
 }
@@ -182,80 +184,83 @@ function zoomable(el) {
   if (ROT) { if (el.tagName === 'IMG' && !el.complete) el.onload = function () { mostrarGirado(el); }; else mostrarGirado(el); }
   el.ondblclick = function () { Z = Z > 1 ? 1 : 2.3; aplicar(); };
 }
-(function () {   // arrastrar para mover, Ctrl + rueda para zoom
-  var m = document.getElementById('marco'), x0, y0, sx, sy, mov = false;
+function cablear() {   // arrastrar para mover, Ctrl + rueda para zoom, divisores (una vez por ventana)
+  if (DOC._cableado) return; DOC._cableado = true;
+  VIEW.addEventListener('resize', ajustar); ajustar();
+  var m = DOC.getElementById('marco'), x0, y0, sx, sy, mov = false;
   m.addEventListener('mousedown', function (e) { if (e.button) return; mov = true; x0 = e.clientX; y0 = e.clientY; sx = m.scrollLeft; sy = m.scrollTop; m.classList.add('arrastra'); e.preventDefault(); });
-  window.addEventListener('mousemove', function (e) { if (mov) { m.scrollLeft = sx - (e.clientX - x0); m.scrollTop = sy - (e.clientY - y0); } });
-  window.addEventListener('mouseup', function () { mov = false; m.classList.remove('arrastra'); });
+  VIEW.addEventListener('mousemove', function (e) { if (mov) { m.scrollLeft = sx - (e.clientX - x0); m.scrollTop = sy - (e.clientY - y0); } });
+  VIEW.addEventListener('mouseup', function () { mov = false; m.classList.remove('arrastra'); });
   m.addEventListener('wheel', function (e) { if (e.ctrlKey) { e.preventDefault(); zoom(e.deltaY < 0 ? 1 : -1); } }, { passive: false });
-  var d = document.getElementById('div'), arr = false, cu = document.querySelector('.cuerpo');
+  var d = DOC.getElementById('div'), arr = false, cu = DOC.querySelector('.cuerpo');
   try { var g = localStorage.getItem('vv_izq'); if (g) cu.style.setProperty('--izq', g); } catch (e) {}
   d.addEventListener('mousedown', function (e) { arr = true; e.preventDefault(); });
-  window.addEventListener('mousemove', function (e) { if (!arr) return; var r = cu.getBoundingClientRect(), p = Math.min(85, Math.max(25, (e.clientX - r.left) / r.width * 100)); cu.style.setProperty('--izq', p + '%'); });
-  window.addEventListener('mouseup', function () { if (arr) { arr = false; try { localStorage.setItem('vv_izq', cu.style.getPropertyValue('--izq')); } catch (e) {} } });
+  VIEW.addEventListener('mousemove', function (e) { if (!arr) return; var r = cu.getBoundingClientRect(), p = Math.min(85, Math.max(25, (e.clientX - r.left) / r.width * 100)); cu.style.setProperty('--izq', p + '%'); });
+  VIEW.addEventListener('mouseup', function () { if (arr) { arr = false; try { localStorage.setItem('vv_izq', cu.style.getPropertyValue('--izq')); } catch (e) {} } });
   // panel angosto (lateral): barra horizontal para repartir el alto entre la imagen y los datos
-  var dh = document.getElementById('divh'), mh = document.getElementById('marco'), arrh = false, y1, h1;
+  var dh = DOC.getElementById('divh'), mh = DOC.getElementById('marco'), arrh = false, y1, h1;
   try { var gh = localStorage.getItem('vv_alto'); if (gh) mh.style.setProperty('--alto', gh); } catch (e) {}
   var empezar = function (y) { arrh = true; y1 = y; h1 = mh.getBoundingClientRect().height; };
-  var mover2 = function (y) { if (arrh) mh.style.setProperty('--alto', Math.max(120, Math.min(window.innerHeight * 1.5, h1 + (y - y1))) + 'px'); };
+  var mover2 = function (y) { if (arrh) mh.style.setProperty('--alto', Math.max(120, Math.min(VIEW.innerHeight * 1.5, h1 + (y - y1))) + 'px'); };
   var soltar = function () { if (arrh) { arrh = false; try { localStorage.setItem('vv_alto', mh.style.getPropertyValue('--alto')); } catch (e) {} } };
   dh.addEventListener('mousedown', function (e) { empezar(e.clientY); e.preventDefault(); });
-  window.addEventListener('mousemove', function (e) { mover2(e.clientY); });
-  window.addEventListener('mouseup', soltar);
+  VIEW.addEventListener('mousemove', function (e) { mover2(e.clientY); });
+  VIEW.addEventListener('mouseup', soltar);
   dh.addEventListener('touchstart', function (e) { empezar(e.touches[0].clientY); e.preventDefault(); }, { passive: false });
-  window.addEventListener('touchmove', function (e) { if (arrh) mover2(e.touches[0].clientY); });
-  window.addEventListener('touchend', soltar);
+  VIEW.addEventListener('touchmove', function (e) { if (arrh) mover2(e.touches[0].clientY); });
+  VIEW.addEventListener('touchend', soltar);
   aplicar();
-})();
+}
+cablear();
 function maximizar() {
   var grande = window.innerWidth < (screen.availWidth - 200);
   google.script.run.VV_abrirGrande(grande ? screen.availWidth - 20 : 1180, grande ? screen.availHeight - 120 : 720);
 }
 
-/* ---------- 🗗 ventana aparte: una ventana REAL del navegador (se agranda arrastrando el borde, se maximiza, va a otro
-   monitor). Muestra el voucher actual y cambia sola con la fila; esta ventana del visor debe seguir abierta. ---------- */
-var POP = null;
-var POP_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Voucher</title><style>' +
-  'html,body{margin:0;height:100%;background:#263238;font-family:Arial,sans-serif}' +
-  '#b{position:fixed;top:0;left:0;right:0;display:flex;gap:4px;align-items:center;padding:6px 8px;background:#37474f;color:#eceff1;font-size:12px;z-index:2}' +
-  '#b button{border:0;border-radius:5px;padding:4px 9px;cursor:pointer;font:inherit}#t{flex:1}' +
-  '#m{position:absolute;top:38px;left:0;right:0;bottom:0;overflow:auto;cursor:grab;text-align:center}' +
-  '#i{display:block;margin:0 auto;background:#fff;width:calc(var(--z,1)*100%)}#m.alto #i{width:auto;height:calc(var(--z,1)*100%)}' +
-  '</style></head><body><div id="b"><span id="t">Voucher</span><button id="menos">−</button><span id="pz">100%</span><button id="mas">+</button>' +
-  '<button id="ancho">↔ Ancho</button><button id="alto">↕ Página</button></div><div id="m"><img id="i"></div></body></html>';
+/* ---------- 🗗 ventana aparte: TODO el visor (imagen, datos, botones) pasa a una ventana REAL del navegador, que se agranda
+   arrastrando el borde, se maximiza o va a otro monitor. Esta ventana de Sheets queda como control: sigue la fila que usted
+   toca y tiene el botón para traer el visor de vuelta. ---------- */
+var POP = null, AVISO_POP = null;
+var MARCADO = Array.prototype.filter.call(document.body.children, function (e) { return e.tagName !== 'SCRIPT'; }).map(function (e) { return e.outerHTML; }).join('');
+var FUNCIONES = ['mover', 'modo', 'copiar', 'abrirOriginal', 'ventanaAparte', 'maximizar', 'zoom', 'ajuste', 'girar', 'descartar', 'revisar', 'guardar', 'traerAqui'];
 function ventanaAparte() {
-  if (POP && !POP.closed) { POP.focus(); return espejo(); }
-  POP = window.open('', 'vv_voucher', 'width=' + Math.round(screen.availWidth * 0.45) + ',height=' + (screen.availHeight - 80) + ',left=' + Math.round(screen.availWidth * 0.55) + ',top=0,resizable=yes');
+  if (POP && !POP.closed) { POP.focus(); return; }
+  POP = window.open('', 'vv_visor', 'width=' + Math.round(screen.availWidth * 0.62) + ',height=' + (screen.availHeight - 60) + ',left=' + Math.round(screen.availWidth * 0.38) + ',top=0,resizable=yes');
   if (!POP) return aviso('⚠️ El navegador bloqueó la ventana: permita las ventanas emergentes de este sitio (ícono en la barra de direcciones) y vuelva a tocar 🗗.');
-  POP.document.open(); POP.document.write(POP_HTML); POP.document.close();
-  var d = POP.document, m = d.getElementById('m'), z = 1, x0, y0, sx, sy, mov = false;
-  var poner = function () { m.style.setProperty('--z', z); d.getElementById('pz').textContent = Math.round(z * 100) + '%'; };
-  d.getElementById('mas').onclick = function () { z = Math.min(6, z + 0.25); poner(); };
-  d.getElementById('menos').onclick = function () { z = Math.max(0.3, z - 0.25); poner(); };
-  d.getElementById('ancho').onclick = function () { m.classList.remove('alto'); z = 1; poner(); };
-  d.getElementById('alto').onclick = function () { m.classList.add('alto'); z = 1; poner(); };
-  m.addEventListener('mousedown', function (e) { mov = true; x0 = e.clientX; y0 = e.clientY; sx = m.scrollLeft; sy = m.scrollTop; e.preventDefault(); });
-  POP.addEventListener('mousemove', function (e) { if (mov) { m.scrollLeft = sx - (e.clientX - x0); m.scrollTop = sy - (e.clientY - y0); } });
-  POP.addEventListener('mouseup', function () { mov = false; });
-  m.addEventListener('wheel', function (e) { if (e.ctrlKey) { e.preventDefault(); z = Math.min(6, Math.max(0.3, z + (e.deltaY < 0 ? 0.25 : -0.25))); poner(); } }, { passive: false });
-  espejo();
+  POP.document.open();
+  POP.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>👁 Visor de voucher</title><style>' + document.querySelector('style').textContent + '</style></head><body>' + MARCADO + '</body></html>');
+  POP.document.close();
+  FUNCIONES.forEach(function (n) { POP[n] = window[n]; });
+  DOC = POP.document; VIEW = POP;
+  var b = DOC.querySelector('[onclick="ventanaAparte()"]'); if (b) { b.textContent = '⤓ Volver a Sheets'; b.setAttribute('onclick', 'traerAqui()'); b.title = 'Traer el visor de vuelta a la ventana de Google Sheets'; }
+  var mx = DOC.querySelector('[onclick="maximizar()"]'); if (mx) mx.remove();
+  cablear(); modo(modoActual()); if (D) pintar(D);
+  AVISO_POP = document.createElement('div');
+  AVISO_POP.style.cssText = 'position:fixed;inset:0;background:#f4f6f8;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;font:13px Arial;color:#37474f;text-align:center;padding:16px';
+  AVISO_POP.innerHTML = '<div style="font-size:28px">🗗</div><div>El visor está en la <b>ventana aparte</b>.<br>Haga clic en las filas de la hoja: la ventana aparte cambia sola.<br><span style="color:#90a4ae;font-size:11px">Deje esta ventanita abierta (puede moverla a un costado).</span></div>' +
+    '<button onclick="POP && POP.focus()">Mostrar la ventana aparte</button><button onclick="traerAqui()">⤓ Traer el visor aquí</button>';
+  document.body.appendChild(AVISO_POP);
+  (function vigilar() { if (POP && POP.closed) return traerAqui(); if (POP) setTimeout(vigilar, 800); })();
 }
-function espejo() {   // copia el voucher que se ve aquí a la ventana aparte
-  if (!POP || POP.closed) return;
-  var t = POP.document.getElementById('t'); if (t && D) t.textContent = D.hoja + ' · fila ' + D.fila + (D.pagina ? ' · pág. ' + D.pagina : '') + (D.archivo ? ' · ' + D.archivo : '');
-  blobImagen().then(function (b) {   // como data: (la ventana aparte no puede leer los blob: de esta página)
-    var r = new FileReader();
-    r.onload = function () { var i = POP && !POP.closed && POP.document.getElementById('i'); if (i) i.src = r.result; };
-    r.readAsDataURL(b);
-  }).catch(function () {});
+function traerAqui() {
+  var p = POP; POP = null; DOC = document; VIEW = window;
+  if (AVISO_POP) { AVISO_POP.remove(); AVISO_POP = null; }
+  try { if (p && !p.closed) p.close(); } catch (e) {}
+  cablear(); modo(modoActual()); if (D) pintar(D);
 }
+function modoActual() { try { return localStorage.getItem('vv_modo') || 'ambos'; } catch (e) { return 'ambos'; } }
+function urlDe(b) {   // en la ventana aparte los blob: de aquí no se ven: se pasa como data:
+  if (DOC === document) return Promise.resolve(URL.createObjectURL(b));
+  return new Promise(function (ok) { var r = new FileReader(); r.onload = function () { ok(r.result); }; r.readAsDataURL(b); });
+}
+function espejo() {}
 
 /* ---------- pintar fila: imagen + datos editables ---------- */
 function pintar(d) {
   var t = ++turno; D = d; actual = { hoja: d.hoja, fila: d.fila }; CAMBIOS = {}; ESPERA = null;
-  document.getElementById('donde').textContent = d.hoja + ' · fila ' + d.fila + (d.pagina ? ' · pág. ' + d.pagina : '');
-  document.getElementById('marco').innerHTML = '<span id="carga">cargando…</span>';
-  document.getElementById('conf').innerHTML = ''; aviso(''); botones();
+  DOC.getElementById('donde').textContent = d.hoja + ' · fila ' + d.fila + (d.pagina ? ' · pág. ' + d.pagina : '');
+  DOC.getElementById('marco').innerHTML = '<span id="carga">cargando…</span>';
+  DOC.getElementById('conf').innerHTML = ''; aviso(''); botones();
   var h = '';
   (d.cols || []).forEach(function (c) {
     var id = 'c' + c.c, ctl;
@@ -266,9 +271,9 @@ function pintar(d) {
     else ctl = '<input type="text" id="' + id + '" data-c="' + c.c + '" value="' + esc(c.v) + '"' + (c.tipo === 'fecha' ? ' placeholder="dd/mm/aaaa"' : '') + '>';
     h += '<div class="f"><label for="' + id + '">' + esc(c.t) + '</label>' + ctl + '</div>';
   });
-  document.getElementById('campos').innerHTML = d.vacio ? '<div class="vacio">Esa fila no tiene datos.</div>' : h;
-  document.querySelectorAll('#campos [data-c]').forEach(function (e) { e.addEventListener('input', marcar); e.addEventListener('change', marcar); });
-  if (!document.body.classList.contains('m-datos') || (POP && !POP.closed)) mostrarImagen(d, t);   // con ventana aparte, aunque aquí se vean solo datos
+  DOC.getElementById('campos').innerHTML = d.vacio ? '<div class="vacio">Esa fila no tiene datos.</div>' : h;
+  DOC.querySelectorAll('#campos [data-c]').forEach(function (e) { e.addEventListener('input', marcar); e.addEventListener('change', marcar); });
+  if (!DOC.body.classList.contains('m-datos') || (POP && !POP.closed)) mostrarImagen(d, t);   // con ventana aparte, aunque aquí se vean solo datos
 }
 function original(c) { var x = (D.cols || []).filter(function (k) { return String(k.c) === String(c); })[0]; return x ? x.v : ''; }
 function titulo(c) { var x = (D.cols || []).filter(function (k) { return String(k.c) === String(c); })[0]; return x ? x.t : 'Col ' + c; }
@@ -276,10 +281,10 @@ function marcar(ev) {
   var e = ev.target, c = e.dataset.c, v = e.type === 'checkbox' ? e.checked : e.value.trim(), o = original(c);
   var igual = e.type === 'checkbox' ? v === o : String(v) === String(o).trim();
   if (igual) delete CAMBIOS[c]; else CAMBIOS[c] = v;
-  e.classList.toggle('cambio', !igual); document.getElementById('conf').innerHTML = ''; botones();
+  e.classList.toggle('cambio', !igual); DOC.getElementById('conf').innerHTML = ''; botones();
   aviso(nCambios() ? nCambios() + ' cambio(s) sin guardar' : '');
 }
-function botones() { var n = nCambios(); document.getElementById('guardar').disabled = !n; document.getElementById('deshacer').disabled = !n; }
+function botones() { var n = nCambios(); DOC.getElementById('guardar').disabled = !n; DOC.getElementById('deshacer').disabled = !n; }
 function descartar() {
   CAMBIOS = {}; if (ESPERA) return pintar(ESPERA);
   pintar(D);
@@ -289,10 +294,10 @@ function revisar() {   // confirmación «antes → ahora»
   Object.keys(CAMBIOS).forEach(function (c) { var o = original(c), n = CAMBIOS[c];
     h += esc(titulo(c)) + ': <s>' + esc(o === true ? '✔' : o === false ? '☐' : (o || '(vacío)')) + '</s> → <b>' + esc(n === true ? '✔' : n === false ? '☐' : (n || '(vacío)')) + '</b><br>'; });
   h += '<div style="margin-top:6px;display:flex;gap:6px"><button onclick="document.getElementById(\'conf\').innerHTML=\'\'">Volver</button><button class="pri" id="ok" onclick="guardar()">✅ Confirmar</button></div>';
-  document.getElementById('conf').innerHTML = '<div class="conf">' + h + '</div>';
+  DOC.getElementById('conf').innerHTML = '<div class="conf">' + h + '</div>';
 }
 function guardar() {
-  var b = document.getElementById('ok'); b.disabled = true; aviso('Guardando…');
+  var b = DOC.getElementById('ok'); b.disabled = true; aviso('Guardando…');
   google.script.run.withSuccessHandler(function (d) {
     var n = nCambios(); CAMBIOS = {}; pintar(d); aviso('✅ Guardado en la hoja (' + n + ' cambio(s)).', true);
   }).withFailureHandler(function (e) { b.disabled = false; aviso('⚠️ ' + e.message); }).VV_guardar(D.hoja, D.fila, D.clave, CAMBIOS);
@@ -304,25 +309,25 @@ function mover(paso) {
 }
 /* ---------- copiar la imagen del voucher (al portapapeles; si el navegador no deja, se muestra para copiar o bajar) ---------- */
 function blobImagen() {
-  var c = document.querySelector('#marco canvas'), i = document.querySelector('#marco img');
+  var c = DOC.querySelector('#marco canvas'), i = DOC.querySelector('#marco img');
   if (c) return new Promise(function (ok) { c.toBlob(ok, 'image/png'); });
   if (!i) return Promise.reject(new Error('no hay imagen'));
   return new Promise(function (ok, mal) {
-    try { var k = document.createElement('canvas'); k.width = i.naturalWidth; k.height = i.naturalHeight; k.getContext('2d').drawImage(i, 0, 0); k.toBlob(function (b) { b ? ok(b) : mal(new Error('imagen')); }, 'image/png'); }
+    try { var k = DOC.createElement('canvas'); k.width = i.naturalWidth; k.height = i.naturalHeight; k.getContext('2d').drawImage(i, 0, 0); k.toBlob(function (b) { b ? ok(b) : mal(new Error('imagen')); }, 'image/png'); }
     catch (e) { mal(e); }
   });
 }
 function copiar() {
   blobImagen().then(function (b) {
-    var mostrar = function () {
-      var url = URL.createObjectURL(b), o = document.createElement('div');
+    var mostrar = function () { urlDe(b).then(function (url) {
+      var o = DOC.createElement('div');
       o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9;overflow:auto;padding:12px;text-align:center';
       o.innerHTML = '<div style="color:#fff;margin-bottom:8px">Clic derecho sobre la imagen → «Copiar imagen» (o <a style="color:#90caf9" download="voucher fila ' + (D ? D.fila : '') + '.png" href="' + url + '">descárguela</a>) ' +
         '<button style="margin-left:8px">Cerrar</button></div><img style="max-width:100%;background:#fff" src="' + url + '">';
       o.querySelector('button').onclick = function () { o.remove(); };
-      document.body.appendChild(o);
-    };
-    try { navigator.clipboard.write([new ClipboardItem({ 'image/png': b })]).then(function () { aviso('✅ Imagen copiada: péguela con Ctrl+V.', true); }, mostrar); }
+      DOC.body.appendChild(o);
+    }); };
+    try { VIEW.navigator.clipboard.write([new VIEW.ClipboardItem({ 'image/png': b })]).then(function () { aviso('✅ Imagen copiada: péguela con Ctrl+V.', true); }, mostrar); }
     catch (e) { mostrar(); }
   }).catch(function () { aviso('⚠️ Todavía no hay imagen para copiar.'); });
 }
