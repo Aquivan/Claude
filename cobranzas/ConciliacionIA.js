@@ -24,6 +24,7 @@
 
 function CIA_agregarMenu_() {
   SpreadsheetApp.getUi().createMenu('🧠 Asistente IA')
+    .addItem('❓ Ayuda: qué hace cada opción', 'AYU_menuAbrir')
     .addItem('💬 Chat con la IA (preguntas, fotos, PDF, Excel)', 'CHAT_menuAbrir')
     .addItem('📰 Resumen de cobranzas y pagos con IA', 'CIA_menuResumen')
     .addItem('📋 Analizar vouchers procesados (factura, empresa, retención)', 'menuAnalizarIAProcesados')

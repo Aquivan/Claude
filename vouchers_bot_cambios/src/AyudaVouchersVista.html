@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_blank">
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #263238; display: grid; grid-template-columns: 260px 1fr; background: #f4f6f8; }
+  nav { background: #fff; border-right: 1px solid #e0e6ea; overflow: auto; padding: 10px; }
+  nav input { width: 100%; padding: 8px 10px; border: 1px solid #cfd8dc; border-radius: 8px; font: inherit; margin-bottom: 8px; }
+  nav a { display: block; padding: 7px 9px; border-radius: 7px; color: #37474f; text-decoration: none; cursor: pointer; margin-bottom: 2px; }
+  nav a:hover { background: #eceff1; } nav a.on { background: #1565c0; color: #fff; }
+  main { overflow: auto; padding: 18px 26px; }
+  h2 { margin: 0 0 12px; color: #1565c0; font-size: 19px; }
+  p { margin: 0 0 9px; line-height: 1.5; }
+  p.vi { padding-left: 18px; position: relative; } p.vi:before { content: '•'; position: absolute; left: 6px; color: #1565c0; }
+  p.pa { padding-left: 26px; position: relative; } p.pa b.n { position: absolute; left: 0; color: #fff; background: #1565c0; border-radius: 50%; width: 19px; height: 19px; font-size: 11px; text-align: center; line-height: 19px; }
+  mark { background: #fff59d; }
+  .pie { margin-top: 18px; display: flex; gap: 8px; } .pie button { border: 1px solid #cfd8dc; background: #fff; border-radius: 7px; padding: 6px 12px; cursor: pointer; font: inherit; }
+  .nada { color: #90a4ae; padding: 30px 0; }
+</style>
+</head>
+<body>
+<nav><input id="q" placeholder="🔎 Buscar (ej. retención, guía, voucher)…" oninput="buscar()"><div id="indice"></div></nav>
+<main id="cont"></main>
+<script>
+var S = <?!= datos ?>, actual = 0;
+function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function linea(t, q) {
+  var h = esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  if (q) h = h.replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'), '<mark>$1</mark>');
+  var m = t.match(/^(\d+)\.\s/);
+  if (/^•\s/.test(t)) return '<p class="vi">' + h.replace(/^•\s/, '') + '</p>';
+  if (m) return '<p class="pa"><b class="n">' + m[1] + '</b>' + h.replace(/^\d+\.\s/, '') + '</p>';
+  return '<p>' + h + '</p>';
+}
+function indice(lista) {
+  document.getElementById('indice').innerHTML = lista.map(function (i) { return '<a class="' + (i === actual ? 'on' : '') + '" onclick="ver(' + i + ')">' + S[i].e + ' ' + esc(S[i].t) + '</a>'; }).join('') ||
+    '<div class="nada">Nada coincide.</div>';
+}
+function ver(i, q) {
+  actual = i; var s = S[i];
+  document.getElementById('cont').innerHTML = '<h2>' + s.e + ' ' + esc(s.t) + '</h2>' + s.p.map(function (t) { return linea(t, q); }).join('') +
+    '<div class="pie">' + (i > 0 ? '<button onclick="ver(' + (i - 1) + ')">◀ ' + esc(S[i - 1].t) + '</button>' : '') +
+    (i < S.length - 1 ? '<button onclick="ver(' + (i + 1) + ')">' + esc(S[i + 1].t) + ' ▶</button>' : '') + '</div>';
+  document.getElementById('cont').scrollTop = 0;
+  buscar(true);
+}
+function plano(t) { return String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+function buscar(soloIndice) {
+  var q = document.getElementById('q').value.trim();
+  var lista = S.map(function (s, i) { return i; }).filter(function (i) { return !q || plano(S[i].t + ' ' + S[i].p.join(' ')).indexOf(plano(q)) >= 0; });
+  indice(lista);
+  if (!soloIndice && q && lista.length && lista.indexOf(actual) < 0) ver(lista[0], q);
+  else if (!soloIndice && q) ver(actual, q);
+}
+ver(0);
+</script>
+</body>
+</html>

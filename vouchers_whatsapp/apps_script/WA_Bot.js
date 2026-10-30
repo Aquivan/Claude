@@ -216,7 +216,8 @@ function WA_comando_(de, texto) {
     '• Mándame la foto del voucher de Cecovasa\n' +
     '• ¿Hay notificaciones nuevas de SUNAT?\n' +
     '• Foto o PDF con una pregunta en el comentario: "¿ya está registrado?"\n' +
-    '• 🎤 También puede mandarme una nota de voz');
+    '• 🎤 También puede mandarme una nota de voz\n\n' +
+    '📖 *ayuda temas*: la guía completa paso a paso (vouchers, preguntas, guías, retenciones, SUNAT y palabras técnicas)');
   return true;
 }
 
