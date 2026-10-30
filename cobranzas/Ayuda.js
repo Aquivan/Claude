@@ -59,7 +59,8 @@ var AYU_SECCIONES_ = [
     '• /emitir (comprobantes de retención) · /descargar · /estado · /sire · /tc (tipo de cambio)',
     '• /ruc (RUC por nombre) · /voucher (foto de un voucher) · /actualizar',
     '• /avisos (qué le aviso solo) · /recordatorios · /olvidar (empezar de cero) · **deshacer** (la última acción)',
-    'Las listas largas llegan también en **Excel**. Si responde citando un mensaje, el asistente entiende de qué habla.'
+    'Las listas largas llegan también en **Excel**. Si responde citando un mensaje, el asistente entiende de qué habla.',
+    '**/ayuda** llega en un solo mensaje con títulos y listas: toque un tema y se abre ahí mismo. **En un grupo**, la ayuda le llega 👻 **solo a usted** (los demás no la ven), al tocar un botón o si usa /ayuda como comando privado (aparece marcado en el ☰ Menú).'
   ] },
   { id: 'whatsapp', e: '📲', t: 'WhatsApp', p: [
     '**Vouchers por WhatsApp**: reenvíe las fotos o PDF (puede marcar varios). Se registran en la hoja de Vouchers y le avisa el resultado.',
@@ -160,6 +161,27 @@ function AYU_indiceTexto_(canal) {
     AYU_SECCIONES_.map(function (s, i) { return (i + 1) + '. ' + s.e + ' ' + s.t; }).join('\n');
 }
 
+/** ✨ Contenido de un tema en HTML enriquecido de Telegram: viñetas → lista, «1. » → pasos numerados. */
+function AYU_ricoCuerpo_(s) {
+  var html = '', lista = '';
+  var cerrar = function () { if (lista) { html += '</' + lista + '>'; lista = ''; } };
+  s.p.forEach(function (t) {
+    var m = String(t).match(/^(•\s|(\d+)\.\s)/), tipo = !m ? '' : m[2] ? 'ol' : 'ul';
+    var x = TG_esc_(m ? t.slice(m[0].length) : t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    if (tipo !== lista) { cerrar(); if (tipo) { html += tipo === 'ol' ? '<ol start="' + m[2] + '">' : '<ul>'; lista = tipo; } }
+    html += tipo ? '<li>' + x + '</li>' : '<p>' + x + '</p>';
+  });
+  cerrar();
+  return html;
+}
+
+/** ✨ Índice enriquecido: todos los temas en un solo mensaje, cada uno se abre tocándolo (<details>). */
+function AYU_ricoIndice_() {
+  return '<h2>❓ Centro de ayuda</h2><p>Toque un tema para abrirlo aquí mismo, o use los botones de abajo.</p>' +
+    AYU_SECCIONES_.map(function (s) { return '<details><summary>' + s.e + ' ' + TG_esc_(s.t) + '</summary>' + AYU_ricoCuerpo_(s) + '</details>'; }).join('') +
+    '<footer>En la hoja: menú ❓ Ayuda · En WhatsApp: escriba «ayuda temas»</footer>';
+}
+
 /** Telegram: /ayuda (índice con botones) y /ayuda <tema>. */
 function AYU_telegram_(ctx, arg) {
   var s = AYU_buscar_(arg);
@@ -169,13 +191,13 @@ function AYU_telegram_(ctx, arg) {
     if (fila.length === 2) { botones.push(fila); fila = []; }
   });
   if (fila.length) botones.push(fila);
-  // Desde un botón se cambia el MISMO mensaje (toda la ayuda en un solo mensaje); escrito, llega uno nuevo.
-  var mostrar = function (html, teclado) { return ctx.esBoton ? TG_editarOEnviar_(ctx, html, teclado) : TG_enviar_(ctx.chatId, html, teclado); };
-  if (!s) return mostrar(AYU_indiceTexto_('tg'), botones);
+  // ✨ Mensaje enriquecido (títulos, listas, temas que se abren); si Telegram no lo acepta, el HTML de siempre.
+  // Desde un botón se cambia el MISMO mensaje; en grupos llega 👻 solo a quien lo pidió (TG_mostrarRico_).
+  if (!s) return TG_mostrarRico_(ctx, AYU_ricoIndice_(), AYU_indiceTexto_('tg'), botones);
   var i = AYU_SECCIONES_.indexOf(s), sig = AYU_SECCIONES_[i + 1];
   var nav = [{ text: '📖 Temas', callback_data: 'c:ayuda' }];
   if (sig) nav.push({ text: 'Siguiente: ' + sig.e + ' ' + sig.t.split(/[:(]/)[0].trim().slice(0, 22) + ' ▶', callback_data: 'c:ayuda ' + sig.id });
-  return mostrar(AYU_texto_(s, 'tg'), [nav]);
+  return TG_mostrarRico_(ctx, '<h2>' + s.e + ' ' + TG_esc_(s.t) + '</h2>' + AYU_ricoCuerpo_(s), AYU_texto_(s, 'tg'), [nav]);
 }
 
 /** WhatsApp: «ayuda temas», «ayuda 3», «ayuda guías». null si no es un pedido de ayuda. */

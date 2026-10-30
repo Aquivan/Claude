@@ -90,7 +90,8 @@ function TG_manejar_(u) {
     return;
   }
   TG_marcarUso_(ss, usuario);
-  var ctx = { ss: ss, chatId: chatId, usuario: usuario, nombre: nombre, msgId: m.message_id };
+  var ctx = { ss: ss, chatId: chatId, usuario: usuario, nombre: nombre, msgId: m.message_id,
+    grupo: grupo, deId: m.from && m.from.id, efimeroId: m.ephemeral_message_id };   // 👻 comando efímero en un grupo
   // ↩️ Respondió (citó) un mensaje: la IA recibe ese texto (o solo la parte que citó) para saber de qué habla.
   if (m.reply_to_message) ctx.citado = (m.quote && m.quote.text) || m.reply_to_message.text || m.reply_to_message.caption || '';
   // 🧩 "1 6 9" mientras el robot de Quesito espera la respuesta de un captcha.
@@ -403,7 +404,9 @@ function TG_alBoton_(ss, q) {
   var usuario = TG_usuario_(ss, String(q.from.id)) || TG_usuario_(ss, chatId);
   if (!usuario || !usuario.activo) { TG_responderBoton_(q.id, '🔒 No autorizado', true); return; }
   if (TG_yaVisto_('b' + q.id)) return;
-  var ctx = { ss: ss, chatId: chatId, usuario: usuario, nombre: q.from.first_name || '', msgId: q.message && q.message.message_id, esBoton: true };
+  var ctx = { ss: ss, chatId: chatId, usuario: usuario, nombre: q.from.first_name || '', msgId: q.message && q.message.message_id, esBoton: true,
+    grupo: !!(q.message && q.message.chat && q.message.chat.type !== 'private'), deId: q.from.id, botonId: q.id,
+    efimeroMsg: q.message && q.message.ephemeral_message_id };   // 👻 botón tocado dentro de un mensaje efímero
   if (d === 'x') { TG_responderBoton_(q.id, 'Listo'); TG_llamar_('editMessageReplyMarkup', { chat_id: chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } }); return; }
   if (d.indexOf('c:') === 0) { TG_responderBoton_(q.id); return TG_comando_(ctx, '/' + d.slice(2)); }
   if (d.indexOf('av:') === 0) { TG_responderBoton_(q.id); return TG_enviarAvisos_(ctx, d.slice(3)); }

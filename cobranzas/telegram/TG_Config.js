@@ -367,7 +367,9 @@ function TG_conectarWebhook_() {
   if (!secreto) { secreto = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, ''); props.setProperty(TG_PROP_.SECRETO, secreto); }
   var r = TG_llamar_('setWebhook', { url: url + '?token=' + secreto, allowed_updates: ['message', 'callback_query'], drop_pending_updates: true, max_connections: 20 });
   if (!r.ok) return { ok: false, error: 'Telegram rechazó la dirección del bot: ' + (r.description || '') };
-  TG_llamar_('setMyCommands', { commands: TG_COMANDOS_.map(function (c) { return { command: c[0], description: c[1] }; }) });
+  // /ayuda como comando 👻 efímero: en un grupo solo lo ven quien lo usa y el bot. Si Telegram no lo acepta, sin esa marca.
+  var cmds = TG_COMANDOS_.map(function (c) { return c[0] === 'ayuda' ? { command: c[0], description: c[1], is_ephemeral: true } : { command: c[0], description: c[1] }; });
+  if (!TG_llamar_('setMyCommands', { commands: cmds }).ok) TG_llamar_('setMyCommands', { commands: TG_COMANDOS_.map(function (c) { return { command: c[0], description: c[1] }; }) });
   TG_llamar_('setMyDescription', { description: 'Asistente del grupo: pregunte lo que quiera de cuentas por cobrar y pagar, SUNAT, detracciones, retenciones, honorarios y vouchers. Mande fotos, PDF o notas de voz.' });
   return { ok: true, bot: me.result.username };
 }
