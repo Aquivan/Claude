@@ -6,6 +6,7 @@ function onOpen() {
   try { IA_agregarMenu_(); } catch (e) { Logger.log('Menu Asistente IA: ' + e.message); }
   SpreadsheetApp.getUi()
     .createMenu('🤖 Vouchers')
+    .addItem('📤 Subir vouchers (PDF o imagen, con el nombre que quiera)', 'SV_abrir')
     .addItem('▶ Procesar Nuevos Archivos (carpeta Drive)', 'procesarVouchers')
     .addItem('🪟 Visor de voucher: ventana flotante (clic en una fila = voucher original en grande)', 'VV_abrirGrande')
     .addItem('👁 Visor de voucher: panel lateral', 'VV_abrir')
