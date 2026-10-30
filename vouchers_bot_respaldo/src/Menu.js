@@ -24,5 +24,7 @@ function onOpen() {
     .addSeparator()
     .addItem('🩺 Configurar diagnostico remoto', 'configurarDiagnosticoRemoto')
     .addItem('🚫 Desactivar diagnostico remoto', 'desactivarDiagnosticoRemoto')
+    .addSeparator()
+    .addItem('❓ Ayuda: cómo funciona esta hoja (paso a paso)', 'AYV_menuAbrir')
     .addToUi();
 }
