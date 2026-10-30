@@ -128,3 +128,38 @@ function VV_urlArchivo(nombre) {
   const f = nombre ? buscarArchivoPorNombre(nombre) : null;
   return f ? f.getUrl() : '';
 }
+
+/**
+ * 🔎 Índice para el buscador del visor: todas las filas de Originales y Fotos con los datos para filtrar
+ * (fecha, banco, moneda, monto, proveedor, empresa, marcas) y la clave de duplicado (la misma que usa el
+ * procesador: n° de operación | banco | monto). Se filtra en el navegador: así cada cambio de filtro es al instante.
+ */
+function VV_indice() {
+  const ss = SpreadsheetApp.getActive();
+  const hojas = [CFG.SHEET_ORIGINALES, CFG.SHEET_FOTOS];
+  const norma = function (t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); };
+  const filas = [];
+  hojas.forEach(function (nombre, h) {
+    const sh = ss.getSheetByName(nombre);
+    if (!sh || sh.getLastRow() < 2) return;
+    const nCol = sh.getLastColumn(), n = sh.getLastRow() - 1;
+    const tit = sh.getRange(1, 1, 1, nCol).getDisplayValues()[0].map(norma);
+    const col = function (re, def) { const i = tit.findIndex(function (t) { return re.test(t); }); return i >= 0 ? i : def; };
+    const iF = col(/^fecha de dep/, 0), iOp = col(/^numero de op|^n.? de op/, 1), iB = col(/^banco/, 2), iMon = col(/^moneda/, 3), iM = col(/^monto/, 4), iP = col(/^proveedor/, 5);
+    const iCli = col(/^cliente/, 7), iDes = col(/^descripcion/, 8), iArch = col(/^archivo original/, 10), iPag = col(/^pagina/, 12);
+    const iRev = col(/^revisado/, -1), iPR = col(/^por retener/, -1), iRet = col(/^retenido/, -1), iEmp = col(/^empresa/, -1), iIdB = col(/^id benef/, -1);
+    const rg = sh.getRange(2, 1, n, nCol), ver = rg.getDisplayValues(), crudo = rg.getValues();
+    for (let r = 0; r < n; r++) {
+      const v = ver[r], c = crudo[r];
+      if (!String(v[iOp] || '').trim() && !String(v[iM] || '').trim() && !String(v[iP] || '').trim()) continue;   // fila vacía
+      const f = c[iF] instanceof Date ? Utilities.formatDate(c[iF], 'America/Lima', 'yyyyMMdd') : '';
+      const op = String(c[iOp] == null ? '' : c[iOp]).trim();
+      const si = function (i) { return i >= 0 && (c[i] === true || /^(true|si|sí|x|✔)$/i.test(String(v[i]).trim())); };
+      filas.push([h, r + 2, f, v[iF], v[iOp], v[iB], v[iMon], Number(c[iM]) || 0, v[iP], iEmp >= 0 ? v[iEmp] : '',
+        si(iRev) ? 1 : 0, si(iPR) ? 1 : 0, si(iRet) ? 1 : 0, iIdB >= 0 ? v[iIdB] : '', v[iCli], v[iDes], v[iArch], v[iPag],
+        op ? claveDuplicado(op, c[iB], c[iM]) : '',
+        norma(v.filter(function (x, i) { return i !== 9; }).join(' | '))]);
+    }
+  });
+  return { hojas: hojas, filas: filas };
+}
