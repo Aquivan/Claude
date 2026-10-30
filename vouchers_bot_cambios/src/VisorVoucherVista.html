@@ -189,8 +189,16 @@ function mostrarImagen(d, t) {
   if (!m.querySelector('canvas,img')) {   // al instante: la imagen de la celda, mientras baja el original
     m.innerHTML = (d.img ? '<img src="' + esc(d.img) + '">' : '<div class="vacio">' + esc(d.texto || 'Cargando el original…') + '</div>') + '<span id="carga">cargando…</span>';
     o.textContent = d.img ? 'imagen de la celda' : ''; zoomable(m.querySelector('img'));
+    var im = m.querySelector('img');
+    if (im) im.onerror = function () {   // el enlace de Google venció: se pide la imagen por el servidor
+      im.onerror = null;
+      google.script.run.withSuccessHandler(function (u) {
+        if (t !== turno) return;
+        if (u) { im.src = u; } else { im.replaceWith(Object.assign(DOC.createElement('div'), { className: 'vacio', textContent: 'La imagen de la celda no se pudo cargar.' })); }
+      }).VV_imagenCelda(d.hoja, d.fila);
+    };
   }
-  if (!d.original || !d.original.id) { o.textContent = d.img ? 'imagen de la celda (no encontré el original en Drive)' : 'no encontré el original en Drive'; return; }
+  if (!d.original || !d.original.id) { o.textContent = (d.img ? 'imagen de la celda · ' : '') + 'no encontré el original «' + (d.archivo || '?') + '» en Drive (¿lo movieron, renombraron o borraron?)'; return; }
   carga(true);
   var mime = String(d.original.mime || '');
   bajar(d.original.id, mime).then(function (a) {
