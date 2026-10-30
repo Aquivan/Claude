@@ -37,6 +37,8 @@ const AYV_SECCIONES_ = [
     '• **Vistas**: 🖼 solo imagen · 🖼 📋 ambos · 📋 solo datos.',
     '• **Imagen**: − / + (o Ctrl + rueda), ↔ Ancho, ↕ Página, ⟳ girar, arrastrar para moverse. Una barra separa imagen y datos: arrástrela.',
     '• **◀ ▶** fila anterior o siguiente · **📋 Copiar** la imagen para pegarla en WhatsApp o correo · **📄** abre el original en Drive.',
+    '• **🔎 Buscar**: abre a la izquierda un buscador sobre **Originales y Fotos** (o solo una): escriba n° de operación, nombre, monto o archivo, y filtre por **fecha, banco, moneda, monto, empresa, revisado, retención e ID Beneficiario** (en «⚙️ Más filtros»). **Duplicados**: Todos · **Únicos** (uno por voucher) · **Solo duplicados** (mismo n° de operación, banco y monto; los repetidos salen juntos). Arriba ve cuántos son y la suma en S/ y US$.',
+    '• Con un filtro puesto, **◀ ▶** (o las flechas ↑ ↓ del teclado) recorren **solo los resultados**, y el título dice «🔎 3 de 45». Al tocar un resultado se ve el voucher y se selecciona la fila en la hoja. **📋** copia la lista para pegarla en Excel o Sheets; **🔄** vuelve a leer la hoja; **✖ Limpiar** quita los filtros.',
     '• **🗗 Ventana aparte**: todo el visor en una ventana del navegador que se agranda arrastrando el borde o se lleva a otro monitor. Deje abierta la ventanita de Sheets (es la que avisa qué fila tocó).'
   ] },
   { id: 'menu', e: '🤖', t: 'Menú 🤖 Vouchers', p: [
