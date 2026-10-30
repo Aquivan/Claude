@@ -18,8 +18,9 @@ name: Desplegar Cobranzas
 on:
   push:
     branches:
+      # Solo esta rama: los cambios de trabajo llegan aquí por merge. Publicar también desde
+      # la rama de trabajo gastaba 2 versiones de Apps Script por cada cambio (límite: 200).
       - claude/python-codes-izve18
-      - claude/tender-wozniak-vnf3iq
     paths:
       - 'cobranzas/**'
   workflow_dispatch:
