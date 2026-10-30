@@ -210,7 +210,7 @@ function TG_comando_(ctx, texto) {
     case 'pdf': if (TGG_atajoTG_(ctx, '/pdf guía ' + arg)) return; break;   // 📄 PDF de una guía emitida
     case 'procesados': case 'procesado': return TGQ_tg_(ctx, 'procesados ' + (arg || 'hoy'));   // 📋 vouchers procesados por tanda
     case 'honorarios': return TG_enviarHonorarios_(ctx, arg);
-    case 'estado': return TG_enviarEstado_(ctx);
+    case 'estado': return TG_enviarEstado_(ctx, arg);
     case 'descargar': return TG_asistenteDescarga_(ctx, null);
     case 'sire': return TGS_comandoTG_(ctx, arg);   // ⚡ SIRE solo reporte (rápido): /sire granix 202601-202609
     case 'ruc': return TG_enviar_(chatId, RPN_consulta_(ctx.ss, arg, { origen: 'tg', chat: chatId }));   // 🔎 RUC por nombre
