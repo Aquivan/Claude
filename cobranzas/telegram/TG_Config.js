@@ -30,7 +30,9 @@ var TG_PARAMETROS_ = [
   ['carpetaOriginales', 'Carpeta de vouchers originales (entrada)', '1GqjydN2oOYhwDvxPmZtr9TEJgjP65i2g', 'Carpeta "Nuevos" del Sistema de Vouchers para PDF/originales (📥 Registrar como voucher).'],
   ['carpetaFotos', 'Carpeta de vouchers fotos (entrada)', '12si83gUAbe5kqbFopbMrFkdD3EvBsA72', 'Carpeta "Nuevos" del Sistema de Vouchers para fotos.'],
   ['avisos', 'Avisos automáticos', 'SI', 'SI = revisa cada hora y avisa lo nuevo (cada persona elige sus avisos con /avisos). NO = no avisa.'],
-  ['horaResumen', 'Hora del resumen diario', '8', 'Hora de Lima (0–23) del ☀️ resumen de la mañana. Vacío = sin resumen.'],
+  ['horaResumen', 'Hora del resumen diario', '8', 'Hora de Lima (0–23) del ☀️ resumen de la mañana (llega a esa hora, ±15 min). Vacío = sin resumen.'],
+  ['noche', 'Descargas de madrugada', 'SIRE 1, Notificaciones 2, Retenciones 2, Detracciones 3, Honorarios 3',
+    'Hora de Lima en que el bot PIDE cada descarga diaria de SUNAT (arranca en segundos; el reloj de GitHub se atrasa horas). Solo si ese día aún no corrió. Vacío = no pedir.'],
   ['diasVence', 'Avisar facturas que vencen en (días)', '3', 'Facturas por cobrar/pagar que vencen dentro de estos días (se avisa una vez al día).'],
   ['modelo', 'Modelo de IA del chat', '', 'Vacío = el mismo de 🤝 Conciliar con IA (proveedor y clave de esa pestaña).'],
 ];

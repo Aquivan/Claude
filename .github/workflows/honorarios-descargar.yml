@@ -12,7 +12,7 @@ run-name: ${{ (github.event_name == 'schedule' || inputs.diario) && 'Honorarios 
 on:
   # Todos los días ~6:22 a. m. de Lima: mes anterior y mes actual de todas las empresas (con PDF).
   schedule:
-    - cron: '22 11 * * *'   # una vez al día (la hoja también la pide a las 7; si ya corrió, no se repite)
+    - cron: '52 9 * * *'   # respaldo: 4:52 a.m. Perú (el bot la pide a las 3 a.m.; si ya corrió, no se repite)
   workflow_dispatch:
     inputs:
       empresa:

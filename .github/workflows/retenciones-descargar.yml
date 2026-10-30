@@ -13,7 +13,7 @@ run-name: ${{ (github.event_name == 'schedule' || inputs.diario) && 'Retenciones
 on:
   # Todos los dias ~6:07 a. m. de Lima: mes anterior y mes actual de todas las empresas.
   schedule:
-    - cron: '7 11 * * *'   # una vez al día (la hoja también la pide a las 7; si ya corrió, no se repite)
+    - cron: '37 9 * * *'   # respaldo: 4:37 a.m. Perú (el bot la pide a las 2 a.m.; si ya corrió, no se repite)
   workflow_dispatch:
     inputs:
       empresa:
