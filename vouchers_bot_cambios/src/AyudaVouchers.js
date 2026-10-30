@@ -17,6 +17,7 @@ const AYV_SECCIONES_ = [
   { id: 'entrar', e: '📥', t: 'Cómo entran los vouchers', p: [
     '• **Telegram (bot de Vouchers)**: mande la foto o el PDF. Con los botones elija si en general manda **originales** o **fotos**; o escriba «original» / «foto» en el comentario de un archivo puntual.',
     '• **WhatsApp**: reenvíe las fotos o PDF (puede marcar varios a la vez). Al terminar la tanda le pregunta de quién son.',
+    '• **📤 Desde esta hoja**: menú **🤖 Vouchers → 📤 Subir vouchers**. Arrastre o elija PDF y fotos (varios a la vez), **cámbieles el nombre** si quiere (o use «Nombre para todos» para numerarlos), elija **📄 Originales** o **📷 Fotos** y toque **📤 Subir**. Luego **▶ Procesar ahora** (en ~1 minuto) o espere la vuelta de 10 minutos. No deja repetir un nombre que ya existe, porque con el nombre se encuentra después el original.',
     '• **Carpeta de Drive de entrada**: deje los archivos ahí.',
     'El sistema los procesa **cada 10 minutos** (o al instante con ▶ Procesar). Si un PDF tiene muchas páginas y no termina, en Telegram toque **▶️ Continuar ahora** o escriba /continuar.',
     'Al terminar, el archivo pasa a la carpeta de **Procesados** (o a **Duplicados/Descartados** si ya estaba o no era un voucher).'
@@ -39,6 +40,7 @@ const AYV_SECCIONES_ = [
     '• **🗗 Ventana aparte**: todo el visor en una ventana del navegador que se agranda arrastrando el borde o se lleva a otro monitor. Deje abierta la ventanita de Sheets (es la que avisa qué fila tocó).'
   ] },
   { id: 'menu', e: '🤖', t: 'Menú 🤖 Vouchers', p: [
+    '• **📤 Subir vouchers**: subir PDF o fotos desde la computadora, con el nombre que usted elija.',
     '• **▶ Procesar Nuevos Archivos**: procesa ya lo que está en la carpeta de entrada.',
     '• **⚙️ Verificar Configuración**: revisa carpetas, claves y conexiones.',
     '• **⏰ Activar / ⏸ Desactivar procesamiento automático** (cada 10 minutos).',
