@@ -16,6 +16,9 @@ function TG_vigia() {
   var cfg = TG_cfg_(ss);
   // 🏷 Vouchers que quedaron esperando "¿de quién son?": pasados 20 min se registran sin nombre.
   try { if (TG_token_()) TGE_vencidosTG_(ss); } catch (e) { console.warn('Vouchers sin nombre: ' + e.message); }
+  // 🌙 Descargas de madrugada puntuales y ☀️ reloj del resumen a la hora exacta (TG_Noche.js).
+  try { TGN_revisar_(cfg); } catch (e) { console.warn('Descargas de madrugada: ' + e.message); }
+  try { TGN_relojResumen_(cfg); } catch (e) { console.warn('Reloj del resumen: ' + e.message); }
   if (!cfg.avisosActivos || !TG_token_()) return;
   var us = TG_usuarios_(ss).filter(function (u) { return u.activo; });
   if (!us.length) return;
@@ -44,26 +47,32 @@ function TG_vigia() {
   // (tiene su propia hora, por eso no se salta de noche)
   try { TGV_activarParaTodos_(ss, us); TGV_avisar_(ss, para('oblig')); } catch (e) { console.warn('Vencimientos SUNAT: ' + e.message); }
 
-  // ☀️ Resumen de la mañana y ⏰ vencimientos (una vez al día, a la hora elegida o dentro de las 3 horas siguientes).
+  // ☀️ Resumen de la mañana y ⏰ vencimientos (respaldo del reloj TG_resumenManana: si a esa hora no salió, sale con el vigía dentro de las 3 horas siguientes)
+  if (cfg.horaResumen >= 0 && hora >= cfg.horaResumen && hora < cfg.horaResumen + 3) TG_mandarResumenDia_(ss, us);
+}
+
+/** ☀️ Resumen de la mañana y ⏰ vencimientos: una sola vez al día (lo llama el reloj de la hora o el vigía). */
+function TG_mandarResumenDia_(ss, us) {
   var props = PropertiesService.getScriptProperties();
   var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd');
-  if (cfg.horaResumen >= 0 && hora >= cfg.horaResumen && hora < cfg.horaResumen + 3 && props.getProperty('TG_RESUMEN_DIA') !== hoy) {
-    props.setProperty('TG_RESUMEN_DIA', hoy);
-    try {
-      var r = para('resumen');
-      if (r.length) {
-        var html = '☀️ <b>Buenos días.</b>\n\n' + TG_textoResumen_(ss);
-        r.forEach(function (u) { TG_enviar_(u.chatId, html, [[{ text: '⏰ Vencidas', callback_data: 'c:vencidas' }, { text: '📬 Buzón SUNAT', callback_data: 'c:notificaciones' }, { text: '📋 Menú', callback_data: 'c:menu' }]]); });
-      }
-    } catch (e) { console.warn('Resumen diario: ' + e.message); }
-    try {
-      para('venc').forEach(function (u) {
-        if (u.avisos.indexOf('resumen') >= 0) return;   // ya va dentro del resumen
-        TG_enviarVencidas_({ ss: ss, chatId: u.chatId, usuario: u }, '');
-      });
-    } catch (e) { console.warn('Vencimientos: ' + e.message); }
-  }
+  if (props.getProperty('TG_RESUMEN_DIA') === hoy) return;
+  var para = function (codigo) { return us.filter(function (u) { return u.avisos.indexOf(codigo) >= 0; }); };
+  props.setProperty('TG_RESUMEN_DIA', hoy);
+  try {
+    var r = para('resumen');
+    if (r.length) {
+      var html = '☀️ <b>Buenos días.</b>\n\n' + TG_textoResumen_(ss);
+      r.forEach(function (u) { TG_enviar_(u.chatId, html, [[{ text: '⏰ Vencidas', callback_data: 'c:vencidas' }, { text: '📬 Buzón SUNAT', callback_data: 'c:notificaciones' }, { text: '📋 Menú', callback_data: 'c:menu' }]]); });
+    }
+  } catch (e) { console.warn('Resumen diario: ' + e.message); }
+  try {
+    para('venc').forEach(function (u) {
+      if (u.avisos.indexOf('resumen') >= 0) return;   // ya va dentro del resumen
+      TG_enviarVencidas_({ ss: ss, chatId: u.chatId, usuario: u }, '');
+    });
+  } catch (e) { console.warn('Vencimientos: ' + e.message); }
 }
+
 
 /* ============================================================ lo ya avisado */
 

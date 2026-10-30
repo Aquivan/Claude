@@ -102,7 +102,9 @@ var AYU_SECCIONES_ = [
     '**Usar su PC**: con la ventana «Robot de guías» abierta y **en pc sí**, Quesito se llena en el Chrome de su PC, a la vista.'
   ] },
   { id: 'sunat', e: '⬇', t: 'SUNAT: descargas automáticas y a pedido', p: [
-    'Los robots bajan de SUNAT, solos, varias veces por semana: **SIRE** (compras y ventas), **retenciones**, **detracciones**, **honorarios** y el **Buzón SOL** (notificaciones).',
+    'Los robots bajan de SUNAT, solos, **cada madrugada**: **SIRE** (compras y ventas), **retenciones**, **detracciones**, **honorarios** y el **Buzón SOL** (notificaciones).',
+    '🌙 **Horario**: el bot las pide a la hora exacta (por defecto SIRE 1 a.m., Notificaciones y Retenciones 2 a.m., Detracciones y Honorarios 3 a.m.; el Buzón también a las 8 a.m. y 5:30 p.m. desde su hoja). Se cambia en la hoja de Cobranzas, pestaña **🤖 Telegram**, fila **«Descargas de madrugada»** (ej. «SIRE 1, Notificaciones 2…»). El reloj propio de GitHub queda de respaldo a las 4–5 a.m., porque GitHub suele atrasarse horas.',
+    '☀️ El **resumen de la mañana** llega a la hora de la fila **«Hora del resumen diario»** (misma pestaña), con unos 15 minutos de margen.',
     '• **/estado**: si las descargas automáticas corrieron bien.',
     '• **/descargar**: pedir una ahora (le pregunta qué y de qué empresa).',
     '• **/sire**: solo el reporte del SIRE, rápido (ej. «/sire granix 202601-202609», «/sire todas mes anterior»).',

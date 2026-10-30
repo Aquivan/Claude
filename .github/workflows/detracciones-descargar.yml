@@ -12,7 +12,7 @@ run-name: ${{ (github.event_name == 'schedule' || inputs.diario) && 'Detraccione
 on:
   # Todos los días ~7:17 a. m. de Lima, todas las empresas, los últimos 3 meses.
   schedule:
-    - cron: '17 12 * * *'   # una vez al día (la hoja también la pide a las 8; si ya corrió, no se repite)
+    - cron: '7 10 * * *'   # respaldo: 5:07 a.m. Perú (el bot la pide a las 3 a.m.; si ya corrió, no se repite)
   workflow_dispatch:
     inputs:
       empresa:
