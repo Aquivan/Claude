@@ -11,6 +11,8 @@ function TG_token_() {
 /** Llama a un método de la API. carga con un Blob adentro = se envía como archivo (multipart). */
 function TG_llamar_(metodo, carga, reintentado) {
   var token = TG_token_();
+  var sinColor = carga && carga._sinColor; if (carga) delete carga._sinColor;
+  if (carga && carga.reply_markup && !sinColor) carga.reply_markup = TG_colorear_(carga.reply_markup);   // 🎨 botones verdes/rojos/azules
   if (!token) throw new Error('Falta conectar el bot (menú 🤖 Telegram → 1️⃣ Conectar bot).');
   var params = { method: 'post', muteHttpExceptions: true };
   var conArchivo = carga && Object.keys(carga).some(function (k) { return carga[k] && typeof carga[k].getBytes === 'function'; });
@@ -32,6 +34,11 @@ function TG_llamar_(metodo, carga, reintentado) {
     j = JSON.parse(r.getContentText());
   } catch (e) {
     j = { ok: false, description: 'sin respuesta de Telegram: ' + e.message };
+  }
+  if (!j.ok && !sinColor && carga && carga.reply_markup && /button|keyboard|style|reply.?markup/i.test(j.description || '')) {
+    carga.reply_markup = TG_colorear_(carga.reply_markup, true);   // si Telegram no aceptara los colores: los mismos botones, sin color
+    carga._sinColor = true;
+    return TG_llamar_(metodo, carga, reintentado);
   }
   if (!j.ok && j.parameters && j.parameters.retry_after && !reintentado) {
     Utilities.sleep(Math.min(8, j.parameters.retry_after) * 1000);
@@ -260,4 +267,25 @@ function TG_guardarBoton_(datos, segundos) {
 function TG_leerBoton_(k) {
   var s = CacheService.getScriptCache().get('tg_b_' + k);
   return s ? JSON.parse(s) : null;
+}
+
+
+/** 🎨 Color de los botones según lo que hacen (Bot API: style = success verde · danger rojo · primary azul).
+ *  quitar=true los deja sin color. Acepta el reply_markup como objeto o como texto JSON. */
+function TG_colorear_(rm, quitar) {
+  var texto = typeof rm === 'string', o;
+  try { o = texto ? JSON.parse(rm) : rm; } catch (e) { return rm; }
+  if (!o || !Array.isArray(o.inline_keyboard)) return rm;
+  o.inline_keyboard.forEach(function (fila) {
+    (fila || []).forEach(function (b) {
+      if (!b || typeof b !== 'object') return;
+      if (quitar) { delete b.style; return; }
+      if (b.style || b.url || b.web_app) return;
+      var t = String(b.text || '');
+      if (/^\s*(✅|☑️|💾)|\b(emitir|confirmar|aprobar|está bien|esta bien|sí,|si,|guardar|aplicar)\b/i.test(t)) b.style = 'success';
+      else if (/^\s*(🗑|✖|❌|🚫|⏹)|\b(descartar|cancelar|borrar|eliminar|detener)\b|^\s*no\b/i.test(t)) b.style = 'danger';
+      else if (/^\s*(▶|🔄|📥|🧾 procesar|🔎 analizar)/i.test(t)) b.style = 'primary';
+    });
+  });
+  return texto ? JSON.stringify(o) : o;
 }

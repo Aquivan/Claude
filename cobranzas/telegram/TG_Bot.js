@@ -403,7 +403,7 @@ function TG_alBoton_(ss, q) {
   var usuario = TG_usuario_(ss, String(q.from.id)) || TG_usuario_(ss, chatId);
   if (!usuario || !usuario.activo) { TG_responderBoton_(q.id, '🔒 No autorizado', true); return; }
   if (TG_yaVisto_('b' + q.id)) return;
-  var ctx = { ss: ss, chatId: chatId, usuario: usuario, nombre: q.from.first_name || '', msgId: q.message && q.message.message_id };
+  var ctx = { ss: ss, chatId: chatId, usuario: usuario, nombre: q.from.first_name || '', msgId: q.message && q.message.message_id, esBoton: true };
   if (d === 'x') { TG_responderBoton_(q.id, 'Listo'); TG_llamar_('editMessageReplyMarkup', { chat_id: chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } }); return; }
   if (d.indexOf('c:') === 0) { TG_responderBoton_(q.id); return TG_comando_(ctx, '/' + d.slice(2)); }
   if (d.indexOf('av:') === 0) { TG_responderBoton_(q.id); return TG_enviarAvisos_(ctx, d.slice(3)); }
