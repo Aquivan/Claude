@@ -119,32 +119,77 @@ function TG_estadoTabla_(cfg, proyecto) {
   return { columnas: ['proyecto', 'estado', 'cuando', 'duracion', 'titulo', 'empresas_que_fallaron', 'enlace'], filas: filas };
 }
 
-function TG_enviarEstado_(ctx) {
+// Otras automatizaciones que también se ven en ⚙️ Estado (solo a pedido).
+var TG_ESTADO_EXTRA_ = [
+  { nombre: '🧀 Guías en Quesito', wf: 'gre-quesito.yml' },
+  { nombre: '🚚 Guías en SUNAT', wf: 'gre-sunat.yml' },
+  { nombre: '🧾 Emisión de CRE', wf: 'retenciones-cre.yml' }
+];
+// Reloj de respaldo de GitHub (hora Lima) de cada descarga diaria; ver los cron de cada workflow.
+var TG_ESTADO_RESPALDO_ = { sire: '4:17', notificaciones: '5:07 y 16:07', retenciones: '4:37', honorarios: '4:52', detracciones: '5:07' };
+
+/** Quién la lanzó: 🌙 la diaria (bot u hoja), ⏰ el reloj de GitHub o 👤 a pedido. */
+function TG_origenRun_(r) {
+  if (r.event === 'schedule') return '⏰ reloj GitHub';
+  if (/diario/i.test(r.display_title || '')) return '🌙 automática';
+  return '👤 a pedido';
+}
+
+/** Cuándo está programada (pestaña 🤖 Telegram «Descargas de madrugada» + respaldo de GitHub). */
+function TG_programadaTexto_(k, horario) {
+  var h = horario[k], partes = [];
+  if (h != null) partes.push('🌙 ' + (h === 0 ? '12' : h > 12 ? h - 12 : h) + (h < 12 ? ' a.m.' : ' p.m.'));
+  if (k === 'notificaciones') partes.push('hoja 8:00 y 17:30');
+  if (TG_ESTADO_RESPALDO_[k]) partes.push('respaldo ' + TG_ESTADO_RESPALDO_[k]);
+  return partes.join(' · ') || 'a pedido';
+}
+
+/** ⚙️ Estado: última corrida de cada proyecto (fecha, hora, quién la lanzó, resultado), qué está programado y el historial. */
+function TG_enviarEstado_(ctx, arg) {
   var cfg = TG_cfg_(ctx.ss);
   TG_accion_(ctx.chatId, 'typing');
-  var lineas = [], botones = [];
+  var lineas = [], botones = [], filas = [], historial = [];
+  var horario = {};
+  try { horario = TGN_horario_(cfg.noche); } catch (e) {}
+  var lista = Object.keys(TG_PROYECTOS_).map(function (k) { return { k: k, nombre: TG_PROYECTOS_[k].nombre, wf: TG_PROYECTOS_[k].wf }; }).concat(TG_ESTADO_EXTRA_);
   try {
-    Object.keys(TG_PROYECTOS_).forEach(function (k) {
-      var p = TG_PROYECTOS_[k];
-      var rs = TG_ghRuns_(cfg, 4, p.wf);
-      if (!rs.length) { lineas.push('⚪ <b>' + p.nombre + '</b> · sin corridas'); return; }
+    lista.forEach(function (p) {
+      var rs = TG_ghRuns_(cfg, 5, p.wf);
+      var corto = p.nombre.replace(/\s*\(.*\)$/, '');
+      var prog = p.k ? TG_programadaTexto_(p.k, horario) : 'a pedido';
+      if (!rs.length) {
+        lineas.push('⚪ <b>' + p.nombre + '</b> · sin corridas');
+        filas.push('<tr><td>' + corto + '<br><i>' + prog + '</i></td><td>—</td><td>⚪ sin corridas</td></tr>');
+        return;
+      }
       var r = rs[0];
-      var lin = TG_iconoRun_(r) + ' <b>' + p.nombre + '</b> · ' + TG_cuando_(r.created_at) + (r.status === 'completed' ? ' (' + TG_duracion_(r) + ')' : ' · en curso');
+      var res = r.status === 'completed' ? TG_iconoRun_(r) + ' ' + ({ success: 'bien', failure: 'falló', cancelled: 'cancelada', timed_out: 'tiempo agotado' }[r.conclusion] || r.conclusion) + ' · ' + TG_duracion_(r) : '⏳ en curso';
+      var lin = TG_iconoRun_(r) + ' <b>' + p.nombre + '</b> · ' + TG_cuando_(r.created_at) + ' · ' + TG_origenRun_(r) + (r.status === 'completed' ? ' (' + TG_duracion_(r) + ')' : ' · en curso');
       if (r.conclusion === 'failure') {
-        var f = TG_ghJobsFallidos_(cfg, r.id);
-        lin += '\n   falló: ' + TG_esc_(f.map(function (x) { return TG_nombreEmpresa_(cfg, x); }).join(', ') || 'ver detalle');
-        botones.push([{ text: '🔁 Reintentar ' + p.nombre.replace(/^\S+\s/, ''), callback_data: 'rr:' + r.id }]);
+        var f = [];
+        try { f = TG_ghJobsFallidos_(cfg, r.id); } catch (e) {}
+        var fs = f.map(function (x) { return TG_nombreEmpresa_(cfg, x); }).join(', ');
+        if (fs) { lin += '\n   falló: ' + TG_esc_(fs); res += '<br>' + TG_esc_(fs); }
+        botones.push([{ text: '🔁 Reintentar ' + corto.replace(/^\S+\s/, ''), callback_data: 'rr:' + r.id }]);
       }
       var ok = rs.filter(function (x) { return x.conclusion === 'success'; })[0];
-      if (r.conclusion !== 'success' && ok) lin += '\n   último bueno: ' + TG_cuando_(ok.created_at);
+      if (r.conclusion !== 'success' && ok) { lin += '\n   último bueno: ' + TG_cuando_(ok.created_at); res += '<br>último bueno ' + TG_cuando_(ok.created_at); }
       lin += ' · <a href="' + r.html_url + '">ver</a>';
       lineas.push(lin);
+      filas.push('<tr><td><b>' + corto + '</b><br><i>' + prog + '</i></td><td><a href="' + r.html_url + '">' + TG_cuando_(r.created_at) + '</a><br>' + TG_origenRun_(r) + '</td><td>' + res + '</td></tr>');
+      historial.push('<details><summary>' + corto + ' · últimas ' + rs.length + '</summary><ul>' + rs.map(function (x) {
+        return '<li>' + TG_iconoRun_(x) + ' ' + TG_cuando_(x.created_at) + ' · ' + TG_origenRun_(x) + (x.status === 'completed' ? ' · ' + TG_duracion_(x) : ' · en curso') + '</li>';
+      }).join('') + '</ul></details>');
     });
   } catch (e) {
     return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message));
   }
-  botones.push([{ text: '⬇ Pedir una descarga', callback_data: 'c:descargar' }, { text: '🔄 Actualizar', callback_data: 'c:estado' }]);
-  TG_enviar_(ctx.chatId, '⚙️ <b>Descargas de SUNAT</b> (última corrida de cada una)\n\n' + lineas.join('\n\n'), botones);
+  botones.push([{ text: '⬇ Pedir una descarga', callback_data: 'c:descargar' }, { text: '🔄 Actualizar', callback_data: 'c:estado act' }]);
+  var rico = '<h2>⚙️ Descargas y robots</h2><p>Última corrida de cada uno (hora de Lima) y cuándo está programado.</p>' +
+    '<table bordered striped compact><tr><th>Proyecto · programado</th><th>Última</th><th>Resultado</th></tr>' + filas.join('') + '</table>' +
+    '<h3>Historial</h3>' + historial.join('') +
+    '<footer>🌙 automática (la pide el bot o la hoja a su hora) · ⏰ reloj de GitHub (respaldo, suele atrasarse) · 👤 a pedido. Las horas 🌙 se cambian en la pestaña 🤖 Telegram, fila «Descargas de madrugada».</footer>';
+  TG_mostrarRico_(ctx, rico, '⚙️ <b>Descargas y robots</b> (última corrida de cada uno)\n\n' + lineas.join('\n\n'), botones, !(ctx.esBoton && arg === 'act'));   // 🔄 Actualizar cambia el mismo mensaje
 }
 
 function TG_nombreEmpresa_(cfg, ruc) {

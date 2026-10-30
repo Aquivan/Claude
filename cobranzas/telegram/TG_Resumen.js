@@ -53,7 +53,7 @@ function TG_enviarResumen_(ctx) {
   // ✨ Con tablas (mensaje enriquecido); si Telegram no lo acepta, el texto de siempre.
   TG_mostrarRico_(ctx, TG_textoResumen_(ctx.ss, true), function () { return TG_textoResumen_(ctx.ss); }, [
     [{ text: '💰 Por cobrar', callback_data: 'c:cobrar' }, { text: '💸 Por pagar', callback_data: 'c:pagar' }, { text: '⏰ Vencidas', callback_data: 'c:vencidas' }],
-    [{ text: '📬 Buzón SUNAT', callback_data: 'c:notificaciones' }, { text: '⚙️ Descargas', callback_data: 'c:estado' }],
+    [{ text: '📬 Buzón SUNAT', callback_data: 'c:notificaciones' }, { text: '⚙️ Últimas descargas', callback_data: 'c:estado' }],
     [{ text: '💬 Analiza el día con IA', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: 'Dame un análisis del estado de hoy del grupo: qué cobrar primero, qué pagar, qué notificaciones SUNAT atender y qué riesgos ves.' }) }],
   ]);
 }
@@ -63,7 +63,8 @@ function TG_textoResumen_(ss, rico) {
   var c = TG_ctxDatos_(ss);
   var cfg = c.op.tg.cfg;
   var hoy = TG_hoy_();
-  var fecha = Utilities.formatDate(new Date(), 'America/Lima', 'EEEE dd/MM/yyyy').replace(/^\w/, function (x) { return x.toUpperCase(); });
+  var dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];   // en español (formatDate da el día en inglés)
+  var fecha = dias[Number(Utilities.formatDate(new Date(), 'America/Lima', 'u')) % 7] + ' ' + Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy');
   var partes = [rico ? '<h2>📊 Resumen · ' + fecha + '</h2>' : '📊 <b>Resumen · ' + fecha + '</b>'];
   var bloque = function (fn) { try { var s = fn(); if (s) partes.push(s); } catch (e) { console.warn('Resumen: ' + e.message); } };
   bloque(function () {
@@ -74,18 +75,19 @@ function TG_textoResumen_(ss, rico) {
       if (!ds.length) return;
       var venc = ds.filter(function (d) { return d.dias_vencido > 0; });
       var ic = lado === 'Por cobrar' ? '💰' : '💸';
-      filas.push('<tr><td>' + ic + ' <b>' + lado + '</b></td><td align="right"><b>' + TG_montos_(TG_monedas_(ds)) + '</b></td><td align="right">' + ds.length +
-        '</td><td align="right">' + (venc.length ? '⚠️ ' + TG_montos_(TG_monedas_(venc)) + ' (' + venc.length + ')' : '—') + '</td></tr>');
+      // 2 columnas para que entre en la pantalla del celular: documentos y vencido van en una segunda línea
+      filas.push('<tr><td>' + ic + ' <b>' + lado + '</b><br><i>' + ds.length + ' doc.</i></td><td align="right"><b>' + TG_montos_(TG_monedas_(ds)) + '</b>' +
+        (venc.length ? '<br>⚠️ vencido ' + TG_montos_(TG_monedas_(venc)) + ' (' + venc.length + ')' : '') + '</td></tr>');
       lin.push(ic + ' <b>' + lado + ':</b> ' + TG_montos_(TG_monedas_(ds)) + ' <i>(' + ds.length + ' doc.)</i>' +
         (venc.length ? '\n   ⚠️ vencido: ' + TG_montos_(TG_monedas_(venc)) + ' <i>(' + venc.length + ')</i>' : ''));
     });
     var lim = new Date(hoy.getTime() + cfg.diasVence * 86400000);
     var pronto = docs.filter(function (d) { return d.vence && d.vence >= hoy && d.vence <= lim; });
     if (pronto.length) {
-      filas.push('<tr><td>⏰ Vencen en ' + cfg.diasVence + ' días</td><td align="right">' + TG_montos_(TG_monedas_(pronto)) + '</td><td align="right">' + pronto.length + '</td><td></td></tr>');
+      filas.push('<tr><td>⏰ Vencen en ' + cfg.diasVence + ' días<br><i>' + pronto.length + ' doc.</i></td><td align="right">' + TG_montos_(TG_monedas_(pronto)) + '</td></tr>');
       lin.push('⏰ <b>Vencen en ' + cfg.diasVence + ' días:</b> ' + pronto.length + ' doc. · ' + TG_montos_(TG_monedas_(pronto)));
     }
-    if (rico) return filas.length ? '<table bordered striped compact><tr><th>Cuentas</th><th>Saldo</th><th>Doc.</th><th>Vencido</th></tr>' + filas.join('') + '</table>' : '';
+    if (rico) return filas.length ? '<table bordered striped compact><tr><th>Cuentas</th><th>Saldo</th></tr>' + filas.join('') + '</table>' : '';
     return lin.join('\n');
   });
   bloque(function () {
@@ -121,14 +123,16 @@ function TG_textoResumen_(ss, rico) {
   });
   bloque(function () {
     if (!cfg.github) return '';
-    var ok = 0, mal = [];
+    var ok = 0, mal = [], ultima = '';
     Object.keys(TG_PROYECTOS_).forEach(function (k) {
       var r = TG_ghRuns_(cfg, 1, TG_PROYECTOS_[k].wf)[0];
       if (!r) return;
+      if (r.created_at > ultima) ultima = r.created_at;
       if (r.conclusion === 'success' || r.status !== 'completed') ok++; else mal.push(TG_PROYECTOS_[k].nombre.replace(/^\S+\s/, ''));
     });
     if (!ok && !mal.length) return '';
-    return '⚙️ <b>Descargas SUNAT:</b> ' + (mal.length ? '❌ con error: ' + TG_esc_(mal.join(', ')) + ' · ' : '') + '✅ ' + ok + ' bien';
+    return '⚙️ <b>Descargas SUNAT:</b> ' + (mal.length ? '❌ con error: ' + TG_esc_(mal.join(', ')) + ' · ' : '') + '✅ ' + ok + ' bien' +
+      (ultima ? ' · última ' + TG_cuando_(ultima) : '') + ' (detalle: ⚙️ Últimas descargas)';
   });
   bloque(function () { return TGV_textoResumen_(ss); });
   bloque(function () { var tc = TG_tipoCambio_(); return '💱 <b>Tipo de cambio SUNAT:</b> compra ' + tc.compra.toFixed(3) + ' · venta ' + tc.venta.toFixed(3); });
