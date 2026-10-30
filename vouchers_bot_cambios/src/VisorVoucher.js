@@ -45,10 +45,42 @@ function VV_idArchivo_(nombre) {
   const cache = CacheService.getScriptCache(), k = 'vv_id_' + Utilities.base64EncodeWebSafe(nombre).slice(0, 200);
   const g = cache.get(k);
   if (g) return JSON.parse(g);
-  const f = buscarArchivoPorNombre(nombre);
+  let f = buscarArchivoPorNombre(nombre) || VV_buscarEnTodoDrive_(nombre);
   const r = f ? { id: f.getId(), mime: f.getMimeType() } : null;
-  if (r) cache.put(k, JSON.stringify(r), 21600);
+  cache.put(k, JSON.stringify(r), r ? 21600 : 600);   // si no está, se vuelve a buscar en 10 min
   return r;
+}
+
+/**
+ * Si no está en las carpetas del sistema (lo movieron, lo subieron a otra carpeta o le cambiaron la extensión),
+ * se busca en todo el Drive de quien mira: primero el nombre exacto, luego sin extensión, luego que empiece igual.
+ */
+function VV_buscarEnTodoDrive_(nombre) {
+  const q = function (t) { return String(t).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); };
+  const base = String(nombre).replace(/\.[A-Za-z0-9]{2,5}$/, '');
+  const intentos = ["title = '" + q(nombre) + "'", "title = '" + q(base) + "'", "title contains '" + q(base.slice(0, 60)) + "'"];
+  for (let i = 0; i < intentos.length; i++) {
+    try {
+      const it = DriveApp.searchFiles(intentos[i] + " and trashed = false and (mimeType = 'application/pdf' or mimeType contains 'image/')");
+      if (!it.hasNext()) continue;
+      const f = it.next();
+      if (i < 2 || !it.hasNext()) return f;   // «empieza igual» solo si hay uno: no mostrar el voucher de otro archivo
+    } catch (e) {}
+  }
+  return null;
+}
+
+/** La imagen de la celda (J) como data:… (el enlace que da Google vence; así se ve igual). */
+function VV_imagenCelda(hoja, fila) {
+  const sh = SpreadsheetApp.getActive().getSheetByName(hoja);
+  if (!sh) return '';
+  const c = sh.getRange(fila, 10).getValue();
+  const url = c && typeof c === 'object' && !(c instanceof Date) ? ((c.getContentUrl && c.getContentUrl()) || (c.getUrl && c.getUrl()) || '') : '';
+  if (!url) return '';
+  const r = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) return '';
+  const b = r.getBlob();
+  return 'data:' + (b.getContentType() || 'image/png') + ';base64,' + Utilities.base64Encode(b.getBytes());
 }
 
 /** Datos de una fila: el original (K, pagina M), la imagen de la celda (J) y TODAS las columnas para ver y corregir. */
