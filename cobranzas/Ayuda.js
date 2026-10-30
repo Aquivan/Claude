@@ -59,6 +59,7 @@ var AYU_SECCIONES_ = [
     '• /emitir (comprobantes de retención) · /descargar · /estado · /sire · /tc (tipo de cambio)',
     '• /ruc (RUC por nombre) · /voucher (foto de un voucher) · /actualizar',
     '• /avisos (qué le aviso solo) · /recordatorios · /olvidar (empezar de cero) · **deshacer** (la última acción)',
+    '**/resumen**, **/cobrar** y **/pagar** llegan en **tablas** (saldo, documentos y vencido por empresa y por cliente o proveedor). Si su Telegram es antiguo, llegan como texto: actualice la app para verlas.',
     'Las listas largas llegan también en **Excel**. Si responde citando un mensaje, el asistente entiende de qué habla.',
     '**/ayuda** llega en un solo mensaje con títulos y listas: toque un tema y se abre ahí mismo. **En un grupo**, la ayuda le llega 👻 **solo a usted** (los demás no la ven), al tocar un botón o si usa /ayuda como comando privado (aparece marcado en el ☰ Menú).'
   ] },

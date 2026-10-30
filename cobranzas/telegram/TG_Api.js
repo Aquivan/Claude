@@ -86,17 +86,20 @@ function TG_editar_(chatId, msgId, html, teclado) {
  * rico = HTML enriquecido; respaldo = el HTML de siempre, que se usa si Telegram no acepta el enriquecido.
  * En grupos responde con un mensaje 👻 efímero (solo lo ve quien preguntó) cuando Telegram lo permite:
  * al tocar un botón (callback), al usar un comando efímero o al tocar un botón de otro efímero.
- * Si es un botón, cambia el mismo mensaje en vez de mandar otro.
+ * Si es un botón, cambia el mismo mensaje en vez de mandar otro. nuevo=true: siempre un mensaje nuevo y visible para todos.
+ * respaldo puede ser una función (se arma solo si hace falta).
  */
-function TG_mostrarRico_(ctx, rico, respaldo, teclado) {
+function TG_mostrarRico_(ctx, rico, respaldo, teclado, nuevo) {
+  var resp = respaldo;
+  respaldo = function () { if (typeof resp === 'function') resp = resp(); return String(resp || ''); };
   var rm = teclado ? (Array.isArray(teclado) ? { inline_keyboard: teclado } : teclado) : undefined;
   var msg = { html: String(rico), skip_entity_detection: true };
   var ok = function (r) { return r && (r.ok || /not modified/i.test(r.description || '')); };
-  if (ctx.grupo && ctx.deId) {   // 👻 efímero: los demás del grupo no lo ven
+  if (!nuevo && ctx.grupo && ctx.deId) {   // 👻 efímero: los demás del grupo no lo ven
     var efi = function (texto) {
       if (ctx.efimeroMsg) {
         var e = { chat_id: ctx.chatId, receiver_user_id: Number(ctx.deId), ephemeral_message_id: ctx.efimeroMsg, reply_markup: rm };
-        if (texto) { e.text = TG_trozos_(respaldo)[0]; e.parse_mode = 'HTML'; } else e.rich_message = msg;
+        if (texto) { e.text = TG_trozos_(respaldo())[0]; e.parse_mode = 'HTML'; } else e.rich_message = msg;
         return TG_llamar_('editEphemeralMessageText', e);
       }
       var p = { receiver_user_id: Number(ctx.deId) };
@@ -104,20 +107,20 @@ function TG_mostrarRico_(ctx, rico, respaldo, teclado) {
       else if (!ctx.efimeroId) return null;
       var c = { chat_id: ctx.chatId, ephemeral_message_parameters: p, reply_markup: rm };
       if (ctx.efimeroId) c.reply_parameters = { ephemeral_message_id: ctx.efimeroId };
-      if (texto) { c.text = TG_trozos_(respaldo)[0]; c.parse_mode = 'HTML'; return TG_llamar_('sendMessage', c); }
+      if (texto) { c.text = TG_trozos_(respaldo())[0]; c.parse_mode = 'HTML'; return TG_llamar_('sendMessage', c); }
       c.rich_message = msg;
       return TG_llamar_('sendRichMessage', c);
     };
     if (ok(efi(false)) || ok(efi(true))) return;
-    if (ctx.efimeroMsg) return TG_enviar_(ctx.chatId, respaldo, teclado);   // un efímero no se puede editar como mensaje normal
+    if (ctx.efimeroMsg) return TG_enviar_(ctx.chatId, respaldo(), teclado);   // un efímero no se puede editar como mensaje normal
   }
-  if (ctx.esBoton && ctx.msgId) {
+  if (!nuevo && ctx.esBoton && ctx.msgId) {
     if (ok(TG_llamar_('editMessageText', { chat_id: ctx.chatId, message_id: ctx.msgId, rich_message: msg, reply_markup: rm }))) return;
-    return TG_editarOEnviar_(ctx, respaldo, teclado);
+    return TG_editarOEnviar_(ctx, respaldo(), teclado);
   }
   var r = TG_llamar_('sendRichMessage', { chat_id: ctx.chatId, rich_message: msg, reply_markup: rm });
   if (r.ok) return r.result.message_id;
-  return TG_enviar_(ctx.chatId, respaldo, teclado);
+  return TG_enviar_(ctx.chatId, respaldo(), teclado);
 }
 
 function TG_borrar_(chatId, msgId) {

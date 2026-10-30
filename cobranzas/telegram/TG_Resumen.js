@@ -48,32 +48,42 @@ function TG_hoy_() {
 
 function TG_enviarResumen_(ctx) {
   TG_accion_(ctx.chatId, 'typing');
-  TG_enviar_(ctx.chatId, TG_textoResumen_(ctx.ss), [
+  // ✨ Con tablas (mensaje enriquecido); si Telegram no lo acepta, el texto de siempre.
+  TG_mostrarRico_(ctx, TG_textoResumen_(ctx.ss, true), function () { return TG_textoResumen_(ctx.ss); }, [
     [{ text: '💰 Por cobrar', callback_data: 'c:cobrar' }, { text: '💸 Por pagar', callback_data: 'c:pagar' }, { text: '⏰ Vencidas', callback_data: 'c:vencidas' }],
     [{ text: '📬 Buzón SUNAT', callback_data: 'c:notificaciones' }, { text: '⚙️ Descargas', callback_data: 'c:estado' }],
     [{ text: '💬 Analiza el día con IA', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: 'Dame un análisis del estado de hoy del grupo: qué cobrar primero, qué pagar, qué notificaciones SUNAT atender y qué riesgos ves.' }) }],
   ]);
 }
 
-function TG_textoResumen_(ss) {
+/** rico=true: HTML enriquecido con tablas (TG_mostrarRico_); si no, el HTML de siempre (también para el aviso de la mañana). */
+function TG_textoResumen_(ss, rico) {
   var c = TG_ctxDatos_(ss);
   var cfg = c.op.tg.cfg;
   var hoy = TG_hoy_();
-  var partes = ['📊 <b>Resumen · ' + Utilities.formatDate(new Date(), 'America/Lima', 'EEEE dd/MM/yyyy').replace(/^\w/, function (x) { return x.toUpperCase(); }) + '</b>'];
+  var fecha = Utilities.formatDate(new Date(), 'America/Lima', 'EEEE dd/MM/yyyy').replace(/^\w/, function (x) { return x.toUpperCase(); });
+  var partes = [rico ? '<h2>📊 Resumen · ' + fecha + '</h2>' : '📊 <b>Resumen · ' + fecha + '</b>'];
   var bloque = function (fn) { try { var s = fn(); if (s) partes.push(s); } catch (e) { console.warn('Resumen: ' + e.message); } };
   bloque(function () {
     var docs = ANA_docs_(c).filter(function (d) { return d.saldo > 0.5; });
-    var lin = [];
+    var lin = [], filas = [];
     ['Por cobrar', 'Por pagar'].forEach(function (lado) {
       var ds = docs.filter(function (d) { return d.lado === lado; });
       if (!ds.length) return;
       var venc = ds.filter(function (d) { return d.dias_vencido > 0; });
-      lin.push((lado === 'Por cobrar' ? '💰' : '💸') + ' <b>' + lado + ':</b> ' + TG_montos_(TG_monedas_(ds)) + ' <i>(' + ds.length + ' doc.)</i>' +
+      var ic = lado === 'Por cobrar' ? '💰' : '💸';
+      filas.push('<tr><td>' + ic + ' <b>' + lado + '</b></td><td align="right"><b>' + TG_montos_(TG_monedas_(ds)) + '</b></td><td align="right">' + ds.length +
+        '</td><td align="right">' + (venc.length ? '⚠️ ' + TG_montos_(TG_monedas_(venc)) + ' (' + venc.length + ')' : '—') + '</td></tr>');
+      lin.push(ic + ' <b>' + lado + ':</b> ' + TG_montos_(TG_monedas_(ds)) + ' <i>(' + ds.length + ' doc.)</i>' +
         (venc.length ? '\n   ⚠️ vencido: ' + TG_montos_(TG_monedas_(venc)) + ' <i>(' + venc.length + ')</i>' : ''));
     });
     var lim = new Date(hoy.getTime() + cfg.diasVence * 86400000);
     var pronto = docs.filter(function (d) { return d.vence && d.vence >= hoy && d.vence <= lim; });
-    if (pronto.length) lin.push('⏰ <b>Vencen en ' + cfg.diasVence + ' días:</b> ' + pronto.length + ' doc. · ' + TG_montos_(TG_monedas_(pronto)));
+    if (pronto.length) {
+      filas.push('<tr><td>⏰ Vencen en ' + cfg.diasVence + ' días</td><td align="right">' + TG_montos_(TG_monedas_(pronto)) + '</td><td align="right">' + pronto.length + '</td><td></td></tr>');
+      lin.push('⏰ <b>Vencen en ' + cfg.diasVence + ' días:</b> ' + pronto.length + ' doc. · ' + TG_montos_(TG_monedas_(pronto)));
+    }
+    if (rico) return filas.length ? '<table bordered striped compact><tr><th>Cuentas</th><th>Saldo</th><th>Doc.</th><th>Vencido</th></tr>' + filas.join('') + '</table>' : '';
     return lin.join('\n');
   });
   bloque(function () {
@@ -120,7 +130,20 @@ function TG_textoResumen_(ss) {
   });
   bloque(function () { return TGV_textoResumen_(ss); });
   bloque(function () { var tc = TG_tipoCambio_(); return '💱 <b>Tipo de cambio SUNAT:</b> compra ' + tc.compra.toFixed(3) + ' · venta ' + tc.venta.toFixed(3); });
-  return partes.join('\n\n');
+  return rico ? TG_resumenRico_(partes) : partes.join('\n\n');
+}
+
+/** ✨ Las líneas «📬 <b>Tema:</b> detalle» van a una tabla Tema | Detalle; los bloques de varias líneas, como título y lista. */
+function TG_resumenRico_(partes) {
+  var html = partes[0], filas = [], listas = '';   // una sola tabla de temas; las listas van después
+  partes.slice(1).forEach(function (p) {
+    if (/^<table/.test(p)) { html += p; return; }
+    var lin = String(p).split('\n'), m = lin[0].match(/^(\S+)\s*<b>([^<]+?):?<\/b>:?\s*(.*)$/);
+    if (m && lin.length === 1) { filas.push('<tr><td>' + m[1] + ' ' + m[2] + '</td><td>' + m[3] + '</td></tr>'); return; }
+    listas += '<h3>' + (m ? m[1] + ' ' + m[2] + (m[3] ? ': ' + m[3] : '') : lin[0]) + '</h3><ul>' + lin.slice(1).map(function (l) { return '<li>' + l.replace(/^\s*[•·-]\s*/, '') + '</li>'; }).join('') + '</ul>';
+  });
+  if (filas.length) html += '<table bordered striped compact><tr><th>Tema</th><th>Detalle</th></tr>' + filas.join('') + '</table>';
+  return html + listas;
 }
 
 /* ============================================================ cartera */
@@ -139,11 +162,21 @@ function TG_enviarCartera_(ctx, lado, empresa) {
   var html = icono + ' <b>' + lado + (nomEmp ? ' · ' + TG_esc_(nomEmp) : ' · todo el grupo') + '</b>\nSaldo: <b>' + TG_montos_(TG_monedas_(docs)) + '</b> en ' + docs.length + ' documento(s)';
   var venc = docs.filter(function (d) { return d.dias_vencido > 0; });
   if (venc.length) html += '\n⚠️ Vencido: <b>' + TG_montos_(TG_monedas_(venc)) + '</b> (' + venc.length + ')';
+  // ✨ La misma información en tablas (mensaje enriquecido); html queda de respaldo.
+  var tabla = function (cab, filas) { return '<table bordered striped compact><tr>' + cab.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr>' + filas.join('') + '</table>'; };
+  var celdas = function (vals) { return '<tr>' + vals.map(function (v, i) { return '<td' + (i && /^(S\/|US\$|[\d—⚠])/.test(String(v).replace(/<[^>]+>/g, '')) ? ' align="right"' : '') + '>' + v + '</td>'; }).join('') + '</tr>'; };
+  var rico = '<h2>' + icono + ' ' + lado + (nomEmp ? ' · ' + TG_esc_(nomEmp) : ' · todo el grupo') + '</h2><p>Saldo: <b>' + TG_montos_(TG_monedas_(docs)) + '</b> en ' + docs.length + ' documento(s)' +
+    (venc.length ? '<br>⚠️ Vencido: <b>' + TG_montos_(TG_monedas_(venc)) + '</b> (' + venc.length + ')' : '') + '</p>';
   var botones = [];
   if (!ruc) {
     var porEmp = {};
     docs.forEach(function (d) { (porEmp[d.empresa] = porEmp[d.empresa] || []).push(d); });
-    html += '\n\n<b>Por empresa:</b>\n' + Object.keys(porEmp).sort(function (a, b) { return TG_monedas_(porEmp[b]).PEN - TG_monedas_(porEmp[a]).PEN; }).map(function (e) {
+    var empOrden = Object.keys(porEmp).sort(function (a, b) { return TG_monedas_(porEmp[b]).PEN - TG_monedas_(porEmp[a]).PEN; });
+    rico += '<h3>Por empresa</h3>' + tabla(['Empresa', 'Saldo', 'Doc.', 'Vencido'], empOrden.map(function (e) {
+      var v = porEmp[e].filter(function (d) { return d.dias_vencido > 0; });
+      return celdas([TG_esc_(e), '<b>' + TG_montos_(TG_monedas_(porEmp[e])) + '</b>', porEmp[e].length, v.length ? '⚠️ ' + TG_montos_(TG_monedas_(v)) : '—']);
+    }));
+    html += '\n\n<b>Por empresa:</b>\n' + empOrden.map(function (e) {
       var v = porEmp[e].filter(function (d) { return d.dias_vencido > 0; });
       return '• <b>' + TG_esc_(e) + '</b>: ' + TG_montos_(TG_monedas_(porEmp[e])) + (v.length ? ' <i>(vencido ' + TG_montos_(TG_monedas_(v)) + ')</i>' : '');
     }).join('\n');
@@ -164,9 +197,15 @@ function TG_enviarCartera_(ctx, lado, empresa) {
     var maxV = ds.reduce(function (m, d) { return Math.max(m, d.dias_vencido || 0); }, 0);
     return (i + 1) + '. ' + TG_esc_(TG_nombreCorto_(k.split('|')[1], k.split('|')[0])) + ': <b>' + TG_montos_(TG_monedas_(ds)) + '</b> <i>(' + ds.length + (maxV > 0 ? ', hasta ' + maxV + ' días vencido' : '') + ')</i>';
   }).join('\n') + (top.length > 10 ? '\n<i>… y ' + (top.length - 10) + ' más</i>' : '');
+  var N = 15;   // en tabla caben más filas que en el texto
+  rico += '<h3>' + (lado === 'Por cobrar' ? 'Clientes' : 'Proveedores') + ' con más saldo</h3>' +
+    tabla(['#', lado === 'Por cobrar' ? 'Cliente' : 'Proveedor', 'Saldo', 'Doc.', 'Días vencido'], top.slice(0, N).map(function (k, i) {
+      var ds = porContra[k], maxV = ds.reduce(function (m, d) { return Math.max(m, d.dias_vencido || 0); }, 0);
+      return celdas([i + 1, TG_esc_(TG_nombreCorto_(k.split('|')[1], k.split('|')[0])), '<b>' + TG_montos_(TG_monedas_(ds)) + '</b>', ds.length, maxV > 0 ? '⚠️ ' + maxV : '—']);
+    })) + (top.length > N ? '<p><i>… y ' + (top.length - N) + ' más (📊 Excel con el detalle)</i></p>' : '');
   botones.push([{ text: '📊 Excel con el detalle', callback_data: 'k:' + TG_guardarBoton_({ t: 'cartxls', lado: lado, ruc: ruc }) }]);
   botones.push([{ text: '💬 Analizar con IA', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: 'Analiza las cuentas ' + lado.toLowerCase() + (nomEmp ? ' de ' + nomEmp : ' del grupo') + ': qué está vencido, qué priorizar y qué vouchers sin usar podrían cubrirlas.' }) }]);
-  TG_enviar_(ctx.chatId, html, botones);
+  TG_mostrarRico_(ctx, rico, html, botones, true);
 }
 
 function TG_excelCartera_(ctx, datos) {
