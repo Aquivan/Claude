@@ -103,7 +103,10 @@ function TG_avisoNotificaciones_(c, V) {
   var t = TG_tablaLibro_(c, 'notificaciones', 'Notificaciones');
   var I = function (n) { return TG_col_(t.columnas, n); };
   var jE = I('Empresa'), jR = I('RUC empresa'), jF = I('Fecha publicación'), jS = I('Surte efecto'), jT = I('Tipo de documento'), jN = I('N° documento'), jA = I('Asunto'), jC = I('Código'), jP = I('PDF');
-  var nuevas = TG_nuevos_(V, 'notif', t.filas, function (f) { return jC >= 0 && f[jC] ? f[jC] : [f[jR], f[jN], f[jF]].join('|'); });
+  var claveN = function (f) { return String(jC >= 0 && f[jC] ? f[jC] : [f[jR], f[jN], f[jF]].join('|')); };
+  // 🆕 del /notificaciones: lo que trajo cada descarga, aunque nadie abra el buzón entre una y otra
+  try { TG_notFoto_(t.filas.slice().sort(function (a, b) { return (aFecha_(b[jF]) || 0) - (aFecha_(a[jF]) || 0); }).map(claveN)); } catch (e) { console.warn('Foto del buzón: ' + e.message); }
+  var nuevas = TG_nuevos_(V, 'notif', t.filas, claveN);
   if (!nuevas.length) return [];
   var botones = [], fila = [];
   var lineas = nuevas.slice(0, 10).map(function (f, i) {

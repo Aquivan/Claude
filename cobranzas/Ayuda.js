@@ -107,6 +107,7 @@ var AYU_SECCIONES_ = [
     '• **/descargar**: pedir una ahora (le pregunta qué y de qué empresa).',
     '• **/sire**: solo el reporte del SIRE, rápido (ej. «/sire granix 202601-202609», «/sire todas mes anterior»).',
     '• **/avisos**: elija qué quiere que le avise solo (notificaciones nuevas, vencimientos, errores).',
+    '• **/notificaciones** (📬 Buzón SUNAT): tabla con marcas **🆕 nueva** (llegó en la última descarga), **🔵 sin leer** y **🔴 coactiva o embargo**. Botones para ver **solo nuevas**, **sin leer** o **coactivas**, y **📄 n** para recibir el PDF. Ojo: al bajar el PDF de SUNAT, SUNAT la marca como leída.',
     'Cada tema tiene su hoja (Retenciones, Detracciones, Honorarios, Notificaciones, Panel SIRE) con los PDF en Drive.'
   ] },
   { id: 'seguridad', e: '🔒', t: 'Seguridad y buenas prácticas', p: [

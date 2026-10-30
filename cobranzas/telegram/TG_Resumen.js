@@ -247,24 +247,86 @@ function TG_enviarVencidas_(ctx, empresa) {
 
 /* ============================================================ SUNAT y demás hojas */
 
-function TG_enviarNotificaciones_(ctx, empresa) {
+/**
+ * 📬 Buzón SUNAT. Marca 🆕 lo que llegó en la última descarga (desde la vez anterior que cambió la lista),
+ * 🔵 lo no leído y 🔴 lo de cobranza coactiva / embargo. arg: empresa, «sin leer», «nuevas» o «coactivas».
+ */
+function TG_enviarNotificaciones_(ctx, arg) {
   TG_accion_(ctx.chatId, 'typing');
+  arg = String(arg || '').trim();
+  var filtro = /sin\s*leer|no\s*le[ií]d/i.test(arg) ? 'sinleer' : /^nuev/i.test(arg) ? 'nuevas' : /coactiv|embargo/i.test(arg) ? 'coactivas' : '';
+  var cambiaVista = !!filtro || /^todas$/i.test(arg);   // botones de este mismo mensaje: se cambia el mensaje
+  var empresa = cambiaVista ? '' : arg;
   var c = TG_ctxDatos_(ctx.ss);
   var res;
-  try { res = TGH_.notificaciones(c, { empresa: empresa, max: 10 }); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ No pude leer la hoja de Notificaciones: ' + TG_esc_(e.message)); }
+  try { res = TGH_.notificaciones(c, { empresa: empresa, max: 400 }); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ No pude leer la hoja de Notificaciones: ' + TG_esc_(e.message)); }
   if (!res.filas.length) return TG_enviar_(ctx.chatId, '📬 No hay notificaciones' + (empresa ? ' de ' + TG_esc_(empresa) : '') + ' en la hoja.');
   var I = function (n) { return TG_col_(res.columnas, n); };
-  var jE = I('Empresa'), jF = I('Fecha publicación'), jT = I('Tipo de documento'), jN = I('N° documento'), jA = I('Asunto'), jL = I('Leída'), jP = I('PDF');
+  var jE = I('Empresa'), jR = I('RUC empresa'), jF = I('Fecha publicación'), jT = I('Tipo de documento'), jN = I('N° documento'), jA = I('Asunto'), jL = I('Leída'), jP = I('PDF'), jC = I('Código');
+  var fecha = function (f) { return aFecha_(f[jF]) || null; };
+  var filas = res.filas.slice().sort(function (a, b) { return (fecha(b) || 0) - (fecha(a) || 0); });
+  var clave = function (f) { return String(jC >= 0 && f[jC] ? f[jC] : [f[jR], f[jN], f[jF]].join('|')); };
+  var foto = empresa ? TG_notFoto_(null) : TG_notFoto_(filas.map(clave));   // con empresa solo se consulta (no cambia la foto)
+  var esNueva = function (f) { return foto.n.indexOf(clave(f)) >= 0; };
+  var sinLeer = function (f) { return jL >= 0 && (!f[jL] || /^(no|false|0)$/i.test(String(f[jL]).trim())); };
+  var coact = function (f) { return /coactiva|embargo/i.test(String(f[jT]) + ' ' + String(f[jA])); };
+  var cuenta = { nuevas: filas.filter(esNueva).length, sinleer: filas.filter(sinLeer).length, coactivas: filas.filter(coact).length };
+  var lista = filas.filter(filtro === 'nuevas' ? esNueva : filtro === 'sinleer' ? sinLeer : filtro === 'coactivas' ? coact : function () { return true; }).slice(0, 15);
+  var titulo = { nuevas: '🆕 Nuevas de la última descarga', sinleer: '🔵 Sin leer', coactivas: '🔴 Cobranza coactiva / embargo' }[filtro] || 'Últimas ' + lista.length;
+  var marcas = function (f) { return (esNueva(f) ? '🆕' : '') + (coact(f) ? '🔴' : '') + (sinLeer(f) ? '🔵' : ''); };
+  var emp = function (f) { return String(f[jE] || '').replace(/\s+(E\.?\s?I\.?\s?R\.?\s?L\.?|S\.?\s?A\.?\s?C\.?|S\.?\s?R\.?\s?L\.?|S\.?\s?A\.?)$/i, ''); };
   var botones = [], fila = [];
-  var html = '📬 <b>Buzón SUNAT · últimas ' + res.filas.length + '</b>' + (empresa ? ' · ' + TG_esc_(empresa) : '') + '\n\n' + res.filas.map(function (f, i) {
+  var pdfDe = function (f, i) {
     var pdf = jP >= 0 ? TG_idDrive_(String(f[jP]).split(' ')[0]) : '';
     if (pdf) { fila.push({ text: '📄 ' + (i + 1), callback_data: 'f:' + pdf }); if (fila.length === 5) { botones.push(fila); fila = []; } }
-    return (i + 1) + '. ' + (jL >= 0 && (!f[jL] || /^(no|false)$/i.test(String(f[jL]))) ? '🔵 ' : '') + '<b>' + TG_esc_(f[jE]) + '</b> · ' + TG_fecha_(aFecha_(f[jF]) || f[jF]) +
-      (pdf ? ' · 📄' : '') + '\n   ' + TG_esc_(TG_asunto_(f[jA], f[jT], f[jN]));
-  }).join('\n');
+    return pdf;
+  };
+  var cuandoFoto = foto.f ? Utilities.formatDate(new Date(foto.f), 'America/Lima', 'dd/MM HH:mm') : '';
+  var resumen = [cuenta.nuevas ? '🆕 <b>' + cuenta.nuevas + '</b> nueva(s) en la última descarga' + (cuandoFoto ? ' (' + cuandoFoto + ')' : '') : '🆕 nada nuevo en la última descarga',
+    '🔵 <b>' + cuenta.sinleer + '</b> sin leer', cuenta.coactivas ? '🔴 <b>' + cuenta.coactivas + '</b> de cobranza coactiva / embargo' : ''].filter(String);
+  // respaldo (texto de siempre) y ✨ enriquecido (tabla)
+  var html = '📬 <b>Buzón SUNAT · ' + titulo + '</b>' + (empresa ? ' · ' + TG_esc_(empresa) : '') + '\n' + resumen.join('\n') + '\n\n', rico = '';
+  if (!lista.length) html += 'No hay notificaciones en esta lista. ✅';
+  var filasRico = lista.map(function (f, i) {
+    var pdf = pdfDe(f, i), m = marcas(f), asunto = TG_esc_(TG_asunto_(f[jA], f[jT], f[jN]));
+    html += (i + 1) + '. ' + (m ? m + ' ' : '') + '<b>' + TG_esc_(emp(f)) + '</b> · ' + TG_fecha_(fecha(f) || f[jF]) + (pdf ? ' · 📄' : '') + '\n   ' + asunto + '\n';
+    var dest = esNueva(f) || sinLeer(f) || coact(f);
+    return '<tr><td align="center">' + (i + 1) + (m ? '<br>' + m : '') + '</td><td>' + (dest ? '<b>' + TG_esc_(emp(f)) + '</b>' : TG_esc_(emp(f))) + '<br><i>' + TG_fecha_(fecha(f) || f[jF]) + '</i>' + (pdf ? ' 📄' : '') +
+      '</td><td>' + (coact(f) ? '<mark>' + asunto + '</mark>' : asunto) + '</td></tr>';
+  });
   if (fila.length) botones.push(fila);
+  rico = '<h2>📬 Buzón SUNAT · ' + titulo + '</h2>' + (empresa ? '<p><b>' + TG_esc_(empresa) + '</b></p>' : '') + '<ul><li>' + resumen.join('</li><li>') + '</li></ul>' +
+    (lista.length ? '<table bordered striped compact><tr><th>#</th><th>Empresa · fecha</th><th>Notificación</th></tr>' + filasRico.join('') + '</table>' : '<p>No hay notificaciones en esta lista. ✅</p>') +
+    '<footer>🆕 nueva en la última descarga · 🔵 sin leer · 🔴 coactiva o embargo · 📄 n = mandarme el PDF</footer>';
+  var vistas = [];
+  if (filtro !== 'nuevas' && cuenta.nuevas) vistas.push({ text: '🆕 Solo nuevas (' + cuenta.nuevas + ')', callback_data: 'c:notificaciones nuevas' });
+  if (filtro !== 'sinleer' && cuenta.sinleer) vistas.push({ text: '🔵 Sin leer (' + cuenta.sinleer + ')', callback_data: 'c:notificaciones sin leer' });
+  if (filtro !== 'coactivas' && cuenta.coactivas) vistas.push({ text: '🔴 Coactivas (' + cuenta.coactivas + ')', callback_data: 'c:notificaciones coactivas' });
+  if (filtro) vistas.push({ text: '📬 Todas', callback_data: 'c:notificaciones todas' });
+  for (var v = 0; v < vistas.length; v += 2) botones.push(vistas.slice(v, v + 2));
   botones.push([{ text: '⬇ Revisar el buzón ahora', callback_data: 'dw:e:notificaciones:todas' }]);
-  TG_enviar_(ctx.chatId, html + (botones.length > 1 ? '\n\n<i>📄 n = mandarme el PDF</i>' : ''), botones);
+  TG_mostrarRico_(ctx, rico, html + (lista.length ? '\n<i>🆕 nueva · 🔵 sin leer · 🔴 coactiva · 📄 n = mandarme el PDF</i>' : ''), botones, !(cambiaVista && ctx.esBoton));
+}
+
+/**
+ * Qué notificaciones son 🆕: guarda la lista de claves (las 400 más recientes). Cuando aparece alguna que no estaba
+ * (llegó una descarga con novedades), esas quedan como «nuevas» hasta la siguiente descarga con novedades.
+ * claves=null: solo leer. La primera vez nada es nuevo.
+ */
+function TG_notFoto_(claves) {
+  var props = PropertiesService.getScriptProperties(), k = 'TG_NOT_FOTO';
+  var foto; try { foto = JSON.parse(props.getProperty(k) || 'null'); } catch (e) { foto = null; }
+  if (!claves) return foto || { v: [], n: [], f: 0 };
+  claves = claves.slice(0, 400);
+  if (!foto) { foto = { v: claves, n: [], f: 0 }; }
+  else {
+    var antes = {}; foto.v.forEach(function (x) { antes[x] = 1; });
+    var hasta = claves.slice(0, 60).filter(function (x) { return !antes[x]; });   // solo entre las recientes (las viejas que salen del tope no son nuevas)
+    if (hasta.length) { foto.n = hasta; foto.f = Date.now(); }
+    foto.v = claves;
+  }
+  try { props.setProperty(k, JSON.stringify(foto)); } catch (e) { foto.v = foto.v.slice(0, 250); try { props.setProperty(k, JSON.stringify(foto)); } catch (e2) {} }
+  return foto;
 }
 
 function TG_enviarDetracciones_(ctx, empresa) {
