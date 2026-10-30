@@ -169,11 +169,13 @@ function AYU_telegram_(ctx, arg) {
     if (fila.length === 2) { botones.push(fila); fila = []; }
   });
   if (fila.length) botones.push(fila);
-  if (!s) return TG_enviar_(ctx.chatId, AYU_indiceTexto_('tg'), botones);
+  // Desde un botón se cambia el MISMO mensaje (toda la ayuda en un solo mensaje); escrito, llega uno nuevo.
+  var mostrar = function (html, teclado) { return ctx.esBoton ? TG_editarOEnviar_(ctx, html, teclado) : TG_enviar_(ctx.chatId, html, teclado); };
+  if (!s) return mostrar(AYU_indiceTexto_('tg'), botones);
   var i = AYU_SECCIONES_.indexOf(s), sig = AYU_SECCIONES_[i + 1];
   var nav = [{ text: '📖 Temas', callback_data: 'c:ayuda' }];
   if (sig) nav.push({ text: 'Siguiente: ' + sig.e + ' ' + sig.t.split(/[:(]/)[0].trim().slice(0, 22) + ' ▶', callback_data: 'c:ayuda ' + sig.id });
-  return TG_enviar_(ctx.chatId, AYU_texto_(s, 'tg'), [nav]);
+  return mostrar(AYU_texto_(s, 'tg'), [nav]);
 }
 
 /** WhatsApp: «ayuda temas», «ayuda 3», «ayuda guías». null si no es un pedido de ayuda. */
