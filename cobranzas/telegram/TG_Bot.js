@@ -194,7 +194,7 @@ function TG_comando_(ctx, texto) {
       TG_enviar_(chatId, '👋 <b>Hola' + (ctx.nombre ? ', ' + TG_esc_(ctx.nombre.split(' ')[0]) : '') + '.</b> ' + TG_textoBienvenida_(), TG_tecladoFijo_());
       return TG_enviar_(chatId, TG_textoMenu_(), TG_tecladoMenu_());
     case 'menu': return TG_enviar_(chatId, TG_textoMenu_(), TG_tecladoMenu_());
-    case 'ayuda': case 'help': return TG_enviar_(chatId, TG_textoAyuda_(), [[{ text: '📋 Menú', callback_data: 'c:menu' }]]);
+    case 'ayuda': case 'help': case 'instrucciones': return AYU_telegram_(ctx, arg);   // ❓ Centro de ayuda por temas (Ayuda.js)
     case 'resumen': case 'hoy': return TG_enviarResumen_(ctx);
     case 'cobrar': return TG_enviarCartera_(ctx, 'Por cobrar', arg);
     case 'pagar': return TG_enviarCartera_(ctx, 'Por pagar', arg);

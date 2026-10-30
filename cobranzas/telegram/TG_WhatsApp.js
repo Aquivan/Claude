@@ -102,6 +102,8 @@ function TGW_responder_(q) {
   }
   var citaRuc = q.citado && texto && TGQ_citaEleccion_(clave, q.citado);   // citó «¿Cuál es el RUC de X?»
   if (citaRuc) return TGQ_nombreWA_(citaRuc, texto, clave);
+  var ay = !(q.adjuntos || []).length && AYU_whatsapp_(texto);   // ❓ «ayuda temas», «ayuda 3», «ayuda guías» (Ayuda.js)
+  if (ay) return ay;
   // 🔎 "ruc CORPORACION GRANIX": RUC por nombre (tus facturas y el padrón de SUNAT, RucPorNombre.js).
   if (/^\/?ruc\b/i.test(texto) && !/^\/?ruc\s+\d/i.test(texto)) {
     var rr;

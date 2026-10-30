@@ -76,6 +76,8 @@ function onOpen() {
       .addItem('♻️ Restaurar un respaldo', 'menuRestaurarRespaldo'))
     .addSeparator()
     .addItem('⚙️ Instalar / reparar', 'menuInstalar')
+    .addSeparator()
+    .addItem('❓ Ayuda: cómo se usa todo (paso a paso)', 'AYU_menuAbrir')
     .addToUi();
   // Menú 🧠 Asistente IA (antes "🤝 Conciliar con IA"; módulo aparte, ver ConciliacionIA.js).
   try { CIA_agregarMenu_(); } catch (e) { Logger.log('Menu Asistente IA: ' + e.message); }
