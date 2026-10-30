@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_blank">
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #263238; background: #f4f6f8; display: flex; flex-direction: column; }
+  header { padding: 10px 14px; background: #fff; border-bottom: 1px solid #e0e6ea; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  header label { color: #546e7a; }
+  select, input[type=text] { font: inherit; padding: 6px 8px; border: 1px solid #cfd8dc; border-radius: 7px; background: #fff; }
+  button { font: inherit; border: 1px solid #cfd8dc; background: #fff; border-radius: 7px; padding: 7px 12px; cursor: pointer; }
+  button.pri { background: #1565c0; border-color: #1565c0; color: #fff; font-weight: bold; }
+  button.ok { background: #2e7d32; border-color: #2e7d32; color: #fff; font-weight: bold; }
+  button:disabled { opacity: .5; cursor: default; }
+  main { flex: 1; overflow: auto; padding: 12px 14px; }
+  #zona { border: 2px dashed #90a4ae; border-radius: 12px; padding: 22px; text-align: center; color: #546e7a; background: #fff; cursor: pointer; }
+  #zona.encima { border-color: #1565c0; background: #e3f2fd; color: #1565c0; }
+  #zona b { color: #1565c0; }
+  .tarjeta { display: grid; grid-template-columns: 74px 1fr auto; gap: 12px; align-items: center; background: #fff; border: 1px solid #e0e6ea; border-radius: 10px; padding: 9px; margin-top: 9px; }
+  .tarjeta.bien { border-color: #66bb6a; background: #f1f8e9; }
+  .tarjeta.mal { border-color: #ef5350; background: #ffebee; }
+  .mini { width: 74px; height: 74px; border-radius: 7px; background: #eceff1; display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 30px; }
+  .mini img, .mini canvas { max-width: 100%; max-height: 100%; }
+  .fila { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .fila input[type=text] { flex: 1; min-width: 220px; }
+  .ext { color: #78909c; }
+  .info { color: #78909c; font-size: 12px; margin-top: 5px; }
+  .aviso { color: #c62828; font-size: 12px; margin-top: 4px; }
+  .barra { height: 5px; background: #eceff1; border-radius: 3px; margin-top: 6px; overflow: hidden; display: none; }
+  .barra i { display: block; height: 100%; width: 0; background: #1565c0; transition: width .3s; }
+  footer { padding: 10px 14px; background: #fff; border-top: 1px solid #e0e6ea; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  footer .esp { flex: 1; color: #546e7a; }
+  .quitar { border: none; background: none; font-size: 18px; color: #90a4ae; padding: 4px 8px; }
+  .quitar:hover { color: #c62828; }
+</style>
+</head>
+<body>
+<header>
+  <label>Destino:</label>
+  <select id="destinoTodos" onchange="destinoParaTodos()">
+    <option value="auto">Automático (PDF → Originales · imagen → Fotos)</option>
+    <option value="original">📄 Todo a Originales</option>
+    <option value="foto">📷 Todo a Fotos</option>
+  </select>
+  <label style="margin-left:8px">Nombre para todos:</label>
+  <input type="text" id="base" placeholder="ej. BCP Granix octubre" style="width:200px">
+  <button onclick="renombrarTodos()" title="Pone ese nombre a todos, numerados: «… 1», «… 2»">🔤 Aplicar</button>
+</header>
+<main>
+  <div id="zona" onclick="document.getElementById('archivos').click()">
+    📥 <b>Arrastre aquí</b> los PDF o fotos de los vouchers, o <b>haga clic para elegirlos</b> (puede marcar varios).<br>
+    <span style="font-size:12px">Antes de subir puede cambiar el nombre de cada archivo y elegir si va a Originales o Fotos.</span>
+  </div>
+  <input type="file" id="archivos" multiple accept="application/pdf,image/*" style="display:none" onchange="agregar(this.files); this.value=''">
+  <div id="lista"></div>
+</main>
+<footer>
+  <span class="esp" id="estado">Elija uno o más archivos.</span>
+  <button onclick="google.script.host.close()">Cerrar</button>
+  <button class="pri" id="btnSubir" onclick="subirTodo()" disabled>📤 Subir</button>
+  <button class="ok" id="btnProcesar" onclick="procesar()" style="display:none">▶ Procesar ahora</button>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+var MAX_MB = 30, items = [], seq = 0, revisarTimer = null;
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function partes(n) { var m = String(n).match(/^(.*?)(\.[A-Za-z0-9]{1,5})?$/); return { base: m[1], ext: (m[2] || '').toLowerCase() }; }
+function mb(b) { return (b / 1048576).toFixed(b < 1048576 ? 2 : 1) + ' MB'; }
+function nombreDe(it) { return it.base.trim() + it.ext; }
+function destinoAuto(f) { return /pdf/i.test(f.type) ? 'original' : 'foto'; }
+
+var zona = document.getElementById('zona');
+['dragenter', 'dragover'].forEach(function (e) { zona.addEventListener(e, function (ev) { ev.preventDefault(); zona.classList.add('encima'); }); });
+['dragleave', 'drop'].forEach(function (e) { zona.addEventListener(e, function (ev) { ev.preventDefault(); zona.classList.remove('encima'); }); });
+zona.addEventListener('drop', function (ev) { agregar(ev.dataTransfer.files); });
+
+function agregar(files) {
+  Array.prototype.forEach.call(files, function (f) {
+    if (!/^(application\/pdf|image\/)/.test(f.type)) { aviso('«' + f.name + '» no es PDF ni imagen: no se agregó.'); return; }
+    var p = partes(f.name), dt = document.getElementById('destinoTodos').value;
+    items.push({ id: ++seq, f: f, base: p.base, ext: p.ext || (/pdf/i.test(f.type) ? '.pdf' : '.jpg'), destino: dt === 'auto' ? destinoAuto(f) : dt, estado: 'nuevo', repetido: false });
+  });
+  pintar();
+  revisarRepetidos();
+}
+
+function pintar() {
+  var l = document.getElementById('lista');
+  l.innerHTML = items.map(function (it) {
+    var grande = it.f.size > MAX_MB * 1048576, hecho = it.estado === 'subido';
+    return '<div class="tarjeta' + (hecho ? ' bien' : it.estado === 'error' ? ' mal' : '') + '" id="t' + it.id + '">' +
+      '<div class="mini" id="m' + it.id + '">' + (/pdf/i.test(it.f.type) ? '📄' : '🖼') + '</div>' +
+      '<div><div class="fila">' +
+        '<input type="text" value="' + esc(it.base) + '" ' + (hecho ? 'disabled' : '') + ' oninput="cambiarNombre(' + it.id + ', this.value)" title="Nombre con el que se guarda en Drive">' +
+        '<span class="ext">' + esc(it.ext) + '</span>' +
+        '<select ' + (hecho ? 'disabled' : '') + ' onchange="cambiarDestino(' + it.id + ', this.value)">' +
+          '<option value="original"' + (it.destino === 'original' ? ' selected' : '') + '>📄 Originales</option>' +
+          '<option value="foto"' + (it.destino === 'foto' ? ' selected' : '') + '>📷 Fotos</option></select></div>' +
+        '<div class="info">Archivo: ' + esc(it.f.name) + ' · ' + mb(it.f.size) + (hecho ? ' · ✅ subido · <a href="' + it.url + '">ver en Drive</a>' : '') + '</div>' +
+        (grande ? '<div class="aviso">⚠️ Pesa más de ' + MAX_MB + ' MB: no se puede subir por aquí (déjelo directo en la carpeta de Drive).</div>' : '') +
+        (it.error ? '<div class="aviso">⚠️ ' + esc(it.error) + '</div>' : '') +
+        '<div class="aviso" id="a' + it.id + '"></div>' +
+        '<div class="barra" id="b' + it.id + '"><i></i></div></div>' +
+      (hecho ? '<span></span>' : '<button class="quitar" title="Quitar" onclick="quitar(' + it.id + ')">✖</button>') + '</div>';
+  }).join('');
+  items.forEach(miniatura);
+  validar();
+}
+
+function miniatura(it) {
+  var cont = document.getElementById('m' + it.id);
+  if (!cont) return;
+  if (it.mini) { cont.innerHTML = ''; cont.appendChild(it.mini); return; }   // la misma miniatura (se mueve al volver a pintar)
+  if (/^image\//.test(it.f.type)) {
+    var img = new Image(); img.src = URL.createObjectURL(it.f); it.mini = img; cont.innerHTML = ''; cont.appendChild(img); return;
+  }
+  if (window.pdfjsLib && it.f.size < 25 * 1048576) {
+    it.f.arrayBuffer().then(function (buf) { return pdfjsLib.getDocument({ data: buf }).promise; }).then(function (doc) {
+      return doc.getPage(1).then(function (pg) {
+        var v = pg.getViewport({ scale: 1 }), s = 140 / Math.max(v.width, v.height), vp = pg.getViewport({ scale: s });
+        var c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+        return pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(function () {
+          var img = new Image(); img.src = c.toDataURL(); it.mini = img;
+          var cc = document.getElementById('m' + it.id); if (cc) { cc.innerHTML = ''; cc.appendChild(img); }
+        });
+      });
+    }).catch(function () {});
+  }
+}
+
+function cambiarNombre(id, v) { var it = buscar(id); it.base = v; it.repetido = false; marcarAviso(it); validar(); clearTimeout(revisarTimer); revisarTimer = setTimeout(revisarRepetidos, 600); }
+function cambiarDestino(id, v) { buscar(id).destino = v; }
+function quitar(id) { items = items.filter(function (x) { return x.id !== id; }); pintar(); }
+function buscar(id) { return items.filter(function (x) { return x.id === id; })[0]; }
+function destinoParaTodos() {
+  var dt = document.getElementById('destinoTodos').value;
+  items.forEach(function (it) { if (it.estado !== 'subido') it.destino = dt === 'auto' ? destinoAuto(it.f) : dt; });
+  pintar();
+}
+function renombrarTodos() {
+  var b = document.getElementById('base').value.trim();
+  if (!b) return aviso('Escriba el nombre para todos.');
+  var pend = items.filter(function (it) { return it.estado !== 'subido'; });
+  pend.forEach(function (it, i) { it.base = pend.length === 1 ? b : b + ' ' + (i + 1); it.repetido = false; });
+  pintar(); revisarRepetidos();
+}
+
+/** Pregunta a Drive si algún nombre ya existe (el nombre se usa para encontrar el original después). */
+function revisarRepetidos() {
+  var pend = items.filter(function (it) { return it.estado !== 'subido' && it.base.trim(); });
+  if (!pend.length) return;
+  google.script.run.withSuccessHandler(function (rep) {
+    var set = {}; (rep || []).forEach(function (n) { set[n.toLowerCase()] = 1; });
+    pend.forEach(function (it) { it.repetido = !!set[nombreDe(it).toLowerCase()]; marcarAviso(it); });
+    validar();
+  }).SV_repetidos(pend.map(nombreDe));
+}
+
+function marcarAviso(it) {
+  var a = document.getElementById('a' + it.id);
+  if (!a) return;
+  var msg = '';
+  if (!it.base.trim()) msg = '⚠️ Escriba un nombre.';
+  else if (it.repetido) msg = '⚠️ Ya existe un archivo con este nombre en Drive: cámbielo.';
+  else if (items.some(function (x) { return x !== it && x.estado !== 'subido' && nombreDe(x).toLowerCase() === nombreDe(it).toLowerCase(); })) msg = '⚠️ Repetido en esta lista.';
+  a.textContent = msg;
+}
+
+function validar() {
+  items.forEach(marcarAviso);
+  var pend = items.filter(function (it) { return it.estado !== 'subido'; });
+  var listos = pend.filter(function (it) {
+    return it.base.trim() && !it.repetido && it.f.size <= MAX_MB * 1048576 &&
+      !items.some(function (x) { return x !== it && x.estado !== 'subido' && nombreDe(x).toLowerCase() === nombreDe(it).toLowerCase(); });
+  });
+  var b = document.getElementById('btnSubir');
+  b.disabled = !pend.length || listos.length !== pend.length;
+  b.textContent = '📤 Subir ' + (pend.length ? pend.length + ' archivo' + (pend.length > 1 ? 's' : '') : '');
+  if (!items.length) estado('Elija uno o más archivos.');
+  else if (pend.length && listos.length !== pend.length) estado('Revise los avisos en rojo antes de subir.');
+  else if (pend.length) estado(pend.length + ' listo(s) para subir.');
+}
+
+function estado(t) { document.getElementById('estado').textContent = t; }
+function aviso(t) { estado('⚠️ ' + t); }
+
+function base64De(f) {
+  return new Promise(function (ok, mal) {
+    var r = new FileReader();
+    r.onload = function () { ok(String(r.result).split(',')[1]); };
+    r.onerror = function () { mal(new Error('no se pudo leer el archivo')); };
+    r.readAsDataURL(f);
+  });
+}
+
+function subirTodo() {
+  var pend = items.filter(function (it) { return it.estado !== 'subido'; });
+  document.getElementById('btnSubir').disabled = true;
+  var i = 0, bien = 0;
+  (function siguiente() {
+    if (i >= pend.length) {
+      pintar();
+      estado('✅ ' + bien + ' de ' + pend.length + ' subido(s). Se procesan solos en unos 10 minutos, o toque ▶ Procesar ahora.');
+      if (bien) document.getElementById('btnProcesar').style.display = '';
+      return;
+    }
+    var it = pend[i++], barra = document.getElementById('b' + it.id);
+    estado('Subiendo ' + i + ' de ' + pend.length + ': ' + nombreDe(it) + '…');
+    if (barra) { barra.style.display = 'block'; barra.firstChild.style.width = '35%'; }
+    base64De(it.f).then(function (datos) {
+      if (barra) barra.firstChild.style.width = '70%';
+      google.script.run.withSuccessHandler(function (r) {
+        if (r && r.ok) { it.estado = 'subido'; it.url = r.url; it.error = ''; bien++; }
+        else { it.estado = 'error'; it.error = (r && r.error) || 'No se pudo subir.'; if (/existe/.test(it.error)) it.repetido = true; }
+        siguiente();
+      }).withFailureHandler(function (e) { it.estado = 'error'; it.error = e.message; siguiente(); })
+        .SV_subir({ nombre: nombreDe(it), mime: it.f.type, datos: datos, destino: it.destino });
+    }).catch(function (e) { it.estado = 'error'; it.error = e.message; siguiente(); });
+  })();
+}
+
+function procesar() {
+  var b = document.getElementById('btnProcesar'); b.disabled = true;
+  google.script.run.withSuccessHandler(function () { estado('▶ Listo: se procesan en aproximadamente 1 minuto. Puede cerrar esta ventana.'); })
+    .withFailureHandler(function (e) { b.disabled = false; aviso(e.message); }).SV_procesarPronto();
+}
+</script>
+</body>
+</html>
