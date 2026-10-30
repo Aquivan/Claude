@@ -23,8 +23,10 @@ function TG_monedas_(lista, campo) {
   return t;
 }
 
+/** «S/ 1,200.00 + US$ 300.00»; si solo hay dólares, solo «US$ 300.00» (sin «S/ 0.00»). */
 function TG_montos_(t) {
-  return 'S/ ' + TG_num_(t.PEN) + (Math.abs(t.USD) > 0.005 ? ' + US$ ' + TG_num_(t.USD) : '');
+  var usd = Math.abs(t.USD) > 0.005, pen = Math.abs(t.PEN) > 0.005 || !usd;
+  return (pen ? 'S/ ' + TG_num_(t.PEN) : '') + (pen && usd ? ' + ' : '') + (usd ? 'US$ ' + TG_num_(t.USD) : '');
 }
 
 /** Nombre de 40 caracteres como máximo; si se corta, con el final del RUC para distinguir nombres parecidos. */
