@@ -61,8 +61,13 @@ function TG_mandarResumenDia_(ss, us) {
   try {
     var r = para('resumen');
     if (r.length) {
-      var html = '☀️ <b>Buenos días.</b>\n\n' + TG_textoResumen_(ss);
-      r.forEach(function (u) { TG_enviar_(u.chatId, html, [[{ text: '⏰ Vencidas', callback_data: 'c:vencidas' }, { text: '📬 Buzón SUNAT', callback_data: 'c:notificaciones' }, { text: '📋 Menú', callback_data: 'c:menu' }]]); });
+      // ✨ Con tablas, igual que 📊 Resumen; si Telegram no acepta el formato nuevo, el texto de siempre.
+      var rico = '<p>☀️ <b>Buenos días.</b></p>' + TG_textoResumen_(ss, true), html;
+      var texto = function () { return html || (html = '☀️ <b>Buenos días.</b>\n\n' + TG_textoResumen_(ss)); };
+      r.forEach(function (u) {
+        TG_mostrarRico_({ chatId: u.chatId }, rico, texto, [[{ text: '⏰ Vencidas', callback_data: 'c:vencidas' }, { text: '📬 Buzón SUNAT', callback_data: 'c:notificaciones' }],
+          [{ text: '⚙️ Últimas descargas', callback_data: 'c:estado' }, { text: '📋 Menú', callback_data: 'c:menu' }]], true);
+      });
     }
   } catch (e) { console.warn('Resumen diario: ' + e.message); }
   try {
