@@ -266,11 +266,22 @@ function GR_menuPortal() {
     if (r.getSelectedButton() !== ui.Button.OK || !r.getResponseText().trim()) return;
     sh.getRange(2, 1, 1, 5).setValues([[r.getResponseText().trim().toLowerCase(), 'Administrador', '', 'admin', true]]);
   }
+  // Quien no tenga PIN todavía: se pide aquí mismo (lo escribe la persona; se guarda cifrado 🔒).
+  PT_usuarios_().filter(function (x) { return x.activo && !x.pin; }).forEach(function (x) {
+    for (var intento = 0; intento < 3; intento++) {
+      var r2 = ui.prompt('🔒 PIN para «' + x.u + '»', 'Escriba el PIN con el que «' + x.u + '» entrará al portal (de 4 a 8 números). Se guarda cifrado: anótelo, nadie lo podrá volver a ver.', ui.ButtonSet.OK_CANCEL);
+      if (r2.getSelectedButton() !== ui.Button.OK) return;
+      var pin = r2.getResponseText().trim();
+      if (/^\d{4,8}$/.test(pin)) { sh.getRange(x.fila, 3).setValue(PT_hash_(pin)).setNote('PIN guardado ' + Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm')); return; }
+      ui.alert('El PIN debe tener de 4 a 8 números (sin letras ni espacios).');
+    }
+  });
   sh.activate();
   var url = PT_URL_ ? 'https://script.google.com/macros/s/' + PT_URL_ + '/exec' : '';
   var h = '<div style="font:13px Arial;line-height:1.55">' +
     (url ? '<b>Enlace del portal</b> (cópielo y compártalo solo con quien usted autorice):<br><input style="width:100%;padding:6px;margin:4px 0 10px" readonly onclick="this.select()" value="' + url + '">' +
       '<a href="' + url + '" target="_blank">Abrir el portal ↗</a><br><br>' : '⚠️ El portal todavía no está publicado: se publica solo al desplegar la hoja desde GitHub.<br><br>') +
+    '<b>Para entrar</b>: en el portal escriba su <b>Usuario</b> (columna A de 👥 Portal) y el <b>PIN</b> que acaba de poner. Para cambiar un PIN, escriba uno nuevo en la columna PIN.<br><br>' +
     '<b>Usuarios</b> (pestaña 👥 Portal): Usuario · Nombre · <b>PIN</b> (4–8 números; al escribirlo se guarda cifrado 🔒) · <b>Permiso</b> · <b>Activo</b>.<br>' +
     '• <b>ver</b>: mira guías, borrador y factura · <b>armar</b>: además crea y corrige · <b>emitir</b>: además emite · <b>admin</b>: todo.<br>' +
     '• Desmarque <b>Activo</b> para quitar el acceso al instante. En 🧾 Registro queda quién hizo qué (🌐 usuario).<br><br>' +
