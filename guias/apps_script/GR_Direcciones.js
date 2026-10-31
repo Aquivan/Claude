@@ -8,7 +8,7 @@
 
 var GR_ANEXOS_URLS_ = ['https://www.sunat.gob.pe/descargaPRR/padron_reducido_local_anexo.zip', 'https://www2.sunat.gob.pe/padron_reducido_local_anexo.zip'];
 
-function GR_menuBuscarDirecciones() {
+function GR_menuBuscarDirecciones() { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), f = sh.getActiveRange().getRow(), ctx = { ruc: '', nombre: '', id: '', para: 'l' };
   if (sh.getName() === GR_HOJA_ && f >= GR_FILA1_) {
     var r = GR_leerGuias_(sh, f, f)[0].r;
@@ -112,7 +112,7 @@ function GR_completarNombres_(sh, ruc, nombre) {
 }
 
 /** Lo que muestra la ventana: los locales de SUNAT y los que ya están en 📍 Direcciones para ese RUC. */
-function GR_buscarDirecciones(ruc) {
+function GR_buscarDirecciones(ruc) { GR_guardia_();
   ruc = String(ruc || '').replace(/\D/g, '');
   if (!/^\d{11}$/.test(ruc)) throw new Error('Escriba un RUC de 11 dígitos (las personas con DNI no tienen locales registrados).');
   var ss = SpreadsheetApp.getActive(), ctx = GR_contexto_(ss);
@@ -128,7 +128,7 @@ function GR_buscarDirecciones(ruc) {
  * Guarda lo elegido. d = {ruc, nombre, items:[{direccion, ubigeo (código o etiqueta), uso}], id (guía), usar: índice en items o -1, para: 'l'|'p'}.
  * → {agregadas, guia}
  */
-function GR_agregarDirecciones(d) {
+function GR_agregarDirecciones(d) { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(GR_DIR_), ctx = GR_contexto_(ss), ruc = String(d.ruc || '').replace(/\D/g, '');
   var nombre = String(d.nombre || '').trim();
   if (!nombre) { var fz = GR_domicilioFiscal_(ruc); nombre = fz && fz.nombre || ''; }   // el nombre de SUNAT si no lo escribieron

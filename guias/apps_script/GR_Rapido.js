@@ -15,7 +15,7 @@ var GR_TRANSPORTE_ = ['modalidad', 'm1', 'truc', 'tnom', 'mtc', 'placa', 'placa2
 /* ---------------- 👁 vista ---------------- */
 
 /** Oculta lo que no aplica a la guía de la fila seleccionada (las demás guías no cambian: solo es la vista). */
-function GR_menuVistaGuia() {
+function GR_menuVistaGuia() { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), f = sh.getActiveRange().getRow();
   if (sh.getName() !== GR_HOJA_ || f < GR_FILA1_) return SpreadsheetApp.getUi().alert('Haga clic en la fila de una guía de ' + GR_HOJA_ + '.');
   var r = GR_leerGuias_(sh, f, f)[0].r, t = function (k) { return String(r[k] == null ? '' : r[k]).trim(); };
@@ -31,7 +31,7 @@ function GR_menuVistaGuia() {
   ss.toast('Vista de la guía ' + r.id + ': ' + Object.keys(ocultar).length + ' columnas ocultas que no aplican. Para ver todo: 🚚 Guías → 👁 Ver todas las columnas.', '👁 Vista', 8);
 }
 
-function GR_menuVistaTodo() {
+function GR_menuVistaTodo() { GR_guardia_();
   var sh = SpreadsheetApp.getActive().getSheetByName(GR_HOJA_);
   sh.showColumns(1, GR_COLS_.length);
   SpreadsheetApp.getActive().toast('Se ven todas las columnas.', '👁 Vista', 4);
@@ -60,7 +60,7 @@ function GR_copiarTransporte_(ss, sh, fila) {
   return puestos.length ? 'transporte de ' + ant.r.id + ' (' + [ant.r.placa, ant.r.cnom, ant.r.tnom].filter(function (x) { return String(x).trim(); }).join(' · ') + ')' : '';
 }
 
-function GR_menuCopiarTransporte() {
+function GR_menuCopiarTransporte() { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), rg = sh.getActiveRange(), msgs = [];
   if (sh.getName() !== GR_HOJA_ || rg.getRow() < GR_FILA1_) return SpreadsheetApp.getUi().alert('Seleccione la(s) fila(s) de la(s) guía(s) en ' + GR_HOJA_ + '.');
   for (var f = Math.max(rg.getRow(), GR_FILA1_); f <= rg.getLastRow(); f++) {
@@ -74,7 +74,7 @@ function GR_menuCopiarTransporte() {
 
 /* ---------------- ➕ nueva guía rápida ---------------- */
 
-function GR_menuNuevaRapida() {
+function GR_menuNuevaRapida() { GR_guardia_();
   var ctx = GR_contexto_(SpreadsheetApp.getActive());
   var t = HtmlService.createTemplateFromFile('GR_RapidaVista');
   t.empresasJson = JSON.stringify(Object.keys(ctx.emp).filter(function (k) { return ctx.emp[k].activa; }).map(function (k) { return { nombre: k, serie: ctx.emp[k].serieFact || '' }; }));
@@ -82,7 +82,7 @@ function GR_menuNuevaRapida() {
 }
 
 /** d = {empresa, factura ("FQQ1-3702" o "3702"), cotizacion, copiar (bool)} → {id, fila, msgs} */
-function GR_crearGuiaRapida(d) {
+function GR_crearGuiaRapida(d) { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(GR_HOJA_), ctx = GR_contexto_(ss), emp = ctx.emp[String(d.empresa || '').trim()];
   if (!emp) throw new Error('Elija la empresa.');
   var fac = String(d.factura || '').toUpperCase().replace(/\s/g, ''), cot = String(d.cotizacion || '').replace(/\D/g, ''), serie = '', numero = '';
@@ -106,14 +106,14 @@ function GR_crearGuiaRapida(d) {
   if (r.pedidas) GR_programarRevision_();
   msgs = msgs.concat(r.msgs);
   var id = String(sh.getRange(fila, 1).getValue());
-  sh.getRange(fila, GR_col_('estado')).activate();
+  try { sh.getRange(fila, GR_col_('estado')).activate(); } catch (e) {}   // desde el 🌐 portal no hay hoja abierta
   GR_registrar_(id, '➕ Nueva guía rápida', (numero ? serie + '-' + numero : 'cotización ' + cot));
   return { id: id, fila: fila, msgs: msgs };
 }
 
 /* ---------------- 📋 resumen del día ---------------- */
 
-function GR_menuResumen() {
+function GR_menuResumen() { GR_guardia_();
   var ui = SpreadsheetApp.getUi(), hoy = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy');
   var p = ui.prompt('📋 Resumen del día', 'Fecha (dd/mm/aaaa). Deje vacío para HOY (' + hoy + ').', ui.ButtonSet.OK_CANCEL);
   if (p.getSelectedButton() !== ui.Button.OK) return;

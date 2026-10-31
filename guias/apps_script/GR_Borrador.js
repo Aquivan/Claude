@@ -5,7 +5,7 @@
  * Funciones GR_.
  */
 
-function GR_menuBorrador() {
+function GR_menuBorrador() { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), f = sh.getActiveRange().getRow();
   var id = sh.getName() === GR_HOJA_ && f >= GR_FILA1_ ? String(sh.getRange(f, 1).getValue()) : '';
   if (!id) return SpreadsheetApp.getUi().alert('Haga clic en la fila de la guía (en ' + GR_HOJA_ + ') y vuelva a intentar.');
@@ -15,7 +15,7 @@ function GR_menuBorrador() {
 }
 
 /** Todo lo de la guía, listo para dibujar. */
-function GR_datosBorrador(id) {
+function GR_datosBorrador(id) { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(GR_HOJA_), fila = GR_filaDe_(sh, id);
   if (!fila) throw new Error('No encontré la guía ' + id + '.');
   var r = GR_leerGuias_(sh, fila, fila)[0].r, ctx = GR_contexto_(ss), emp = ctx.emp[String(r.empresa).trim()] || {};
@@ -72,7 +72,7 @@ var GR_BOR_EDIT_ = [
 
 /** Guarda en la fila lo corregido en el borrador (ya confirmado por la persona) y la vuelve a revisar/autollenar
  *  como si se hubiera escrito en la hoja. cambios = {clave: valor nuevo}. → datos del borrador actualizados. */
-function GR_guardarBorrador(id, cambios) {
+function GR_guardarBorrador(id, cambios) { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(GR_HOJA_), fila = GR_filaDe_(sh, id);
   if (!fila) throw new Error('No encontré la guía ' + id + '.');
   GR_hojaAlDia_(sh);
@@ -96,7 +96,7 @@ function GR_guardarBorrador(id, cambios) {
 }
 
 /** Guarda el borrador como PDF en Drive (carpeta «Guías · borradores» junto a la hoja). → url */
-function GR_borradorPdf(id, html) {
+function GR_borradorPdf(id, html) { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), padre;
   try { padre = DriveApp.getFileById(ss.getId()).getParents().next(); } catch (e) { padre = DriveApp.getRootFolder(); }
   var it = padre.getFoldersByName('Guías · borradores'), carpeta = it.hasNext() ? it.next() : padre.createFolder('Guías · borradores');

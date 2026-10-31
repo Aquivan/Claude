@@ -7,6 +7,7 @@
 var GR_FIJOS_ = [GR_ESTADOS_.EMITIENDO, GR_ESTADOS_.EMITIDA, GR_ESTADOS_.ANULADA];
 
 function onEdit(e) {
+  try { PT_alEditar_(e); } catch (err) { console.warn('Portal: ' + err); }   // 👥 Portal: el PIN se guarda cifrado
   try { GR_alEditar_(e); } catch (err) {
     console.warn('onEdit: ' + (err && err.stack || err));
     if (/versión anterior/.test(String(err && err.message))) try { e.source.toast(err.message, '🚚 Guías', 15); } catch (x) {}
@@ -491,7 +492,7 @@ function GR_normalizarCatalogo_(sh, rango) {
 }
 
 /** Menú 🔍 Revisar todas. */
-function GR_menuRevisar() {
+function GR_menuRevisar() { GR_guardia_();
   var ss = SpreadsheetApp.getActive();
   var r = GR_revisarTodo_(ss);
   ss.toast(r.lista + ' lista(s) para emitir · ' + r.borrador + ' con datos por completar.', '🔍 Revisión', 8);
@@ -506,7 +507,7 @@ function GR_revisarTodo_(ss) {
   return out;
 }
 
-function GR_menuDuplicar() {
+function GR_menuDuplicar() { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), f = sh.getActiveRange().getRow();
   if (sh.getName() !== GR_HOJA_ || f < GR_FILA1_) return SpreadsheetApp.getUi().alert('Seleccione una fila de 🚚 Guías.');
   var x = GR_leerGuias_(sh, f, f)[0].r;
@@ -524,7 +525,7 @@ function GR_menuDuplicar() {
   GR_registrar_(idNuevo, 'Duplicada', 'Copia de ' + idViejo);
 }
 
-function GR_menuProductos() {
+function GR_menuProductos() { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), f = sh.getActiveRange().getRow();
   var id = sh.getName() === GR_HOJA_ && f >= GR_FILA1_ ? String(sh.getRange(f, 1).getValue()) : '';
   var p = ss.getSheetByName(GR_PROD_);

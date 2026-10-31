@@ -5,7 +5,7 @@
  * no se vuelve a agregar si ya hay otra de la misma empresa, cotización, fecha, placa, partida y llegada.
  */
 
-function GR_menuImportar() {
+function GR_menuImportar() { GR_guardia_();
   var ui = SpreadsheetApp.getUi();
   var r = ui.prompt('📥 Importar datos', 'Pegue el enlace (o el ID) de la hoja "Guías · datos para importar":', ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
