@@ -131,6 +131,7 @@ jobs:
           except Exception: d=[]
           b=[x for x in d if (x.get('description') or '').startswith('Portal Guias')]
           print(b[0]['deploymentId'] if b else '')")
+          [ -n "$ID" ] && echo "::add-mask::$ID"   # la dirección del portal no se muestra en los registros
           echo "id=$ID" >> "$GITHUB_OUTPUT"
           printf "/**\n * 🌐 Portal — ID de la aplicación web (la dirección del portal).\n * Este archivo lo REESCRIBE el workflow \"Desplegar Guías de Remisión (hoja)\" en cada despliegue; aquí queda vacío.\n */\nvar PT_URL_ = '%s';\n" "$ID" > GR_PortalDespliegue.js
 
@@ -151,10 +152,11 @@ jobs:
             # Primera vez: se crea la aplicación web, se anota su ID en el código y se vuelve a subir.
             ID=$(clasp --json create-deployment -d "$DESC" | grep -oE 'AKfy[A-Za-z0-9_-]+' | head -1)
             [ -n "$ID" ] || { echo "::error::No se pudo crear la aplicación web del portal"; exit 1; }
+            echo "::add-mask::$ID"
             printf "/**\n * 🌐 Portal — ID de la aplicación web (la dirección del portal).\n * Este archivo lo REESCRIBE el workflow \"Desplegar Guías de Remisión (hoja)\" en cada despliegue; aquí queda vacío.\n */\nvar PT_URL_ = '%s';\n" "$ID" > GR_PortalDespliegue.js
             clasp push --force
           fi
-          clasp create-deployment -i "$ID" -d "$DESC"
+          clasp create-deployment -i "$ID" -d "$DESC" | sed -E "s/AKfy[A-Za-z0-9_-]+/(oculto)/g"
           echo "Portal publicado (el enlace se ve en la hoja: 🚚 Guías → 🌐 Portal web)."
           N=$(clasp --json list-versions 2>/dev/null | grep -c '"versionNumber"' || true)
           echo "Versiones del proyecto de Guías: $N de 200"
