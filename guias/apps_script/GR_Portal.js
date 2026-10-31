@@ -8,8 +8,8 @@
  *
  * SEGURIDAD: una aplicación web deja llamar a cualquier función pública del proyecto. Por eso:
  *   - el portal solo usa PT_entrar / PT_api / PT_fn, que revisan la sesión y el permiso en cada llamada;
- *   - las funciones públicas GR_… de las ventanas de la hoja empiezan con GR_guardia_(): sin sesión del portal
- *     solo las puede usar alguien con cuenta (el dueño desde la hoja), nunca un visitante anónimo.
+ *   - las funciones públicas GR_… de la hoja empiezan con GR_guardia_(): sin sesión del portal solo funcionan
+ *     desde la hoja abierta (con sus menús y ventanas), nunca desde el enlace.
  * Funciones PT_.
  */
 
@@ -26,12 +26,13 @@ var PT_FN_ = {
   GR_agregarDirecciones: 'armar', GR_guardarTransporte: 'armar'
 };
 
-/** Sin sesión del portal, solo alguien con cuenta de Google (el dueño desde la hoja). Va al inicio de cada función pública. */
+/**
+ * Sin sesión del portal, solo desde la hoja abierta (menús y sus ventanas). La hoja se reconoce porque allí existe su
+ * interfaz (SpreadsheetApp.getUi); desde la aplicación web no existe, así que un visitante del enlace no puede usarlas.
+ */
 function GR_guardia_() {
   if (PT_SESION_) return;
-  var e = '';
-  try { e = Session.getActiveUser().getEmail(); } catch (x) {}
-  if (!e) throw new Error('Sin permiso.');
+  try { SpreadsheetApp.getUi(); } catch (x) { throw new Error('Sin permiso.'); }
 }
 
 /* ============================================================ la página */
