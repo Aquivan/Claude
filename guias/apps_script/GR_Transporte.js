@@ -62,7 +62,7 @@ function GR_mtcDetalle_(html) {
 
 /* ---------------- ventana ---------------- */
 
-function GR_menuBuscarTransporte() {
+function GR_menuBuscarTransporte() { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), f = sh.getActiveRange().getRow(), ctx = { id: '', ruc: '', placa: '' };
   if (sh.getName() === GR_HOJA_ && f >= GR_FILA1_) {
     var r = GR_leerGuias_(sh, f, f)[0].r;
@@ -75,7 +75,7 @@ function GR_menuBuscarTransporte() {
 }
 
 /** Lo que pide la ventana: por RUC o por placa. */
-function GR_buscarTransporte(valor) {
+function GR_buscarTransporte(valor) { GR_guardia_();
   var v = String(valor || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (/^\d{11}$/.test(v)) return { tipo: 'ruc', valor: v, empresas: GR_mtcBuscar_('2', v) };
   if (/^[A-Z0-9]{6}$/.test(v)) return { tipo: 'placa', valor: v, empresas: GR_mtcBuscar_('4', v) };
@@ -86,7 +86,7 @@ function GR_buscarTransporte(valor) {
  * Guarda lo elegido. d = {empresa:{ruc, nombre, codigo}, guardarEmpresa, vehiculos:[{placa, constancia, categoria, anio, ejes, carga}],
  * id, principal (placa), secundaria (placa), modo: 'publico'|'privado'}
  */
-function GR_guardarTransporte(d) {
+function GR_guardarTransporte(d) { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), ctx = GR_contexto_(ss), hechos = [];
   var agregar = function (hoja, fila) { var h = ss.getSheetByName(hoja), ult = 1, last = h.getLastRow();
     if (last >= 2) h.getRange(2, 1, last - 1, 1).getValues().forEach(function (r, i) { if (String(r[0]).trim()) ult = i + 2; });
@@ -145,7 +145,7 @@ function GR_nombreDni_(dni) {
 }
 
 /** Menú: completa nombres y apellidos del conductor por su DNI (en la guía seleccionada o en 👤 Conductores). */
-function GR_menuConductorDni() {
+function GR_menuConductorDni() { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), rg = sh.getActiveRange(), msgs = [];
   if (sh.getName() === GR_HOJA_) {
     GR_leerGuias_(sh, Math.max(rg.getRow(), GR_FILA1_), rg.getLastRow()).forEach(function (x) {

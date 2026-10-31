@@ -14,8 +14,8 @@ var GR_COB_URL_ = '__COBRANZAS_URL__';   // aplicación web de Cobranzas: la pon
 var GR_MOTIVO_CASO_ = { '01': 'Venta', '02': 'Compra', '04': 'Traslado entre establecimientos de la misma empresa', '05': 'Consignación',
   '06': 'Devolución', '13': 'Otros' };
 
-function GR_menuVista() { GR_pedirRobot_('vista'); }
-function GR_menuEmitir() { GR_pedirRobot_('emitir'); }
+function GR_menuVista() { GR_guardia_(); GR_pedirRobot_('vista'); }
+function GR_menuEmitir() { GR_guardia_(); GR_pedirRobot_('emitir'); }
 
 /* ---------------- conexión con Cobranzas ---------------- */
 
@@ -81,40 +81,53 @@ function GR_casoDeFila_(r, ctx) {
 function GR_pedirRobot_(modo) {
   var ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet();
   if (sh.getName() !== GR_HOJA_ || sh.getActiveRange().getRow() < GR_FILA1_) return ui.alert('Seleccione una fila de la pestaña ' + GR_HOJA_ + '.');
-  var fila = sh.getActiveRange().getRow(), x = GR_leerGuias_(sh, fila, fila)[0], r = x.r, ctx = GR_contexto_(ss);
-  if (!r.id) return ui.alert('Esa fila está vacía.');
-  if (String(r.estado).indexOf(GR_ESTADOS_.EMITIDA) === 0) return ui.alert('La guía ' + r.id + ' ya está emitida (' + r.guia + ').');
-  if (String(r.estado).indexOf(GR_ESTADOS_.EMITIENDO) === 0) return ui.alert('La guía ' + r.id + ' se está emitiendo: espere el resultado (🔄).');
-  var v = GR_validar_(r, ctx);
-  if (v.faltas.length) return ui.alert('Antes complete: ' + v.faltas.join(', ') + '.');
-  var donde = String(r.via) === 'SUNAT' ? 'SUNAT SOL' : 'Quesito';
-  if (modo === 'emitir') {
-    var ok = ui.alert('✅ Emitir la guía ' + r.id + ' en ' + donde,
+  var res = GR_pedirRobotFila_(ss, sh, sh.getActiveRange().getRow(), modo, function (r, donde) {
+    return ui.alert('✅ Emitir la guía ' + r.id + ' en ' + donde,
       'Es una operación REAL ante SUNAT. Empresa ' + r.empresa + ' · ' + (r.numero ? r.docrel + ' ' + r.serie + '-' + r.numero : 'cotización ' + r.cotizacion) + ' · ' + (r.dest || '(cliente de la factura)') +
-      '\nLlegada: ' + r.ldir + '\n\nSe emite tal como está la fila ahora (si después la cambia, no se emite). ¿Emitir?', ui.ButtonSet.YES_NO);
-    if (ok !== ui.Button.YES) return;
-  }
+      '\nLlegada: ' + r.ldir + '\n\nSe emite tal como está la fila ahora (si después la cambia, no se emite). ¿Emitir?', ui.ButtonSet.YES_NO) === ui.Button.YES;
+  });
+  if (res.cancelado) return;
+  if (!res.ok) return ui.alert(res.msg);
+  if (res.vivo && res.donde !== 'pc') GR_abrirVivo_(res.vivo, res.id);   // 📺 modo en vivo activo (en la PC se ve el Chrome mismo)
+  if (res.donde === 'pc') ss.toast('🖥 Se hace en su PC: mire la ventana de Chrome que se abre (no la use mientras trabaja).', '🚚 Guías', 10);
+  else if (res.pc_motivo) ss.toast('🖥 No pude usar su PC (' + res.pc_motivo + '): se hace en GitHub.', '🚚 Guías', 10);
+  ss.toast(res.msg, '🚚 Guías', 8);
+}
+
+/**
+ * 👁 / ✅ de una fila, sin ventanas (lo usan el menú y el 🌐 portal). confirmar(r, donde) se llama solo para emitir;
+ * si devuelve false no se hace nada. Devuelve {ok, msg, id, vivo, donde, pc_motivo, cancelado}.
+ */
+function GR_pedirRobotFila_(ss, sh, fila, modo, confirmar) {
+  var x = GR_leerGuias_(sh, fila, fila)[0], r = x.r, ctx = GR_contexto_(ss);
+  if (!r.id) return { ok: false, msg: 'Esa fila está vacía.' };
+  if (String(r.estado).indexOf(GR_ESTADOS_.EMITIDA) === 0) return { ok: false, msg: 'La guía ' + r.id + ' ya está emitida (' + r.guia + ').' };
+  if (String(r.estado).indexOf(GR_ESTADOS_.EMITIENDO) === 0) return { ok: false, msg: 'La guía ' + r.id + ' se está emitiendo: espere el resultado (🔄).' };
+  var v = GR_validar_(r, ctx);
+  if (v.faltas.length) return { ok: false, msg: 'Antes complete: ' + v.faltas.join(', ') + '.' };
+  var donde = String(r.via) === 'SUNAT' ? 'SUNAT SOL' : 'Quesito';
+  if (modo === 'emitir' && !(confirmar && confirmar(r, donde))) return { ok: false, cancelado: true, msg: 'No se emitió.' };
   var caso;
-  try { caso = GR_casoDeFila_(r, ctx); } catch (e) { return ui.alert('No se puede pedir: ' + e.message); }
+  try { caso = GR_casoDeFila_(r, ctx); } catch (e) { return { ok: false, msg: 'No se puede pedir: ' + e.message }; }
   var c = GR_cob_('caso', { caso: String(r.caso || ''), hoja: r.id, datos: caso });
-  if (!c.ok) return ui.alert('El bot no aceptó la guía: ' + (c.error || '') + ((c.faltan || []).length ? '\n' + c.faltan.join('\n') : ''));
+  if (!c.ok) return { ok: false, msg: 'El bot no aceptó la guía: ' + (c.error || '') + ((c.faltan || []).length ? '\n' + c.faltan.join('\n') : '') };
   var p = GR_cob_('pedir', { caso: c.caso, modo: modo });
   var col = function (k) { return GR_col_(k); };
   sh.getRange(fila, col('caso')).setValue(c.caso);
   if (!p.ok) {
     sh.getRange(fila, col('msg')).setValue('⚠️ ' + (p.error || 'no se pudo pedir'));
-    return ui.alert('No se pudo pedir al robot: ' + (p.error || ''));
+    return { ok: false, msg: 'No se pudo pedir al robot: ' + (p.error || '') };
   }
-  if (p.vivo && p.donde !== 'pc') GR_abrirVivo_(p.vivo, r.id);   // 📺 modo en vivo activo (en la PC se ve el Chrome mismo)
-  if (p.donde === 'pc') ss.toast('🖥 Se hace en su PC: mire la ventana de Chrome que se abre (no la use mientras trabaja).', '🚚 Guías', 10);
-  else if (p.pc_motivo) ss.toast('🖥 No pude usar su PC (' + p.pc_motivo + '): se hace en GitHub.', '🚚 Guías', 10);
+  if (p.vivo) PropertiesService.getDocumentProperties().setProperty('GR_VIVO_URL', p.vivo);
   var ahora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'HH:mm');
   sh.getRange(fila, col('estado')).setValue(modo === 'emitir' ? GR_ESTADOS_.EMITIENDO + ' en ' + donde + ' (' + ahora + ')' : GR_ESTADOS_.VISTA + ' pedida en ' + donde + ' (' + ahora + ')');
   sh.getRange(fila, col('msg')).setValue(modo === 'emitir' ? 'Emitiendo… el resultado llega aquí solo (en 1–2 min) y al Telegram del administrador.'
     : 'Preparando la vista previa (no se emite). La foto llega al Telegram del administrador y aquí el enlace, en 2–4 min.');
   sh.getRange(fila, col('actualizado')).setValue(new Date());
   GR_programarRevision_();
-  ss.toast(modo === 'emitir' ? 'Emitiendo la guía ' + r.id + ' en ' + donde + '…' : 'Vista previa de ' + r.id + ' en ' + donde + ' (no se emite)…', '🚚 Guías', 8);
+  GR_registrar_(r.id, modo === 'emitir' ? '✅ Emitir (pedido)' : '👁 Vista previa (pedida)', donde);
+  return { ok: true, id: r.id, vivo: p.vivo || '', donde: p.donde || '', pc_motivo: p.pc_motivo || '',
+    msg: modo === 'emitir' ? 'Emitiendo la guía ' + r.id + ' en ' + donde + '…' : 'Vista previa de ' + r.id + ' en ' + donde + ' (no se emite)…' };
 }
 
 /* ---------------- resultados (cada minuto mientras haya guías en curso) ---------------- */
@@ -124,7 +137,7 @@ function GR_programarRevision_() {
   if (!hay) ScriptApp.newTrigger('GR_revisarResultados').timeBased().everyMinutes(1).create();
 }
 
-function GR_menuResultados() { var n = GR_revisarResultados(); SpreadsheetApp.getActive().toast(n ? n + ' guía(s) en curso.' : 'No hay guías en curso.', '🚚 Guías', 5); }
+function GR_menuResultados() { GR_guardia_(); var n = GR_revisarResultados(); SpreadsheetApp.getActive().toast(n ? n + ' guía(s) en curso.' : 'No hay guías en curso.', '🚚 Guías', 5); }
 
 /** Trae del bot el estado de las guías en curso. Devuelve cuántas siguen en curso (sin ninguna, se apaga solo). */
 function GR_revisarResultados() {
@@ -181,7 +194,7 @@ function GR_apagarRevision_() {
 
 /* ---------------- 📺 ver el robot en vivo (la pantalla de Quesito / SUNAT mientras trabaja) ---------------- */
 
-function GR_menuEnVivo() {
+function GR_menuEnVivo() { GR_guardia_();
   var ui = SpreadsheetApp.getUi(), r = GR_cob_('vivo', {});
   if (!r.ok) return ui.alert('No pude hablar con el bot: ' + (r.error || ''));
   var si = ui.alert('📺 Ver el robot en vivo', 'Ahora está ' + (r.activo ? 'ACTIVADO' : 'DESACTIVADO') + '.\n\n' +
@@ -193,7 +206,7 @@ function GR_menuEnVivo() {
   SpreadsheetApp.getActive().toast(x.ok ? (x.activo ? '📺 En vivo ACTIVADO' : 'En vivo desactivado') : '⚠️ ' + (x.error || ''), '🚚 Guías', 6);
 }
 
-function GR_menuAbrirVivo() {
+function GR_menuAbrirVivo() { GR_guardia_();
   var u = PropertiesService.getDocumentProperties().getProperty('GR_VIVO_URL');
   if (!u) return SpreadsheetApp.getUi().alert('Todavía no hay transmisión. Active 📺 Ver el robot en vivo y pida una vista previa, emitir o traer datos.');
   GR_abrirVivo_(u, '');
@@ -210,7 +223,7 @@ function GR_abrirVivo_(url, id) {
 
 /* ---------------- 🖥 Quesito en la PC (ejecutor pc-quesito: Chrome visible en la pantalla) ---------------- */
 
-function GR_menuEnPc() {
+function GR_menuEnPc() { GR_guardia_();
   var ui = SpreadsheetApp.getUi(), r = GR_cob_('pc', {});
   if (!r.ok) return ui.alert('No pude hablar con el bot: ' + (r.error || ''));
   var e = r.estado || {};

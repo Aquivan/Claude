@@ -12,8 +12,8 @@ name: Desplegar Guías de Remisión (hoja)
 on:
   push:
     branches:
+      # Solo esta rama (los cambios llegan aquí por merge): publicar desde dos ramas gastaba 2 versiones por cambio.
       - claude/python-codes-izve18
-      - claude/tender-wozniak-vnf3iq
     paths:
       - 'guias/apps_script/**'
       - '.github/workflows/deploy-guias.yml'
@@ -120,12 +120,45 @@ jobs:
           sed -i "s#__COBRANZAS_URL__#https://script.google.com/macros/s/$ID/exec#" GR_Emitir.js
           grep -q "__COBRANZAS_URL__" GR_Emitir.js && { echo "::error::No se puso la dirección"; exit 1; } || echo "Dirección del bot puesta."
 
+      - name: ID del 🌐 portal web
+        id: portal
+        if: hashFiles('guias/apps_script/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir')
+        run: |
+          ID=$(clasp --json list-deployments 2>/dev/null | python3 -c "
+          import json,sys
+          t=sys.stdin.read()
+          try: d=json.loads(t[t.index('['):])
+          except Exception: d=[]
+          b=[x for x in d if (x.get('description') or '').startswith('Portal Guias')]
+          print(b[0]['deploymentId'] if b else '')")
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          printf "/**\n * 🌐 Portal — ID de la aplicación web (la dirección del portal).\n * Este archivo lo REESCRIBE el workflow \"Desplegar Guías de Remisión (hoja)\" en cada despliegue; aquí queda vacío.\n */\nvar PT_URL_ = '%s';\n" "$ID" > GR_PortalDespliegue.js
+
       - name: Subir el codigo a la hoja
         if: hashFiles('guias/apps_script/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir')
         run: |
           clasp push --force
           HOJA=$(python3 -c "import json;print((json.load(open('.clasp.json')).get('parentId') or [''])[0])")
           echo "Código subido: https://docs.google.com/spreadsheets/d/$HOJA/edit"
+
+      - name: Publicar el 🌐 portal web
+        if: hashFiles('guias/apps_script/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir')
+        env:
+          ID: ${{ steps.portal.outputs.id }}
+        run: |
+          DESC="Portal Guias $(date -u +%Y-%m-%d)"
+          if [ -z "$ID" ]; then
+            # Primera vez: se crea la aplicación web, se anota su ID en el código y se vuelve a subir.
+            ID=$(clasp --json create-deployment -d "$DESC" | grep -oE 'AKfy[A-Za-z0-9_-]+' | head -1)
+            [ -n "$ID" ] || { echo "::error::No se pudo crear la aplicación web del portal"; exit 1; }
+            printf "/**\n * 🌐 Portal — ID de la aplicación web (la dirección del portal).\n * Este archivo lo REESCRIBE el workflow \"Desplegar Guías de Remisión (hoja)\" en cada despliegue; aquí queda vacío.\n */\nvar PT_URL_ = '%s';\n" "$ID" > GR_PortalDespliegue.js
+            clasp push --force
+          fi
+          clasp create-deployment -i "$ID" -d "$DESC"
+          echo "Portal publicado (el enlace se ve en la hoja: 🚚 Guías → 🌐 Portal web)."
+          N=$(clasp --json list-versions 2>/dev/null | grep -c '"versionNumber"' || true)
+          echo "Versiones del proyecto de Guías: $N de 200"
+          if [ "${N:-0}" -ge 180 ]; then echo "::warning::El proyecto de Guías tiene $N versiones (Google permite 200). Borre versiones viejas en Apps Script → Historial del proyecto."; fi
 
       - name: Limpiar credenciales
         if: always()

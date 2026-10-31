@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_blank">
+<meta charset="utf-8">
+<meta name="theme-color" content="#0d47a1">
+<style>
+  :root { --azul: #1565c0; --azul2: #0d47a1; --fondo: #eef2f6; --borde: #dbe3ea; --texto: #22313f; --suave: #6b7c8c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-size: 14px; color: var(--texto); background: var(--fondo); -webkit-tap-highlight-color: transparent; }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--borde); background: #fff; color: var(--texto); border-radius: 10px; padding: 9px 13px; }
+  button:active { transform: scale(.98); }
+  button.pri { background: var(--azul); border-color: var(--azul); color: #fff; font-weight: 600; }
+  button.ok { background: #2e7d32; border-color: #2e7d32; color: #fff; font-weight: 600; }
+  button.peligro { background: #c62828; border-color: #c62828; color: #fff; font-weight: 700; }
+  button:disabled { opacity: .5; cursor: default; }
+  input, select { font: inherit; padding: 10px 12px; border: 1px solid var(--borde); border-radius: 10px; background: #fff; color: var(--texto); width: 100%; }
+  input:focus, select:focus { outline: 2px solid #90caf9; border-color: var(--azul); }
+  .oculto { display: none !important; }
+
+  /* entrar */
+  #entrar { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; background: linear-gradient(160deg, #0d47a1, #1976d2 55%, #42a5f5); }
+  .tarjetaEntrar { background: #fff; border-radius: 18px; padding: 26px 22px; width: 100%; max-width: 360px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  .tarjetaEntrar h1 { margin: 0 0 4px; font-size: 22px; } .tarjetaEntrar p { margin: 0 0 18px; color: var(--suave); }
+  .tarjetaEntrar label { display: block; font-size: 12px; color: var(--suave); margin: 10px 0 4px; }
+  .tarjetaEntrar button { width: 100%; margin-top: 16px; padding: 12px; font-size: 15px; }
+  #errEntrar { color: #c62828; min-height: 18px; margin-top: 10px; font-size: 13px; }
+
+  /* app */
+  header { position: sticky; top: 0; z-index: 5; background: var(--azul2); color: #fff; padding: 10px 14px; display: flex; align-items: center; gap: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+  header h1 { font-size: 17px; margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header .quien { font-size: 12px; opacity: .85; white-space: nowrap; }
+  header button { background: rgba(255,255,255,.14); border-color: transparent; color: #fff; padding: 7px 10px; }
+  .barra { padding: 10px 14px 4px; display: grid; grid-template-columns: 1fr auto; gap: 8px; max-width: 1400px; margin: 0 auto; }
+  .chips { padding: 4px 14px 8px; display: flex; gap: 6px; overflow-x: auto; max-width: 1400px; margin: 0 auto; scrollbar-width: none; }
+  .chip { border-radius: 18px; padding: 6px 11px; font-size: 13px; white-space: nowrap; flex: none; }
+  .chip.on { background: var(--texto); color: #fff; border-color: var(--texto); }
+  .chip b { font-weight: 600; opacity: .7; margin-left: 3px; }
+  .filtros2 { padding: 0 14px 8px; display: flex; gap: 8px; max-width: 1400px; margin: 0 auto; flex-wrap: wrap; }
+  .filtros2 select { width: auto; flex: 1; min-width: 140px; padding: 8px 10px; }
+  #lista { padding: 6px 14px 90px; display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; max-width: 1400px; margin: 0 auto; }
+  .g { background: #fff; border: 1px solid var(--borde); border-radius: 14px; padding: 12px 13px; cursor: pointer; display: flex; flex-direction: column; gap: 5px; transition: box-shadow .15s; position: relative; }
+  .g:hover { box-shadow: 0 4px 16px rgba(13,71,161,.12); }
+  .g .top { display: flex; align-items: center; gap: 8px; }
+  .g .id { font-weight: 700; font-size: 15px; white-space: nowrap; }
+  .g .via { font-size: 11px; color: var(--suave); border: 1px solid var(--borde); border-radius: 6px; padding: 1px 6px; }
+  .g .linea { color: var(--suave); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .g .linea b { color: var(--texto); font-weight: 600; }
+  .g .dest { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .g .msg { font-size: 12px; color: var(--suave); background: #f6f8fa; border-radius: 8px; padding: 6px 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .g .res { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+  .g .res a { color: var(--azul); font-weight: 600; text-decoration: none; }
+  .est { font-size: 12px; font-weight: 600; border-radius: 12px; padding: 3px 9px; margin-left: auto; white-space: nowrap; max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
+  .e-borr { background: #fff3e0; color: #e65100; } .e-lista { background: #e8f5e9; color: #2e7d32; } .e-vista { background: #e3f2fd; color: #1565c0; }
+  .e-emit { background: #ede7f6; color: #4527a0; } .e-ok { background: #e0f2f1; color: #00695c; } .e-err { background: #ffebee; color: #c62828; } .e-anul { background: #eceff1; color: #546e7a; }
+  .vacio { text-align: center; color: var(--suave); padding: 50px 10px; grid-column: 1 / -1; }
+  #fab { position: fixed; right: 18px; bottom: 18px; z-index: 6; border-radius: 28px; padding: 14px 20px; box-shadow: 0 6px 18px rgba(13,71,161,.4); font-size: 15px; }
+
+  /* detalle (panel a la derecha en PC, hoja desde abajo en el celular) */
+  #velo { position: fixed; inset: 0; background: rgba(15,30,45,.45); z-index: 10; }
+  #detalle { position: fixed; z-index: 11; background: #fff; overflow: auto; right: 0; top: 0; bottom: 0; width: min(520px, 100%); box-shadow: -8px 0 30px rgba(0,0,0,.2); }
+  @media (max-width: 700px) { #detalle { top: auto; left: 0; width: 100%; max-height: 92vh; border-radius: 18px 18px 0 0; } }
+  .dCab { position: sticky; top: 0; background: #fff; padding: 14px 16px 10px; border-bottom: 1px solid var(--borde); display: flex; gap: 10px; align-items: center; z-index: 1; }
+  .dCab h2 { margin: 0; font-size: 18px; flex: 1; }
+  .dCuerpo { padding: 12px 16px 24px; }
+  .datos { display: grid; grid-template-columns: 120px 1fr; gap: 6px 10px; font-size: 13px; margin-bottom: 12px; }
+  .datos span:nth-child(odd) { color: var(--suave); }
+  .grupo { margin-top: 14px; } .grupo h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--suave); margin: 0 0 8px; }
+  .acciones { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .acciones button { text-align: left; padding: 11px 12px; }
+  .aviso { background: #f6f8fa; border-radius: 10px; padding: 9px 11px; font-size: 13px; color: #37474f; white-space: pre-wrap; margin-bottom: 10px; }
+
+  /* ventanas de la hoja (borrador, formulario…) a pantalla completa */
+  #ventana { position: fixed; inset: 0; z-index: 20; background: #fff; display: flex; flex-direction: column; }
+  #ventana .vCab { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--azul2); color: #fff; }
+  #ventana .vCab h2 { margin: 0; font-size: 16px; flex: 1; }
+  #ventana .vCab button { background: rgba(255,255,255,.15); border-color: transparent; color: #fff; }
+  #ventana iframe { flex: 1; border: none; width: 100%; }
+  #ventana .cargando { position: absolute; top: 60px; left: 0; right: 0; text-align: center; color: var(--suave); }
+
+  /* confirmar emisión */
+  #confirmar { position: fixed; inset: 0; z-index: 30; background: rgba(15,30,45,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .cCaja { background: #fff; border-radius: 16px; padding: 20px; max-width: 440px; width: 100%; box-shadow: 0 16px 50px rgba(0,0,0,.35); }
+  .cCaja h2 { margin: 0 0 6px; font-size: 18px; } .cCaja .real { color: #c62828; font-weight: 600; margin-bottom: 10px; }
+  .cCaja .botones { display: flex; gap: 8px; margin-top: 16px; } .cCaja .botones button { flex: 1; padding: 12px; }
+
+  #toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: #263238; color: #fff; padding: 11px 16px; border-radius: 12px; z-index: 40; max-width: 92vw; font-size: 13px; white-space: pre-wrap; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+  .giro { display: inline-block; animation: giro 1s linear infinite; } @keyframes giro { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ============ entrar ============ -->
+<div id="entrar">
+  <div class="tarjetaEntrar">
+    <h1>🚚 Guías de remisión</h1>
+    <p>Entre con el usuario y PIN que le dio el administrador.</p>
+    <label>Usuario</label><input id="usuario" autocomplete="username" autocapitalize="none">
+    <label>PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="current-password" onkeydown="if(event.key==='Enter')entrar()">
+    <button class="pri" id="bEntrar" onclick="entrar()">Entrar</button>
+    <div id="errEntrar"></div>
+  </div>
+</div>
+
+<!-- ============ app ============ -->
+<div id="app" class="oculto">
+  <header>
+    <h1>🚚 Guías de remisión</h1>
+    <span class="quien" id="quien"></span>
+    <button onclick="cargar(true)" title="Actualizar">🔄</button>
+    <button onclick="salir()" title="Salir">Salir</button>
+  </header>
+  <div class="barra">
+    <input id="q" placeholder="🔎 Buscar: guía, cliente, factura, placa, chofer…" oninput="pintar()">
+    <button id="bFormulario" onclick="abrirVentana('formulario', '', '➕ Nueva guía (formulario)')" title="Nueva guía llenando todos los datos">📝</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="filtros2">
+    <select id="fEmp" onchange="pintar()"><option value="">Todas las empresas</option></select>
+    <select id="fVia" onchange="pintar()"><option value="">Quesito y SUNAT</option><option>Quesito</option><option>SUNAT</option></select>
+    <select id="fCuando" onchange="pintar()"><option value="">Cualquier fecha</option><option value="hoy">Traslado hoy</option><option value="7">Últimos 7 días</option><option value="30">Últimos 30 días</option></select>
+  </div>
+  <div id="lista"><div class="vacio"><span class="giro">⏳</span> Cargando guías…</div></div>
+  <button id="fab" class="pri" onclick="abrirVentana('rapida', '', '➕ Nueva guía rápida')">➕ Nueva guía</button>
+</div>
+
+<div id="velo" class="oculto" onclick="cerrarDetalle()"></div>
+<div id="detalle" class="oculto"></div>
+
+<div id="ventana" class="oculto">
+  <div class="vCab"><button onclick="cerrarVentana()">← Volver</button><h2 id="vTit"></h2></div>
+  <div class="cargando" id="vCarga"><span class="giro">⏳</span> Abriendo…</div>
+  <iframe id="vMarco" title="ventana"></iframe>
+</div>
+
+<div id="confirmar" class="oculto"></div>
+<div id="toast" class="oculto"></div>
+
+<script>
+/* ============================================================ estado */
+var TOKEN = '', YO = null, GUIAS = [], FILTRO = '', SEL = null, VIGIA = null;
+var NIVEL = { ver: 0, armar: 1, emitir: 2, admin: 3 };
+function puede(p) { return YO && NIVEL[YO.permiso] >= NIVEL[p]; }
+function $(id) { return document.getElementById(id); }
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function guardar(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} }
+function leer(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+function toast(t, ms) { var x = $('toast'); x.textContent = t; x.classList.remove('oculto'); clearTimeout(x._t); x._t = setTimeout(function () { x.classList.add('oculto'); }, ms || 4500); }
+
+/** Llamada al servidor con la sesión; si la sesión venció, vuelve a la pantalla de entrar. */
+function api(accion, d) {
+  return new Promise(function (ok, mal) {
+    google.script.run.withSuccessHandler(ok).withFailureHandler(function (e) {
+      if (/^SESION/.test(e.message)) { sesionVencida(e.message.replace(/^SESION:\s*/, '')); return; }
+      mal(e);
+    }).PT_api(TOKEN, accion, d || {});
+  });
+}
+function sesionVencida(m) {
+  TOKEN = ''; guardar('pt_token', '');
+  cerrarVentana(true); cerrarDetalle();
+  $('app').classList.add('oculto'); $('entrar').classList.remove('oculto');
+  $('errEntrar').textContent = m || 'Su sesión terminó. Vuelva a entrar.';
+}
+
+/* ============================================================ entrar / salir */
+function entrar() {
+  var u = $('usuario').value.trim(), p = $('pin').value.trim();
+  if (!u || !p) { $('errEntrar').textContent = 'Escriba usuario y PIN.'; return; }
+  $('bEntrar').disabled = true; $('errEntrar').textContent = '';
+  google.script.run.withSuccessHandler(function (r) {
+    $('bEntrar').disabled = false; $('pin').value = '';
+    TOKEN = r.token; guardar('pt_token', r.token); guardar('pt_usuario', u);
+    iniciar({ nombre: r.nombre, permiso: r.permiso });
+  }).withFailureHandler(function (e) { $('bEntrar').disabled = false; $('errEntrar').textContent = e.message; }).PT_entrar(u, p);
+}
+function salir() { api('salir').catch(function () {}); sesionVencida('Salió del portal.'); }
+function iniciar(yo) {
+  YO = yo;
+  $('entrar').classList.add('oculto'); $('app').classList.remove('oculto');
+  $('quien').textContent = '👤 ' + yo.nombre + ' · ' + yo.permiso;
+  $('fab').classList.toggle('oculto', !puede('armar')); $('bFormulario').classList.toggle('oculto', !puede('armar'));
+  cargar();
+}
+
+/* ============================================================ lista */
+var GRUPOS = [
+  { k: '', t: 'Todas' }, { k: 'borr', t: '✏️ Borrador', e: '✏️' }, { k: 'lista', t: '✅ Listas', e: '✅' }, { k: 'vista', t: '👁 Vista previa', e: '👁' },
+  { k: 'emit', t: '⏳ Emitiendo', e: '⏳' }, { k: 'ok', t: '🚚 Emitidas', e: '🚚' }, { k: 'err', t: '⚠️ Con error', e: '⚠️' }, { k: 'anul', t: '🚫 Anuladas', e: '🚫' }
+];
+function grupoDe(g) { var e = String(g.estado || '').trim(); for (var i = 1; i < GRUPOS.length; i++) if (e.indexOf(GRUPOS[i].e) === 0) return GRUPOS[i].k; return 'borr'; }
+function cargar(mostrar) {
+  if (mostrar) toast('Actualizando…', 1500);
+  return api('lista').then(function (l) {
+    GUIAS = l;
+    var emps = {}; l.forEach(function (g) { if (g.empresa) emps[g.empresa] = 1; });
+    var e = $('fEmp').value;
+    $('fEmp').innerHTML = '<option value="">Todas las empresas</option>' + Object.keys(emps).sort().map(function (x) { return '<option>' + esc(x) + '</option>'; }).join('');
+    $('fEmp').value = e;
+    pintar(); vigilar();
+    if (SEL) { var g = GUIAS.filter(function (x) { return x.id === SEL; })[0]; if (g && !$('detalle').classList.contains('oculto')) abrirDetalle(SEL, true); }
+  }).catch(function (e) { $('lista').innerHTML = '<div class="vacio">⚠️ ' + esc(e.message) + '</div>'; });
+}
+function plano(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+function fechaNum(d) { var m = String(d || '').match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? new Date(+m[3], +m[2] - 1, +m[1]).getTime() : 0; }
+function pintar() {
+  var q = plano($('q').value), emp = $('fEmp').value, via = $('fVia').value, cu = $('fCuando').value, hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  var base = GUIAS.filter(function (g) {
+    if (emp && g.empresa !== emp) return false;
+    if (via && g.via !== via) return false;
+    if (cu) { var f = fechaNum(g.fecha); if (cu === 'hoy' ? f !== hoy.getTime() : f < hoy.getTime() - Number(cu) * 864e5) return false; }
+    if (q) { var txt = plano([g.id, g.estado, g.empresa, g.comp, g.dest, g.ndest, g.llegada, g.placa, g.conductor, g.transportista, g.guia, g.msg].join(' ')); if (q.split(' ').some(function (p) { return txt.indexOf(p) < 0; })) return false; }
+    return true;
+  });
+  var cuenta = {}; base.forEach(function (g) { var k = grupoDe(g); cuenta[k] = (cuenta[k] || 0) + 1; });
+  $('chips').innerHTML = GRUPOS.map(function (x) {
+    var n = x.k ? cuenta[x.k] || 0 : base.length;
+    if (x.k && !n && FILTRO !== x.k) return '';
+    return '<button class="chip' + (FILTRO === x.k ? ' on' : '') + '" onclick="FILTRO=\'' + x.k + '\';pintar()">' + x.t + '<b>' + n + '</b></button>';
+  }).join('');
+  var l = FILTRO ? base.filter(function (g) { return grupoDe(g) === FILTRO; }) : base;
+  $('lista').innerHTML = l.length ? l.slice(0, 300).map(tarjeta).join('') + (l.length > 300 ? '<div class="vacio">Mostrando 300 de ' + l.length + ': use el buscador o los filtros.</div>' : '')
+    : '<div class="vacio">' + (GUIAS.length ? 'Ninguna guía coincide con el filtro.' : 'Todavía no hay guías. Toque ➕ Nueva guía.') + '</div>';
+}
+function tarjeta(g) {
+  var k = grupoDe(g);
+  return '<div class="g" onclick="abrirDetalle(\'' + esc(g.id) + '\')">' +
+    '<div class="top"><span class="id">' + esc(g.id) + '</span><span class="via">' + esc(g.via) + '</span><span class="est e-' + k + '">' + esc(g.estado || '✏️ Borrador') + '</span></div>' +
+    '<div class="dest">' + esc(g.dest || '(cliente de la factura)') + '</div>' +
+    '<div class="linea"><b>' + esc(g.empresa) + '</b>' + (g.comp ? ' · ' + esc(g.comp) : '') + (g.fecha ? ' · 📅 ' + esc(g.fecha) : '') + (g.peso ? ' · ' + esc(g.peso) + ' ' + esc(g.upeso) : '') + '</div>' +
+    (g.llegada ? '<div class="linea">🏁 ' + esc(g.llegada) + '</div>' : '') +
+    (g.placa || g.conductor || g.transportista ? '<div class="linea">🚛 ' + esc([g.placa, g.conductor, g.transportista].filter(String).join(' · ')) + '</div>' : '') +
+    (g.guia || g.pdf ? '<div class="res">✅ <b>' + esc(g.guia) + '</b>' + (g.pdf ? '<a href="' + esc(g.pdf) + '" onclick="event.stopPropagation()">📄 PDF</a>' : '') + '</div>' : '') +
+    (g.msg ? '<div class="msg">' + esc(g.msg) + '</div>' : '') + '</div>';
+}
+
+/* mientras haya algo en curso, trae los resultados del robot cada 45 s */
+function enCurso() { return GUIAS.some(function (g) { var k = grupoDe(g); return k === 'emit' || /pedida/.test(g.estado) || /^📥 Leyendo/.test(g.msg); }); }
+function vigilar() {
+  clearTimeout(VIGIA);
+  if (!enCurso()) return;
+  VIGIA = setTimeout(function () { api('resultados').then(function () { return cargar(); }).catch(function () { vigilar(); }); }, 45000);
+}
+
+/* ============================================================ detalle y acciones */
+function abrirDetalle(id, refrescar) {
+  var g = GUIAS.filter(function (x) { return x.id === id; })[0]; if (!g) return;
+  SEL = id;
+  var k = grupoDe(g), emitida = k === 'ok', curso = k === 'emit';
+  var dato = function (t, v) { return v ? '<span>' + t + '</span><span>' + esc(v) + '</span>' : ''; };
+  var b = function (txt, fn, perm, extra) { return perm && !puede(perm) ? '' : '<button ' + (extra || '') + ' onclick="' + fn + '">' + txt + '</button>'; };
+  var idq = "'" + esc(g.id) + "'";
+  $('detalle').innerHTML = '<div class="dCab"><h2>' + esc(g.id) + ' <span class="est e-' + k + '" style="font-size:12px">' + esc(g.estado || '✏️ Borrador') + '</span></h2><button onclick="cerrarDetalle()">✖</button></div>' +
+    '<div class="dCuerpo">' + (g.msg ? '<div class="aviso">' + esc(g.msg) + '</div>' : '') +
+    '<div class="datos">' + dato('Empresa', g.empresa) + dato('Emitir en', g.via) + dato('Comprobante', g.comp) + dato('Destinatario', g.dest) + dato('RUC / DNI', g.ndest) +
+      dato('Traslado', g.fecha) + dato('Peso', g.peso ? g.peso + ' ' + g.upeso : '') + dato('Modalidad', g.modalidad) + dato('Llegada', g.llegada) +
+      dato('Transportista', g.transportista) + dato('Placa', g.placa) + dato('Conductor', g.conductor) + dato('N° guía', g.guia) + dato('Actualizado', g.actualizado) + '</div>' +
+    (g.pdf ? '<p><a href="' + esc(g.pdf) + '">📄 Abrir el PDF de la guía</a></p>' : '') +
+    '<div class="grupo"><h3>Revisar y emitir</h3><div class="acciones">' +
+      b('🧾 Borrador (cómo queda)', "abrirVentana('borrador'," + idq + ",'🧾 Borrador de " + esc(g.id) + "')") +
+      (emitida || curso ? '' : b('👁 Vista previa en ' + esc(g.via), "robot(" + idq + ",'vista')", 'armar')) +
+      (emitida || curso ? '' : b('✅ Emitir', "preguntarEmitir(" + idq + ")", 'emitir', 'class="ok"')) +
+      b('📺 Ver el robot en vivo', 'verVivo()') + b('🔄 Traer resultados', 'traerResultados()') +
+    '</div></div>' +
+    (emitida ? '' : '<div class="grupo"><h3>Datos de la guía</h3><div class="acciones">' +
+      b('✏️ Editar datos', "abrirVentana('formulario'," + idq + ",'✏️ Guía " + esc(g.id) + "')", 'armar') +
+      b('📥 Traer datos de la factura', "accion('traer'," + idq + ")", 'armar') +
+      b('📦 Productos y cantidades', "abrirVentana('productos'," + idq + ",'📦 Productos de " + esc(g.id) + "')", 'armar') +
+      b('📄 Ver la factura', "abrirVentana('factura'," + idq + ",'📄 Factura de " + esc(g.id) + "')") +
+    '</div></div>' +
+    '<div class="grupo"><h3>Transporte y direcciones</h3><div class="acciones">' +
+      b('🚛 Transportista o placa (MTC)', "abrirVentana('transporte'," + idq + ",'🚛 Transportista y vehículos')", 'armar') +
+      b('🚛 Copiar de la guía anterior', "accion('copiarTransporte'," + idq + ")", 'armar') +
+      b('👤 Conductor por DNI', "accion('conductor'," + idq + ")", 'armar') +
+      b('🏁 Dirección de llegada', "abrirVentana('direcciones'," + idq + ",'📍 Direcciones del cliente')", 'armar') +
+      b('📍 Dirección de partida', "abrirVentana('partida'," + idq + ",'📍 Direcciones de la empresa')", 'armar') +
+    '</div></div>') + '</div>';
+  $('detalle').classList.remove('oculto'); $('velo').classList.remove('oculto');
+  if (!refrescar) $('detalle').scrollTop = 0;
+}
+function cerrarDetalle() { $('detalle').classList.add('oculto'); $('velo').classList.add('oculto'); SEL = null; }
+
+function accion(a, id) {
+  toast('Un momento…', 60000);
+  api(a, { id: id }).then(function (m) { toast(m, 7000); return cargar(); }).catch(function (e) { toast('⚠️ ' + e.message, 7000); });
+}
+function robot(id, modo, confirmo) {
+  toast(modo === 'emitir' ? 'Pidiendo la emisión…' : 'Pidiendo la vista previa…', 60000);
+  api('robot', { id: id, modo: modo, confirmo: !!confirmo }).then(function (r) {
+    toast((r.ok ? '' : '⚠️ ') + r.msg + (r.ok && r.vivo ? '\n📺 Toque «Ver el robot en vivo» para mirarlo.' : ''), 8000);
+    return cargar();
+  }).catch(function (e) { toast('⚠️ ' + e.message, 8000); });
+}
+function preguntarEmitir(id) {
+  var c = $('confirmar');
+  c.innerHTML = '<div class="cCaja"><span class="giro">⏳</span> Revisando la guía…</div>'; c.classList.remove('oculto');
+  api('resumen', { id: id }).then(function (r) {
+    if (r.faltas && r.faltas.length) {
+      c.innerHTML = '<div class="cCaja"><h2>Falta completar</h2><div class="aviso">' + esc(r.faltas.join('\n')) + '</div><div class="botones"><button onclick="$(\'confirmar\').classList.add(\'oculto\')">Entendido</button></div></div>';
+      return;
+    }
+    c.innerHTML = '<div class="cCaja"><h2>✅ Emitir la guía ' + esc(r.id) + ' en ' + esc(r.donde) + '</h2>' +
+      '<div class="real">Es una operación REAL ante SUNAT.</div>' +
+      '<div class="datos"><span>Empresa</span><span>' + esc(r.empresa) + '</span><span>Comprobante</span><span>' + esc(r.comprobante) + '</span><span>Destinatario</span><span>' + esc(r.destinatario) + '</span>' +
+      '<span>Traslado</span><span>' + esc(r.fecha) + '</span><span>Llegada</span><span>' + esc(r.llegada) + '</span></div>' +
+      '<div style="font-size:12px;color:#6b7c8c">Se emite tal como está ahora. Si la cambia después, no se emite.</div>' +
+      '<div class="botones"><button onclick="$(\'confirmar\').classList.add(\'oculto\')">Cancelar</button><button class="peligro" onclick="$(\'confirmar\').classList.add(\'oculto\');robot(\'' + esc(r.id) + '\',\'emitir\',true)">Sí, emitir</button></div></div>';
+  }).catch(function (e) { c.classList.add('oculto'); toast('⚠️ ' + e.message); });
+}
+function verVivo() {
+  api('vivo').then(function (u) {
+    if (!u) return toast('Todavía no hay transmisión. Pida una vista previa o emitir (con 📺 en vivo activado).', 6000);
+    window.open(u, '_blank');
+  }).catch(function (e) { toast('⚠️ ' + e.message); });
+}
+function traerResultados() { toast('Trayendo resultados del robot…', 30000); api('resultados').then(function (r) { toast(r.enCurso ? r.enCurso + ' guía(s) siguen en curso.' : 'Nada en curso.'); return cargar(); }).catch(function (e) { toast('⚠️ ' + e.message); }); }
+
+/* ============================================================ ventanas de la hoja dentro del portal */
+// Son las mismas ventanas que abre el menú de la hoja. Aquí van en un marco a pantalla completa y sus llamadas al servidor
+// pasan por PT_fn con la sesión (el servidor revisa el permiso de cada una).
+function runner() {
+  var ok = null, mal = null, uo;
+  var px = new Proxy({}, { get: function (_, k) {
+    if (k === 'withSuccessHandler') return function (f) { ok = f; return px; };
+    if (k === 'withFailureHandler') return function (f) { mal = f; return px; };
+    if (k === 'withUserObject') return function (o) { uo = o; return px; };
+    return function () {
+      var args = Array.prototype.slice.call(arguments);
+      google.script.run.withSuccessHandler(function (r) { if (ok) ok(r, uo); })
+        .withFailureHandler(function (e) { if (/^SESION/.test(e.message)) return sesionVencida(e.message.replace(/^SESION:\s*/, '')); if (mal) mal(e, uo); else toast('⚠️ ' + e.message, 7000); })
+        .PT_fn(TOKEN, k, args);
+    };
+  } });
+  return px;
+}
+window.PT_google = { script: { get run() { return runner(); }, host: { close: function () { cerrarVentana(); }, setHeight: function () {}, setWidth: function () {}, editor: { focus: function () {} } } } };
+function abrirVentana(v, id, titulo) {
+  $('vTit').textContent = titulo; $('vCarga').classList.remove('oculto');
+  var m = $('vMarco'); m.srcdoc = '<html><body></body></html>';
+  $('ventana').classList.remove('oculto');
+  api('vista', { v: v, id: id }).then(function (html) {
+    var shim = '<script>window.google = parent.PT_google;<\/script><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{max-width:100vw;overflow-x:auto}</style>';
+    html = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, function (h) { return h + shim; }) : shim + html;
+    m.srcdoc = html; $('vCarga').classList.add('oculto');
+  }).catch(function (e) { cerrarVentana(true); toast('⚠️ ' + e.message, 7000); });
+}
+function cerrarVentana(sinRecargar) {
+  if ($('ventana').classList.contains('oculto')) return;
+  $('ventana').classList.add('oculto'); $('vMarco').srcdoc = '';
+  if (!sinRecargar) cargar();
+}
+
+/* ============================================================ arranque: si hay sesión guardada, entra solo */
+$('usuario').value = leer('pt_usuario');
+TOKEN = leer('pt_token');
+if (TOKEN) api('yo').then(iniciar).catch(function () { sesionVencida(''); });
+else $((leer('pt_usuario') ? 'pin' : 'usuario')).focus();
+</script>
+</body>
+</html>

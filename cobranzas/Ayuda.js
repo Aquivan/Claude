@@ -91,6 +91,7 @@ var AYU_SECCIONES_ = [
   ] },
   { id: 'guias', e: '🚚', t: 'Guías de remisión (traslado de mercadería)', p: [
     'La **guía de remisión** (GRE) acompaña la mercadería. Se emite en **Quesito** (desde la factura) o en **SUNAT SOL**.',
+    '**🌐 Portal web (celular o PC, sin cuenta de Google)**: en la hoja de Guías, menú **🚚 Guías → 🌐 Portal web** da el enlace. Cada persona entra con su **usuario y PIN** (pestaña **👥 Portal**) y, según su permiso (ver · armar · emitir · admin), ve las guías con buscador y filtros, crea y corrige, pide la vista previa y emite (siempre confirmando). En Android: Chrome → ⋮ → **Agregar a la pantalla principal**.',
     '**Desde Telegram o WhatsApp**:',
     '1. Mande la factura, el ticket o la tarjeta del vehículo y escriba **guía** (o «emite guía»); luego **listo**.',
     '2. Revise el resumen. Corrija con sus palabras («es privado», «peso 30000», «llegada Av. Mártires»).',

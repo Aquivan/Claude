@@ -3,9 +3,9 @@
  * en 📦 Productos; la revisión y el autollenado son los mismos que al escribir en la hoja.
  */
 
-function GR_menuNueva() { GR_abrirFormulario_(''); }
+function GR_menuNueva() { GR_guardia_(); GR_abrirFormulario_(''); }
 
-function GR_menuEditar() {
+function GR_menuEditar() { GR_guardia_();
   var sh = SpreadsheetApp.getActiveSheet(), f = sh.getActiveRange().getRow();
   var id = sh.getName() === GR_HOJA_ && f >= GR_FILA1_ ? String(sh.getRange(f, 1).getValue()) : '';
   if (!id) return SpreadsheetApp.getUi().alert('Seleccione una fila con guía en 🚚 Guías (o use ➕ Nueva guía).');
@@ -19,7 +19,7 @@ function GR_abrirFormulario_(id) {
 }
 
 /** Todo lo que el formulario necesita: listas, catálogos y (si edita) la guía con sus productos. */
-function GR_datosFormulario(id) {
+function GR_datosFormulario(id) { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), ctx = GR_contexto_(ss);
   var out = {
     listas: { motivos: GR_MOTIVOS_, modalidad: GR_MODALIDAD_, tipodoc: GR_TIPODOC_, docrel: GR_DOCREL_, pesos: GR_PESO_, unidades: GR_UNIDADES_ },
@@ -57,7 +57,7 @@ function GR_filaDe_(sh, id) {
 }
 
 /** Guarda lo del formulario. g = {clave: valor} de GR_COLS_ + productos:[{desc, unidad, cant, lote}]. → {id, estado, fila}. */
-function GR_guardarFormulario(g) {
+function GR_guardarFormulario(g) { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(GR_HOJA_);
   var lock = LockService.getDocumentLock();
   lock.waitLock(20000);

@@ -9,7 +9,7 @@
 
 var GR_GH_ = { owner: 'Aquivan', repo: 'Claude', rama: 'claude/python-codes-izve18' };
 
-function GR_menuToken() {
+function GR_menuToken() { GR_guardia_();
   var ui = SpreadsheetApp.getUi(), p = PropertiesService.getScriptProperties();
   var r = ui.prompt('🔑 Token de GitHub', 'Para leer las facturas del SIRE que guarda GitHub (el mismo token de las otras hojas del grupo, permiso de lectura de "Contents").\n' +
     (p.getProperty('GR_GITHUB_TOKEN') ? 'Ya hay uno guardado: escriba otro para cambiarlo.' : ''), ui.ButtonSet.OK_CANCEL);
@@ -105,7 +105,7 @@ function GR_buscarFactura_(empresaRuc, serie, numero, fecha, cantidades) {
 }
 
 /** Menú 🔎: para las filas seleccionadas de 🚚 Guías. */
-function GR_menuTraerFactura() {
+function GR_menuTraerFactura() { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet();
   if (sh.getName() !== GR_HOJA_) return SpreadsheetApp.getUi().alert('Seleccione una o varias filas de 🚚 Guías.');
   var rg = sh.getActiveRange(), f0 = Math.max(rg.getRow(), GR_FILA1_), f1 = rg.getLastRow(), msgs = [];

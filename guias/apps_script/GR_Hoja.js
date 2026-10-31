@@ -37,6 +37,7 @@ function onOpen() {
       .addItem('📥 Importar datos (del Excel de guías)', 'GR_menuImportar')
       .addItem('🔑 Token de GitHub (para leer el SIRE)', 'GR_menuToken')
       .addItem('🧰 Preparar / reparar la hoja', 'GR_menuPreparar'))
+    .addItem('🌐 Portal web (usuarios y enlace)', 'GR_menuPortal')
     .addItem('📖 Ayuda', 'GR_menuAyuda')
     .addToUi();
   var ss = SpreadsheetApp.getActive();
@@ -52,7 +53,7 @@ function onOpen() {
   }
 }
 
-function GR_menuPreparar() {
+function GR_menuPreparar() { GR_guardia_();
   var ss = SpreadsheetApp.getActive();
   GR_preparar_(ss);
   PropertiesService.getDocumentProperties().setProperty('GR_VERSION', String(GR_VERSION_));
@@ -60,7 +61,7 @@ function GR_menuPreparar() {
   ss.toast('Pestañas, listas y formatos al día. No se borró ningún dato.', '🚚 Guías', 6);
 }
 
-function GR_menuAyuda() { SpreadsheetApp.getActive().getSheetByName(GR_AYU_).activate(); }
+function GR_menuAyuda() { GR_guardia_(); SpreadsheetApp.getActive().getSheetByName(GR_AYU_).activate(); }
 
 /** Crea lo que falte y vuelve a poner encabezados, formatos y listas. */
 function GR_preparar_(ss) {
@@ -348,6 +349,7 @@ function GR_registrar_(id, accion, detalle) {
   if (!sh) return;
   var quien = '';
   try { quien = Session.getActiveUser().getEmail(); } catch (e) {}
+  if (typeof PT_SESION_ !== 'undefined' && PT_SESION_) quien = '🌐 ' + PT_SESION_.u + (PT_SESION_.n ? ' (' + PT_SESION_.n + ')' : '');   // desde el portal web
   sh.insertRowAfter(1);
   sh.getRange(2, 1, 1, 5).setValues([[new Date(), id || '', accion, detalle || '', quien]]);
 }
@@ -373,6 +375,7 @@ function GR_hojaAyuda_(ss) {
     ['', ''],
     ['Estado', '✏️ Borrador = falta algo (dice qué) · ✅ Lista para emitir · 👁 Vista previa · ⏳ Emitiendo · 🚚 Emitida · ⚠️ Error (dice por qué).'],
     ['📺 En vivo', '🚚 Guías → 📺 Ver el robot en vivo → Activar: al pedir vista previa o emitir se abre la pantalla del robot. En GitHub se ve en 🎥 video y se puede hacer clic (por ejemplo, resolver el captcha si Quesito pide iniciar sesión: el robot pone correo y clave, usted solo el captcha).'],
+    ['🌐 Portal web', '🚚 Guías → 🌐 Portal web: el enlace para usar las guías desde el celular o la PC SIN cuenta de Google. Cada persona entra con usuario y PIN de la pestaña 👥 Portal (PIN de 4–8 números, se guarda cifrado 🔒) y un permiso: ver · armar · emitir · admin. Desmarque Activo para quitar el acceso. Emitir siempre pide confirmar; en 🧾 Registro queda quién hizo qué (🌐 usuario).'],
     ['🖥 Mi PC', '🚚 Guías → 🖥 Quesito en mi PC: con la ventana «Robot de guías» abierta en su computadora, Quesito se llena en su Chrome, a la vista. Si la PC está apagada se usa GitHub.'],
     ['Una a la vez', 'Quesito atiende una guía por empresa a la vez: si pide otra, la vista previa que esperaba se cierra sola (no se emite).'],
     ['Botón', '📄 Ver factura (arriba a la izquierda): datos de la factura de la fila seleccionada y su PDF.'],

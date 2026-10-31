@@ -10,9 +10,9 @@
  * Funciones GR_.
  */
 
-function GR_menuLeerQuesito() { GR_menuTraerDatos(); }   // nombre anterior del menú
+function GR_menuLeerQuesito() { GR_guardia_(); GR_menuTraerDatos(); }   // nombre anterior del menú
 
-function GR_menuTraerDatos() {
+function GR_menuTraerDatos() { GR_guardia_();
   var ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet();
   if (sh.getName() !== GR_HOJA_ || sh.getActiveRange().getRow() < GR_FILA1_) return ui.alert('Seleccione una o varias filas de la pestaña ' + GR_HOJA_ + '.');
   var rg = sh.getActiveRange(), msgs = [], pedidas = 0;
@@ -295,7 +295,7 @@ function GR_corto_(l) {
   return d.replace(/\s+S\/\.?$/, '').slice(0, 70);
 }
 
-function GR_menuElegirProductos() {
+function GR_menuElegirProductos() { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), ui = SpreadsheetApp.getUi();
   var f = sh.getActiveRange().getRow(), id = sh.getName() === GR_HOJA_ && f >= GR_FILA1_ ? String(sh.getRange(f, 1).getValue()) : '';
   if (!id) return ui.alert('Seleccione la fila de la guía en ' + GR_HOJA_ + '.');
@@ -305,7 +305,7 @@ function GR_menuElegirProductos() {
 }
 
 /** Lo que muestra la ventana: líneas de la factura y lo que ya va en la guía. */
-function GR_datosProductos(id) {
+function GR_datosProductos(id) { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), fac = GR_facturaDe_(ss, id), ps = GR_contexto_(ss).prod[id] || [];
   var usadas = {};
   var lineas = fac.lineas.map(function (l, i) {
@@ -317,7 +317,7 @@ function GR_datosProductos(id) {
 }
 
 /** Guarda lo elegido: 📦 Productos de la guía, «Producto y cantidad» y «¿Todo lo de la factura?». */
-function GR_guardarProductos(id, elegidos) {
+function GR_guardarProductos(id, elegidos) { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), fac = GR_facturaDe_(ss, id).lineas;
   var filas = (elegidos || []).filter(function (e) { return fac[e.i] && Number(e.cant) > 0; }).map(function (e) {
     var l = fac[e.i];
@@ -375,7 +375,7 @@ function GR_pedidoA_Productos_(ss, id, texto) {
 
 /* ---------------- 📄 Ver factura (botón fijo arriba a la izquierda y menú) ---------------- */
 
-function GR_menuVerFactura() {
+function GR_menuVerFactura() { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), ui = SpreadsheetApp.getUi();
   var f = sh.getActiveRange().getRow(), id = sh.getName() === GR_HOJA_ && f >= GR_FILA1_ ? String(sh.getRange(f, 1).getValue()) : '';
   if (!id) return ui.alert('📄 Ver factura', 'Haga clic en la fila de la guía (en ' + GR_HOJA_ + ') y vuelva a tocar el botón.', ui.ButtonSet.OK);
@@ -385,7 +385,7 @@ function GR_menuVerFactura() {
 }
 
 /** Datos de la factura de una guía: cabecera del SIRE (si está), líneas (Quesito o SIRE) y el PDF (si Quesito lo trajo). */
-function GR_datosFactura(id) {
+function GR_datosFactura(id) { GR_guardia_();
   var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(GR_HOJA_), fila = GR_filaDe_(sh, id);
   if (!fila) throw new Error('No encontré la guía ' + id + '.');
   var r = GR_leerGuias_(sh, fila, fila)[0].r, ctx = GR_contexto_(ss), emp = ctx.emp[String(r.empresa).trim()] || {};
