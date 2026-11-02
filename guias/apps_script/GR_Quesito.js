@@ -66,7 +66,7 @@ function GR_traerDatosFila_(ss, sh, fila) {
     }
     // 2) 📥 Quesito: solo lo que falta (no crea nada)
     var c = GR_cob_('leer', { caso: t('caso'), hoja: r.id, datos: { empresa_ruc: emp.ruc, via: 'quesito', motivo: 'Venta', cotizacion: fac ? '' : cot,
-      documento: fac ? { tipo: 'Factura', numero: fac, ruc_emisor: emp.ruc } : null } });
+      documento: fac ? { tipo: 'Factura', numero: fac, ruc_emisor: emp.ruc, total: sire && sire.total ? String(sire.total) : '' } : null } });   // con el total: «Buscar comprobante» (sin sesión)
     if (!c.ok || !c.caso) {
       sh.getRange(fila, GR_col_('msg')).setValue((m ? m + ' ' : '') + '⚠️ Quesito: ' + (c.error || 'el bot no aceptó el pedido'));
       return msgs.push(r.id + ': ' + (m ? '🔎 del SIRE; ' : '') + '⚠️ Quesito: ' + (c.error || 'el bot no aceptó el pedido'));
