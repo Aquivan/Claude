@@ -198,6 +198,8 @@ jobs:
               N=0
               if [ -s "$W/salida.csv" ]; then
                 mkdir -p "$HIST"
+                # Conserva lo que solo trae la cadena completa (productos de cada factura, enlaces): sin esto se perdían.
+                [ -s "$HIST/$CSV" ] && python3 "$RAIZ/scripts/sire_mantener_detalle.py" "$W/salida.csv" "$HIST/$CSV" || true
                 cp "$W/salida.csv" "$HIST/$CSV"
                 N=$(python3 -c "import csv,sys; print(max(0, sum(1 for _ in csv.reader(open(sys.argv[1], encoding='utf-8'))) - 1))" "$W/salida.csv")
               fi
