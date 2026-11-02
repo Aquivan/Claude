@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_blank">
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Google Sans", Roboto, Arial, sans-serif; font-size: 13px; color: #263238; margin: 0; padding: 14px 18px; background: #f4f6f8; }
+  label { display: block; font-size: 12px; color: #546e7a; margin: 8px 0 4px; }
+  input { width: 100%; padding: 9px 10px; border: 1px solid #cfd8dc; border-radius: 8px; font: inherit; background: #fff; }
+  input:focus { outline: none; border-color: #1e88e5; box-shadow: 0 0 0 2px #bbdefb; }
+  .fila { display: grid; grid-template-columns: 90px 1fr 1fr; gap: 8px; }
+  .info { background: #fff; border: 1px solid #e0e6ea; border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12px; line-height: 1.5; }
+  .info b { color: #1b5e20; } .info .no { color: #c62828; }
+  .opc { display: grid; gap: 8px; margin-top: 14px; }
+  .opc button { text-align: left; border: 1px solid #cfd8dc; background: #fff; border-radius: 10px; padding: 11px 12px; font: inherit; cursor: pointer; }
+  .opc button:hover { border-color: #1e88e5; background: #f3f8fd; }
+  .opc button b { display: block; font-size: 14px; margin-bottom: 2px; } .opc button span { color: #607d8b; font-size: 12px; }
+  .opc button.rec { border-color: #66bb6a; }
+  .opc button:disabled { opacity: .5; cursor: default; }
+  #msg { margin-top: 12px; font-size: 12px; white-space: pre-line; min-height: 16px; }
+  .ok { color: #2e7d32; } .err { color: #c62828; }
+  .pie { display: flex; justify-content: flex-end; margin-top: 10px; }
+  .sec { border: 0; border-radius: 8px; padding: 9px 16px; background: #eceff1; color: #37474f; font: inherit; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="info" id="info">Revisando el SIRE…</div>
+<div class="fila">
+  <div><label>Serie</label><input id="serie" placeholder="FQQ1" maxlength="4"></div>
+  <div><label>Número</label><input id="numero" inputmode="numeric" placeholder="3677"></div>
+  <div><label>Total de la factura</label><input id="total" inputmode="decimal" placeholder="40950.00"></div>
+</div>
+<label>N° de cotización (opcional, si no tiene la factura)</label>
+<input id="cot" inputmode="numeric" placeholder="2905">
+<div class="opc">
+  <button id="bSire" onclick="buscar('sire')"><b>🔎 SIRE — al instante</b><span>Los productos que trae el registro de SUNAT (las facturas del día anterior en adelante).</span></button>
+  <button id="bPub" onclick="buscar('publico')"><b>🌐 Quesito público — sin iniciar sesión</b><span>«Buscar comprobante» de Quesito con RUC, serie, número y <u>total</u>. Si Google pide el captcha, le llega el 🎥 enlace para resolverlo (solo eso). 30 s–1 min.</span></button>
+  <button id="bCta" onclick="buscar('cuenta')"><b>🔐 Quesito con su cuenta</b><span>Entra con la sesión de Quesito y lee la factura (sirve también con solo la cotización). 1–3 min.</span></button>
+  <button id="bAuto" onclick="buscar('auto')"><b>⚡ Automático</b><span>Primero el SIRE; si faltan productos, Quesito público y, si no se puede, con su cuenta.</span></button>
+</div>
+<div id="msg"></div>
+<div class="pie"><button class="sec" onclick="google.script.host.close()">Cerrar</button></div>
+<script>
+var ID = <?= idGuia ?>, D = null;
+function $(i) { return document.getElementById(i); }
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+google.script.run.withSuccessHandler(function (d) {
+  D = d;
+  $('serie').value = d.serie; $('numero').value = d.numero; $('cot').value = d.cotizacion;
+  var h = '<b>' + esc(d.id) + '</b> · ' + esc(d.empresa) + (d.ruc ? ' (RUC ' + esc(d.ruc) + ')' : '') + '<br>';
+  if (d.sire) {
+    $('total').value = String(d.sire.total || '').replace(/,/g, '');
+    h += '🔎 En el SIRE: <b>sí</b> · total ' + esc(d.sire.moneda) + ' ' + esc(d.sire.total) + ' · ' + esc(d.sire.cliente) + ' · ' +
+      (d.sire.productos ? '<b>' + d.sire.productos + ' producto(s)</b>' : '<span class="no">sin productos</span>');
+    (d.sire.productos ? $('bSire') : $('bPub')).classList.add('rec');
+  } else {
+    h += d.serie && d.numero ? '🔎 En el SIRE: <span class="no">todavía no</span> (escriba el total para la consulta pública).' : 'Escriba la serie y el número de la factura (o la cotización).';
+    $('bPub').classList.add('rec');
+  }
+  if (d.sireError) h += '<br><span class="no">SIRE: ' + esc(d.sireError) + '</span>';
+  $('info').innerHTML = h;
+}).withFailureHandler(function (e) { $('info').innerHTML = '<span class="no">⚠️ ' + esc(e.message) + '</span>'; }).GR_datosBuscar(ID);
+
+function buscar(fuente) {
+  var m = $('msg'), serie = $('serie').value.trim().toUpperCase(), numero = $('numero').value.trim(), total = $('total').value.trim(), cot = $('cot').value.trim();
+  if (fuente === 'publico' && (!serie || !numero || !total)) { m.className = 'err'; m.textContent = 'La consulta pública pide serie, número y el TOTAL de la factura.'; return; }
+  if (!cot && (!serie || !numero)) { m.className = 'err'; m.textContent = 'Escriba la serie y el número (o la cotización).'; return; }
+  document.querySelectorAll('.opc button').forEach(function (b) { b.disabled = true; });
+  m.className = ''; m.textContent = 'Buscando…';
+  google.script.run.withSuccessHandler(function (r) {
+    m.className = 'ok';
+    m.textContent = (r.msgs || []).join('\n') + (r.pedidas ? '\n\nQuesito la está leyendo (no se crea nada). En 1–2 min abra 📦 Productos o mire «Mensaje / error».' : '');
+    document.querySelectorAll('.opc button').forEach(function (b) { b.disabled = false; });
+  }).withFailureHandler(function (e) {
+    m.className = 'err'; m.textContent = '⚠️ ' + e.message;
+    document.querySelectorAll('.opc button').forEach(function (b) { b.disabled = false; });
+  }).GR_buscarFacturaDe({ id: ID, serie: serie, numero: numero, cotizacion: cot, total: total, fuente: fuente });
+}
+</script>
+</body>
+</html>

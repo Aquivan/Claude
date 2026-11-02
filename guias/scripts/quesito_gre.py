@@ -864,7 +864,8 @@ def main():
     with sync_playwright() as p:
         # 📥 Solo leer: primero la página pública «Buscar comprobante» (sin sesión, rápida). Si Google pide el captcha,
         # se abre el 🎥 video para que la persona lo resuelva (solo eso); si no se puede, se sigue por la cuenta de Quesito.
-        if modo == "leer" and serie and not EN_PC and (c.get("documento") or {}).get("total"):
+        pedido_fuente = (c.get("documento") or {}).get("fuente") or ""   # 🔎 Buscar la factura: «publico» o «cuenta» (vacío = automático)
+        if modo == "leer" and serie and not EN_PC and (c.get("documento") or {}).get("total") and pedido_fuente != "cuenta":
             pub, nav0 = None, None
             try:
                 paso("Buscando la factura en «Buscar comprobante» de Quesito (sin iniciar sesión)")
@@ -896,6 +897,14 @@ def main():
                 en_vivo.apagar()
                 return
             en_vivo.apagar()
+            if pedido_fuente == "publico":   # pidió solo la consulta pública: no se entra con la cuenta
+                fin(False, "La consulta pública de Quesito no trajo los productos de la factura " + f"{serie}-{numero}" +
+                    (" (Google pidió el captcha y no se resolvió)" if pub == "captcha" else " (¿el total coincide con la factura?)") +
+                    ". Pruebe 🔐 Quesito con su cuenta. No se creó nada.")
+                return
+        elif modo == "leer" and pedido_fuente == "publico":
+            fin(False, "Para la consulta pública de Quesito hacen falta la serie, el número y el total de la factura. No se creó nada.")
+            return
         pantalla = False
         if EN_PC:   # 🖥 en la PC de la persona: Chrome VISIBLE con un perfil propio del robot (la sesión de Quesito queda guardada ahí)
             nav = ctx = p.chromium.launch_persistent_context(perfil_pc(ruc), channel="chrome", headless=False, locale="es-PE",

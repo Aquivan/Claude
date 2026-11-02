@@ -8,6 +8,7 @@ function onOpen() {
   ui.createMenu('🚚 Guías')
     .addItem('➕ 1. Nueva guía rápida (empresa + factura)', 'GR_menuNuevaRapida')
     .addItem('📥 2. Traer datos de la factura (SIRE o Quesito)', 'GR_menuTraerDatos')
+    .addItem('🔎 Buscar la factura (elegir: SIRE · Quesito público · con su cuenta)', 'GR_menuBuscarFactura')
     .addSubMenu(ui.createMenu('✏️ 3. Completar la guía')
       .addItem('📦 Elegir productos y cantidades', 'GR_menuElegirProductos')
       .addItem('🚛 Copiar transporte de la guía anterior', 'GR_menuCopiarTransporte')
@@ -364,6 +365,7 @@ function GR_hojaAyuda_(ss) {
     ['', 'Las pestañas 🚛 🚗 👤 📍 se llenan solas con lo que va usando (y con 🚛 Buscar en el MTC / 📍 Buscar direcciones por RUC).'],
     ['1. Crear', 'Menú 🚚 Guías → ➕ 1. Nueva guía rápida: empresa + N° de factura (o de cotización). Puede copiar el transporte de la guía anterior.'],
     ['2. Traer datos', '📥 2. Traer datos de la factura: cliente, productos y dirección. Primero el SIRE (al instante); Quesito solo si hace falta (1–3 min, no crea nada).'],
+    ['', '🔎 Buscar la factura: elija de dónde traerla. SIRE (al instante) · 🌐 Quesito público (sin iniciar sesión: RUC, serie, número y TOTAL; si Google pide captcha le llega el 🎥 enlace) · 🔐 Quesito con su cuenta (sirve con solo la cotización) · ⚡ Automático.'],
     ['3. Completar', 'Las celdas en NARANJA son las que faltan (solo en guías ✏️ Borrador). Casi todas tienen lista para elegir: placa, chofer, transportista, cliente, dirección.'],
     ['', 'Parcial: escriba «Producto y cantidad» (ej. «M&D 325 lote 1507: 10000») o use ✏️ 3. Completar → 📦 Elegir productos y cantidades.'],
     ['', 'Transporte público: transportista obligatorio; placa y chofer OPCIONALES (si se los dan). Privado: placa y chofer obligatorios.'],

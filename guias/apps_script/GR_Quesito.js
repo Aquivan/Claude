@@ -23,8 +23,9 @@ function GR_menuTraerDatos() { GR_guardia_();
 }
 
 /** 📥 de UNA fila (lo usan el menú y ➕ Nueva guía rápida). → {msgs, pedidas}: pedidas = 1 si se mandó a leer en Quesito. */
-function GR_traerDatosFila_(ss, sh, fila) {
-  var msgs = [], pedidas = 0;
+function GR_traerDatosFila_(ss, sh, fila, op) {
+  op = op || {};   // {fuente: 'auto' | 'sire' | 'publico' | 'cuenta', total: '40950.00'} (🔎 Buscar la factura)
+  var msgs = [], pedidas = 0, fuente = op.fuente || 'auto';
   (function () {
     var x = GR_leerGuias_(sh, fila, fila)[0], r = x.r, t = function (k) { return String(r[k] == null ? '' : r[k]).trim(); };
     if (!r.id) return;
@@ -42,7 +43,9 @@ function GR_traerDatosFila_(ss, sh, fila) {
       catch (e) { porQue.push('SIRE: ' + e.message); }
     } else porQue.push('solo hay cotización');
     var m = '';
-    if (sire) {
+    if (fuente === 'sire' && !sire) return msgs.push(r.id + ': ' + (fac ? 'la factura ' + fac + ' no está en el SIRE todavía' : 'con solo la cotización no se busca en el SIRE') +
+      '. Pruebe 🌐 Quesito público (con el total) o 🔐 Quesito con su cuenta.');
+    if (sire && fuente !== 'publico' && fuente !== 'cuenta') {
       var items = sire.items || [], nombres = items.map(function (it) { return GR_norm_(it.desc); });
       var dudosos = items.length > 1 && nombres.some(function (n, i) { return nombres.indexOf(n) !== i; });   // mismo producto, distinto lote
       var d = { fuente: 'sire', factura: fac, cliente_pdf: { ruc: sire.ruc, nombre: sire.cliente },
@@ -60,13 +63,19 @@ function GR_traerDatosFila_(ss, sh, fila) {
         return msgs.push(r.id + ': 🔎 ' + m.replace(/^\S+\s/, ''));
       }
     }
+    if (fuente === 'sire') {   // solo el SIRE: no se pide nada a Quesito
+      sh.getRange(fila, GR_col_('msg')).setValue((m ? m + ' ' : '') + '⚠️ El SIRE no tiene los productos de esta factura (' + porQue.join('; ') + '): pruebe 🌐 Quesito público o 🔐 Quesito con su cuenta.');
+      return msgs.push(r.id + ': ' + (m ? '🔎 del SIRE, ' : '') + 'sin productos en el SIRE.');
+    }
+    if (fuente === 'publico' || fuente === 'cuenta') porQue = [fuente === 'publico' ? 'pedido: consulta pública' : 'pedido: con su cuenta'];
     if (!quesito) {   // guía por SUNAT: no hay Quesito que mirar
       sh.getRange(fila, GR_col_('msg')).setValue(m || '⚠️ ' + porQue.join('; ') + '. Vuelva a intentar cuando el robot baje el SIRE, o llene los productos en 📦.');
       return msgs.push(r.id + ': ' + (m ? '🔎 listo' : '⚠️ ' + porQue.join('; ')));
     }
     // 2) 📥 Quesito: solo lo que falta (no crea nada)
     var c = GR_cob_('leer', { caso: t('caso'), hoja: r.id, datos: { empresa_ruc: emp.ruc, via: 'quesito', motivo: 'Venta', cotizacion: fac ? '' : cot,
-      documento: fac ? { tipo: 'Factura', numero: fac, ruc_emisor: emp.ruc, total: sire && sire.total ? String(sire.total) : '' } : null } });   // con el total: «Buscar comprobante» (sin sesión)
+      documento: fac ? { tipo: 'Factura', numero: fac, ruc_emisor: emp.ruc, total: String(op.total || (sire && sire.total) || '').replace(/,/g, ''),
+        fuente: fuente === 'publico' || fuente === 'cuenta' ? fuente : '' } : null } });   // con el total: «Buscar comprobante» (sin sesión)
     if (!c.ok || !c.caso) {
       sh.getRange(fila, GR_col_('msg')).setValue((m ? m + ' ' : '') + '⚠️ Quesito: ' + (c.error || 'el bot no aceptó el pedido'));
       return msgs.push(r.id + ': ' + (m ? '🔎 del SIRE; ' : '') + '⚠️ Quesito: ' + (c.error || 'el bot no aceptó el pedido'));
@@ -81,6 +90,50 @@ function GR_traerDatosFila_(ss, sh, fila) {
     msgs.push(r.id + ': ' + (sire ? '🔎 cliente del SIRE; ' : '') + '📥 Quesito (' + porQue.join('; ') + ')…');
   })();
   return { msgs: msgs, pedidas: pedidas };
+}
+
+/* ---------------- 🔎 Buscar la factura (elegir de dónde: SIRE, Quesito público o Quesito con la cuenta) ---------------- */
+
+function GR_menuBuscarFactura() { GR_guardia_();
+  var ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet(), ui = SpreadsheetApp.getUi();
+  var f = sh.getActiveRange().getRow(), id = sh.getName() === GR_HOJA_ && f >= GR_FILA1_ ? String(sh.getRange(f, 1).getValue()) : '';
+  if (!id) return ui.alert('Seleccione la fila de la guía en ' + GR_HOJA_ + '.');
+  var t = HtmlService.createTemplateFromFile('GR_BuscarVista');
+  t.idGuia = id;
+  ui.showModalDialog(t.evaluate().setWidth(560).setHeight(560), '🔎 Buscar la factura de la guía ' + id);
+}
+
+/** Lo que ya se sabe de la factura de la guía (y si está en el SIRE, con su total y productos). */
+function GR_datosBuscar(id) { GR_guardia_();
+  var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(GR_HOJA_), f = GR_filaDe_(sh, id);
+  if (!f) throw new Error('No encontré la guía ' + id + '.');
+  var r = GR_leerGuias_(sh, f, f)[0].r, emp = GR_contexto_(ss).emp[String(r.empresa).trim()] || {};
+  var out = { id: id, empresa: String(r.empresa || ''), ruc: emp.ruc || '', serie: String(r.serie || '').toUpperCase(), numero: String(r.numero || ''), cotizacion: String(r.cotizacion || ''),
+    via: String(r.via || 'Quesito'), sire: null, msg: String(r.msg || '') };
+  if (emp.ruc && /^[A-Z0-9]{4}$/.test(out.serie) && out.numero) {
+    try { var b = GR_buscarFactura_(emp.ruc, out.serie, out.numero.replace(/\D/g, ''), r.fecha, []); if (b.f) out.sire = { total: String(b.f.total || ''), moneda: String(b.f.moneda || ''), cliente: String(b.f.cliente || ''), productos: (b.f.items || []).length }; }
+    catch (e) { out.sireError = e.message; }
+  }
+  return out;
+}
+
+/** Busca con la fuente elegida y completa la fila (lo mismo que 📥 Traer datos). d = {id, serie, numero, cotizacion, total, fuente}. */
+function GR_buscarFacturaDe(d) { GR_guardia_();
+  var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(GR_HOJA_), f = GR_filaDe_(sh, String(d.id || ''));
+  if (!f) throw new Error('No encontré la guía.');
+  var serie = String(d.serie || '').toUpperCase().trim(), numero = String(d.numero || '').replace(/\D/g, ''), cot = String(d.cotizacion || '').replace(/\D/g, '');
+  if (serie && !/^[A-Z0-9]{4}$/.test(serie)) throw new Error('La serie tiene 4 caracteres (ej. FQQ1).');
+  var r = GR_leerGuias_(sh, f, f)[0].r, cambia = [];
+  if (serie && serie !== String(r.serie || '').toUpperCase()) { sh.getRange(f, GR_col_('serie')).setValue(serie); cambia.push('serie'); }
+  if (numero && numero !== String(r.numero || '')) { sh.getRange(f, GR_col_('numero')).setValue(Number(numero)); cambia.push('numero'); }
+  if (cot !== String(r.cotizacion || '').replace(/\D/g, '')) { sh.getRange(f, GR_col_('cotizacion')).setValue(cot); cambia.push('cotizacion'); }
+  if (cambia.length) GR_procesarFilas_(ss, f, f, cambia);
+  var total = String(d.total || '').replace(/[^\d.]/g, '');
+  if (d.fuente === 'publico' && !total) throw new Error('La consulta pública de Quesito pide el TOTAL de la factura (tal cual figura en ella).');
+  var res = GR_traerDatosFila_(ss, sh, f, { fuente: d.fuente || 'auto', total: total });
+  if (res.pedidas) GR_programarRevision_();
+  GR_registrar_(d.id, '🔎 Buscar la factura', ({ sire: 'SIRE', publico: 'Quesito público', cuenta: 'Quesito con la cuenta' }[d.fuente] || 'automático') + (total ? ' · total ' + total : ''));
+  return { msgs: res.msgs, pedidas: res.pedidas };
 }
 
 /** "M&D 325 lote 1507: 10000; barra 5000" → [{desc, cant}]; vacío o "total" → []. Lanza un error si falta la cantidad. */

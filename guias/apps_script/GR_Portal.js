@@ -21,7 +21,7 @@ var PT_SESION_ = null;   // sesión de ESTA llamada (la pone PT_api / PT_fn)
 // Ventanas de la hoja que el portal reutiliza tal cual, y el permiso que pide cada función que llaman.
 var PT_FN_ = {
   GR_datosBorrador: 'ver', GR_datosFactura: 'ver', GR_datosFormulario: 'ver', GR_datosProductos: 'ver', GR_borradorPdf: 'ver',
-  GR_buscarDirecciones: 'ver', GR_buscarTransporte: 'ver',
+  GR_buscarDirecciones: 'ver', GR_buscarTransporte: 'ver', GR_datosBuscar: 'ver', GR_buscarFacturaDe: 'armar',
   GR_guardarBorrador: 'armar', GR_guardarFormulario: 'armar', GR_guardarProductos: 'armar', GR_crearGuiaRapida: 'armar',
   GR_agregarDirecciones: 'armar', GR_guardarTransporte: 'armar'
 };
@@ -239,6 +239,7 @@ function PT_vista_(v, id, ss, sh) {
   switch (v) {
     case 'borrador': t = HtmlService.createTemplateFromFile('GR_BorradorVista'); t.idGuia = id; break;
     case 'factura': t = HtmlService.createTemplateFromFile('GR_FacturaVista'); t.idGuia = id; break;
+    case 'buscar': PT_sesion_permiso_('armar'); t = HtmlService.createTemplateFromFile('GR_BuscarVista'); t.idGuia = id; break;
     case 'productos': PT_sesion_permiso_('armar'); t = HtmlService.createTemplateFromFile('GR_ProductosVista'); t.idGuia = id; break;
     case 'formulario': PT_sesion_permiso_('armar'); t = HtmlService.createTemplateFromFile('GR_FormularioVista'); t.idGuia = id; break;
     case 'rapida':
