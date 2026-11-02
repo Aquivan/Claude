@@ -707,6 +707,111 @@ def leer_formulario(pag):
     return d
 
 
+def _xml_factura(xml_bytes):
+    """Factura electrónica (UBL 2.1, la misma que va a SUNAT) → {lineas:[{texto, cantidad}], cliente_pdf:{nombre, ruc, direccion}}."""
+    import xml.etree.ElementTree as ET
+    raiz = ET.fromstring(xml_bytes)
+    loc = lambda e: e.tag.split("}")[-1]
+    hijos = lambda e, n: [x for x in e.iter() if loc(x) == n]
+    lineas = []
+    for ln in hijos(raiz, "InvoiceLine"):
+        cant = next((x.text for x in ln.iter() if loc(x) == "InvoicedQuantity"), "0")
+        item = next((x for x in ln.iter() if loc(x) == "Item"), None)
+        desc = " ".join((x.text or "").strip() for x in (item.iter() if item is not None else []) if loc(x) == "Description")
+        lineas.append({"texto": re.sub(r"\s+", " ", desc).strip(), "cantidad": num(cant)})   # tal como la describe la factura (como en Quesito)
+    cli = {}
+    cp = next((x for x in raiz.iter() if loc(x) == "AccountingCustomerParty"), None)
+    if cp is not None:
+        ruc = next((x.text for x in cp.iter() if loc(x) == "ID" and x.text and re.fullmatch(r"\d{8}|\d{11}", x.text.strip())), "")
+        nom = next((x.text for x in cp.iter() if loc(x) == "RegistrationName" and x.text), "")
+        dirc = " ".join((x.text or "").strip() for x in cp.iter() if loc(x) == "Line")
+        if nom:
+            cli["nombre"] = nom.strip()
+        if ruc:
+            cli["ruc"] = ruc.strip()
+        if dirc and not SIN_DIRECCION.match(dirc):
+            cli["direccion"] = dirc
+    return {"lineas": lineas, "cliente_pdf": cli}
+
+
+def leer_publico(pag, c, serie, numero, con_persona=False):
+    """📥 La factura desde «Buscar comprobante» de Quesito (página pública: RUC, tipo, serie, número y total), sin iniciar sesión.
+    Esa página tiene un reCAPTCHA invisible: si Google lo deja pasar, sigue solo; si pide resolverlo, devuelve "captcha"
+    (con con_persona=True espera a que la persona lo resuelva por el 🎥 video). Nunca intenta saltar el captcha.
+    Devuelve {lineas, cliente_pdf, pdf} o None (no se pudo: se sigue por la cuenta de Quesito, como siempre)."""
+    d = c.get("documento") or {}
+    total = str(d.get("total") or "").replace(",", "").strip()
+    if not total or not re.fullmatch(r"\d+(\.\d+)?", total):
+        return None
+    pag.goto(BASE + "/buscar", wait_until="domcontentloaded", timeout=45000)
+    pag.locator("#ruc").fill(c.get("empresa_ruc", ""))
+    pag.locator("#voucher").select_option("1" if serie.startswith("F") else "2")
+    pag.locator("#serie").fill(serie)
+    pag.locator("#numero").fill(numero)
+    pag.locator("#total").fill(("%.2f" % float(total)).rstrip("0").rstrip("."))
+    pag.wait_for_timeout(1200)   # que cargue el reCAPTCHA de Google
+    pag.locator("button.buscar_button").click()
+    form = lambda: pag.locator("#buscar-cpe-form").count() > 0 and pag.locator("#buscar-cpe-form").is_visible()
+    reto = lambda: pag.locator("iframe[src*='api2/bframe']").count() > 0 and pag.locator("iframe[src*='api2/bframe']").first.is_visible()
+    hasta, avisado = time.time() + (480 if con_persona else 25), False
+    while time.time() < hasta:
+        pag.wait_for_timeout(1500)
+        if not form():
+            break
+        if reto():
+            if not con_persona:
+                return "captcha"
+            if not avisado:
+                en_vivo.zoom(2)
+                bot({"accion": "gre_aviso", "texto": "🧩 Quesito pide el captcha para buscar la factura: ábralo en 🎥 Video en vivo y resuélvalo (solo eso). Lo espero 8 minutos."})
+                paso("Esperando que la persona resuelva el captcha de «Buscar comprobante»")
+                avisado = True
+    if avisado:
+        en_vivo.zoom_normal(pag)
+        bot({"accion": "gre_aviso", "texto": "✅ Captcha resuelto. Sigo yo solo; ya puede cerrar el video."})
+    if form():
+        paso("Buscar comprobante: no pasó (" + ("captcha sin resolver" if reto() else "sin respuesta") + ")")
+        return "captcha" if reto() else None
+    esperar(pag, 1500)
+    cuerpo = pag.inner_text("body")
+    if re.search(r"no\s+(se\s+)?(encontr|exist)", cuerpo, re.I) and not re.search(r"\b" + serie + r"\b", cuerpo):
+        paso("Buscar comprobante: Quesito dice que no encontró la factura (¿el total no coincide?)")
+        return None
+    enlaces = pag.evaluate("""() => [...document.querySelectorAll('a[href]')].map(a => ({h: a.href, t: (a.innerText || '').trim()}))""")
+    xml = [e["h"] for e in enlaces if re.search(r"xml", e["h"] + " " + e["t"], re.I)]
+    pdf = [e["h"] for e in enlaces if re.search(r"\.pdf|\bpdf\b", e["h"] + " " + e["t"], re.I)]
+    paso(f"Buscar comprobante: factura encontrada · enlaces XML {len(xml)} · PDF {len(pdf)}")   # sin datos de clientes en el registro
+    out = None
+    for h in xml:
+        try:
+            r = pag.context.request.get(h)
+            cuerpo_x = r.body()
+            if r.ok and b"InvoiceLine" in cuerpo_x[:2_000_000] or (r.ok and cuerpo_x[:2] == b"PK"):
+                if cuerpo_x[:2] == b"PK":   # a veces el XML viene en un .zip
+                    import io
+                    import zipfile
+                    z = zipfile.ZipFile(io.BytesIO(cuerpo_x))
+                    cuerpo_x = next(z.read(n) for n in z.namelist() if n.lower().endswith(".xml"))
+                out = _xml_factura(cuerpo_x)
+                break
+        except Exception as e:
+            paso("Buscar comprobante: no pude leer el XML (" + type(e).__name__ + ")")
+    for h in pdf:
+        try:
+            r = pag.context.request.get(h)
+            if r.ok and r.body()[:4] == b"%PDF":
+                out = out or {"lineas": [], "cliente_pdf": {}}
+                if len(r.body()) < 4_000_000:
+                    out["pdf"] = base64.b64encode(r.body()).decode()
+                break
+        except Exception:
+            pass
+    if not out or not out.get("lineas"):
+        paso("Buscar comprobante: sin productos legibles; sigo por la cuenta de Quesito")
+        return None
+    return out
+
+
 def esperar_decision(huella):
     hasta = time.time() + ESPERA_MIN * 60
     while time.time() < hasta:
@@ -749,6 +854,39 @@ def main():
     paso(f"Caso recibido · modo {modo} · " + (f"factura {serie}-{numero}" if m else f"cotización {cot}") + f" · {len(c.get('bienes') or [])} bien(es)")
 
     with sync_playwright() as p:
+        # 📥 Solo leer: primero la página pública «Buscar comprobante» (sin sesión, rápida). Si Google pide el captcha,
+        # se abre el 🎥 video para que la persona lo resuelva (solo eso); si no se puede, se sigue por la cuenta de Quesito.
+        if modo == "leer" and serie and not EN_PC and (c.get("documento") or {}).get("total"):
+            pub, nav0 = None, None
+            try:
+                paso("Buscando la factura en «Buscar comprobante» de Quesito (sin iniciar sesión)")
+                nav0 = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"], ignore_default_args=["--enable-automation"])
+                pub = leer_publico(nav0.new_context(locale="es-PE", user_agent=UA, viewport={"width": 1366, "height": 900}).new_page(), c, serie, numero)
+                if pub == "captcha":
+                    nav0.close()
+                    nav0 = None
+                    paso("Google pidió el captcha: abro el 🎥 video para que la persona lo resuelva")
+                    if en_vivo.video(bot, forzar=True):
+                        nav0 = en_vivo.lanzar(p, True, executable_path=os.environ.get("CHROMIUM") or None)
+                        pag0 = nav0.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE").new_page()
+                        en_vivo.iniciar(bot, PASO)
+                        pub = leer_publico(pag0, c, serie, numero, con_persona=True)
+            except Exception as e:
+                paso("Buscar comprobante no funcionó (" + type(e).__name__ + "); sigo por la cuenta de Quesito")
+                pub = None
+            finally:
+                if nav0:
+                    nav0.close()
+            if isinstance(pub, dict):
+                datos = {"cliente": (pub.get("cliente_pdf") or {}).get("nombre", ""), "partida": {}, "lineas": pub["lineas"], "factura": f"{serie}-{numero}",
+                         "cotizacion": cot, "cliente_pdf": pub.get("cliente_pdf") or {}, "fila": "", "pdf": pub.get("pdf", ""), "fuente": "buscar"}
+                r = bot({"accion": "gre_leido", "datos": datos})
+                open(os.path.join(os.environ.get("RUNNER_TEMP", "/tmp"), "gre_avisado"), "w").close()
+                print(f"::notice title=Quesito leído::factura {serie}-{numero} · {len(datos['lineas'])} línea(s) · desde «Buscar comprobante» · nada se creó" +
+                      ("" if r.get("ok") else " · el bot no lo recibió"))
+                en_vivo.apagar()
+                return
+            en_vivo.apagar()
         pantalla = False
         if EN_PC:   # 🖥 en la PC de la persona: Chrome VISIBLE con un perfil propio del robot (la sesión de Quesito queda guardada ahí)
             nav = ctx = p.chromium.launch_persistent_context(perfil_pc(ruc), channel="chrome", headless=False, locale="es-PE",

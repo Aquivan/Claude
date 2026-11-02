@@ -79,8 +79,9 @@ def _correr(cmd, salida=None):
     return p
 
 
-def video(bot, ancho=1366, alto=1000):
-    """Prepara el video en vivo si el bot dice que está activo. True = hay pantalla (lanzar Chrome con headless=False)."""
+def video(bot, ancho=1366, alto=1000, forzar=False):
+    """Prepara el video en vivo si el bot dice que está activo (o si forzar=True: p. ej. para que la persona resuelva un captcha).
+    True = hay pantalla (lanzar Chrome con headless=False)."""
     import os
     import platform
     import re
@@ -90,7 +91,7 @@ def video(bot, ancho=1366, alto=1000):
     if platform.system() != "Linux" or os.environ.get("EN_PC") == "1":
         return False
     try:
-        if not (bot({"accion": "gre_vivo_info"}) or {}).get("vivo"):
+        if not forzar and not (bot({"accion": "gre_vivo_info"}) or {}).get("vivo"):
             return False
         print("  🎥 Video en vivo: preparando la pantalla…", flush=True)
         q = lambda *c: subprocess.run(list(c), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=240)
