@@ -143,13 +143,14 @@ function GR_estadoLectura(id) { GR_guardia_();
   var caso = String(sh.getRange(f, GR_col_('caso')).getValue()), msg = String(sh.getRange(f, GR_col_('msg')).getValue());
   if (msg.indexOf('📥 Leyendo') !== 0) return { fin: true, msg: msg, lineas: GR_facturaDe_(ss, id).lineas.length };
   var r = GR_cob_('estado', { casos: [caso] }), e = r.ok && (r.casos || {})[caso];
-  if (!e) return { fin: false, msg: msg };
+  if (!e) return { fin: false, msg: msg, diag: r.ok ? 'el bot no conoce el caso ' + caso : 'bot: ' + (r.error || 'sin respuesta') };
   if (e.estado === 'Leído de Quesito' || e.estado === 'No leído') {   // terminó: se pasa a la hoja ahora mismo
     try { GR_revisarResultados(); } catch (x) {}
     msg = String(sh.getRange(f, GR_col_('msg')).getValue());
     return { fin: true, msg: msg, error: e.estado === 'No leído' ? String(e.error || '') : '', lineas: GR_facturaDe_(ss, id).lineas.length };
   }
-  return { fin: false, msg: msg, captcha: e.captcha || '', video: e.captcha === 'pide' ? (e.video || '') : '' };
+  return { fin: false, msg: msg, captcha: e.captcha || '', video: e.captcha === 'pide' ? (e.video || '') : '',
+    diag: 'bot: ' + e.estado + (e.captcha ? ' · captcha ' + e.captcha : '') + (e.video ? ' · con video' : '') };
 }
 
 /** "M&D 325 lote 1507: 10000; barra 5000" → [{desc, cant}]; vacío o "total" → []. Lanza un error si falta la cantidad. */

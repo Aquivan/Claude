@@ -59,7 +59,7 @@ def entrar_asistido(pag, bot, fuera, minutos=10):
     vis = lambda sel: pag.locator(sel).first if pag.locator(sel).count() and pag.locator(sel).first.is_visible() else None
     hasta, ultimo, aviso_cap = time.time() + minutos * 60, 0, False
     if not (correo and clave):
-        bot({"accion": "gre_captcha", "estado": "pide"})   # la persona escribe todo: la hoja muestra el video
+        bot({"accion": "gre_captcha", "estado": "pide", "url": en_vivo.ENLACE[0]})   # la persona escribe todo: la hoja muestra el video
     while time.time() < hasta and fuera():
         pag.wait_for_timeout(2500)
         if not (correo and clave):
@@ -70,7 +70,7 @@ def entrar_asistido(pag, bot, fuera, minutos=10):
             token = pag.evaluate("() => [...document.querySelectorAll('textarea[name=g-recaptcha-response]')].some(t => t.value)")
             if cap.count() and cap.first.is_visible() and not token:
                 if not aviso_cap:
-                    bot({"accion": "gre_captcha", "estado": "pide"})
+                    bot({"accion": "gre_captcha", "estado": "pide", "url": en_vivo.ENLACE[0]})
                     bot({"accion": "gre_aviso", "texto": "🧩 Apareció el captcha: resuélvalo en el video (toque «No soy un robot» y, si pide, las imágenes)."})
                     paso("Esperando que la persona resuelva el captcha")
                     aviso_cap = True
@@ -772,7 +772,7 @@ def leer_publico(pag, c, serie, numero, con_persona=False):
                 return "captcha"
             if not avisado:
                 en_vivo.zoom(2)
-                bot({"accion": "gre_captcha", "estado": "pide"})   # la hoja muestra el video en su ventana
+                bot({"accion": "gre_captcha", "estado": "pide", "url": en_vivo.ENLACE[0]})   # la hoja muestra el video en su ventana
                 bot({"accion": "gre_aviso", "texto": "🧩 Quesito pide el captcha para buscar la factura: abra 🎥 Video en vivo y resuélvalo (solo eso; si no ve el captcha, toque «Buscar»). Lo espero 8 minutos."})
                 paso("Esperando que la persona resuelva el captcha de «Buscar comprobante»")
                 avisado = True
