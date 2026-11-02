@@ -50,7 +50,8 @@ function GR_traerDatosFila_(ss, sh, fila) {
       try { m = GR_aplicarLeido_(ss, fila, d); } catch (e) { m = '⚠️ ' + e.message; }
       var y = GR_leerGuias_(sh, fila, fila)[0].r;
       var sinCod = items.length && !items.every(function (it) { return /^\s*[A-Z&]{1,6}[\s-]?\d{2,5}\b/i.test(it.desc); });   // SIRE antiguo: sin el CÓD.
-      if (quesito && dudosos) porQue.push('productos que se distinguen por el lote');
+      if (quesito && !items.length) porQue.push('el SIRE no trae el detalle de productos de esta factura');   // sin líneas no se pueden elegir productos
+      else if (quesito && dudosos) porQue.push('productos que se distinguen por el lote');
       else if (quesito && sinCod) porQue.push('el SIRE no trae el código del producto');
       else if (quesito && !String(y.ldir || '').trim()) porQue.push('falta la dirección de llegada');
       else {   // con el SIRE basta
