@@ -126,7 +126,7 @@ def video(bot, ancho=1366, alto=1000, forzar=False):
             print("  🎥 El túnel no respondió; sigo con fotos.", flush=True)
             return True   # la pantalla igual sirve (las fotos salen de ahí)
         enlace = f"{url}/vnc.html?autoconnect=1&resize=scale&reconnect=1&show_dot=1&password={clave}"
-        r = bot({"accion": "gre_vivo_vnc", "url": enlace}) or {}
+        r = bot({"accion": "gre_vivo_vnc", "url": enlace, "forzado": bool(forzar)}) or {}
         print("  🎥 Video en vivo listo (el enlace va solo al bot)." if r.get("ok") else "  🎥 El bot no recibió el video.", flush=True)
         return True
     except Exception as e:

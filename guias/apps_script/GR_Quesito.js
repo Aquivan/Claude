@@ -136,6 +136,22 @@ function GR_buscarFacturaDe(d) { GR_guardia_();
   return { msgs: res.msgs, pedidas: res.pedidas };
 }
 
+/** Avance de la lectura de una guía (para la ventana 🔎): captcha pendiente con su video, terminado o con error. */
+function GR_estadoLectura(id) { GR_guardia_();
+  var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(GR_HOJA_), f = GR_filaDe_(sh, String(id || ''));
+  if (!f) return { fin: true, error: 'No encontré la guía.' };
+  var caso = String(sh.getRange(f, GR_col_('caso')).getValue()), msg = String(sh.getRange(f, GR_col_('msg')).getValue());
+  if (msg.indexOf('📥 Leyendo') !== 0) return { fin: true, msg: msg, lineas: GR_facturaDe_(ss, id).lineas.length };
+  var r = GR_cob_('estado', { casos: [caso] }), e = r.ok && (r.casos || {})[caso];
+  if (!e) return { fin: false, msg: msg };
+  if (e.estado === 'Leído de Quesito' || e.estado === 'No leído') {   // terminó: se pasa a la hoja ahora mismo
+    try { GR_revisarResultados(); } catch (x) {}
+    msg = String(sh.getRange(f, GR_col_('msg')).getValue());
+    return { fin: true, msg: msg, error: e.estado === 'No leído' ? String(e.error || '') : '', lineas: GR_facturaDe_(ss, id).lineas.length };
+  }
+  return { fin: false, msg: msg, captcha: e.captcha || '', video: e.captcha === 'pide' ? (e.video || '') : '' };
+}
+
 /** "M&D 325 lote 1507: 10000; barra 5000" → [{desc, cant}]; vacío o "total" → []. Lanza un error si falta la cantidad. */
 function GR_partirPedido_(txt) {
   var t = String(txt == null ? '' : txt).trim();

@@ -51,7 +51,9 @@ function TGGH_doPost_(e) {
         var x = TGG_leer_(ss, String(id));
         if (!x) return;
         var url = function (fid) { try { return fid ? DriveApp.getFileById(fid).getUrl() : ''; } catch (err) { return ''; } };
-        out[x.id] = { estado: x.estado || '', gre: x.gre || '', via: x.via || '', error: x.ultimo_error || '', pdf: url(x.pdf), imagen: url(x.vista_img), leido: x.leido ? Object.assign({}, x.leido, { pdf: url(x.leido.pdf) }) : null };
+        var cache = CacheService.getScriptCache();
+        out[x.id] = { estado: x.estado || '', gre: x.gre || '', via: x.via || '', error: x.ultimo_error || '', pdf: url(x.pdf), imagen: url(x.vista_img), leido: x.leido ? Object.assign({}, x.leido, { pdf: url(x.leido.pdf) }) : null,
+          captcha: cache.get('tgg_cap_' + x.id) || '', video: cache.get('tgv_v_' + x.id) || '' };   // 🧩 para mostrar el captcha en la hoja
       });
       return TGW_json_({ ok: true, casos: out });
     }

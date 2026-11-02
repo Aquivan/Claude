@@ -21,7 +21,7 @@ var PT_SESION_ = null;   // sesión de ESTA llamada (la pone PT_api / PT_fn)
 // Ventanas de la hoja que el portal reutiliza tal cual, y el permiso que pide cada función que llaman.
 var PT_FN_ = {
   GR_datosBorrador: 'ver', GR_datosFactura: 'ver', GR_datosFormulario: 'ver', GR_datosProductos: 'ver', GR_borradorPdf: 'ver',
-  GR_buscarDirecciones: 'ver', GR_buscarTransporte: 'ver', GR_datosBuscar: 'ver', GR_buscarFacturaDe: 'armar',
+  GR_buscarDirecciones: 'ver', GR_buscarTransporte: 'ver', GR_datosBuscar: 'ver', GR_buscarFacturaDe: 'armar', GR_estadoLectura: 'ver',
   GR_guardarBorrador: 'armar', GR_guardarFormulario: 'armar', GR_guardarProductos: 'armar', GR_crearGuiaRapida: 'armar',
   GR_agregarDirecciones: 'armar', GR_guardarTransporte: 'armar'
 };

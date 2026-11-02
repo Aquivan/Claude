@@ -59,7 +59,8 @@ function TGEV_vncDelRobot_(q) {
   var caso = String(q.caso || ''), url = String(q.url || '');
   if (!/^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/vnc\.html\?[\w=&%.-]+$/i.test(url)) return { ok: false, error: 'enlace no válido' };
   var cache = CacheService.getScriptCache();
-  if (!caso || !cache.get('tgv_on_' + caso)) return { ok: false, error: 'en vivo apagado' };
+  // forzado = el robot abrió el video aunque «en vivo» esté apagado (para que la persona resuelva un captcha o entre a Quesito)
+  if (!caso || (!cache.get('tgv_on_' + caso) && !q.forzado)) return { ok: false, error: 'en vivo apagado' };
   cache.put('tgv_v_' + caso, url, 3600);
   // También directo al chat: este enlace no pasa por Google (con varias cuentas de Google abiertas, la página 📺 a veces no abre).
   try { var c = TGG_leer_(TG_ss_(), caso); if (c) TGG_avisar_(c, '🎥 Video en vivo (puede hacer clic y escribir): ' + url +
