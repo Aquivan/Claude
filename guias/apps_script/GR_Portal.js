@@ -186,6 +186,22 @@ function PT_api(token, accion, d) {
     case 'resultados': PT_sesion_(token, 'ver'); return { enCurso: GR_revisarResultados() };
     case 'vivo': PT_sesion_(token, 'ver'); return PropertiesService.getDocumentProperties().getProperty('GR_VIVO_URL') || '';
     case 'resumen': PT_sesion_(token, 'ver'); return PT_resumenEmitir_(ss, sh, filaDe(d.id));
+    case 'catalogo': PT_sesion_(token, 'ver'); return PT_catalogo_(ss, String(d.nombre || ''));
+    case 'guardarCatalogo': {
+      PT_sesion_(token, d.nombre === GR_EMP_ ? 'admin' : 'armar');   // las empresas (series, partida) solo el admin
+      return PT_guardarCatalogo_(ss, String(d.nombre || ''), Number(d.fila) || 0, d.valores || []);
+    }
+    case 'dniCatalogo': {
+      PT_sesion_(token, 'armar');
+      var n2 = GR_nombreDni_(String(d.dni || '').replace(/\D/g, ''));
+      return n2 ? { nom: n2.nom, ape: n2.ape } : null;
+    }
+    case 'enVivo': {
+      PT_sesion_(token, d.activar == null ? 'ver' : 'admin');
+      var rv = GR_cob_('vivo', d.activar == null ? {} : { activar: !!d.activar });
+      if (!rv.ok) throw new Error(rv.error || 'No pude hablar con el bot.');
+      return { activo: !!rv.activo };
+    }
   }
   throw new Error('Acción desconocida.');
 }
@@ -254,6 +270,46 @@ function PT_vista_(v, id, ss, sh) {
 
 function PT_sesion_permiso_(necesita) {
   if (!PT_SESION_ || PT_nivel_(PT_SESION_.p) < PT_nivel_(necesita)) throw new Error('Su usuario no tiene permiso para esto (pide «' + necesita + '»).');
+}
+
+/* ============================================================ catálogos (🏢 🚛 🚗 👤 📍) */
+
+/** Una pestaña de catálogo: títulos, filas (con su número) y las listas desplegables de cada columna. */
+function PT_catalogo_(ss, nombre) {
+  var def = GR_CATALOGOS_[nombre];
+  if (!def) throw new Error('Catálogo desconocido.');
+  var sh = ss.getSheetByName(nombre), n = def.cols.length, ult = sh.getLastRow();
+  var filas = ult >= 2 ? sh.getRange(2, 1, ult - 1, n).getDisplayValues().map(function (v, i) { return [i + 2].concat(v); })
+    .filter(function (v) { return v.slice(1).some(function (x) { return String(x).trim(); }); }) : [];
+  var reglas = sh.getRange(2, 1, 1, n).getDataValidations()[0], listas = [];
+  for (var j = 0; j < n; j++) {
+    var r = reglas[j], op = null;
+    try {
+      if (r && r.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) op = r.getCriteriaValues()[0].map(String);
+      else if (r && r.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.VALUE_IN_RANGE)
+        op = r.getCriteriaValues()[0].getDisplayValues().map(function (x) { return String(x[0]); }).filter(String).slice(0, 2000);
+    } catch (e) {}
+    listas.push(op);
+  }
+  return { nombre: nombre, nota: def.nota, cols: def.cols.map(function (c) { return c[0]; }), filas: filas, listas: listas };
+}
+
+/** Guarda una fila del catálogo (fila 0 = nueva, al final). Devuelve el catálogo actualizado. */
+function PT_guardarCatalogo_(ss, nombre, fila, valores) {
+  var def = GR_CATALOGOS_[nombre];
+  if (!def) throw new Error('Catálogo desconocido.');
+  var sh = ss.getSheetByName(nombre), n = def.cols.length;
+  valores = def.cols.map(function (c, j) { return String(valores[j] == null ? '' : valores[j]).trim(); });
+  if (!valores[0]) throw new Error('Falta «' + def.cols[0][0] + '».');
+  if (nombre === GR_VEH_) valores[0] = GR_placa_(valores[0]);
+  var ult = sh.getLastRow(), col1 = ult >= 2 ? sh.getRange(2, 1, ult - 1, 1).getDisplayValues().map(function (v) { return String(v[0]).trim().toUpperCase(); }) : [];
+  var repetida = col1.indexOf(valores[0].toUpperCase());
+  if (repetida >= 0 && repetida + 2 !== fila && nombre !== GR_DIR_) throw new Error('Ya existe «' + valores[0] + '» (fila ' + (repetida + 2) + '): edite esa.');
+  if (fila >= 2) { if (fila > ult) throw new Error('Esa fila ya no existe: vuelva a abrir la lista.'); }
+  else { fila = 1; col1.forEach(function (v, i) { if (v) fila = i + 2; }); fila++; }
+  sh.getRange(fila, 1, 1, n).setValues([valores]);
+  GR_registrar_('', (fila > ult ? '➕ ' : '✏️ ') + nombre, valores.slice(0, 3).join(' · '));
+  return PT_catalogo_(ss, nombre);
 }
 
 /* ============================================================ menú de la hoja (solo el dueño) */
