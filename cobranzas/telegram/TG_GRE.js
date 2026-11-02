@@ -510,6 +510,10 @@ function TGG_gh_(q) {
   }
   if (q.accion === 'gre_llave') return TGEV_llave_(TG_cfg_(ss), c);   // 🔑 llave pública para guardar la sesión de Quesito
   if (q.accion === 'gre_guardar_sesion') return TGEV_guardarSesion_(TG_cfg_(ss), c, q);
+  if (q.accion === 'gre_captcha') {   // 🧩 el robot espera que la persona resuelva el captcha ('pide') o ya pasó ('listo'): lo mira la hoja
+    CacheService.getScriptCache().put('tgg_cap_' + c.id, String(q.estado || ''), 1800);
+    return { ok: true };
+  }
   if (q.accion === 'gre_aviso') { TGG_avisar_(c, String(q.texto || '').slice(0, 500) + ' · caso ' + c.id, null, false); return { ok: true }; }
   var cache = CacheService.getScriptCache();
   if (q.accion === 'gre_vista') {
