@@ -39,6 +39,10 @@
 var ID = <?= idGuia ?>, D = null;
 var fmt = function (n) { return Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 3 }); };
 function pintar() {
+  if (!D.lineas.length && D.leyendo) {
+    document.getElementById('app').innerHTML = '<div class="aviso">⏳ <b>Estoy leyendo la factura en Quesito</b> (1–3 min, no se crea nada). Cierre esta ventana y vuelva a abrirla en un momento: aquí aparecerán las líneas para elegir.</div>';
+    return;
+  }
   if (!D.lineas.length) {
     document.getElementById('app').innerHTML = '<div class="aviso">Todavía no tengo las <b>líneas de la factura</b> para elegir. Cierre esta ventana y use <b>📥 Traer datos de la factura</b>: ' +
       'si el SIRE no trae el detalle, las lee en <b>Quesito</b> (1–3 min, no crea nada) y luego aquí elige cuáles van y cuánto.<br><br>' +

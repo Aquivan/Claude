@@ -860,7 +860,8 @@ def main():
             pub, nav0 = None, None
             try:
                 paso("Buscando la factura en «Buscar comprobante» de Quesito (sin iniciar sesión)")
-                nav0 = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"], ignore_default_args=["--enable-automation"])
+                nav0 = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"], ignore_default_args=["--enable-automation"],
+                                         executable_path=os.environ.get("CHROMIUM") or None)   # el Chrome del ejecutor (como el resto del robot)
                 pub = leer_publico(nav0.new_context(locale="es-PE", user_agent=UA, viewport={"width": 1366, "height": 900}).new_page(), c, serie, numero)
                 if pub == "captcha":
                     nav0.close()
@@ -872,7 +873,7 @@ def main():
                         en_vivo.iniciar(bot, PASO)
                         pub = leer_publico(pag0, c, serie, numero, con_persona=True)
             except Exception as e:
-                paso("Buscar comprobante no funcionó (" + type(e).__name__ + "); sigo por la cuenta de Quesito")
+                paso("Buscar comprobante no funcionó (" + type(e).__name__ + ": " + str(e).splitlines()[0][:80] + "); sigo por la cuenta de Quesito")
                 pub = None
             finally:
                 if nav0:
