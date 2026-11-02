@@ -307,13 +307,18 @@ function GR_menuElegirProductos() { GR_guardia_();
 
 /** Lo que muestra la ventana: líneas de la factura y lo que ya va en la guía. */
 function GR_datosProductos(id) { GR_guardia_();
-  var ss = SpreadsheetApp.getActive(), fac = GR_facturaDe_(ss, id), ps = GR_contexto_(ss).prod[id] || [], leyendo = false;
+  var ss = SpreadsheetApp.getActive(), fac = GR_facturaDe_(ss, id), ps = GR_contexto_(ss).prod[id] || [], leyendo = false, detalle = '';
   if (!fac.lineas.length) {   // ¿Quesito ya terminó de leer la factura y aún no se pasó a la hoja? Se trae ahora mismo.
     var sh = ss.getSheetByName(GR_HOJA_), f = GR_filaDe_(sh, id), msg = f ? String(sh.getRange(f, GR_col_('msg')).getValue()) : '';
     if (msg.indexOf('📥 Leyendo') === 0) {
       try { GR_revisarResultados(); } catch (e) {}
       fac = GR_facturaDe_(ss, id);
       leyendo = !fac.lineas.length && String(sh.getRange(f, GR_col_('msg')).getValue()).indexOf('📥 Leyendo') === 0;
+      if (leyendo) {   // 🔎 qué dice el bot de este caso (para saber por qué no llega)
+        var caso = String(sh.getRange(f, GR_col_('caso')).getValue()), est = GR_cob_('estado', { casos: [caso] }), e = est.ok && (est.casos || {})[caso];
+        detalle = !est.ok ? 'el bot no respondió: ' + (est.error || '') : !e ? 'el bot no conoce el caso ' + caso : e.estado + (e.leido ? ' · con ' + (e.leido.lineas || []).length + ' línea(s)' : ' · sin datos') + (e.error ? ' · ' + e.error : '');
+        GR_registrar_(id, '🔎 Diagnóstico lectura', 'caso ' + caso + ': ' + detalle);
+      }
     }
   }
   var usadas = {};
@@ -322,7 +327,7 @@ function GR_datosProductos(id) { GR_guardia_();
     for (var j = 0; j < ps.length && !p; j++) if (!usadas[j] && String(ps[j].desc) === String(l.desc)) { usadas[j] = true; p = ps[j]; }
     return { i: i, nombre: GR_corto_(l), lote: l.lote, unidad: String(l.unidad).split(' - ')[0], factura: l.cant, va: !!p || !ps.length, cant: p ? p.cant : l.cant };
   });
-  return { id: id, lineas: lineas, deQuesito: fac.deQuesito, leyendo: leyendo };
+  return { id: id, lineas: lineas, deQuesito: fac.deQuesito, leyendo: leyendo, detalle: detalle };
 }
 
 /** Guarda lo elegido: 📦 Productos de la guía, «Producto y cantidad» y «¿Todo lo de la factura?». */
