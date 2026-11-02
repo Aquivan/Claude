@@ -85,6 +85,24 @@
   .cCaja h2 { margin: 0 0 6px; font-size: 18px; } .cCaja .real { color: #c62828; font-weight: 600; margin-bottom: 10px; }
   .cCaja .botones { display: flex; gap: 8px; margin-top: 16px; } .cCaja .botones button { flex: 1; padding: 12px; }
 
+  /* pestañas de arriba: guías y catálogos */
+  .tabs { background: #fff; border-bottom: 1px solid var(--borde); display: flex; gap: 2px; overflow-x: auto; padding: 0 10px; scrollbar-width: none; position: sticky; top: 52px; z-index: 4; }
+  .tab { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 12px 12px 9px; white-space: nowrap; color: var(--suave); font-weight: 600; flex: none; }
+  .tab.on { color: var(--azul); border-bottom-color: var(--azul); }
+  .pista { max-width: 1400px; margin: 0 auto; padding: 0 14px 6px; color: var(--suave); font-size: 12px; }
+  #catalogo { max-width: 1400px; margin: 0 auto; padding: 10px 14px 90px; }
+  .catBarra { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 8px; }
+  .catNota { color: var(--suave); font-size: 12px; margin-bottom: 10px; }
+  .tabla { background: #fff; border: 1px solid var(--borde); border-radius: 12px; overflow: auto; }
+  .tabla table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  .tabla th { position: sticky; top: 0; background: #f6f8fa; text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--borde); white-space: nowrap; font-size: 12px; color: var(--suave); }
+  .tabla td { padding: 9px 10px; border-bottom: 1px solid #f0f3f5; vertical-align: top; }
+  .tabla tr:hover td { background: #f3f8fd; cursor: pointer; }
+  .tabla td.dim { color: var(--suave); }
+  .form label { display: block; font-size: 12px; color: var(--suave); margin: 10px 0 4px; }
+  .form .fila2 { display: flex; gap: 6px; } .form .fila2 input { flex: 1; }
+  .herr { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+  .herr button { text-align: left; padding: 14px; } .herr button small { display: block; color: var(--suave); font-weight: normal; margin-top: 3px; font-size: 12px; }
   #toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: #263238; color: #fff; padding: 11px 16px; border-radius: 12px; z-index: 40; max-width: 92vw; font-size: 13px; white-space: pre-wrap; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
   .giro { display: inline-block; animation: giro 1s linear infinite; } @keyframes giro { to { transform: rotate(360deg); } }
 </style>
@@ -111,6 +129,8 @@
     <button onclick="cargar(true)" title="Actualizar">🔄</button>
     <button onclick="salir()" title="Salir">Salir</button>
   </header>
+  <nav class="tabs" id="tabs"></nav>
+  <div id="vGuias">
   <div class="barra">
     <input id="q" placeholder="🔎 Buscar: guía, cliente, factura, placa, chofer…" oninput="pintar()">
     <button id="bFormulario" onclick="abrirVentana('formulario', '', '➕ Nueva guía (formulario)')" title="Nueva guía llenando todos los datos">📝</button>
@@ -121,7 +141,10 @@
     <select id="fVia" onchange="pintar()"><option value="">Quesito y SUNAT</option><option>Quesito</option><option>SUNAT</option></select>
     <select id="fCuando" onchange="pintar()"><option value="">Cualquier fecha</option><option value="hoy">Traslado hoy</option><option value="7">Últimos 7 días</option><option value="30">Últimos 30 días</option></select>
   </div>
+  <div class="pista">👆 Toque una guía para ver todas sus opciones (borrador, vista previa, emitir, editar, transporte, direcciones…).</div>
   <div id="lista"><div class="vacio"><span class="giro">⏳</span> Cargando guías…</div></div>
+  </div>
+  <div id="catalogo" class="oculto"></div>
   <button id="fab" class="pri" onclick="abrirVentana('rapida', '', '➕ Nueva guía rápida')">➕ Nueva guía</button>
 </div>
 
@@ -181,7 +204,7 @@ function iniciar(yo) {
   $('entrar').classList.add('oculto'); $('app').classList.remove('oculto');
   $('quien').textContent = '👤 ' + yo.nombre + ' · ' + yo.permiso;
   $('fab').classList.toggle('oculto', !puede('armar')); $('bFormulario').classList.toggle('oculto', !puede('armar'));
-  cargar();
+  pintarTabs(); cargar();
 }
 
 /* ============================================================ lista */
@@ -349,6 +372,91 @@ function cerrarVentana(sinRecargar) {
   if ($('ventana').classList.contains('oculto')) return;
   $('ventana').classList.add('oculto'); $('vMarco').srcdoc = '';
   if (!sinRecargar) cargar();
+}
+
+/* ============================================================ pestañas: guías, catálogos y herramientas */
+var TABS = [
+  { k: 'guias', t: '🚚 Guías' }, { k: '🚗 Vehículos', t: '🚗 Vehículos' }, { k: '👤 Conductores', t: '👤 Conductores' }, { k: '🚛 Transportistas', t: '🚛 Transportistas' },
+  { k: '📍 Direcciones', t: '📍 Direcciones' }, { k: '🏢 Empresas', t: '🏢 Empresas' }, { k: 'herr', t: '🧰 Más' }
+];
+var TAB = 'guias', CAT = null;
+function pintarTabs() { $('tabs').innerHTML = TABS.map(function (x) { return '<button class="tab' + (TAB === x.k ? ' on' : '') + '" onclick="irA(\'' + x.k + '\')">' + x.t + '</button>'; }).join(''); }
+function irA(k) {
+  TAB = k; pintarTabs(); window.scrollTo(0, 0);
+  $('vGuias').classList.toggle('oculto', k !== 'guias'); $('fab').classList.toggle('oculto', k !== 'guias' || !puede('armar'));
+  $('catalogo').classList.toggle('oculto', k === 'guias');
+  if (k === 'herr') return pintarHerramientas();
+  if (k !== 'guias') cargarCatalogo(k);
+}
+function cargarCatalogo(nombre) {
+  $('catalogo').innerHTML = '<div class="vacio"><span class="giro">⏳</span> Cargando…</div>';
+  api('catalogo', { nombre: nombre }).then(function (c) { CAT = c; pintarCatalogo(); }).catch(function (e) { $('catalogo').innerHTML = '<div class="vacio">⚠️ ' + esc(e.message) + '</div>'; });
+}
+function puedeCat() { return CAT && (CAT.nombre === '🏢 Empresas' ? puede('admin') : puede('armar')); }
+function pintarCatalogo() {
+  var c = CAT, q = plano(($('qCat') || {}).value || '');
+  var filas = c.filas.filter(function (f) { return !q || plano(f.slice(1).join(' ')).indexOf(q) >= 0; });
+  var extra = c.nombre === '🚗 Vehículos' || c.nombre === '🚛 Transportistas' ? '<button onclick="abrirVentana(\'transporte\', \'\', \'🚛 Buscar en el MTC\')">🔎 Buscar en el MTC</button>'
+    : c.nombre === '📍 Direcciones' ? '<button onclick="abrirVentana(\'direcciones\', \'\', \'📍 Direcciones por RUC (SUNAT)\')">🔎 Buscar por RUC en SUNAT</button>' : '';
+  var buscar = $('qCat') ? $('qCat').value : '';
+  $('catalogo').innerHTML = '<div class="catBarra"><input id="qCat" placeholder="🔎 Buscar en ' + esc(c.nombre) + '…" oninput="pintarCatalogo()" value="' + esc(buscar) + '">' +
+      (puedeCat() ? '<button class="pri" onclick="editarFila(0)">➕ Agregar</button>' : '') + '</div>' +
+    (extra ? '<div style="margin-bottom:8px">' + extra + '</div>' : '') +
+    '<div class="catNota">' + esc(c.nota) + (puedeCat() ? ' · Toque una fila para corregirla.' : '') + '</div>' +
+    '<div class="tabla"><table><tr>' + c.cols.map(function (t) { return '<th>' + esc(t) + '</th>'; }).join('') + '</tr>' +
+    (filas.length ? filas.map(function (f) { return '<tr onclick="editarFila(' + f[0] + ')">' + f.slice(1).map(function (v, j) { return '<td' + (j ? ' class="dim"' : '') + '>' + esc(v) + '</td>'; }).join('') + '</tr>'; }).join('')
+      : '<tr><td colspan="' + c.cols.length + '" class="dim">Nada todavía.</td></tr>') + '</table></div>';
+  var i = $('qCat'); if (buscar) { i.focus(); i.setSelectionRange(buscar.length, buscar.length); }
+}
+function editarFila(fila) {
+  if (!puedeCat()) return toast('Su usuario solo puede ver esta lista.');
+  var c = CAT, v = fila ? (c.filas.filter(function (f) { return f[0] === fila; })[0] || []).slice(1) : [];
+  var campo = function (t, j) {
+    var val = v[j] || '', l = c.listas[j], id = 'cf' + j;
+    var ctl = l && l.length ? '<input id="' + id + '" list="dl' + j + '" value="' + esc(val) + '"><datalist id="dl' + j + '">' + l.slice(0, 2000).map(function (o) { return '<option value="' + esc(o) + '">'; }).join('') + '</datalist>'
+      : '<input id="' + id + '" value="' + esc(val) + '">';
+    if (c.nombre === '👤 Conductores' && j === 0) ctl = '<div class="fila2">' + ctl + '<button onclick="nombreDni()">Buscar nombre</button></div>';
+    return '<label for="' + id + '">' + esc(t) + '</label>' + ctl;
+  };
+  $('detalle').innerHTML = '<div class="dCab"><h2>' + (fila ? '✏️ Corregir' : '➕ Agregar') + ' · ' + esc(c.nombre) + '</h2><button onclick="cerrarDetalle()">✖</button></div>' +
+    '<div class="dCuerpo form">' + c.cols.map(campo).join('') +
+    '<div style="display:flex;gap:8px;margin-top:16px"><button onclick="cerrarDetalle()" style="flex:1">Cancelar</button><button class="pri" style="flex:2" onclick="guardarFila(' + fila + ')">💾 Guardar</button></div></div>';
+  $('detalle').classList.remove('oculto'); $('velo').classList.remove('oculto');
+}
+function nombreDni() {
+  var dni = $('cf0').value.replace(/\D/g, '');
+  if (dni.length !== 8) return toast('El DNI tiene 8 números.');
+  toast('Buscando…', 20000);
+  api('dniCatalogo', { dni: dni }).then(function (n) {
+    if (!n) return toast('No encontré ese DNI.');
+    if (!$('cf1').value) $('cf1').value = n.nom; if (!$('cf2').value) $('cf2').value = n.ape;
+    toast('👤 ' + n.nom + ' ' + n.ape + '. Falta la licencia (suele ser una letra + el DNI).', 6000);
+  }).catch(function (e) { toast('⚠️ ' + e.message); });
+}
+function guardarFila(fila) {
+  var vals = CAT.cols.map(function (t, j) { return $('cf' + j).value; });
+  toast('Guardando…', 20000);
+  api('guardarCatalogo', { nombre: CAT.nombre, fila: fila, valores: vals }).then(function (c) {
+    CAT = c; cerrarDetalle(); pintarCatalogo(); toast('✅ Guardado en ' + c.nombre + '.');
+  }).catch(function (e) { toast('⚠️ ' + e.message, 7000); });
+}
+function pintarHerramientas() {
+  var b = function (txt, sub, fn, perm) { return perm && !puede(perm) ? '' : '<button onclick="' + fn + '">' + txt + '<small>' + sub + '</small></button>'; };
+  $('catalogo').innerHTML = '<div class="herr">' +
+    b('🚛 Buscar transportista o placa (MTC)', 'Consulta el registro del MTC y guarda el transportista, sus placas y certificados.', "abrirVentana('transporte','','🚛 Buscar en el MTC')", 'armar') +
+    b('📍 Buscar direcciones por RUC', 'Los locales registrados en SUNAT de un cliente o de una empresa.', "abrirVentana('direcciones','','📍 Direcciones por RUC (SUNAT)')", 'armar') +
+    b('📝 Nueva guía con formulario', 'Todos los datos de la guía en un solo formulario.', "abrirVentana('formulario','','➕ Nueva guía (formulario)')", 'armar') +
+    b('➕ Nueva guía rápida', 'Empresa + N° de factura (o cotización); trae los datos solo.', "abrirVentana('rapida','','➕ Nueva guía rápida')", 'armar') +
+    b('📺 Ver el robot en vivo', 'Abre la última transmisión del robot (Quesito o SUNAT).', 'verVivo()') +
+    b('📺 Activar / desactivar «en vivo»', 'Con «en vivo», cada vista previa o emisión muestra la pantalla del robot.', 'cambiarVivo()', 'admin') +
+    b('🔄 Traer resultados del robot', 'Actualiza las guías que están en curso.', 'traerResultados()') +
+    '</div>';
+}
+function cambiarVivo() {
+  api('enVivo', {}).then(function (r) {
+    if (!confirm('📺 «En vivo» está ' + (r.activo ? 'ACTIVADO' : 'DESACTIVADO') + '. ¿' + (r.activo ? 'Desactivarlo' : 'Activarlo') + '?')) return;
+    return api('enVivo', { activar: !r.activo }).then(function (x) { toast(x.activo ? '📺 En vivo ACTIVADO' : 'En vivo desactivado'); });
+  }).catch(function (e) { toast('⚠️ ' + e.message); });
 }
 
 /* ============================================================ arranque: si hay sesión guardada, entra solo */
