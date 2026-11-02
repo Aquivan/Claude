@@ -781,6 +781,14 @@ def leer_publico(pag, c, serie, numero, con_persona=False):
     xml = [e["h"] for e in enlaces if re.search(r"xml", e["h"] + " " + e["t"], re.I)]
     pdf = [e["h"] for e in enlaces if re.search(r"\.pdf|\bpdf\b", e["h"] + " " + e["t"], re.I)]
     paso(f"Buscar comprobante: factura encontrada · enlaces XML {len(xml)} · PDF {len(pdf)}")   # sin datos de clientes en el registro
+    if not xml and not pdf:   # 🔎 cómo ofrece la página la descarga (solo etiquetas de botones y tipos, nunca datos)
+        forma = pag.evaluate("""() => ({
+          botones: [...document.querySelectorAll('a,button,input[type=submit],input[type=button]')].map(e => (e.innerText || e.value || e.title || '').trim())
+                     .filter(t => /pdf|xml|cdr|descarg|imprim|ver|bajar|download/i.test(t)).slice(0, 12),
+          forms: [...document.querySelectorAll('form')].map(f => (f.method || '') + ' ' + new URL(f.action, location.href).pathname).slice(0, 6),
+          marcos: [...document.querySelectorAll('iframe,embed,object')].map(e => e.tagName + ' ' + ((e.src || e.data || '').split('?')[0].replace(/\/\d+/g, '/N'))).slice(0, 6),
+          ruta: location.pathname.replace(/\/\d+/g, '/N') })""")
+        paso("Buscar comprobante · página: " + json.dumps(forma, ensure_ascii=False)[:600])
     out = None
     for h in xml:
         try:
