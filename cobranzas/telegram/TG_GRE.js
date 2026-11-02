@@ -511,7 +511,9 @@ function TGG_gh_(q) {
   if (q.accion === 'gre_llave') return TGEV_llave_(TG_cfg_(ss), c);   // 🔑 llave pública para guardar la sesión de Quesito
   if (q.accion === 'gre_guardar_sesion') return TGEV_guardarSesion_(TG_cfg_(ss), c, q);
   if (q.accion === 'gre_captcha') {   // 🧩 el robot espera que la persona resuelva el captcha ('pide') o ya pasó ('listo'): lo mira la hoja
-    CacheService.getScriptCache().put('tgg_cap_' + c.id, String(q.estado || ''), 1800);
+    var cc = CacheService.getScriptCache();
+    cc.put('tgg_cap_' + c.id, String(q.estado || ''), 1800);
+    if (/^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/vnc\.html\?[\w=&%.-]+$/i.test(String(q.url || ''))) cc.put('tgv_v_' + c.id, String(q.url), 3600);   // el video, por si no llegó antes
     return { ok: true };
   }
   if (q.accion === 'gre_aviso') { TGG_avisar_(c, String(q.texto || '').slice(0, 500) + ' · caso ' + c.id, null, false); return { ok: true }; }

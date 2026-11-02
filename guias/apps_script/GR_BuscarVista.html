@@ -41,6 +41,7 @@
 </div>
 <label class="chk" style="display:flex;gap:8px;align-items:center;margin-top:12px;color:#37474f"><input type="checkbox" id="verCap" style="width:18px;height:18px" checked onchange="try{localStorage.setItem('gr_vercap', this.checked ? '1' : '0')}catch(e){}"> Si aparece el captcha, mostrarlo aquí para resolverlo (se cierra solo al terminar)</label>
 <div id="msg"></div>
+<div id="diag" style="font-size:11px;color:#90a4ae;margin-top:4px"></div>
 <div id="cap" style="display:none;margin-top:10px">
   <div style="font-size:13px;margin-bottom:6px">🧩 <b>Resuelva el captcha aquí</b> (o escriba correo y clave si la empresa aún no entra sola). <a id="capLink" href="#">Abrir en pestaña aparte ↗</a></div>
   <iframe id="capMarco" style="width:100%;height:520px;border:1px solid #cfd8dc;border-radius:8px;background:#000"></iframe>
@@ -104,6 +105,7 @@ function vigilar(desde) {
       m.textContent = e.error ? '⚠️ ' + e.error : '✅ Listo: ' + (e.lineas ? e.lineas + ' línea(s) de la factura. Ya puede abrir 📦 Elegir productos.' : (e.msg || 'terminado'));
       return;
     }
+    $('diag').textContent = e.diag || '';
     if (e.captcha === 'pide' && e.video && $('verCap').checked) { verCaptcha(e.video); m.className = ''; m.textContent = '🧩 Quesito pide el captcha: resuélvalo abajo. Cuando pase, sigo solo.'; }
     else if (e.captcha === 'listo') { cerrarCaptcha(); m.className = 'ok'; m.textContent = '✅ Captcha resuelto. Sigo leyendo…'; }
     setTimeout(function () { vigilar(desde); }, 3000);
