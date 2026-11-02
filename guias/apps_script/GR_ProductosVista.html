@@ -39,6 +39,10 @@
 var ID = <?= idGuia ?>, D = null;
 var fmt = function (n) { return Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 3 }); };
 function pintar() {
+  if (!D.lineas.length && D.fallo) {
+    document.getElementById('app').innerHTML = '<div class="aviso">⚠️ <b>No se pudo leer la factura en Quesito:</b> ' + D.fallo.replace(/[<>&]/g, '') + '<br><br>Vuelva a intentar con <b>🔎 Buscar la factura</b> (elija SIRE, Quesito público o con su cuenta).</div>';
+    return;
+  }
   if (!D.lineas.length && D.leyendo) {
     document.getElementById('app').innerHTML = '<div class="aviso">⏳ <b>Estoy leyendo la factura en Quesito</b> (1–3 min, no se crea nada). Cierre esta ventana y vuelva a abrirla en un momento: aquí aparecerán las líneas para elegir.' + (D.detalle ? '<br><small style="color:#78909c">Estado en el bot: ' + D.detalle.replace(/[<>&]/g, '') + '</small>' : '') + '</div>';
     return;

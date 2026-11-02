@@ -862,9 +862,9 @@ def main():
     if modo == "emitir" and os.environ.get("CONFIRMAR", "") != huella:
         fin(False, "La confirmación no corresponde a este caso (¿se cambió algo después de aprobar?). No se creó nada.")
         sys.exit("Clave de confirmación incorrecta")
-    if not sesion and not EN_PC and os.environ.get("SIN_SESION") != "si":
-        fin(False, "Falta la sesión de Quesito de esta empresa (secreto QUESITO_SESION). No se creó nada.")
-        sys.exit(1)
+    # Sin sesión guardada (empresa nueva): no se detiene. Se abre el 🎥 video y se entra con ayuda (el robot pone correo y clave
+    # si están en los secretos de la empresa; si no, los escribe la persona) y la sesión queda guardada para las próximas veces.
+    sin_guardada = not sesion and not EN_PC
     d = c.get("documento") or {}
     m = re.match(r"^\s*([A-Z0-9]{4})\s*-\s*0*(\d+)\s*$", str(d.get("numero") or "").upper())
     cot = re.sub(r"\D", "", str(c.get("cotizacion") or ""))
@@ -927,7 +927,9 @@ def main():
             pag = ctx.pages[0] if ctx.pages else ctx.new_page()
             paso("🖥 Chrome abierto en la PC (mire la pantalla)")
         else:
-            pantalla = en_vivo.video(bot)   # 🎥 si «en vivo» está activo: Chrome visible transmitido en video (se puede tocar)
+            if sin_guardada:
+                bot({"accion": "gre_aviso", "texto": "🔐 Esta empresa todavía no tiene la sesión de Quesito guardada. Le mando el 🎥 video para entrar una sola vez; después queda guardada."})
+            pantalla = en_vivo.video(bot, forzar=sin_guardada)   # 🎥 si «en vivo» está activo (o falta la sesión): Chrome visible en video
             nav = en_vivo.lanzar(p, pantalla, executable_path=os.environ.get("CHROMIUM") or None)
             ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", **({} if pantalla else {"user_agent": UA}))   # con video: su huella real
             pag = ctx.new_page()
