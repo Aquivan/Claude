@@ -289,6 +289,7 @@ function abrirDetalle(id, refrescar) {
     (emitida ? '' : '<div class="grupo"><h3>Datos de la guía</h3><div class="acciones">' +
       b('✏️ Editar datos', "abrirVentana('formulario'," + idq + ",'✏️ Guía " + esc(g.id) + "')", 'armar') +
       b('📥 Traer datos de la factura', "accion('traer'," + idq + ")", 'armar') +
+      b('🔎 Buscar la factura (SIRE · Quesito)', "abrirVentana('buscar'," + idq + ",'🔎 Buscar la factura de " + esc(g.id) + "')", 'armar') +
       b('📦 Productos y cantidades', "abrirVentana('productos'," + idq + ",'📦 Productos de " + esc(g.id) + "')", 'armar') +
       b('📄 Ver la factura', "abrirVentana('factura'," + idq + ",'📄 Factura de " + esc(g.id) + "')") +
     '</div></div>' +
