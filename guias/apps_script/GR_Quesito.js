@@ -307,14 +307,22 @@ function GR_menuElegirProductos() { GR_guardia_();
 
 /** Lo que muestra la ventana: líneas de la factura y lo que ya va en la guía. */
 function GR_datosProductos(id) { GR_guardia_();
-  var ss = SpreadsheetApp.getActive(), fac = GR_facturaDe_(ss, id), ps = GR_contexto_(ss).prod[id] || [];
+  var ss = SpreadsheetApp.getActive(), fac = GR_facturaDe_(ss, id), ps = GR_contexto_(ss).prod[id] || [], leyendo = false;
+  if (!fac.lineas.length) {   // ¿Quesito ya terminó de leer la factura y aún no se pasó a la hoja? Se trae ahora mismo.
+    var sh = ss.getSheetByName(GR_HOJA_), f = GR_filaDe_(sh, id), msg = f ? String(sh.getRange(f, GR_col_('msg')).getValue()) : '';
+    if (msg.indexOf('📥 Leyendo') === 0) {
+      try { GR_revisarResultados(); } catch (e) {}
+      fac = GR_facturaDe_(ss, id);
+      leyendo = !fac.lineas.length && String(sh.getRange(f, GR_col_('msg')).getValue()).indexOf('📥 Leyendo') === 0;
+    }
+  }
   var usadas = {};
   var lineas = fac.lineas.map(function (l, i) {
     var p = null;
     for (var j = 0; j < ps.length && !p; j++) if (!usadas[j] && String(ps[j].desc) === String(l.desc)) { usadas[j] = true; p = ps[j]; }
     return { i: i, nombre: GR_corto_(l), lote: l.lote, unidad: String(l.unidad).split(' - ')[0], factura: l.cant, va: !!p || !ps.length, cant: p ? p.cant : l.cant };
   });
-  return { id: id, lineas: lineas, deQuesito: fac.deQuesito };
+  return { id: id, lineas: lineas, deQuesito: fac.deQuesito, leyendo: leyendo };
 }
 
 /** Guarda lo elegido: 📦 Productos de la guía, «Producto y cantidad» y «¿Todo lo de la factura?». */
