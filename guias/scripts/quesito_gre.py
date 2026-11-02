@@ -750,32 +750,42 @@ def leer_publico(pag, c, serie, numero, con_persona=False):
     pag.locator("#numero").fill(numero)
     pag.locator("#total").fill(("%.2f" % float(total)).rstrip("0").rstrip("."))
     pag.wait_for_timeout(1200)   # que cargue el reCAPTCHA de Google
+    enviado = []   # la búsqueda de verdad se mandó (POST /buscar): recién ahí hay resultado
+    pag.on("request", lambda rq: enviado.append(1) if rq.method == "POST" and urlsplit(rq.url).path.rstrip("/") == "/buscar" else None)
     pag.locator("button.buscar_button").click()
-    form = lambda: pag.locator("#buscar-cpe-form").count() > 0 and pag.locator("#buscar-cpe-form").is_visible()
-    reto = lambda: pag.locator("iframe[src*='api2/bframe']").count() > 0 and pag.locator("iframe[src*='api2/bframe']").first.is_visible()
+    # ¿Google muestra el reto del captcha? (el marco «bframe» existe siempre; cuenta solo si está a la vista)
+    reto = lambda: pag.evaluate("""() => [...document.querySelectorAll('iframe[src*="api2/bframe"]')].some(x => {
+        for (let e = x; e && e !== document.body; e = e.parentElement) { const s = getComputedStyle(e);
+          if (s.visibility === 'hidden' || s.display === 'none' || s.opacity === '0') return false; }
+        const r = x.getBoundingClientRect(); return r.width > 50 && r.height > 50; })""")
     hasta, avisado = time.time() + (480 if con_persona else 25), False
-    while time.time() < hasta:
+    while time.time() < hasta and not enviado:
         pag.wait_for_timeout(1500)
-        if not form():
+        if enviado:
             break
-        if reto():
+        if reto() or (con_persona and time.time() > hasta - 470):   # con la persona: se le avisa enseguida (vino por el captcha)
             if not con_persona:
                 return "captcha"
             if not avisado:
                 en_vivo.zoom(2)
-                bot({"accion": "gre_aviso", "texto": "🧩 Quesito pide el captcha para buscar la factura: ábralo en 🎥 Video en vivo y resuélvalo (solo eso). Lo espero 8 minutos."})
+                bot({"accion": "gre_aviso", "texto": "🧩 Quesito pide el captcha para buscar la factura: abra 🎥 Video en vivo y resuélvalo (solo eso; si no ve el captcha, toque «Buscar»). Lo espero 8 minutos."})
                 paso("Esperando que la persona resuelva el captcha de «Buscar comprobante»")
                 avisado = True
     if avisado:
         en_vivo.zoom_normal(pag)
+    if not enviado:
+        paso("Buscar comprobante: la búsqueda no se envió (" + ("captcha sin resolver" if reto() else "Google no la dejó pasar") + ")")
+        return "captcha"
+    if avisado:
         bot({"accion": "gre_aviso", "texto": "✅ Captcha resuelto. Sigo yo solo; ya puede cerrar el video."})
-    if form():
-        paso("Buscar comprobante: no pasó (" + ("captcha sin resolver" if reto() else "sin respuesta") + ")")
-        return "captcha" if reto() else None
+    try:
+        pag.wait_for_load_state("networkidle", timeout=30000)
+    except Exception:
+        pass
     esperar(pag, 1500)
     cuerpo = pag.inner_text("body")
-    if re.search(r"no\s+(se\s+)?(encontr|exist)", cuerpo, re.I) and not re.search(r"\b" + serie + r"\b", cuerpo):
-        paso("Buscar comprobante: Quesito dice que no encontró la factura (¿el total no coincide?)")
+    if re.search(r"no\s+(se\s+)?(encontr|exist)|no\s+hay\s+resultado|datos\s+incorrectos", cuerpo, re.I):
+        paso("Buscar comprobante: Quesito dice que no encontró la factura (¿el total no coincide con la factura?)")
         return None
     enlaces = pag.evaluate("""() => [...document.querySelectorAll('a[href]')].map(a => ({h: a.href, t: (a.innerText || '').trim()}))""")
     xml = [e["h"] for e in enlaces if re.search(r"xml", e["h"] + " " + e["t"], re.I)]
@@ -783,8 +793,11 @@ def leer_publico(pag, c, serie, numero, con_persona=False):
     paso(f"Buscar comprobante: factura encontrada · enlaces XML {len(xml)} · PDF {len(pdf)}")   # sin datos de clientes en el registro
     if not xml and not pdf:   # 🔎 cómo ofrece la página la descarga (solo etiquetas de botones y tipos, nunca datos)
         forma = pag.evaluate(r"""() => ({
-          botones: [...document.querySelectorAll('a,button,input[type=submit],input[type=button]')].map(e => (e.innerText || e.value || e.title || '').trim())
-                     .filter(t => /pdf|xml|cdr|descarg|imprim|ver|bajar|download/i.test(t)).slice(0, 12),
+          botones: [...document.querySelectorAll('a,button,input[type=submit],input[type=button]')].map(e => (e.innerText || e.value || e.title || '').trim() +
+                     (e.getAttribute('href') ? ' → ' + e.getAttribute('href').split('?')[0].replace(/\/\d+/g, '/N').replace(/[A-Za-z0-9_-]{20,}/g, 'X') : '') +
+                     (e.getAttribute('onclick') ? ' [onclick]' : '') + (e.getAttribute('data-url') ? ' [data-url]' : ''))
+                     .filter(t => /pdf|xml|cdr|descarg|imprim|bajar|download|→ \/(cpe|doc|compro|invoice|descarg)/i.test(t)).slice(0, 15),
+          titulos: [...document.querySelectorAll('th')].map(e => e.innerText.trim()).filter(t => t && t.length < 30 && !/\d{3,}/.test(t)).slice(0, 12),   // solo encabezados de tabla
           forms: [...document.querySelectorAll('form')].map(f => (f.method || '') + ' ' + new URL(f.action, location.href).pathname).slice(0, 6),
           marcos: [...document.querySelectorAll('iframe,embed,object')].map(e => e.tagName + ' ' + ((e.src || e.data || '').split('?')[0].replace(/\/\d+/g, '/N'))).slice(0, 6),
           ruta: location.pathname.replace(/\/\d+/g, '/N') })""")
