@@ -162,7 +162,7 @@ function AYU_texto_(s, canal) {
 
 function AYU_indiceTexto_(canal) {
   var tg = canal !== 'wa';
-  return (tg ? '❓ <b>Centro de ayuda</b>' : '❓ *Centro de ayuda*') + '\nElija un tema' + (tg ? '' : ' (escriba *ayuda* y el número, ej. *ayuda 8*)') + ':\n\n' +
+  return (tg ? '❓ <b>Centro de ayuda</b>' : '❓ *Centro de ayuda*') + '\nElija un tema' + (tg ? '' : ' (escriba solo el *número*, ej. *8*)') + ':\n\n' +
     AYU_SECCIONES_.map(function (s, i) { return (i + 1) + '. ' + s.e + ' ' + s.t; }).join('\n');
 }
 
@@ -206,12 +206,20 @@ function AYU_telegram_(ctx, arg) {
 }
 
 /** WhatsApp: «ayuda temas», «ayuda 3», «ayuda guías». null si no es un pedido de ayuda. */
-function AYU_whatsapp_(texto) {
-  var m = String(texto || '').trim().match(/^\/?(?:ayuda|help|instrucciones|c[oó]mo (?:se )?usa)\s*(.*)$/i);
-  if (!m) return null;
-  var arg = m[1].replace(/^(de|del|sobre|temas?)\s*/i, '').trim();
-  var s = AYU_buscar_(arg);
-  var txt = s ? AYU_texto_(s, 'wa') + '\n\n📖 *ayuda temas*: ver todos los temas' : AYU_indiceTexto_('wa');
+function AYU_whatsapp_(texto, clave) {
+  var t = String(texto || '').trim(), cache = CacheService.getScriptCache(), llave = 'ayu_wa_' + (clave || '');
+  var s = null;
+  // Recién vio el índice (15 min): con escribir solo el número (o «8.», «el 8», «tema 8») se abre ese tema
+  var num = t.match(/^(?:el\s+|tema\s+|opci[oó]n\s+)?(\d{1,2})\s*[.)]?$/i);
+  if (num && clave && cache.get(llave)) s = AYU_buscar_(num[1]);
+  if (!s) {
+    var m = t.match(/^\/?(?:ayuda|help|instrucciones|c[oó]mo (?:se )?usa)\s*(.*)$/i);
+    if (!m) return null;
+    var arg = m[1].replace(/^(de|del|sobre|temas?)\s*/i, '').trim();
+    s = AYU_buscar_(arg);
+  }
+  if (clave) cache.put(llave, '1', 900);   // en el índice o en un tema: el siguiente número abre otro tema
+  var txt = s ? AYU_texto_(s, 'wa') + '\n\n📖 Escriba otro *número* para otro tema, o *ayuda* para ver la lista.' : AYU_indiceTexto_('wa');
   return { ok: true, respuesta: txt, tablas: [], sugerencias: [], archivos: [], avisos: [] };
 }
 
