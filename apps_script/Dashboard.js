@@ -10,9 +10,12 @@ function menuActualizarPanelDeControl() {
   if (rucFiltro === null) return; // cancelado
 
   try {
-    generarPanelDeControl_(rucFiltro || undefined);
+    asegurarActivadorPanel_();
+    var info = generarPanelDeControl_(rucFiltro || undefined) || {};
     ui.alert('Panel de Control actualizado ✓',
-      'El Panel de Control se ha actualizado con el estado mas reciente de Drive.',
+      'El Panel de Control se ha actualizado con el estado mas reciente de Drive.' +
+      (info.ajustesPasados ? '\n\n✋ ' + info.ajustesPasados + ' ajuste(s) a mano guardado(s) en la liquidación.' : '') +
+      '\n\nTip: un monto que escriba en el resumen IGV (ventas, compras, IR) se guarda al instante en la liquidación y queda en rojo.',
       ui.ButtonSet.OK);
   } catch (e) {
     Logger.log('Error actualizando Panel de Control: ' + e.message + '\n' + e.stack);
@@ -86,6 +89,7 @@ function generarPanelDeControl_(rucFiltro) {
     medidas.tabla[i] = Math.max(medidas.tabla[i], String(texto).length);
   }
   var ULT_COL = 7 + NUM_COLS_IGV_; // ultima columna del panel (M)
+  var ajustesPasados = 0;
   var sinPermiso = [];   // bloques cuyo IMPORTRANGE no conecto al primer intento (se reintenta al final)
 
   var raiz = obtenerCarpetaRaiz_();
@@ -203,7 +207,10 @@ function generarPanelDeControl_(rucFiltro) {
 
     // Resumen IGV por periodo, leido (solo lectura) de la hoja "Liquidacion"
     // Montos escritos a mano en el panel (ventas, compras, IR) -> ajuste en la liquidacion (asi se recalcula todo)
-    try { llevarAjustesALiquidacion_(archivoLiq, ruc, ajustesPrevios); } catch (eA) { Logger.log('Ajustes a la liquidacion: ' + eA.message); }
+    try { ajustesPasados += llevarAjustesALiquidacion_(archivoLiq, ruc, ajustesPrevios); } catch (eA) {
+      Logger.log('Ajustes a la liquidacion: ' + eA.message);
+      try { registrarEnBitacora_('Panel SIRE: no se pudo pasar un ajuste a la liquidación de ' + ruc + ': ' + eA.message); } catch (x) {}
+    }
     var resumenIgv = leerResumenIgvLiquidacion_(archivoLiq);
     // Liquidacion a medio generar (p. ej. Google corto la ejecucion y quedo solo con titulos): se rehace aqui
     // mismo si queda tiempo; si no, el bloque lo dice claro (en vez de quedar vacio sin explicacion).
@@ -419,6 +426,7 @@ function generarPanelDeControl_(rucFiltro) {
   reintentarPermisosImportrange_(ss, sheet, sinPermiso);
   ajustarColumnasDashboard_(sheet, largoMaxIgv, medidas);
   limpiarHojasVacias_(ss);
+  return { ajustesPasados: ajustesPasados };
 }
 
 /**
@@ -570,28 +578,114 @@ function sumasOriginalesLiquidacion_(ssLiq) {
 function llevarAjustesALiquidacion_(archivoLiq, ruc, ajustes) {
   var claves = Object.keys(ajustes).filter(function (k) {
     var p = k.split('|');
-    return p[0] === ruc && CLAVE_LIQ_POR_TITULO_PANEL_[p[2]] && typeof ajustes[k] === 'number';
+    return String(p[0]) === String(ruc) && CLAVE_LIQ_POR_TITULO_PANEL_[p[2]] && typeof ajustes[k] === 'number';
   });
   if (!claves.length || !archivoLiq) return 0;
   var hoja = SpreadsheetApp.openById(archivoLiq.getId()).getSheetByName('Liquidacion');
-  if (!hoja || hoja.getLastRow() < 2) return 0;
-  var enc = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0].map(function (t) { return String(t).trim(); });
-  var pers = hoja.getRange(1, 2, Math.min(hoja.getLastRow(), 14), 1).getValues().map(function (r) { return String(r[0]).trim(); });
-  var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm');
   var n = 0;
   claves.forEach(function (k) {
     var p = k.split('|');
-    var col = enc.indexOf(tituloLiq_(CLAVE_LIQ_POR_TITULO_PANEL_[p[2]])) + 1, fila = pers.indexOf(p[1]) + 1;
-    if (col < 1 || fila < 2) return;
-    var c = hoja.getRange(fila, col), antes = c.getValue();
-    c.setValue(ajustes[k]).setBackground(COLOR_OVERRIDE_FONDO_).setFontColor(COLOR_OVERRIDE_TEXTO_).setFontWeight('bold')
-      .setNote('✋ Ajuste a mano (escrito en el Panel de Control el ' + hoy + ').\nAntes: ' + textoMonto_(Number(antes) || 0) +
-        '\nAhora: ' + textoMonto_(ajustes[k]) + '\n\nPara volver al cálculo automático: borre esta celda y actualice la liquidación.');
-    delete ajustes[k];
-    n++;
+    if (escribirAjusteEnLiquidacion_(hoja, p[1], CLAVE_LIQ_POR_TITULO_PANEL_[p[2]], ajustes[k])) { delete ajustes[k]; n++; }
   });
   if (n) SpreadsheetApp.flush();
   return n;
+}
+
+/** Escribe un ajuste a mano en la hoja Liquidacion (periodo + clave de columna), en rojo y con nota. true si pudo. */
+function escribirAjusteEnLiquidacion_(hoja, per, clave, valor) {
+  if (!hoja || hoja.getLastRow() < 2) return false;
+  var enc = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0].map(function (t) { return String(t).trim(); });
+  var pers = hoja.getRange(1, 2, Math.min(hoja.getLastRow(), 14), 1).getValues().map(function (r) { return String(r[0]).trim(); });
+  var col = enc.indexOf(tituloLiq_(clave)) + 1, fila = pers.indexOf(String(per)) + 1;
+  if (col < 1 || fila < 2) return false;
+  var c = hoja.getRange(fila, col), antes = c.getValue();
+  if (!c.getFormula() && antes === valor) return true;   // ya estaba guardado (no se pisa la nota con el «Antes» original)
+  var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm');
+  c.setValue(valor).setBackground(COLOR_OVERRIDE_FONDO_).setFontColor(COLOR_OVERRIDE_TEXTO_).setFontWeight('bold')
+    .setNote('✋ Ajuste a mano (escrito en el Panel de Control el ' + hoy + ').\nAntes: ' + textoMonto_(Number(antes) || 0) +
+      '\nAhora: ' + textoMonto_(valor) + '\n\nPara volver al cálculo automático: borre esta celda y actualice la liquidación.');
+  return true;
+}
+
+/** Texto del comentario de una celda ajustada: lo que trae el SIRE, lo considerado y lo excluido. */
+function textoNotaAjuste_(orig, valor) {
+  var t = '✋ AJUSTADO A MANO (guardado en la liquidación).\n';
+  if (typeof orig === 'number' && typeof valor === 'number') {
+    var dif = orig - valor;
+    t += '\nSegún el SIRE: ' + textoMonto_(orig) + '\nConsiderado: ' + textoMonto_(valor) +
+      '\n' + (dif >= 0 ? 'IGV EXCLUIDO: ' : 'IGV agregado: ') + textoMonto_(Math.abs(dif)) + '\n';
+  } else if (typeof valor === 'number') {
+    t += '\nConsiderado: ' + textoMonto_(valor) + '\n';
+  }
+  return t + '\nEl total, el IGV a pagar y los saldos usan este monto. Para volver al automático: en la liquidación borre la celda roja y actualice.';
+}
+
+/**
+ * AL ESCRIBIR un monto en el resumen IGV del panel (activador instalado «alEditarPanelSire»): se guarda AL INSTANTE en la
+ * liquidacion de esa empresa (si la columna existe alli), la celda queda en rojo con el comentario SIRE / considerado /
+ * excluido y sale un aviso abajo a la derecha. No hace falta actualizar nada para que quede guardado.
+ */
+function alEditarPanelSire(e) {
+  try {
+    if (!e || !e.range) return;
+    var sh = e.range.getSheet();
+    if (sh.getName() !== 'Panel de Control' || e.range.getNumRows() !== 1 || e.range.getNumColumns() !== 1) return;
+    var col = e.range.getColumn(), fila = e.range.getRow();
+    if (col < 8 || col >= 8 + NUM_COLS_IGV_) return;
+    var per = String(sh.getRange(fila, 3).getValue()).trim();
+    if (!/^\d{6}$/.test(per)) return;
+    // fila de titulos ('Mes') y fila de la empresa, subiendo
+    var desde = Math.max(1, fila - 14), colB = sh.getRange(desde, 2, fila - desde + 1, 1).getValues();
+    var filaMes = -1, ruc = '';
+    for (var i = colB.length - 1; i >= 0; i--) {
+      var t = String(colB[i][0]);
+      if (filaMes === -1 && t.trim() === 'Mes') { filaMes = desde + i; continue; }
+      var m = t.match(/^\s*[▶■]\s*\d+\.\s*(\d{11})/);
+      if (filaMes !== -1 && m) { ruc = m[1]; break; }
+    }
+    if (filaMes === -1 || !ruc) return;
+    var titulo = String(sh.getRange(filaMes, col).getValue()).trim();
+    var clave = CLAVE_LIQ_POR_TITULO_PANEL_[titulo];
+    var valor = e.range.getValue();
+    var ss = sh.getParent();
+    if (valor === '' || valor === null) {
+      ss.toast('Celda borrada. Para que vuelva el monto automático use «Actualizar panel».', 'Panel SIRE', 6);
+      return;
+    }
+    if (typeof valor !== 'number') return;
+    e.range.setBackground('#CC0000').setFontColor('#FFFFFF').setFontWeight('bold');
+    if (!clave) {   // L, M, N: no existen tal cual en la liquidacion: el ajuste queda solo en el panel
+      e.range.setNote('✋ Ajuste a mano solo en el panel (esta columna se calcula en la liquidación; se conserva al actualizar).');
+      ss.toast('Ajuste guardado en el panel (en rojo).', 'Panel SIRE', 5);
+      return;
+    }
+    var archivo = null, it = DriveApp.getFilesByName('Liquidacion IGV ' + ruc + ' - ' + per.slice(0, 4));
+    while (it.hasNext()) { var f = it.next(); if (!f.isTrashed()) { archivo = f; break; } }
+    if (!archivo) { ss.toast('No encontré la liquidación ' + per.slice(0, 4) + ' de ' + ruc + '. El ajuste queda solo en el panel.', 'Panel SIRE', 8); return; }
+    var ssLiq = SpreadsheetApp.openById(archivo.getId());
+    if (!escribirAjusteEnLiquidacion_(ssLiq.getSheetByName('Liquidacion'), per, clave, valor)) {
+      ss.toast('No pude escribir en la liquidación (columna o mes no encontrado). El ajuste queda solo en el panel.', 'Panel SIRE', 8);
+      return;
+    }
+    var orig;
+    try { var o = sumasOriginalesLiquidacion_(ssLiq)[per]; orig = o ? o[clave] : undefined; } catch (eO) {}
+    e.range.setNote(textoNotaAjuste_(orig, valor));
+    ss.toast((typeof orig === 'number' ? 'Según SIRE ' + textoMonto_(orig) + ' → considerado ' + textoMonto_(valor) +
+      ' (' + (orig - valor >= 0 ? 'excluido ' : 'agregado ') + textoMonto_(Math.abs(orig - valor)) + '). ' : '') +
+      'Guardado en la liquidación; el total y el IGV a pagar se recalculan.', '✅ Ajuste guardado', 10);
+  } catch (err) {
+    try { e.range.getSheet().getParent().toast('No se pudo guardar el ajuste: ' + err.message, 'Panel SIRE', 10); } catch (x) {}
+    try { registrarEnBitacora_('Panel SIRE (ajuste a mano): ' + err.message); } catch (x) {}
+  }
+}
+
+/** Instala (una sola vez) el activador que guarda al instante lo que se escribe en el panel. */
+function asegurarActivadorPanel_() {
+  try {
+    var ya = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'alEditarPanelSire'; });
+    if (!ya) ScriptApp.newTrigger('alEditarPanelSire').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
+    return true;
+  } catch (e) { Logger.log('Activador del panel: ' + e.message); return false; }
 }
 
 /**
@@ -610,16 +704,7 @@ function marcarAjustesLiquidacionPanel_(sheet, fila1, resumenIgv, anio) {
       var valor = { debitoTotal: igv.debito, creditoDgDelMes: igv.creditoMes, creditoDgAnt: igv.creditoAnt,
         creditoDgTotal: igv.credito, pagoACuentaRenta: igv.irPagar }[clave];
       var orig = resumenIgv.originales && resumenIgv.originales[per] ? resumenIgv.originales[per][clave] : undefined;
-      var texto = '✋ AJUSTADO A MANO (en la liquidación).\n';
-      if (typeof orig === 'number' && typeof valor === 'number') {
-        var dif = orig - valor;
-        texto += '\nSegún el SIRE: ' + textoMonto_(orig) + '\nConsiderado: ' + textoMonto_(valor) +
-          '\n' + (dif >= 0 ? 'IGV EXCLUIDO: ' : 'IGV agregado: ') + textoMonto_(Math.abs(dif)) + '\n';
-      } else if (typeof valor === 'number') {
-        texto += '\nConsiderado: ' + textoMonto_(valor) + '\n';
-      }
-      texto += '\nEl total, el IGV a pagar y los saldos ya usan este monto. Para volver al automático: en la liquidación ' +
-        'borre la celda roja y actualice.';
+      var texto = textoNotaAjuste_(orig, valor);
       var rg = sheet.getRange(fila1 + m - 1, 8 + k);
       rg.setNote(texto);
       reglas.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=TRUE')
