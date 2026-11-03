@@ -367,9 +367,16 @@ function ejecutarImportacion_(periodos, mostrarResultado, rucFiltro) {
     });
   });
 
-  // Construir / actualizar Liquidación IGV SIEMPRE de forma 100% automática para cada RUC y año procesado
+  // Construir / actualizar Liquidación IGV SIEMPRE de forma 100% automática para cada RUC y año procesado.
+  // Con control de tiempo: si Google (6 min) cortara a mitad de una liquidacion, quedaria solo con titulos.
+  // Lo que no alcanza se sigue generando solo en segundo plano (cola de liquidaciones).
+  var pendientesLiq = [];
   Object.keys(aniosPorRuc).forEach(function (ruc) {
     aniosPorRuc[ruc].forEach(function (anio) {
+      if (pendientesLiq.length || Date.now() - INICIO_EJECUCION_ > LIMITE_LIQ_EN_IMPORTACION_MS_) {
+        pendientesLiq.push(ruc + '|' + anio);
+        return;
+      }
       try {
         var urlLiq = construirLiquidacion_(ruc, anio);
         resumen.push('📊 Liquidación ' + ruc + ' ' + anio + ' actualizada -> ' + urlLiq);
@@ -378,6 +385,10 @@ function ejecutarImportacion_(periodos, mostrarResultado, rucFiltro) {
       }
     });
   });
+  if (pendientesLiq.length) {
+    encolarLiquidaciones_(pendientesLiq);
+    resumen.push('📊 ' + pendientesLiq.length + ' liquidación(es) más se generan solas en segundo plano (en 1 minuto).');
+  }
 
   var mensaje = resumen.join('\n');
   if (errores.length > 0) mensaje += '\n\nERRORES:\n' + errores.join('\n');

@@ -202,6 +202,20 @@ function generarPanelDeControl_(rucFiltro) {
 
     // Resumen IGV por periodo, leido (solo lectura) de la hoja "Liquidacion"
     var resumenIgv = leerResumenIgvLiquidacion_(archivoLiq);
+    // Liquidacion a medio generar (p. ej. Google corto la ejecucion y quedo solo con titulos): se rehace aqui
+    // mismo si queda tiempo; si no, el bloque lo dice claro (en vez de quedar vacio sin explicacion).
+    if (archivoLiq && resumenIgv.incompleta) {
+      if (Date.now() - INICIO_EJECUCION_ < 3 * 60 * 1000) {
+        try {
+          construirLiquidacion_(ruc, anioActual);
+          resumenIgv = leerResumenIgvLiquidacion_(archivoLiq);
+        } catch (eL) { Logger.log('Rehacer liquidacion ' + ruc + ': ' + eL.message); }
+      } else {
+        encolarLiquidaciones_([ruc + '|' + anioActual]);
+      }
+      if (resumenIgv.incompleta) resumenIgv.error = 'liquidación incompleta: se está rehaciendo, actualice el panel en unos minutos';
+    }
+    var liqConDatos = resumenIgv.error ? null : archivoLiq;   // las formulas solo se conectan a una liquidacion sana
 
     // -------------------------------------------------------
     // --- HEADER DE EMPRESA: B..G (6 columnas alineadas) ---
@@ -353,13 +367,13 @@ function generarPanelDeControl_(rucFiltro) {
     // --- BLOQUE RESUMEN IGV + IR (H..M): FORMULAS que leen la Liquidacion (se actualizan solas) ---
     var rangoIgv = sheet.getRange(filaActual, 8, 12, NUM_COLS_IGV_);
     var conFormulas = false;
-    if (archivoLiq) {
-      rangoIgv.setFormulas(formulasResumenIgv_(ss, sheet, archivoLiq, filaActual - 1));
-      conFormulas = importrangeConectado_(ss, sheet, archivoLiq, filaActual - 1);
+    if (liqConDatos) {
+      rangoIgv.setFormulas(formulasResumenIgv_(ss, sheet, liqConDatos, filaActual - 1));
+      conFormulas = importrangeConectado_(ss, sheet, liqConDatos, filaActual - 1);
     }
     if (!conFormulas) {   // sin permiso para leer la liquidacion (o sin liquidacion): los montos como valores, como antes
       rangoIgv.setValues(filasIgv);
-      if (archivoLiq) sheet.getRange(filaActual - 2, 8).setNote('Montos fijos (copiados de la liquidación al actualizar el panel): Google no dejó conectar este bloque con la liquidación. ' +
+      if (liqConDatos) sheet.getRange(filaActual - 2, 8).setNote('Montos fijos (copiados de la liquidación al actualizar el panel): Google no dejó conectar este bloque con la liquidación. ' +
         'Para que se actualicen solos: abra la liquidación una vez desde «📊 Liquidación» y vuelva a actualizar el panel.');
     }
     rangoIgv.setFontSize(9).setVerticalAlignment('middle')
@@ -427,7 +441,11 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
   if (!archivoLiq) { res.error = 'sin liquidación generada'; return res; }
   try {
     var hoja = SpreadsheetApp.openById(archivoLiq.getId()).getSheetByName('Liquidacion');
-    if (!hoja) { res.error = 'falta la pestaña Liquidacion'; return res; }
+    if (!hoja || hoja.getLastRow() < 2 || hoja.getLastColumn() < 2) {
+      res.error = hoja ? 'liquidación vacía' : 'falta la pestaña Liquidacion';
+      res.incompleta = true;
+      return res;
+    }
     var datos = hoja.getRange(1, 1, Math.min(hoja.getLastRow(), 20), hoja.getLastColumn()).getValues();
     var enc = datos[0].map(function (t) { return String(t).trim(); });
     function col(clave) {
@@ -436,8 +454,9 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
     }
     var iPer = col('periodo'), iDeb = col('debitoTotal'), iCred = col('creditoDgTotal'),
         iCredMes = col('creditoDgDelMes'), iCredAnt = col('creditoDgAnt'), iPagar = col('igvAPagar'), iFavor = col('saldoArrastrar');
-    if ([iPer, iDeb, iCred, iCredMes, iCredAnt, iPagar, iFavor].indexOf(-1) !== -1) {
+    if ([iPer, iDeb, iCred, iCredAnt, iPagar, iFavor].indexOf(-1) !== -1) {
       res.error = 'columnas de la liquidación no reconocidas';
+      res.incompleta = true;   // formato antiguo o a medias: se rehace
       return res;
     }
     // Pago a cuenta de renta: opcional (si no existiera, la columna IR queda vacia)
@@ -450,7 +469,9 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
       res.porPeriodo[per] = {
         debito: num(datos[i][iDeb]),
         credito: num(datos[i][iCred]),
-        creditoMes: num(datos[i][iCredMes]),
+        // liquidacion antigua sin «del mes»: total - anteriores
+        creditoMes: iCredMes !== -1 ? num(datos[i][iCredMes])
+          : (typeof datos[i][iCred] === 'number' && typeof datos[i][iCredAnt] === 'number' ? datos[i][iCred] - datos[i][iCredAnt] : ''),
         creditoAnt: num(datos[i][iCredAnt]),
         aPagar: num(datos[i][iPagar]),
         // En la liquidacion el saldo a favor se guarda en negativo; aqui positivo
@@ -458,6 +479,8 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
         irPagar: iRenta === -1 ? '' : num(datos[i][iRenta]),
       };
     }
+    // Solo titulos y ningun mes: la liquidacion quedo a medio generar
+    if (!Object.keys(res.porPeriodo).length) res.incompleta = true;
   } catch (e) {
     Logger.log('No se pudo leer la liquidacion ' + archivoLiq.getName() + ': ' + e.message);
     res.error = 'no se pudo leer la liquidación';
