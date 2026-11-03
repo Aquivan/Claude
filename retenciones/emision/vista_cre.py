@@ -213,6 +213,44 @@ def pasar_avisos_sol(pag, rondas=4):
     return hechos
 
 
+class FechaFueraDeRango(Exception):
+    """SUNAT: «La fecha de emisión debe estar en un rango de N días antes…» (aparece recién al agregar la factura)."""
+    def __init__(self, antes):
+        super().__init__(f"fecha fuera de rango ({antes} días antes)")
+        self.antes = antes
+
+
+def preparar_seguro(p, nav_args, s, docs, avisos_ok, ruc, usuario, clave, al_dialogo_fn, lanzar=None):
+    """preparar() con su navegador; si SUNAT dice que la fecha de emisión está fuera de su rango (N días antes de hoy),
+    se queda solo con las fechas permitidas, avisa al bot (para las próximas) y vuelve a empezar UNA vez.
+    Devuelve (nav, pag, vp, total_ret)."""
+    for intento in range(2):
+        nav = lanzar() if lanzar else p.chromium.launch(args=nav_args)
+        ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
+        pag = ctx.new_page()
+        pag.on("dialog", al_dialogo_fn)
+        if intento == 0:
+            en_vivo_iniciar()
+        try:
+            vp, total_ret = preparar(pag, s, docs, avisos_ok, ruc, usuario, clave)
+            return nav, pag, vp, total_ret
+        except FechaFueraDeRango as e:
+            hoy = datetime.now(LIMA).replace(hour=12, minute=0, second=0, microsecond=0)
+            piso = hoy - timedelta(days=e.antes)
+            antes = s.get("fechas_emision") or []
+            validas = [f for f in antes if datetime.strptime(f, "%d/%m/%Y").replace(tzinfo=LIMA) >= piso.replace(hour=0)]
+            print(f"SUNAT solo permite fechas de emisión desde {e.antes} día(s) antes de hoy: pruebo de nuevo con {validas[:1] or ['hoy']}")
+            _bot_vivo({"accion": "cre_rango", "antes": e.antes})   # el bot lo recuerda para las próximas solicitudes
+            s = dict(s, fechas_emision=validas or [hoy.strftime("%d/%m/%Y")])
+            try:
+                nav.close()
+            except Exception:
+                pass
+            if intento == 1:
+                alto("SUNAT no aceptó ninguna fecha de emisión permitida")
+    alto("SUNAT no aceptó ninguna fecha de emisión permitida")
+
+
 def elegir_fecha(fr, s, hoy):
     """Fecha de emisión: prueba las fechas en orden (la del pago, la del último CRE de la empresa, luego desde 5 días
     atrás hasta hoy; las arma el bot en "fechas_emision") y se queda con la primera que SUNAT acepta.
@@ -346,6 +384,13 @@ def preparar(pag, s, docs, avisos_ok, ruc, usuario, clave):
                     boton = fr.evaluate("""() => { const b = [...document.querySelectorAll('#idModalMensaje button')]
                         .find(x => x.offsetParent !== null && x.innerText.trim().toLowerCase() === 'aceptar');
                         if (!b) return ''; b.id = b.id || 'btnAceptarAvisoSunat'; return '#' + b.id; }""")
+                rango = re.search(r"(?i)rango de\s*(\d+)\s*d\S*as antes", c["texto"])
+                if rango:   # la fecha de emisión elegida está fuera de lo que SUNAT permite: se vuelve a empezar con otra
+                    try:
+                        fr.click("#btnModalIzq:visible, #btnModalDer:visible", timeout=2000)
+                    except Exception:
+                        pass
+                    raise FechaFueraDeRango(int(rango.group(1)))
                 if not permitido or not boton:
                     fallar(fr, f"Documento {i}: SUNAT pregunta «{sin_datos(c['texto'])[:300]}». El robot no responde por usted")
                 print(f"  SUNAT avisa «{sin_datos(c['texto'])[:200]}» → Aceptar (autorizado por el usuario: «{permitido}»; solo agrega la factura a la lista)")
@@ -387,7 +432,8 @@ def _bot_vivo(cuerpo):
     url = os.environ.get("BOT_URL", "")
     if not url or not os.environ.get("CASO_VIVO"):
         return {"ok": False}
-    c = dict(cuerpo, accion="cre_vivo", caso=os.environ["CASO_VIVO"], run=os.environ.get("GITHUB_RUN_ID", ""))
+    acc = str(cuerpo.get("accion", "gre_vivo")).replace("gre_vivo", "cre_vivo")   # 📺 fotos / 🎥 video / rango de fechas
+    c = dict(cuerpo, accion=acc, caso=os.environ["CASO_VIVO"], run=os.environ.get("GITHUB_RUN_ID", ""))
     req = urllib.request.Request(url + ("&" if "?" in url else "?") + "canal=gh", data=json.dumps(c).encode(),
                                  headers={"Content-Type": "application/json"}, method="POST")
     try:
@@ -405,6 +451,20 @@ def en_vivo_args():
         return en_vivo.args()
     except Exception:
         return []
+
+
+def en_vivo_lanzador(p):
+    """🎥 Si «en vivo» está activo: Chrome VISIBLE en una pantalla virtual que se ve como video (se puede mirar en vivo,
+    no solo fotos). Si no se puede, el de siempre. Devuelve la función que abre el navegador, o None."""
+    if not os.environ.get("CASO_VIVO") or not os.environ.get("BOT_URL"):
+        return None
+    try:
+        import en_vivo
+        pantalla = en_vivo.video(_bot_vivo)
+        return lambda: en_vivo.lanzar(p, pantalla)
+    except Exception as e:
+        print("  (video en vivo no disponible:", type(e).__name__, ")")
+        return None
 
 
 def en_vivo_iniciar():
@@ -426,12 +486,8 @@ def main():
     print("Documentos:", len(docs), "| notas de crédito:", sum(len(d.get("notas_credito") or []) for d in docs), "| solo VISTA PRELIMINAR (no emite)")
 
     with sync_playwright() as p:
-        nav = p.chromium.launch(args=en_vivo_args())
-        ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
-        pag = ctx.new_page()
-        pag.on("dialog", al_dialogo)
-        en_vivo_iniciar()
-        vp, total_ret = preparar(pag, s, docs, avisos_ok, ruc, usuario, clave)
+        nav, pag, vp, total_ret = preparar_seguro(p, en_vivo_args(), s, docs, avisos_ok, ruc, usuario, clave, al_dialogo,
+                                                  lanzar=en_vivo_lanzador(p))
         print("Vista preliminar abierta:", vp.url.split("?")[0])
         aviso = vp.evaluate(JS_AVISO)
         if aviso:
@@ -439,6 +495,8 @@ def main():
         print("Botones y campos de la vista preliminar (para el siguiente paso):\n  " + "\n  ".join(vp.evaluate(JS_ESTRUCTURA)))
         print("::notice title=CRE vista::Vista preliminar lista: SUNAT aceptó todo. No se emitió nada.")
         print("\n✅ Llegó a la vista preliminar. NO se emitió nada: este programa no tiene el paso de emitir.")
+        if os.environ.get("CASO_VIVO"):   # 📺 que se alcance a ver la vista preliminar en vivo antes de cerrar
+            pag.wait_for_timeout(45000)
 
 
 if __name__ == "__main__":

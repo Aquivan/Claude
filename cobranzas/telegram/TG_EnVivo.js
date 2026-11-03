@@ -26,9 +26,11 @@ function TGEV_iniciar_(c) {
 }
 
 /** Abre una transmisión para otro robot (p. ej. el del comprobante de retención): caso → enlace secreto (o '' si apagado). */
-function TGEV_abrir_(caso) {
+function TGEV_abrir_(caso, chat) {
   if (!TGEV_activo_() || !caso) return '';
-  var cache = CacheService.getScriptCache(), tok = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+  var cache = CacheService.getScriptCache();
+  if (chat) cache.put('tgv_chat_' + caso, String(chat), 21600);   // a dónde mandar el enlace del 🎥 video
+  var tok = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
   cache.put('tgv_t_' + tok, String(caso), 21600);
   cache.put('tgv_on_' + caso, '1', 3600);
   cache.removeAll(['tgv_m_' + caso, 'tgv_v_' + caso]);
@@ -73,6 +75,12 @@ function TGEV_vncDelRobot_(q) {
   if (!caso || (!cache.get('tgv_on_' + caso) && !q.forzado)) return { ok: false, error: 'en vivo apagado' };
   cache.put('tgv_v_' + caso, url, 3600);
   // También directo al chat: este enlace no pasa por Google (con varias cuentas de Google abiertas, la página 📺 a veces no abre).
+  var chatCre = cache.get('tgv_chat_' + caso);   // 🧾 robot del comprobante de retención
+  if (chatCre) {
+    var txt = '🎥 Video en vivo del comprobante de retención: ' + url + '\nSolo dura mientras el robot trabaja.';
+    try { if (String(chatCre).indexOf('wa') === 0) TGC_wa_({ tipo: 'texto', numero: String(chatCre).slice(2), texto: txt }); else TG_enviar_(chatCre, TG_esc_(txt)); } catch (e) {}
+    return { ok: true };
+  }
   try { var c = TGG_leer_(TG_ss_(), caso); if (c) TGG_avisar_(c, '🎥 Video en vivo (puede hacer clic y escribir): ' + url +
     '\n🔍 Tamaño real (para el captcha en el celular; mueva la pantalla con la mano ✋ del menú): ' + url.replace('resize=scale', 'resize=off&view_clip=1') +
     '\nSolo duran mientras el robot trabaja.', null, false); } catch (e) {}
