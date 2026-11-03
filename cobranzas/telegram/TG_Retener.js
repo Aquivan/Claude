@@ -41,7 +41,8 @@ function TGR_pendientes_(ss) {
     var empresa = String(r[I['Empresa']]), empresaRuc = rucDe[empresa] || '', prov = String(r[I['RUC']]).replace(/\D/g, '');
     var fecha = aFecha_(r[I['Fecha']]), op = String(r[I['N° operación']]);
     if (!fecha || !empresaRuc || String(r[I['Moneda']]) !== 'PEN') { out.otras++; return; }
-    if (fecha < minPago || fecha > hoy) { out.fuera++; return; }   // SEE-SOL: el pago debe ser del mes de emisión
+    if (fecha > hoy) { out.fuera++; return; }
+    // Pagos de meses anteriores: también se proponen (el robot prueba fechas de emisión, ver TGR_fechasEmision_)
     var docsS = [], total = 0;
     String(r[I['Facturas que pagó (sujetas)']]).split(/\s*,\s*/).filter(String).forEach(function (etq) {
       var m = etq.match(/^(\d{2})_([A-Z0-9]{4})-(\d+)$/i);
@@ -69,7 +70,8 @@ function TGR_pendientes_(ss) {
       s: s, total: total, falta: aNumero_(r[I['Falta S/']]), empresa: empresa, proveedor: String(r[I['Proveedor / cliente']])
     });
   });
-  out.lista.sort(function (a, b) { return a.s.documentos[0].fecha_pago < b.s.documentos[0].fecha_pago ? 1 : -1; });
+  // Del pago MÁS ANTIGUO al más reciente: los CRE de una empresa van en orden de fecha (se emiten primero los antiguos)
+  out.lista.sort(function (a, b) { return TGR_fechaDe_(a.s.documentos[0].fecha_pago) - TGR_fechaDe_(b.s.documentos[0].fecha_pago); });
   return out;
 }
 
@@ -111,9 +113,69 @@ function TGR_clave_(s) {
     .map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('').slice(0, 10);
 }
 
+/** Pide la corrida. Devuelve el enlace 📺 en vivo ('' si ese modo está apagado). */
 function TGR_pedir_(cfg, s, modo) {
+  try { s.fechas_emision = TGR_fechasEmision_(s); } catch (e) { console.warn('Fechas de emisión: ' + e.message); }
+  var caso = '', url = '';
+  try { if (TGEV_activo_()) { caso = 'cre' + Utilities.getUuid().replace(/-/g, '').slice(0, 8); url = TGEV_abrir_(caso); } } catch (e) { caso = ''; }
   TG_gh_(cfg, '/actions/workflows/' + TGR_WF_ + '/dispatches', 'post', { ref: cfg.rama, inputs: {
-    ruc: s.empresa_ruc, solicitud: JSON.stringify(s), modo: modo, confirmar: modo === 'emitir' ? TGR_clave_(s) : '' } });
+    ruc: s.empresa_ruc, solicitud: JSON.stringify(s), modo: modo, confirmar: modo === 'emitir' ? TGR_clave_(s) : '', caso: caso } });
+  return url;
+}
+
+function TGR_fechaDe_(t) {
+  var m = String(t || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), 12) : new Date(0);
+}
+
+/**
+ * 📅 Fechas de emisión que el robot prueba EN ORDEN hasta que SUNAT acepte una:
+ *   1) la fecha del pago; 2) la del último CRE emitido por esa empresa (los comprobantes van en orden);
+ *   3) desde 5 días atrás hasta hoy. Nunca antes del pago ni antes del último CRE, nunca después de hoy.
+ */
+function TGR_fechasEmision_(s) {
+  var tz = 'America/Lima', hoy = new Date(Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd') + 'T12:00:00');
+  var pago = (s.documentos || []).map(function (d) { return TGR_fechaDe_(d.fecha_pago); }).filter(function (d) { return d.getTime() > 0; })
+    .sort(function (a, b) { return b - a; })[0] || hoy;   // el pago más reciente del comprobante
+  var ultima = TGR_ultimoCre_(s.empresa_ruc);
+  var piso = ultima && ultima > pago ? ultima : pago;
+  var cand = [pago, ultima];
+  for (var d = 5; d >= 0; d--) cand.push(new Date(hoy.getTime() - d * 864e5));
+  var vistas = {}, out = [];
+  cand.filter(function (x) { return x && x >= piso && x <= hoy; }).sort(function (a, b) { return a - b; }).forEach(function (x) {
+    var t = Utilities.formatDate(x, tz, 'dd/MM/yyyy');
+    if (!vistas[t]) { vistas[t] = 1; out.push(t); }
+  });
+  return out.length ? out : [Utilities.formatDate(hoy, tz, 'dd/MM/yyyy')];
+}
+
+/** Fecha del último comprobante de retención EMITIDO por esa empresa (descarga de Retenciones), o null. */
+function TGR_ultimoCre_(ruc) {
+  try {
+    var t = TG_tablaLibro_(ANA_ctx_(TG_ss_()), 'retenciones', 'Emitidas');
+    var jr = TG_col_(t.columnas, 'RUC empresa'), jf = TG_col_(t.columnas, 'Fecha emisión'), je = TG_col_(t.columnas, 'Estado'), max = null;
+    if (jr < 0 || jf < 0) return null;
+    t.filas.forEach(function (r) {
+      if (String(r[jr]).replace(/\D/g, '') !== String(ruc)) return;
+      if (je >= 0 && /REVERT|ANUL|BAJA/i.test(String(r[je]))) return;
+      var f = r[jf] instanceof Date ? new Date(r[jf].getFullYear(), r[jf].getMonth(), r[jf].getDate(), 12) : TGR_fechaDe_(r[jf]);
+      if (f.getTime() > 0 && (!max || f > max)) max = f;
+    });
+    return max;
+  } catch (e) { console.warn('Último CRE: ' + e.message); return null; }
+}
+
+/** Si hay un pago MÁS ANTIGUO de la misma empresa todavía sin CRE, aviso para emitir primero ese ('' si no). */
+function TGR_avisoAntiguo_(ss, p) {
+  try {
+    var mio = TGR_fechaDe_(p.s.documentos[0].fecha_pago);
+    var antes = TGR_pendientes_(ss).lista.filter(function (x) {
+      return x.s.empresa_ruc === p.s.empresa_ruc && TGR_fechaDe_(x.s.documentos[0].fecha_pago) < mio && TGR_clave_(x.s) !== TGR_clave_(p.s);
+    });
+    if (!antes.length) return '';
+    return '\n\n⚠️ <b>' + p.empresa + ' tiene ' + antes.length + ' pago(s) más antiguo(s) sin comprobante</b> (el más antiguo: ' + antes[0].detalle +
+      '). Los CRE van en orden de fecha: conviene emitir primero ese (escriba <i>emitir</i> para verlos todos).';
+  } catch (e) { return ''; }
 }
 
 function TGR_textoPropuesta_(p, n) {
@@ -504,8 +566,7 @@ function TGR_armarCre_(p, rucDe) {
   if (!/^PEN|^S\//i.test(v.moneda)) return { motivo: 'El voucher ' + v.fila + ' está en dólares: hágalo a mano en SOL.', filas: filas };
   var hoy = new Date(Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd') + 'T12:00:00');
   var minPago = new Date(hoy.getTime() - 5 * 864e5); minPago = new Date(minPago.getFullYear(), minPago.getMonth(), 1);
-  if (v.fecha < minPago) return { motivo: 'El pago (' + v.fila + ') es del ' + Utilities.formatDate(v.fecha, 'America/Lima', 'dd/MM/yyyy') +
-    ' y SEE-SOL solo emite comprobantes con pagos del mes en curso: hágalo con su contador.', filas: filas };
+  // Pago de un mes anterior: se intenta igual; el robot prueba fechas de emisión (TGR_fechasEmision_) y la 👁 vista previa dice cuál aceptó SUNAT.
   var empresaRuc = rucDe[f.empresa] || v.idUsuario;
   if (!empresaRuc || !f.ruc) return { motivo: 'Al voucher ' + v.fila + ' o a la factura les falta la empresa o el RUC del proveedor.', filas: filas };
   var neto = f.total - f.nc, bruto = Math.round(v.monto / 0.97 * 100) / 100;
@@ -620,7 +681,8 @@ function TGR_alBotonTG_(ctx, datos, op, k) {
   if (op === 'no') return TG_editarOEnviar_(ctx, '✖ No se emitió nada.', null);
   if (op === 'em') {
     return TG_enviar_(ctx.chatId, '⚠️ <b>¿Emito este comprobante de retención en SUNAT?</b>\n' + TGR_textoPropuesta_(p, 0) +
-      '\n\nEs una operación real ante SUNAT. El robot emite solo si SUNAT calcula exactamente S/ ' + TG_num_(p.total) + ' y la factura no tiene ya un comprobante.',
+      '\n\nEs una operación real ante SUNAT. El robot emite solo si SUNAT calcula exactamente S/ ' + TG_num_(p.total) + ' y la factura no tiene ya un comprobante.' +
+      TGR_avisoAntiguo_(ctx.ss, p),
       [[{ text: '✅ Sí, emitir', callback_data: 'k:' + k + ':ok' }, { text: '✖ No', callback_data: 'k:' + k + ':no' }]]);
   }
   if (op === 'ok' && (!ctx.usuario || ctx.usuario.rol !== 'admin')) return TG_enviar_(ctx.chatId, 'Solo un administrador puede emitir comprobantes de retención.');
@@ -628,10 +690,12 @@ function TGR_alBotonTG_(ctx, datos, op, k) {
     var modo = op === 'ok' ? 'emitir' : 'vista';
     if (TG_yaVisto_('cre' + modo + k)) return TG_enviar_(ctx.chatId, 'Eso ya se pidió.');
     if (op === 'ok') TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
-    try { TGR_pedir_(cfg, p.s, modo); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ No pude pedirlo a GitHub: ' + TG_esc_(e.message)); }
+    var vivo = '';
+    try { vivo = TGR_pedir_(cfg, p.s, modo); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ No pude pedirlo a GitHub: ' + TG_esc_(e.message)); }
     TG_seguir_(ctx.chatId, TGR_WF_, null, p.titulo, { tipo: 'cre', modo: modo, k: k, total: p.total, docs: p.s.documentos.map(function (x) { return x.serie + '-' + x.numero; }) });
     return TG_enviar_(ctx.chatId, (modo === 'emitir' ? '🧾 <b>Emitiendo</b> en SUNAT' : '👁 <b>Preparando la vista previa</b> en SUNAT (no se emite)') +
-      ': ' + TG_esc_(p.titulo) + '\nTarda 1–2 minutos; le aviso aquí el resultado.');
+      ': ' + TG_esc_(p.titulo) + '\nTarda 1–2 minutos; le aviso aquí el resultado.' +
+      (vivo ? '\n📺 Véalo en vivo: ' + vivo : '\n<i>📺 Para verlo en vivo la próxima vez, escriba «en vivo sí».</i>'));
   }
 }
 
@@ -913,6 +977,7 @@ function TGR_avisarFin_(cfg, s, r) {
   } catch (e) {}
   var nota = function (rx) { return notas.filter(function (n) { return rx.test(n.title || ''); })[0]; };
   var ok = nota(/^CRE emitido/), vista = nota(/^CRE vista/), no = nota(/^CRE no emitido/), sin = nota(/^CRE sin confirmar/);
+  var fEm = nota(/^Fecha de emisi/), conFecha = fEm ? '\n📅 Fecha de emisión: <b>' + TG_esc_(fEm.message) + '</b>' : '';
   var html, k = s.extra.k;
   // A qué pedido corresponde (puede haber varios del mismo comprobante).
   var t = s.texto + ((s.extra.docs || []).length ? ' · factura ' + s.extra.docs.join(', ') : '') + ' (' + (s.extra.modo === 'emitir' ? 'emisión' : 'vista previa') + ' pedida a las ' + Utilities.formatDate(new Date(s.desde), 'America/Lima', 'HH:mm') + ')';
@@ -921,9 +986,9 @@ function TGR_avisarFin_(cfg, s, r) {
     try { url = TGR_mandarPdf_(s.chat, r.id); } catch (e) { console.warn('PDF del CRE: ' + e.message); }
     html = '✅ <b>Comprobante de retención emitido: ' + TG_esc_(ok.message) + '</b>\n' + TG_esc_(t) + ' · S/ ' + TG_num_(s.extra.total) +
       (url ? '\n📄 Le envié el PDF (copia en Drive: <a href="' + url + '">' + TG_esc_(TGR_CARPETA_) + '</a>). El XML llega con la próxima descarga de Retenciones.'
-        : '\n<i>El PDF y el XML llegan con la próxima descarga de Retenciones.</i>');
+        : '\n<i>El PDF y el XML llegan con la próxima descarga de Retenciones.</i>') + conFecha;
   }
-  else if (vista) html = '👁 <b>Vista previa lista</b>: ' + TG_esc_(t) + '\nSUNAT aceptó todo y calculó S/ ' + TG_num_(s.extra.total) + '. <b>No se emitió nada.</b>';
+  else if (vista) html = '👁 <b>Vista previa lista</b>: ' + TG_esc_(t) + '\nSUNAT aceptó todo y calculó S/ ' + TG_num_(s.extra.total) + '. <b>No se emitió nada.</b>' + conFecha;
   else if (sin) html = '⚠️ <b>Se tocó Emitir pero no confirmé el número</b>: ' + TG_esc_(t) + '\nRevise en SOL → Consultar emisión antes de volver a intentar.';
   else if (no) html = '⛔ <b>No se emitió</b>: ' + TG_esc_(t) + '\n' + TG_esc_(no.message);
   else html = '❌ <b>El robot de retenciones falló</b>: ' + TG_esc_(t) + '. No se emitió nada.' +
@@ -1059,7 +1124,7 @@ function TGR_botonWA_(acc, k, op, numero) {
   var cfg = TG_cfg_(TG_ss_()), p = acc.p, clave = 'wa' + String(numero || '').replace(/\D/g, '');
   if (op === 'no') return { ok: true, respuesta: '✖ No se emitió nada.' };
   if (op === 'em') return { ok: true, respuesta: '⚠️ *¿Emito este comprobante de retención en SUNAT?*\n' + TGR_textoPropuesta_(p, 0) +
-    '\n\nEs una operación real ante SUNAT. El robot emite solo si SUNAT calcula exactamente S/ ' + TG_num_(p.total) + '.',
+    '\n\nEs una operación real ante SUNAT. El robot emite solo si SUNAT calcula exactamente S/ ' + TG_num_(p.total) + '.' + TGR_avisoAntiguo_(TG_ss_(), p),
     botones: [{ k: k, texto: '¿Emitir?', opciones: [{ op: 'ok', titulo: '✅ Sí, emitir' }, { op: 'no', titulo: '✖ No' }] }] };
   var permitidos = (PropertiesService.getScriptProperties().getProperty(TGR_PROP_WA_) || '').split(',');
   if (op === 'ok' && permitidos.indexOf(clave.slice(2)) < 0)
@@ -1067,8 +1132,9 @@ function TGR_botonWA_(acc, k, op, numero) {
   if (op !== 'ok' && op !== 'vp') return { ok: true, respuesta: 'No entendí ese botón.' };
   var modo = op === 'ok' ? 'emitir' : 'vista';
   if (TG_yaVisto_('cre' + modo + k)) return { ok: true, respuesta: 'Eso ya se pidió.' };
-  try { TGR_pedir_(cfg, p.s, modo); } catch (e) { return { ok: false, error: 'No pude pedirlo a GitHub: ' + e.message }; }
+  var vivo = '';
+  try { vivo = TGR_pedir_(cfg, p.s, modo); } catch (e) { return { ok: false, error: 'No pude pedirlo a GitHub: ' + e.message }; }
   TG_seguir_(clave, TGR_WF_, null, p.titulo, { tipo: 'cre', modo: modo, k: k, total: p.total, docs: p.s.documentos.map(function (x) { return x.serie + '-' + x.numero; }) });
   return { ok: true, seguir: true, respuesta: (modo === 'emitir' ? '🧾 *Emitiendo* en SUNAT' : '👁 *Preparando la vista previa* en SUNAT (no se emite)') +
-    ': ' + p.titulo + '\nTarda 1–2 minutos; le aviso aquí el resultado.' };
+    ': ' + p.titulo + '\nTarda 1–2 minutos; le aviso aquí el resultado.' + (vivo ? '\n📺 Véalo en vivo: ' + vivo : '\n_📺 Para verlo en vivo la próxima vez, escriba «en vivo sí»._') };
 }

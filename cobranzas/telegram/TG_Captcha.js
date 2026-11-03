@@ -27,6 +27,7 @@ function TGC_doPost_(e) {
     // 🧾 PDF del comprobante de retención recién emitido (TG_Retener.js): solo una corrida de retenciones-cre.yml que esté corriendo.
     if (/^cre_/.test(String(q.accion || ''))) {
       if (!run || !TGC_runValido_(cfg, run, /(^|\/)retenciones-cre\.ya?ml$/)) return TGW_json_({ ok: false, error: 'Forbidden' });
+      if (q.accion === 'cre_vivo') return TGW_json_(TGEV_cuadroDelRobot_(q));   // 📺 foto de la pantalla (TG_EnVivo.js)
       return TGW_json_(TGR_pdfGh_(ss, run, q));
     }
     if (/^rpn_/.test(String(q.accion || ''))) {

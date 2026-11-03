@@ -213,6 +213,40 @@ def pasar_avisos_sol(pag, rondas=4):
     return hechos
 
 
+def elegir_fecha(fr, s, hoy):
+    """Fecha de emisión: prueba las fechas en orden (la del pago, la del último CRE de la empresa, luego desde 5 días
+    atrás hasta hoy; las arma el bot en "fechas_emision") y se queda con la primera que SUNAT acepta.
+    Si ninguna lo deja, se queda con hoy (lo que SUNAT pone solo)."""
+    fechas = [f for f in (s.get("fechas_emision") or [s.get("fecha_emision") or hoy]) if f]
+    for f in fechas:
+        if f == hoy:
+            poner(fr, "#txtFecEmision", hoy)
+            print("Fecha de emisión:", f)
+            print(f"::notice title=Fecha de emisión::{f}")
+            return f
+        poner(fr, "#txtFecEmision", f)
+        fr.wait_for_timeout(1500)
+        aviso = ""
+        try:
+            aviso = fr.evaluate(JS_AVISO)
+        except Exception:
+            pass
+        puesto = valor(fr, "#txtFecEmision")
+        if puesto == f and not re.search(r"(?i)fecha", aviso or ""):
+            print("Fecha de emisión:", f)
+            print(f"::notice title=Fecha de emisión::{f}")
+            return f
+        print(f"  SUNAT no aceptó la fecha {f}" + (f": {sin_datos(aviso)[:150]}" if aviso else ""))
+        try:   # cerrar el aviso de SUNAT antes de probar la siguiente
+            fr.click("#idModalMensaje button:visible", timeout=2000)
+        except Exception:
+            pass
+    poner(fr, "#txtFecEmision", hoy)
+    print("Fecha de emisión: hoy (ninguna de las anteriores fue aceptada)")
+    print(f"::notice title=Fecha de emisión::{hoy} (SUNAT no aceptó las fechas anteriores)")
+    return hoy
+
+
 def preparar(pag, s, docs, avisos_ok, ruc, usuario, clave):
     """Llena el comprobante en SEE-SOL y abre la Vista preliminar. NO emite.
     Devuelve (marco de la vista preliminar, total de retención que calculó SUNAT)."""
@@ -230,13 +264,23 @@ def preparar(pag, s, docs, avisos_ok, ruc, usuario, clave):
     pasar_avisos_sol(pag)   # «datos de contacto», campañas: se pasan sin confirmar nada
     print("Ingreso a SOL: OK")
 
-    # 2) Formulario del comprobante de retención
-    pag.goto(f"{MENU}?action=execute&code={CODIGO_FORMULARIO}", wait_until="networkidle", timeout=60000)
-    fr = marco_con(pag, "#txtNumDoc")
+    # 2) Formulario del comprobante de retención. SOL a veces muestra un aviso al salir del menú («¿salir de la
+    #    página?») que cortaba la carga (ERR_ABORTED): se acepta ese aviso y se reintenta.
+    fr = None
+    for intento in range(3):
+        try:
+            pag.goto(f"{MENU}?action=execute&code={CODIGO_FORMULARIO}", wait_until="domcontentloaded", timeout=60000)
+            fr = marco_con(pag, "#txtNumDoc", 40000)
+            break
+        except Exception as e:
+            print(f"  Abrir el formulario: intento {intento + 1} sin éxito ({type(e).__name__})")
+            pag.wait_for_timeout(3000)
+            pasar_avisos_sol(pag)
+    if fr is None:
+        alto("SUNAT no abrió el formulario de comprobantes de retención (3 intentos)")
     print("Formulario abierto:", fr.url.split("?")[0])
     fr.wait_for_timeout(1500)
-    if s.get("fecha_emision") and s["fecha_emision"] != hoy:
-        poner(fr, "#txtFecEmision", s["fecha_emision"])
+    elegir_fecha(fr, s, hoy)
     fr.select_option("#cmbRegiPercep", "01")   # Tasa 3%
     if s.get("observacion"):
         fr.fill("#txtObs", s["observacion"][:250])
@@ -328,6 +372,51 @@ def preparar(pag, s, docs, avisos_ok, ruc, usuario, clave):
     return vp, round(total_ret, 2)
 
 
+def al_dialogo(d):
+    """Avisos del navegador: el de «salir de la página» se ACEPTA (si no, la navegación se corta); los demás se cierran."""
+    print("  Diálogo del navegador:", d.type, sin_datos(d.message)[:200])
+    try:
+        d.accept() if d.type == "beforeunload" else d.dismiss()
+    except Exception:
+        pass
+
+
+# 📺 En vivo (opcional): con el modo activo en el bot, fotos de la pantalla cada ~3 s al bot (no a GitHub).
+def _bot_vivo(cuerpo):
+    import urllib.request
+    url = os.environ.get("BOT_URL", "")
+    if not url or not os.environ.get("CASO_VIVO"):
+        return {"ok": False}
+    c = dict(cuerpo, accion="cre_vivo", caso=os.environ["CASO_VIVO"], run=os.environ.get("GITHUB_RUN_ID", ""))
+    req = urllib.request.Request(url + ("&" if "?" in url else "?") + "canal=gh", data=json.dumps(c).encode(),
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode() or "{}")
+    except Exception:
+        return {"ok": False}
+
+
+def en_vivo_args():
+    if not os.environ.get("CASO_VIVO"):
+        return []
+    try:
+        import en_vivo
+        return en_vivo.args()
+    except Exception:
+        return []
+
+
+def en_vivo_iniciar():
+    if not os.environ.get("CASO_VIVO") or not os.environ.get("BOT_URL"):
+        return
+    try:
+        import en_vivo
+        en_vivo.iniciar(_bot_vivo, ["CRE"])
+    except Exception as e:
+        print("  (en vivo no disponible:", type(e).__name__, ")")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--solicitud", default="", help="archivo JSON (si no, variable SOLICITUD)")
@@ -337,10 +426,11 @@ def main():
     print("Documentos:", len(docs), "| notas de crédito:", sum(len(d.get("notas_credito") or []) for d in docs), "| solo VISTA PRELIMINAR (no emite)")
 
     with sync_playwright() as p:
-        nav = p.chromium.launch()
+        nav = p.chromium.launch(args=en_vivo_args())
         ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
         pag = ctx.new_page()
-        pag.on("dialog", lambda d: (print("  Diálogo del navegador:", sin_datos(d.message)[:200]), d.dismiss()))
+        pag.on("dialog", al_dialogo)
+        en_vivo_iniciar()
         vp, total_ret = preparar(pag, s, docs, avisos_ok, ruc, usuario, clave)
         print("Vista preliminar abierta:", vp.url.split("?")[0])
         aviso = vp.evaluate(JS_AVISO)
