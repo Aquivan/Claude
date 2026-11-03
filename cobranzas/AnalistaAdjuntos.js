@@ -214,10 +214,15 @@ var ANX_HERR_ = {
         if (cand.length && q.monto) { var mismos = cand.filter(function (p) { return Math.abs(p.monto - q.monto) <= 0.05; }); if (mismos.length) cand = mismos; else como += ' (¡monto distinto!)'; }
       }
       if (!cand.length && q.monto) {
-        cand = L.pagos.filter(function (p) {
-          return Math.abs(p.monto - q.monto) <= 0.05 && (!q.fecha || !p.fecha || Math.abs(p.fecha - q.fecha) <= dias * 86400000);
-        });
-        if (cand.length) como = 'monto' + (q.fecha ? ' y fecha ±' + dias + ' días' : ' (sin fecha)');
+        // Sin N° de operación el monto solo NO basta: hace falta la fecha en los dos (±días). Sin fecha solo se avisa.
+        var porMonto = L.pagos.filter(function (p) { return Math.abs(p.monto - q.monto) <= 0.05; });
+        if (!q.fecha) {
+          if (porMonto.length) return [q.ref, '', q.monto, q.operacion || '', '⚠️ Sin N° de operación ni fecha: no se puede saber si está (' + porMonto.length +
+            ' pago(s) con el mismo monto: ' + porMonto.slice(0, 4).map(function (x) { return x.fuente; }).join(', ') + ')', 'solo monto (no basta)', '', '', '', '', '', ''];
+        } else {
+          cand = porMonto.filter(function (p) { return p.fecha && Math.abs(p.fecha - q.fecha) <= dias * 86400000; });
+          if (cand.length) como = 'monto y fecha ±' + dias + ' días';
+        }
       }
       var p = cand[0];
       var estado = !cand.length ? '❌ No está en la hoja de vouchers' : cand.length > 1 ? '⚠️ ' + cand.length + ' posibles: ' + cand.slice(0, 5).map(function (x) { return x.fuente; }).join(', ')
