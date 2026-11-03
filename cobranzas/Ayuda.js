@@ -68,6 +68,8 @@ var AYU_SECCIONES_ = [
     '• Fotos van a la pestaña **Fotos** y los PDF a **Originales**. Escriba «original» o «foto» en el comentario para cambiarlo esa vez, o **modo original / modo foto / modo auto**.',
     '• **estado**: lo que está en cola · **deshacer**: anula la última acción.',
     '• Al terminar cada tanda le pregunta **de quién son** (un toque). Elija **Revisar con IA** para que lea cada página y complete la factura.',
+    '• Si la IA **duda** si un voucher ya está registrado (sin N° de operación, otra fecha, varios parecidos), le muestra las alternativas y **usted elige**: «Es A)…», «Es un pago nuevo» o «No tocarlo».',
+    '• Si el pago lleva **retención** (la empresa del grupo es agente y pagó el total menos el 3 %), al terminar le ofrece **emitir el comprobante de retención (CRE)** con 👁 Vista previa / ✅ Emitir (siempre pide confirmar).',
     '**Preguntas**: lo mismo que en Telegram (la misma IA): escriba o mande nota de voz.',
     '**Guías y retenciones**: igual que en Telegram, con botones. Para emitir siempre le pide confirmar.',
     '**Ayuda**: escriba **ayuda temas** para esta guía, o **ayuda 3** / **ayuda guías** para un tema.'

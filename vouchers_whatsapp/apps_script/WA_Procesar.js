@@ -110,17 +110,28 @@ function WA_procesarBoton_(de, id) {
   if (!r || !r.ok) { WA_enviarTexto_(de, '⚠️ ' + ((r && r.error) || 'No respondió Cobranzas.')); return; }
   WA_marcarRevisando_(de, op === 'si' ? 'Revisado IA' : 'Cancelado', String(r.texto || '').replace(/<[^>]+>/g, '').slice(0, 300), k);
   WA_trozos_(WA_md_(r.texto)).forEach(function (t) { WA_enviarTexto_(de, t); });
+  (r.siguientes || []).forEach(function (t) { WA_mandarMensajeCob_(de, t); });   // 🧾 p. ej. ¿emito el comprobante de retención?
   if (r.pendiente) {
     WA_props_().setProperty('WA_PROC_' + de, String(Date.now())); WA_props_().setProperty('WA_HAY_PROC', '1');
     // Que Cobranzas separe y registre YA; si contesta a tiempo, el aviso "Listo" sale enseguida.
     try { WA_cobranzas_('procesar', { modo: 'trabajar', numero: de }); } catch (e) {}
     try {
       var m = WA_cobranzas_('procesar', { modo: 'mensajes', numero: de });
-      (m && m.mensajes || []).forEach(function (t) { WA_trozos_(WA_md_(t)).forEach(function (x) { WA_enviarTexto_(de, x); }); });
+      (m && m.mensajes || []).forEach(function (t) { WA_mandarMensajeCob_(de, t); });
       if (m && m.ok && !m.pendiente) WA_props_().deleteProperty('WA_PROC_' + de);
     } catch (e) {}
   }
   else if (op === 'si') WA_enviarTexto_(de, '_Escriba *deshacer* si quiere deshacerlo todo._');
+}
+
+/** Mensaje que manda Cobranzas: texto (HTML) o {texto, botones:{k, texto, opciones}} (👁 Vista previa / ✅ Emitir…). */
+function WA_mandarMensajeCob_(de, t) {
+  if (typeof t === 'string') { WA_trozos_(WA_md_(t)).forEach(function (x) { WA_enviarTexto_(de, x); }); return; }
+  if (!t) return;
+  if (t.texto) WA_trozos_(WA_md_(t.texto)).forEach(function (x) { WA_enviarTexto_(de, x); });
+  if (t.botones && (t.botones.opciones || []).length) {
+    try { WA_ofrecerBotones_(de, t.botones); } catch (e) { WA_enviarTexto_(de, '⚠️ No pude mostrar los botones: ' + e.message); }
+  }
 }
 
 /** Texto (o voz ya transcrita) con el nombre pedido por "🏷 Cambiar nombre". true si lo tomó. */
@@ -163,7 +174,7 @@ function WA_seguirProcesar_(props) {
     }
     if (k.indexOf('WA_PROC_') === 0) {
       var de2 = k.slice(8), m = WA_cobranzas_('procesar', { modo: 'mensajes', numero: de2 });
-      (m && m.mensajes || []).forEach(function (t) { WA_trozos_(WA_md_(t)).forEach(function (x) { WA_enviarTexto_(de2, x); }); });
+      (m && m.mensajes || []).forEach(function (t) { WA_mandarMensajeCob_(de2, t); });
       if (m && m.ok && !m.pendiente) WA_props_().deleteProperty(k); else activo = true;
     }
   });
