@@ -118,13 +118,16 @@ function TGP_analizar_(ss, adjs, op) {
       v: { fecha: v.d.fecha || '', monto: AUV_num_(v.d.monto), moneda: v.d.moneda || 'PEN', operacion: String(v.d.operacion || ''), banco: v.d.banco || '',
         ordenante: v.d.ordenante || '', beneficiario: v.d.beneficiario || '' } };
     if (/^❌/.test(estado)) it.tipo = 'nuevo';
-    else if (/^⚠️/.test(estado) || !fuente) { it.tipo = 'dudoso'; it.estado = estado.replace(/^⚠️\s*/, ''); }
+    else if (/^⚠️/.test(estado) || !fuente) {
+      it.tipo = 'dudoso'; it.estado = estado.replace(/^⚠️\s*/, '');
+      it.opciones = (fila[7] || []).slice(0, 5);   // alternativas: la persona elige (TGP_decidir_)
+    }
     else {
       it.fuente = fuente;
       it.facturaActual = TGP_celda_(libro, fuente, ['Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc']);
       it.tipo = !it.facturaActual && fac && fac.serie ? 'completar' : 'listo';
     }
-    if (it.tipo === 'nuevo') {
+    if (it.tipo === 'nuevo' || it.tipo === 'dudoso') {   // al dudoso también: por si la persona dice «es nuevo»
       var sug = TGE_nombreDeOrdenante_(TGE_ordenanteReal_(it.v.ordenante, it.v.beneficiario));
       it.nombre = sug ? sug.nombre : 'Voucher';
       it.ordenante = sug ? sug.ordenante : '';
@@ -179,50 +182,69 @@ function TGP_buscarVouchers_(c, vouchers) {
     h.getRange(2, 1, h.getLastRow() - 1, Math.max(cO, cM, cF, cB, cMo) + 1).getValues().forEach(function (r, i) {
       var op = String(r[cO] == null ? '' : r[cO]);
       if (/^\[/.test(op) || (!op && !r[cM])) return;   // [DUPLICADO], [OMITIDO], vacías
-      pagos.push({ fuente: h.getName() + '!' + (i + 2), op: dig(op), monto: AUV_num_(r[cM]), fecha: cF >= 0 ? AUV_fecha_(r[cF]) : null,
+      pagos.push({ fuente: h.getName() + '!' + (i + 2), op: dig(op), opTxt: op, monto: AUV_num_(r[cM]), fecha: cF >= 0 ? AUV_fecha_(r[cF]) : null,
         benef: cB >= 0 ? String(r[cB] || '') : '', moneda: cMo >= 0 ? TGP_moneda_(r[cMo]) : '' });
     });
   });
+  // Alternativa para mostrarle a la persona: dónde está y por qué podría ser (o no) el mismo pago
+  function opcion(p, motivo) {
+    return { fuente: p.fuente, fecha: TGP_fechaTxt_(p.fecha), op: p.opTxt || '', benef: p.benef || '', monto: p.monto, moneda: p.moneda || '', motivo: motivo || '' };
+  }
+  function dias(a, b) { return Math.round(Math.abs(a - b) / 864e5); }
+  function invertida(a, b) {   // 06/10 leído como 10/06
+    return a && b && a.getFullYear() === b.getFullYear() && a.getDate() === b.getMonth() + 1 && a.getMonth() + 1 === b.getDate() && a.getDate() !== a.getMonth() + 1;
+  }
   return vouchers.map(function (v, n) {
     // Solo cuenta como N° de operación si tiene dígitos (a veces la IA pone el TIPO de operación, p. ej.
     // «Transferencia a cuentas de terceros BCP local», que no sirve para buscar).
     var q = { op: dig(v.d.operacion), monto: AUV_num_(v.d.monto), fecha: AUV_fecha_(v.d.fecha), moneda: TGP_moneda_(v.d.moneda),
       benef: String(v.d.beneficiario || '') };
-    var cand = [], como = '';
+    var ref = 'V' + (n + 1);
+    function fila(estado, como, fuente, opciones) { return [ref, q.fecha || '', q.monto, q.op, estado, como || '', fuente || '', opciones || []]; }
+    // 1) N° de operación: es el dato que identifica el pago
     if (q.op.length >= 3) {
-      cand = pagos.filter(function (p) { return p.op === q.op || (q.op.length >= 5 && p.op.length >= 5 && p.op.slice(-6) === q.op.slice(-6)); });
-      if (cand.length && q.monto) {
-        var mismos = cand.filter(function (p) { return Math.abs(p.monto - q.monto) <= 0.05; });
-        if (!mismos.length) return ['V' + (n + 1), q.fecha || '', q.monto, q.op, '⚠️ Misma operación con otro monto (' + cand[0].fuente + ')', 'N° de operación', cand[0].fuente];
-        cand = mismos;
+      var porOp = pagos.filter(function (p) { return p.op === q.op || (q.op.length >= 5 && p.op.length >= 5 && p.op.slice(-6) === q.op.slice(-6)); });
+      if (porOp.length) {
+        var mismos = !q.monto ? porOp : porOp.filter(function (p) { return Math.abs(p.monto - q.monto) <= 0.05; });
+        if (!mismos.length) return fila('⚠️ Hay un voucher con el mismo N° de operación pero otro monto', 'N° de operación', '',
+          porOp.slice(0, 3).map(function (p) { return opcion(p, 'mismo N° de operación, monto ' + TGP_num_(p.monto)); }));
+        if (mismos.length > 1) return fila('⚠️ Hay ' + mismos.length + ' vouchers con el mismo N° de operación y monto', 'N° de operación', '',
+          mismos.slice(0, 5).map(function (p) { return opcion(p, 'mismo N° y monto'); }));
+        return fila('🟡 Registrado', 'N° de operación', mismos[0].fuente);
       }
-      if (cand.length) como = 'N° de operación';
+      // con N° de operación y no está: sigue abajo por si se registró sin el N°
     }
-    if (!cand.length && q.monto) {
-      // SIN N° de operación: el monto solo no basta (muchos pagos repiten montos). Tiene que coincidir también la
-      // moneda, la FECHA (±5 días; sin fecha no se da por registrado) y, si ambos lo tienen, el beneficiario.
-      var porMonto = pagos.filter(function (p) {
-        return Math.abs(p.monto - q.monto) <= 0.05 && (!q.moneda || !p.moneda || q.moneda === p.moneda);
-      });
-      // otro beneficiario (cuando los dos lo tienen) = otro pago
-      porMonto = porMonto.filter(function (p) { return TGP_mismoBenef_(q.benef, p.benef); });
-      if (!q.fecha) {
-        if (porMonto.length) return ['V' + (n + 1), '', q.monto, q.op, '⚠️ El voucher no muestra N° de operación ni fecha; hay ' + porMonto.length +
-          ' pago(s) con el mismo monto (' + porMonto.slice(0, 3).map(function (p) { return p.fuente; }).join(', ') + '), pero no puedo saber si es el mismo', '', ''];
-        cand = [];
-      } else {
-        cand = porMonto.filter(function (p) {
-          return p.fecha && Math.abs(p.fecha - q.fecha) <= 5 * 864e5;
-        });
-        if (cand.length) como = 'monto, fecha y beneficiario';
-      }
-    }
-    var estado = !cand.length ? '❌ No está en la hoja de vouchers'
-      : cand.length > 1 ? '⚠️ ' + cand.length + ' posibles: ' + cand.slice(0, 4).map(function (p) { return p.fuente; }).join(', ')
-      : '🟡 Registrado';
-    return ['V' + (n + 1), q.fecha || '', q.monto, q.op, estado, como, cand.length === 1 ? cand[0].fuente : ''];
+    if (!q.monto) return fila('❌ No está en la hoja de vouchers');
+    // 2) Sin N° (o no encontrado): el monto solo no basta. Mismo monto, misma moneda y, si los dos lo tienen,
+    //    el mismo beneficiario (otro beneficiario = otro pago).
+    var porMonto = pagos.filter(function (p) {
+      return Math.abs(p.monto - q.monto) <= 0.05 && (!q.moneda || !p.moneda || q.moneda === p.moneda) && TGP_mismoBenef_(q.benef, p.benef) &&
+        (!q.op || !p.op || q.op.length < 3);   // si los dos tienen N° y es distinto, es otro pago
+    });
+    if (!porMonto.length) return fila('❌ No está en la hoja de vouchers');
+    if (!q.fecha) return fila('⚠️ El voucher no muestra fecha' + (q.op.length >= 3 ? '' : ' ni N° de operación') + ' y hay pago(s) con el mismo monto', 'solo monto', '',
+      porMonto.slice(-3).reverse().map(function (p) { return opcion(p, 'mismo monto' + (p.benef && q.benef ? ' y beneficiario' : '')); }));
+    // 3) Con fecha: la del voucher y la de la hoja salen del MISMO comprobante, deben ser iguales.
+    var exactos = porMonto.filter(function (p) { return p.fecha && dias(p.fecha, q.fecha) === 0; });
+    if (exactos.length === 1 && !q.op) return fila('🟡 Registrado', 'monto, fecha y beneficiario', exactos[0].fuente);
+    if (exactos.length) return fila('⚠️ ' + (exactos.length > 1 ? 'Hay ' + exactos.length + ' pagos' : 'Hay un pago') + ' con el mismo monto y fecha' +
+      (q.op.length >= 3 ? ', pero con otro N° de operación o sin N°' : ''), 'monto y fecha', '',
+      exactos.slice(0, 5).map(function (p) { return opcion(p, 'misma fecha y monto'); }));
+    // Casos reales de fecha distinta: abono al día hábil siguiente (otro banco, fin de semana) o día/mes leídos al revés
+    var parecidos = porMonto.filter(function (p) { return p.fecha && (dias(p.fecha, q.fecha) <= 3 || invertida(p.fecha, q.fecha)); });
+    if (parecidos.length) return fila('⚠️ Parecido pero con otra fecha', 'monto', '', parecidos.slice(0, 5).map(function (p) {
+      return opcion(p, invertida(p.fecha, q.fecha) ? 'día y mes invertidos' : dias(p.fecha, q.fecha) + ' día(s) de diferencia (¿abono al día siguiente?)');
+    }));
+    return fila('❌ No está en la hoja de vouchers');
   });
 }
+
+function TGP_fechaTxt_(d) {
+  if (!(d instanceof Date) || isNaN(d)) return '';
+  return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
+}
+
+function TGP_num_(n) { return Number(n || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 
 /** 'PEN' | 'USD' | '' */
 function TGP_moneda_(m) {
@@ -287,13 +309,26 @@ function TGP_texto_(k, p) {
       L.push(cab + '\n   🟡 Ya está en <b>' + TG_esc_(it.fuente) + '</b> sin factura' + fac + ' → la completo');
     } else if (it.tipo === 'listo') {
       L.push(cab + '\n   ✅ Ya está en <b>' + TG_esc_(it.fuente) + '</b>' + (it.facturaActual ? ' con factura ' + TG_esc_(it.facturaActual) : '') + ' → no hay nada que hacer');
-    } else L.push(cab + '\n   ⚠️ ' + TG_esc_(it.estado || 'no estoy seguro si ya está') + ' → no lo toco; revíselo en la hoja');
+    } else if (it.tipo === 'omitido') {
+      L.push(cab + '\n   ⏭ Usted indicó no tocarlo');
+    } else {
+      var ops = it.opciones || [];
+      L.push(cab + '\n   🤔 <b>Tengo una duda:</b> ' + TG_esc_(it.estado || 'no estoy seguro si ya está') + '.' +
+        (it.v.beneficiario ? '\n   El voucher es a <i>' + TG_esc_(it.v.beneficiario) + '</i>' + (it.v.fecha ? ' del ' + TG_esc_(it.v.fecha) : ' (sin fecha)') + '.' : '') +
+        ops.map(function (o, j) {
+          return '\n   <b>' + 'ABCDE'.charAt(j) + ')</b> ' + TG_esc_(o.fuente) + ' · ' + TG_esc_([o.fecha, o.benef, o.op ? 'op ' + o.op : 'sin N°', (o.moneda === 'USD' ? 'US$ ' : 'S/ ') + TGP_num_(o.monto)].filter(String).join(' · ')) +
+            (o.motivo ? ' <i>(' + TG_esc_(o.motivo) + ')</i>' : '');
+        }).join('') + '\n   👉 ' + (ops.length ? '¿Es ' + (ops.length > 1 ? 'alguno de estos' : 'ese') + ', es un pago nuevo, o no lo toco?' : '¿Lo registro como nuevo o no lo toco?') + fac);
+    }
     if (avisoSsco) L[L.length - 1] += avisoSsco;
   });
+  var preg = TGP_pregunta_(p);
+  if (preg) acciones++;
   if (nuevos) L.push('\n📂 Pestaña: <b>' + TGP_textoPestana_(p) + '</b>');
   if (nuevos) L.push('🏷 Se guardará como <b>' + TG_esc_(TGE_corta_(p.fecha) + ' ' + p.nombre) + '</b>' + (nuevos > 1 ? ', … 2…' : '') + ' (puede cambiarlo).');
   L.push('\n<i>El archivo original queda en la carpeta temporal (se borra sola en 7 días). Todo se puede deshacer.</i>');
-  return { texto: L.join('\n'), k: k, hayAcciones: acciones > 0, hayNuevos: nuevos > 0, etiqueta: TGE_corta_(p.fecha) + ' ' + p.nombre, msg: p.msg || 0,
+  if (preg) L.push('\n🤔 <b>Antes de hacer nada, dígame la duda del voucher ' + preg.n + '</b> (botones abajo).');
+  return { texto: L.join('\n'), k: k, hayAcciones: acciones > 0, hayNuevos: nuevos > 0, pregunta: preg, etiqueta: TGE_corta_(p.fecha) + ' ' + p.nombre, msg: p.msg || 0,
     pestana: TGP_pestanaEfectiva_(p), textoPestana: TGP_textoPestana_(p) };
 }
 
@@ -330,6 +365,48 @@ function TGP_cambiarNombre_(k, texto) {
   p.nombre = it.nombre; p.fecha = it.fecha; p.ordenante = '';
   CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(p), 21600);
   return TGP_texto_(k, p);
+}
+
+/**
+ * 🤔 Primera duda sin responder: {n, texto, botones:[{op, title}]}. Las alternativas (A, B…), «es nuevo» y «no tocar».
+ */
+function TGP_pregunta_(p) {
+  var it = (p.items || []).filter(function (x) { return x.tipo === 'dudoso'; })[0];
+  if (!it) return null;
+  var ops = it.opciones || [], b = [];
+  ops.forEach(function (o, j) { b.push({ op: 'q' + it.n + '_a' + j, title: 'Es ' + 'ABCDE'.charAt(j) + ') ' + o.fuente, desc: [o.fecha, o.benef].filter(String).join(' · ') }); });
+  b.push({ op: 'q' + it.n + '_nv', title: '🆕 Es un pago nuevo', desc: 'Registrarlo como voucher nuevo' });
+  b.push({ op: 'q' + it.n + '_nt', title: '⏭ No tocarlo', desc: 'Dejarlo como está' });
+  return { n: it.n, texto: '🤔 Voucher ' + it.n + ': ' + (ops.length ? '¿es ' + (ops.length > 1 ? 'alguno de los de arriba' : 'el de arriba') + ' o es un pago nuevo?' : '¿lo registro como nuevo?'), botones: b };
+}
+
+/** Respuesta a una duda (op = 'q<n>_a<j>' | 'q<n>_nv' | 'q<n>_nt'). Devuelve el resumen actualizado (o {error}). */
+function TGP_decidir_(ss, k, op) {
+  var p = TG_leerBoton_(k);
+  if (!p) return { error: 'Ese resumen ya venció (dura 6 horas). Mándeme el archivo de nuevo.' };
+  var m = String(op).match(/^q(\d+)_(a(\d)|nv|nt)$/);
+  var it = m ? p.items.filter(function (x) { return x.n === Number(m[1]) && x.tipo === 'dudoso'; })[0] : null;
+  if (!it) return TGP_texto_(k, p);   // ya respondida
+  var anotado;
+  if (m[3] !== undefined) {
+    var o = (it.opciones || [])[Number(m[3])];
+    if (!o) return { error: 'Esa opción ya no existe.' };
+    it.fuente = o.fuente;
+    try { it.facturaActual = TGP_celda_(SpreadsheetApp.openById(TGP_ctx_(ss).cfg.idVouchers), o.fuente, ['Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc']); } catch (e) { it.facturaActual = ''; }
+    it.tipo = !it.facturaActual && it.fac && it.fac.serie ? 'completar' : 'listo';
+    anotado = 'Voucher ' + it.n + ' = ' + o.fuente;
+  } else if (m[2] === 'nv') {
+    it.tipo = 'nuevo';
+    if (!p.nombre) { p.nombre = it.nombre || 'Voucher'; p.ordenante = it.ordenante || ''; }
+    anotado = 'Voucher ' + it.n + ': es nuevo, lo registro';
+  } else {
+    it.tipo = 'omitido';
+    anotado = 'Voucher ' + it.n + ': no lo toco';
+  }
+  CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(p), 21600);
+  var r = TGP_texto_(k, p);
+  r.anotado = anotado;
+  return r;
 }
 
 /** ✅ Hacerlo. Completa facturas ya; los vouchers nuevos siguen en TGP_trabajar. Devuelve {texto, pendiente}. */
@@ -611,6 +688,10 @@ function TGP_hayVariasPaginas_(adjs) {
 
 function TGP_tecladoTG_(r) {
   if (!r.hayAcciones) return null;
+  if (r.pregunta) {   // primero se resuelve la duda; recién después aparece ✅ Hacerlo
+    return r.pregunta.botones.map(function (b) { return [{ text: b.title + (b.desc && /^Es /.test(b.title) ? ' · ' + b.desc : ''), callback_data: 'k:' + r.k + ':' + b.op }]; })
+      .concat([[{ text: '✖ Cancelar todo', callback_data: 'k:' + r.k + ':no' }]]);
+  }
   var f = [[{ text: '✅ Hacerlo', callback_data: 'k:' + r.k + ':si' }]];
   if (r.hayNuevos) f[0].push({ text: '🏷 Cambiar nombre', callback_data: 'k:' + r.k + ':nom' });
   f[0].push({ text: '✖ Cancelar', callback_data: 'k:' + r.k + ':no' });
@@ -620,6 +701,12 @@ function TGP_tecladoTG_(r) {
 }
 
 function TGP_alBotonTG_(ctx, op, k) {
+  if (/^q\d+_/.test(op || '')) {   // 🤔 respuesta a una duda: se corrige el mismo resumen
+    var rd = TGP_decidir_(ctx.ss, k, op);
+    if (rd.error) return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(rd.error));
+    if (rd.hayNuevos) { var sn = TG_sesion_(ctx.chatId); sn.procPend = k; TG_guardarSesion_(ctx.chatId, sn); }
+    return TG_editar_(ctx.chatId, ctx.msgId, rd.texto, TGP_tecladoTG_(rd));
+  }
   if (op === 'dfo' || op === 'dor') {   // 📸 / 📄: se corrige el mismo resumen
     var rp = TGP_cambiarPestana_(k, op === 'dfo' ? 'foto' : 'original');
     if (rp.error) return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(rp.error));
@@ -678,6 +765,7 @@ function TGP_wa_(q) {
   if (q.modo === 'cancelar') return { ok: true, texto: TGP_cancelar_(ss, q.k) };
   if (q.modo === 'nombre') { var n = TGP_cambiarNombre_(q.k, q.texto || ''); n.ok = !n.error; return n; }
   if (q.modo === 'trabajar') { TGP_trabajarYa_(); return { ok: true }; }
+  if (q.modo === 'decidir') { var dd = TGP_decidir_(ss, q.k, q.op); dd.ok = !dd.error; return dd; }
   if (q.modo === 'pestana') { var d = TGP_cambiarPestana_(q.k, q.pestana); d.ok = !d.error; return d; }
   if (q.modo === 'mensajes') {
     var p = PropertiesService.getScriptProperties(), m = [];
