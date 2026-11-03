@@ -23,7 +23,7 @@ import urllib.request
 
 from playwright.sync_api import sync_playwright
 
-from vista_cre import JS_AVISO, UA, al_dialogo, alto, claves_sol, en_vivo_args, en_vivo_iniciar, leer_solicitud, num, preparar, simple, sin_datos
+from vista_cre import JS_AVISO, UA, alto, claves_sol, en_vivo_args, en_vivo_lanzador, leer_solicitud, num, preparar_seguro, simple, sin_datos
 
 
 def clave_confirmacion(empresa, proveedor, total):
@@ -151,12 +151,9 @@ def main():
     print("Clave de confirmación: OK · documentos:", len(docs))
 
     with sync_playwright() as p:
-        nav = p.chromium.launch(args=en_vivo_args())
-        ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
-        pag = ctx.new_page()
-        pag.on("dialog", lambda d: (print("  Diálogo del navegador:", sin_datos(d.message)[:200]), d.accept()))   # emitir: siempre acepta
-        en_vivo_iniciar()
-        vp, total_sunat = preparar(pag, s, docs, avisos_ok, ruc, usuario, clave)
+        nav, pag, vp, total_sunat = preparar_seguro(   # emitir: los diálogos del navegador se aceptan siempre
+            p, en_vivo_args(), s, docs, avisos_ok, ruc, usuario, clave,
+            lambda d: (print("  Diálogo del navegador:", sin_datos(d.message)[:200]), d.accept()), lanzar=en_vivo_lanzador(p))
         print("Vista preliminar abierta.")
         if abs(total_sunat - total) > 0.005:
             alto("El total de retención que calcula SUNAT no es el que se aprobó.")

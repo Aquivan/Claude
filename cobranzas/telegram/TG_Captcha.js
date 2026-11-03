@@ -28,6 +28,13 @@ function TGC_doPost_(e) {
     if (/^cre_/.test(String(q.accion || ''))) {
       if (!run || !TGC_runValido_(cfg, run, /(^|\/)retenciones-cre\.ya?ml$/)) return TGW_json_({ ok: false, error: 'Forbidden' });
       if (q.accion === 'cre_vivo') return TGW_json_(TGEV_cuadroDelRobot_(q));   // 📺 foto de la pantalla (TG_EnVivo.js)
+      if (q.accion === 'cre_vivo_info') return TGW_json_(TGEV_infoRobot_(q));   // 🎥 ¿preparar el video?
+      if (q.accion === 'cre_vivo_vnc') return TGW_json_(TGEV_vncDelRobot_(q));   // 🎥 el video está listo
+      if (q.accion === 'cre_rango') {   // 📅 SUNAT dijo cuántos días atrás permite la fecha de emisión
+        var dias = Number(q.antes);
+        if (dias >= 0 && dias <= 30) PropertiesService.getScriptProperties().setProperty('TGR_DIAS_ATRAS', String(dias));
+        return TGW_json_({ ok: true });
+      }
       return TGW_json_(TGR_pdfGh_(ss, run, q));
     }
     if (/^rpn_/.test(String(q.accion || ''))) {
