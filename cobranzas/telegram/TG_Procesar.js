@@ -38,16 +38,67 @@ function TGP_leer_(c, adj) {
   var f = DriveApp.getFileById(adj.id), blob = f.getBlob(), mime = f.getMimeType();
   if (!/^image\/|pdf/i.test(mime)) return { error: 'solo fotos o PDF' };
   var bytes = blob.getBytes();
-  var clave = hashTexto_('tgp|' + bytes.length + '|' + Utilities.base64Encode(bytes.slice(0, 3000)));
+  // 'tgp2': lecturas con el modelo lector (las de antes, con el modelo liviano, no se reutilizan)
+  var clave = hashTexto_('tgp2|' + bytes.length + '|' + Utilities.base64Encode(bytes.slice(0, 3000)));
   var cache = AUV_cache_(c.ss), r = AUV_cacheGet_(cache, 'tgp', clave);
   if (!r) {
-    r = IA_llamarSeguro_(c.ia, { sistema: TGP_SISTEMA_, maxTokens: 8000,
+    r = TGP_iaLectora_(c, { sistema: TGP_SISTEMA_, maxTokens: 8000,
       adjunto: { mime: /pdf/i.test(mime) ? 'application/pdf' : mime, base64: Utilities.base64Encode(bytes) },
-      texto: 'ARCHIVO: ' + adj.nombre + '\nExtrae todos los documentos que contiene, con su página.' });
+      texto: 'ARCHIVO: ' + adj.nombre + '\nExtrae todos los documentos que contiene, con su página. ' +
+        'El N° de operación cópialo dígito por dígito, con los ceros del inicio y del final (p. ej. «OP-0686860» → 0686860).' });
     AUV_cachePut_(cache, 'tgp', clave, r);
     AUV_cacheGuardar_(cache);
   }
   return { docs: Array.isArray(r.documentos) ? r.documentos : [], obs: (r.legible === false ? 'ilegible. ' : '') + String(r.observaciones || ''), mime: mime };
+}
+
+/**
+ * 🔍 Para LEER documentos se usa un modelo más fuerte que el del chat (los números de operación en papel térmico
+ * pierden dígitos con los modelos livianos). Con Gemini: propiedad TGP_MODELO_LECTOR (por defecto gemini-3.8-flash).
+ * Si la cuenta no lo tiene o está saturado, sigue con el modelo de siempre (nunca se queda sin leer).
+ */
+var TGP_MODELO_LECTOR_ = 'gemini-3.8-flash';
+function TGP_iaLectora_(c, opts) {
+  var prov = IA_PROVEEDORES_[c.ia.proveedor] || {}, sp = PropertiesService.getScriptProperties();
+  var lector = sp.getProperty('TGP_MODELO_LECTOR') || TGP_MODELO_LECTOR_;
+  if (prov.tipo === 'gemini' && lector && lector !== c.ia.modelo && sp.getProperty('TGP_SIN_LECTOR') !== lector) {
+    var o = {};
+    for (var x in opts) o[x] = opts[x];
+    o.proveedor = c.ia.proveedor; o.modelo = lector; o.clave = c.ia.clave;
+    try { return IA_llamar_(o); } catch (e) {
+      var msg = String(e.message || e);
+      if (/respondió (400|403|404)/.test(msg)) sp.setProperty('TGP_SIN_LECTOR', lector);   // la cuenta no lo tiene: no se insiste
+      console.warn('Modelo lector ' + lector + ': ' + msg.slice(0, 150) + ' → sigo con el de siempre');
+    }
+  }
+  return IA_llamarSeguro_(c.ia, opts);
+}
+
+/**
+ * 🔎 Segunda lectura SOLO del N° de operación (y fecha) de un voucher que no se encontró en la hoja: la IA mira de
+ * nuevo únicamente ese dato, dígito por dígito. Devuelve {operacion, fecha} o null.
+ */
+function TGP_releerOp_(c, v) {
+  try {
+    var f = DriveApp.getFileById(v.a.id), blob = f.getBlob(), mime = f.getMimeType(), bytes = blob.getBytes();
+    var clave = hashTexto_('tgpop|' + (v.d.pagina || 0) + '|' + bytes.length + '|' + Utilities.base64Encode(bytes.slice(0, 3000)));
+    var cache = AUV_cache_(c.ss), r = AUV_cacheGet_(cache, 'tgp', clave);
+    if (!r) {
+      r = TGP_iaLectora_(c, { maxTokens: 600,
+        sistema: 'Eres un lector muy cuidadoso de vouchers bancarios peruanos. Responde SOLO JSON: ' +
+          '{"operacion":"","fecha":"dd/mm/aaaa","monto":0,"seguro":true}. "operacion" = el N° de operación / OP / N° de movimiento / ' +
+          'código de operación EXACTO, solo los dígitos (y letras si las tiene), copiado carácter por carácter, SIN omitir ceros al inicio ' +
+          'ni al final. No confundas el número de cuenta, CCI, oficina, terminal ni la hora con el N° de operación. ' +
+          '"seguro" = false si algún dígito está borroso.',
+        adjunto: { mime: /pdf/i.test(mime) ? 'application/pdf' : mime, base64: Utilities.base64Encode(bytes) },
+        texto: 'Voucher' + (v.d.pagina ? ' de la página ' + v.d.pagina : '') + ' por ' + (v.d.monto || '') +
+          '. En la primera lectura salió N° de operación «' + (v.d.operacion || '—') + '»: vuelve a leerlo con cuidado.' });
+      AUV_cachePut_(cache, 'tgp', clave, r);
+      AUV_cacheGuardar_(cache);
+    }
+    var op = String(r && r.operacion || '').trim();
+    return op ? { operacion: op, fecha: String(r.fecha || ''), seguro: r.seguro !== false } : null;
+  } catch (e) { console.warn('Releer N° de operación: ' + e.message); return null; }
 }
 
 function TGP_tipo_(d) {
@@ -109,6 +160,25 @@ function TGP_analizar_(ss, adjs, op) {
     (x.r.docs || []).filter(function (d) { return TGP_tipo_(d) === 'voucher'; }).forEach(function (d) { vouchers.push({ a: x.a, d: d, mime: x.r.mime }); });
   });
   var cruce = { filas: vouchers.length ? TGP_buscarVouchers_(c, vouchers) : [] };   // búsqueda directa en la hoja (rápida)
+  // 🔎 Los que no aparecen (o con duda): se relee SOLO el N° de operación y se busca otra vez. Si así aparece, vale.
+  vouchers.forEach(function (v, i) {
+    var est = String((cruce.filas[i] || [])[4] || '');
+    if (!/^(❌|⚠️)/.test(est)) return;
+    var re = TGP_releerOp_(c, v);
+    if (!re) return;
+    var dig = function (t) { return String(t || '').replace(/\D/g, '').replace(/^0+/, ''); };
+    if (dig(re.operacion) === dig(v.d.operacion) && (v.d.fecha || !re.fecha)) return;   // leyó lo mismo
+    var v2 = { a: v.a, mime: v.mime, d: {} };
+    for (var x in v.d) v2.d[x] = v.d[x];
+    v2.d.operacion = re.operacion;
+    if (!v2.d.fecha && re.fecha) v2.d.fecha = re.fecha;
+    var f2 = TGP_buscarVouchers_(c, [v2])[0];
+    if (/^❌/.test(String(f2[4])) && /^⚠️/.test(est)) return;   // la duda de antes dice más
+    f2[0] = cruce.filas[i][0];
+    f2[5] = (f2[5] ? f2[5] + ' · ' : '') + 'releí el N° de operación: ' + v.d.operacion + ' → ' + re.operacion;
+    cruce.filas[i] = f2;
+    v.d = v2.d;   // el resto del resumen usa el número bien leído
+  });
   var libro = vouchers.length ? SpreadsheetApp.openById(c.cfg.idVouchers) : null;
   vouchers.forEach(function (v, i) {
     var fila = cruce.filas[i] || [], estado = String(fila[4] || ''), fuente = String(fila[6] || '');
@@ -117,6 +187,8 @@ function TGP_analizar_(ss, adjs, op) {
     var it = { n: i + 1, archivo: v.a, mime: v.mime, pagina: Number(v.d.pagina) || 0, fac: fac, cuadra: par ? par.como : '',
       v: { fecha: v.d.fecha || '', monto: AUV_num_(v.d.monto), moneda: v.d.moneda || 'PEN', operacion: String(v.d.operacion || ''), banco: v.d.banco || '',
         ordenante: v.d.ordenante || '', beneficiario: v.d.beneficiario || '' } };
+    var nota = String(fila[5] || '').match(/(releí el N° de operación[^·]*|N° de operación parecido[^)]*\)?)/);
+    if (nota) it.nota = nota[1].trim();
     if (/^❌/.test(estado)) it.tipo = 'nuevo';
     else if (/^⚠️/.test(estado) || !fuente) {
       it.tipo = 'dudoso'; it.estado = estado.replace(/^⚠️\s*/, '');
@@ -354,6 +426,7 @@ function TGP_texto_(k, p) {
             (o.motivo ? ' <i>(' + TG_esc_(o.motivo) + ')</i>' : '');
         }).join('') + '\n   👉 ' + (ops.length ? '¿Es ' + (ops.length > 1 ? 'alguno de estos' : 'ese') + ', es un pago nuevo, o no lo toco?' : '¿Lo registro como nuevo o no lo toco?') + fac);
     }
+    if (it.nota) L[L.length - 1] += '\n   🔎 <i>' + TG_esc_(it.nota) + '</i>';
     if (avisoSsco) L[L.length - 1] += avisoSsco;
   });
   var preg = TGP_pregunta_(p);
