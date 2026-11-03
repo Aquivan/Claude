@@ -598,6 +598,8 @@ function tituloLiq_(clave) { return COLUMNAS_TABLERO_.filter(function (c) { retu
 function formulasResumenIgv_(ss, sheet, archivoLiq, filaTit) {
   var S = separadorFormula_(ss);
   var ini = letraColumna_(COL_AYUDA_IGV_), fin = letraColumna_(COL_AYUDA_IGV_ + ANCHO_AYUDA_IGV_ - 1);
+  var falta = COL_AYUDA_IGV_ + ANCHO_AYUDA_IGV_ - 1 - sheet.getMaxColumns();   // la hoja puede tener menos columnas
+  if (falta > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), falta);
   sheet.getRange(filaTit, COL_AYUDA_IGV_).setFormula('=IMPORTRANGE("' + archivoLiq.getId() + '"' + S + '"Liquidacion!A1:' + letraColumna_(ANCHO_AYUDA_IGV_) + '13")');
   permitirImportrange_(ss, archivoLiq.getId());
   var filas = [];
