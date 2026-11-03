@@ -30,6 +30,7 @@ function TGC_doPost_(e) {
       if (q.accion === 'cre_vivo') return TGW_json_(TGEV_cuadroDelRobot_(q));   // 📺 foto de la pantalla (TG_EnVivo.js)
       if (q.accion === 'cre_vivo_info') return TGW_json_(TGEV_infoRobot_(q));   // 🎥 ¿preparar el video?
       if (q.accion === 'cre_vivo_vnc') return TGW_json_(TGEV_vncDelRobot_(q));   // 🎥 el video está listo
+      if (q.accion === 'cre_foto') return TGW_json_(TGR_fotoGh_(q));   // 🖼 foto de la vista preliminar / del comprobante
       if (q.accion === 'cre_rango') {   // 📅 SUNAT dijo cuántos días atrás permite la fecha de emisión
         var dias = Number(q.antes);
         if (dias >= 0 && dias <= 30) PropertiesService.getScriptProperties().setProperty('TGR_DIAS_ATRAS', String(dias));

@@ -116,8 +116,10 @@ function TGR_clave_(s) {
 /** Pide la corrida. Devuelve el enlace 📺 en vivo ('' si ese modo está apagado). */
 function TGR_pedir_(cfg, s, modo, chat) {
   try { s.fechas_emision = TGR_fechasEmision_(s); } catch (e) { console.warn('Fechas de emisión: ' + e.message); }
-  var caso = '', url = '';
-  try { if (TGEV_activo_()) { caso = 'cre' + Utilities.getUuid().replace(/-/g, '').slice(0, 8); url = TGEV_abrir_(caso, chat); } } catch (e) { caso = ''; }
+  // caso: siempre (el robot manda al chat la FOTO de la vista preliminar apenas la ve); 📺 en vivo solo si está activo
+  var caso = 'cre' + Utilities.getUuid().replace(/-/g, '').slice(0, 8), url = '';
+  if (chat) CacheService.getScriptCache().put('tgv_chat_' + caso, String(chat), 21600);
+  try { if (TGEV_activo_()) url = TGEV_abrir_(caso, chat); } catch (e) {}
   TG_gh_(cfg, '/actions/workflows/' + TGR_WF_ + '/dispatches', 'post', { ref: cfg.rama, inputs: {
     ruc: s.empresa_ruc, solicitud: JSON.stringify(s), modo: modo, confirmar: modo === 'emitir' ? TGR_clave_(s) : '', caso: caso } });
   return url;
@@ -1004,6 +1006,23 @@ function TGR_avisarFin_(cfg, s, r) {
   html += '\n<a href="' + r.html_url + '">ver en GitHub</a>';
   if (String(s.chat).indexOf('wa') === 0) return TGR_guardarWA_(s.chat, html + (vista ? '\n\nPara emitirlo, escriba *emitir* y toque ✅ Emitir.' : ''));
   TG_enviar_(s.chat, html, vista && k ? [[{ text: '✅ Emitir', callback_data: 'k:' + k + ':em' }]] : null);
+}
+
+/** 🖼 El robot manda la foto de la vista preliminar (o del comprobante emitido) apenas la ve: va directo al chat que lo pidió. */
+function TGR_fotoGh_(q) {
+  var chat = CacheService.getScriptCache().get('tgv_chat_' + String(q.caso || ''));
+  if (!chat) return { ok: false, error: 'sin chat' };
+  var b64 = String(q.img || '');
+  if (b64.length < 1000 || b64.length > 6 * 1024 * 1024) return { ok: false, error: 'foto rara' };
+  var texto = String(q.texto || '').slice(0, 900);
+  try {
+    if (String(chat).indexOf('wa') === 0) {
+      TGC_wa_({ tipo: 'imagen', numero: String(chat).slice(2), mime: 'image/jpeg', base64: b64, texto: texto });
+    } else {
+      TG_llamar_('sendPhoto', { chat_id: chat, photo: Utilities.newBlob(Utilities.base64Decode(b64), 'image/jpeg', 'vista.jpg'), caption: TG_esc_(texto) });
+    }
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
 }
 
 function TGR_guardarWA_(clave, html) {
