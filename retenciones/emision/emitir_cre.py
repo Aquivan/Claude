@@ -23,7 +23,7 @@ import urllib.request
 
 from playwright.sync_api import sync_playwright
 
-from vista_cre import JS_AVISO, UA, alto, claves_sol, en_vivo_args, en_vivo_lanzador, leer_solicitud, num, preparar_seguro, simple, sin_datos
+from vista_cre import JS_AVISO, UA, alto, claves_sol, en_vivo_args, en_vivo_lanzador, leer_solicitud, mandar_foto, num, preparar_seguro, simple, sin_datos
 
 
 def clave_confirmacion(empresa, proveedor, total):
@@ -140,6 +140,7 @@ def bajar_pdf(pag):
 
 
 def main():
+    sys.stdout.reconfigure(line_buffering=True)
     ruc, usuario, clave = claves_sol()
     s, docs, avisos_ok = leer_solicitud(os.environ.get("SOLICITUD", "{}"))
     if any(d.get("retencion") in (None, "") for d in docs):
@@ -209,6 +210,7 @@ def main():
             sys.exit(2)
         print(f"::notice title=CRE emitido::{numero}")
         print(f"✅ Comprobante de retención emitido: {numero}")
+        mandar_foto(pag, f"✅ Comprobante de retención {numero} emitido en SUNAT.")
         salida("comprobante", numero)
         salida("resultado", "emitido")
         # 📄 El PDF va directo al bot (no se sube a GitHub: el repositorio es público). Si falla, el CRE igual quedó emitido.

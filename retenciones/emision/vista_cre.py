@@ -261,6 +261,7 @@ def elegir_fecha(fr, s, hoy):
             poner(fr, "#txtFecEmision", hoy)
             print("Fecha de emisión:", f)
             print(f"::notice title=Fecha de emisión::{f}")
+            FECHA_ELEGIDA[0] = f
             return f
         poner(fr, "#txtFecEmision", f)
         fr.wait_for_timeout(1500)
@@ -273,6 +274,7 @@ def elegir_fecha(fr, s, hoy):
         if puesto == f and not re.search(r"(?i)fecha", aviso or ""):
             print("Fecha de emisión:", f)
             print(f"::notice title=Fecha de emisión::{f}")
+            FECHA_ELEGIDA[0] = f
             return f
         print(f"  SUNAT no aceptó la fecha {f}" + (f": {sin_datos(aviso)[:150]}" if aviso else ""))
         try:   # cerrar el aviso de SUNAT antes de probar la siguiente
@@ -282,6 +284,7 @@ def elegir_fecha(fr, s, hoy):
     poner(fr, "#txtFecEmision", hoy)
     print("Fecha de emisión: hoy (ninguna de las anteriores fue aceptada)")
     print(f"::notice title=Fecha de emisión::{hoy} (SUNAT no aceptó las fechas anteriores)")
+    FECHA_ELEGIDA[0] = hoy
     return hoy
 
 
@@ -453,6 +456,20 @@ def en_vivo_args():
         return []
 
 
+FECHA_ELEGIDA = [""]
+
+
+def mandar_foto(pag, texto):
+    """🖼 Foto de la pantalla (la vista preliminar) directo al chat por el bot. Nunca va al registro de GitHub."""
+    try:
+        import base64
+        img = base64.b64encode(pag.screenshot(type="jpeg", quality=70, full_page=True)).decode()
+        r = _bot_vivo({"accion": "cre_foto", "img": img, "texto": texto})
+        print("  🖼 Foto de la vista preliminar enviada al chat." if r.get("ok") else "  🖼 No pude mandar la foto al chat.")
+    except Exception as e:
+        print("  🖼 Foto no enviada (" + type(e).__name__ + ")")
+
+
 def en_vivo_lanzador(p):
     """🎥 Si «en vivo» está activo: Chrome VISIBLE en una pantalla virtual que se ve como video (se puede mirar en vivo,
     no solo fotos). Si no se puede, el de siempre. Devuelve la función que abre el navegador, o None."""
@@ -461,6 +478,8 @@ def en_vivo_lanzador(p):
     try:
         import en_vivo
         pantalla = en_vivo.video(_bot_vivo)
+        if pantalla:
+            os.environ["VIDEO_ACTIVO"] = "1"
         return lambda: en_vivo.lanzar(p, pantalla)
     except Exception as e:
         print("  (video en vivo no disponible:", type(e).__name__, ")")
@@ -478,6 +497,7 @@ def en_vivo_iniciar():
 
 
 def main():
+    sys.stdout.reconfigure(line_buffering=True)   # el registro con la hora real de cada paso
     ap = argparse.ArgumentParser()
     ap.add_argument("--solicitud", default="", help="archivo JSON (si no, variable SOLICITUD)")
     a = ap.parse_args()
@@ -495,8 +515,12 @@ def main():
         print("Botones y campos de la vista preliminar (para el siguiente paso):\n  " + "\n  ".join(vp.evaluate(JS_ESTRUCTURA)))
         print("::notice title=CRE vista::Vista preliminar lista: SUNAT aceptó todo. No se emitió nada.")
         print("\n✅ Llegó a la vista preliminar. NO se emitió nada: este programa no tiene el paso de emitir.")
-        if os.environ.get("CASO_VIVO"):   # 📺 que se alcance a ver la vista preliminar en vivo antes de cerrar
-            pag.wait_for_timeout(45000)
+        mandar_foto(pag, "👁 Vista preliminar de SUNAT (NO se emitió nada)" +
+                    (f" · fecha de emisión {FECHA_ELEGIDA[0]}" if FECHA_ELEGIDA[0] else "") +
+                    ". Si está bien, toque ✅ Emitir en el mensaje del comprobante.")
+        if os.environ.get("VIDEO_ACTIVO"):   # 🎥 el video sigue 3 minutos más para que alcance a mirarlo
+            print("  🎥 Dejo la vista preliminar en el video 3 minutos.")
+            pag.wait_for_timeout(180000)
 
 
 if __name__ == "__main__":
