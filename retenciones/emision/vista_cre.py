@@ -303,58 +303,83 @@ def preparar_seguro(p, nav_args, s, docs, avisos_ok, ruc, usuario, clave, al_dia
     alto("SUNAT no aceptó ninguna fecha de emisión permitida")
 
 
-JS_FECHA_DP = """([sel, d, m, y]) => {
-  const e = document.querySelector(sel);
-  if (!e || !window.jQuery || !jQuery.fn.datepicker) return '';
-  const $e = jQuery(e);
-  try { $e.datepicker('setDate', new Date(y, m - 1, d, 23, 0, 0)); } catch (x) { return ''; }
-  $e.trigger('changeDate').trigger('change');
-  return e.value; }"""
-
-JS_DIA_CALENDARIO = r"""([d, m, y]) => {
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre',
-                 'january','february','march','april','may','june','july','august','september','october','november','december'];
-  const vis = x => x && x.offsetParent !== null;
-  const cal = [...document.querySelectorAll('.datepicker-days, .datepicker, .ui-datepicker')].find(vis);
-  if (!cal) return 'sin calendario';
-  const titulo = (cal.querySelector('.datepicker-switch, .ui-datepicker-title') || {}).innerText || '';
-  const t = titulo.toLowerCase();
-  const mesVisto = meses.findIndex(x => t.includes(x)) % 12 + 1, anioVisto = Number((t.match(/\d{4}/) || [0])[0]);
-  if (mesVisto && anioVisto && (anioVisto * 12 + mesVisto) > (y * 12 + m)) {
-    const prev = cal.querySelector('th.prev, .ui-datepicker-prev'); if (prev) { prev.click(); return 'atras'; }
+# Calendario de la página (cualquier tipo: bootstrap-datepicker, datetimepicker, jQuery UI…): busca el día por su
+# atributo de fecha (data-day="29/10/2026", data-date=…) o, si no tiene, por el número dentro del mes que se ve.
+JS_ELEGIR_DIA = r"""([d, m, y]) => {
+  const vis = x => x && x.offsetParent !== null && x.getBoundingClientRect().width > 0;
+  const pops = [...document.querySelectorAll('[class*="picker"], [class*="calendar"], [class*="datepicker"]')]
+    .filter(x => vis(x) && x.tagName !== 'INPUT' && x.querySelector('td'));
+  const pop = pops[pops.length - 1];
+  const libs = window.jQuery ? Object.keys(jQuery.fn).filter(k => /picker|calend/i.test(k)) : [];
+  if (!pop) return {r: 'sin calendario', libs: libs};
+  const dd = String(d).padStart(2, '0'), mm = String(m).padStart(2, '0'), full = dd + '/' + mm + '/' + y;
+  const ts = [Date.UTC(y, m - 1, d), new Date(y, m - 1, d).getTime()].map(String);
+  const enc = (pop.querySelector('.picker-switch, .datepicker-switch, .ui-datepicker-title, thead th[colspan]') || {}).innerText || '';
+  const info = {libs: libs, pop: pop.className.slice(0, 80), enc: enc.trim().slice(0, 40)};
+  const bloqueada = c => /disabled|unselectable|inactive/i.test(c.className + ' ' + ((c.parentElement || {}).className || '')) || c.getAttribute('aria-disabled') === 'true';
+  let c = [...pop.querySelectorAll('[data-day], [data-date], [data-value]')].find(x => vis(x) &&
+      [x.getAttribute('data-day'), x.getAttribute('data-date'), x.getAttribute('data-value')].some(v => v === full || ts.includes(v)));
+  if (!c) {   // sin atributo: por el número, solo días del mes que se está viendo (no los grises de otros meses)
+    const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    const meses2 = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+    const t = enc.toLowerCase();
+    let mv = meses.findIndex(x => t.includes(x)); if (mv < 0) mv = meses2.findIndex(x => t.includes(x));
+    const av = Number((t.match(/\d{4}/) || [0])[0]);
+    if (mv >= 0 && av && (av * 12 + mv + 1) !== (y * 12 + m)) {
+      const ir = (av * 12 + mv + 1) > (y * 12 + m) ? pop.querySelector('.prev, [data-action="previous"], .ui-datepicker-prev, th.prev')
+                                                   : pop.querySelector('.next, [data-action="next"], .ui-datepicker-next, th.next');
+      if (ir) { ir.click(); return Object.assign({r: 'mover'}, info); }
+      return Object.assign({r: 'sin flecha'}, info);
+    }
+    c = [...pop.querySelectorAll('td, td a, td span, td button')].find(x => vis(x) && x.innerText.trim() === String(d) &&
+      !/\bold\b|\bnew\b|other-month|othermonth/i.test(x.className + ' ' + ((x.parentElement || {}).className || '')));
   }
-  const celda = [...cal.querySelectorAll('td.day, td a.ui-state-default')].find(c => vis(c) && c.innerText.trim() === String(d)
-     && !c.classList.contains('old') && !c.classList.contains('new') && !c.classList.contains('disabled')
-     && !(c.parentElement && c.parentElement.classList.contains('ui-datepicker-unselectable')));
-  if (!celda) return 'dia bloqueado';
-  celda.click(); return 'ok'; }"""
+  if (!c) return Object.assign({r: 'no encontré el día'}, info);
+  info.dia = c.tagName + '.' + c.className.slice(0, 40) + ' ' + ['data-day', 'data-date', 'data-value'].map(a => c.getAttribute(a) ? a + '=' + c.getAttribute(a) : '').join(' ');
+  if (bloqueada(c)) return Object.assign({r: 'día bloqueado'}, info);
+  c.click();
+  return Object.assign({r: 'ok'}, info); }"""
 
 
 def poner_fecha_calendario(fr, sel, f):
-    """Pone la fecha como lo hace una persona: con el calendario de la página (escribirla como texto hace que el
-    calendario de SUNAT la borre si es de días atrás). 1) API del calendario; 2) abre el calendario y toca el día."""
+    """Pone la fecha como una persona: abre el calendario (📅 al lado de la casilla) y toca el día. Escribirla como texto
+    hacía que SUNAT la borrara. Deja en el registro cómo es el calendario (sin datos de nadie) para revisar si falla."""
     d, m, y = [int(x) for x in f.split("/")]
+    antes = valor(fr, sel)
     try:
-        if fr.evaluate(JS_FECHA_DP, [sel, d, m, y]) == f:
-            return True
-    except Exception:
-        pass
-    try:   # abrir el calendario: el botón de al lado (📅) o la casilla misma
-        boton = fr.query_selector(f"{sel} ~ .input-group-addon, {sel} ~ span .btn, {sel} ~ .input-group-btn button, {sel} + span")
-        (boton or fr.query_selector(sel)).click()
-        for _ in range(4):
-            fr.wait_for_timeout(400)
-            r = fr.evaluate(JS_DIA_CALENDARIO, [d, m, y])
-            if r != "atras":
+        abre = None
+        for q in [f"{sel} ~ .input-group-addon", f"{sel} ~ span.input-group-addon", f"{sel} ~ .input-group-btn button",
+                  f"{sel} ~ span", f"{sel} + span", f"{sel} ~ button", f"{sel} ~ i"]:
+            el = fr.query_selector(q)
+            if el and el.is_visible():
+                abre = el
                 break
-        fr.wait_for_timeout(600)
-        try:
-            fr.evaluate("() => { const b = document.activeElement; if (b && b.blur) b.blur(); }")
-        except Exception:
-            pass
-    except Exception:
-        pass
-    return valor(fr, sel) == f
+        (abre or fr.query_selector(sel)).click()
+        res = {}
+        for i in range(5):
+            fr.wait_for_timeout(500)
+            res = fr.evaluate(JS_ELEGIR_DIA, [d, m, y]) or {}
+            if res.get("r") == "sin calendario" and i < 2:   # el 📅 no lo abrió: probar tocando la casilla
+                try:
+                    fr.click(sel, timeout=3000)
+                except Exception:
+                    fr.focus(sel)
+                continue
+            if res.get("r") != "mover":
+                break
+        fr.wait_for_timeout(700)
+        ahora = valor(fr, sel)
+        print(f"    calendario {f}: {res.get('r')} · casilla {antes or '—'} → {ahora or '—'} · "
+              f"[{', '.join(res.get('libs') or [])}] {res.get('pop', '')} | {res.get('enc', '')} | {res.get('dia', '')}")
+        if ahora != f:   # cerrar el calendario si quedó abierto
+            try:
+                fr.page.keyboard.press("Escape")
+            except Exception:
+                pass
+        return ahora == f
+    except Exception as e:
+        print(f"    calendario {f}: error {type(e).__name__}")
+        return False
 
 
 def elegir_fecha(fr, s, hoy):
