@@ -435,13 +435,16 @@ function TGP_ejecutar_(ss, k) {
   var nuevos = p.items.filter(function (x) { return x.tipo === 'nuevo'; });
   if (nuevos.length) {
     var job = { id: accId, canal: p.canal, destino: p.destino, clave: p.clave, estado: 'separar', t: Date.now(), nombre: p.nombre, fecha: p.fecha, ordenante: p.ordenante, pestana: p.pestana || '',
-      items: nuevos.map(function (it) { return { archivo: it.archivo, mime: it.mime, pagina: it.pagina, fac: it.fac, v: it.v }; }) };
+      items: nuevos.map(function (it) { return { archivo: it.archivo, mime: it.mime, pagina: it.pagina, fac: it.fac, v: it.v, cuadra: it.cuadra || '' }; }) };
     PropertiesService.getScriptProperties().setProperty(TGP_PROP_JOB_ + accId, JSON.stringify(job));
     TGP_reprogramar_();
     lineas.push('📥 Separando ' + (nuevos.length > 1 ? 'los ' + nuevos.length + ' vouchers' : 'el voucher') + ' y mandándolo a la hoja de Vouchers como <b>' + TG_esc_(TGE_corta_(p.fecha) + ' ' + p.nombre) + '</b>… le aviso cuando quede registrado' + (nuevos.some(function (x) { return x.fac && x.fac.serie; }) ? ' y con la factura completada' : '') + '.');
   }
   if (!lineas.length) lineas.push('No había nada que hacer.');
-  return { texto: '✅ ' + lineas.join('\n'), pendiente: nuevos.length > 0 };
+  // 🧾 vouchers que ya estaban (completados o listos) con su factura: ¿llevan retención sin CRE? (los nuevos, al registrarse)
+  var paresCre = p.items.filter(function (x) { return (x.tipo === 'completar' || x.tipo === 'listo') && x.fuente && x.fac && x.fac.serie; })
+    .map(function (x) { return { doc: x.fac.serie, fila: x.fuente, cuadra: x.cuadra || '' }; });
+  return { texto: '✅ ' + lineas.join('\n'), pendiente: nuevos.length > 0, paresCre: paresCre, canal: p.canal, destino: p.destino };
 }
 
 /** ✖ Cancelar: no se registra nada; los archivos van a la carpeta temporal. */
@@ -603,6 +606,7 @@ function TGP_revisar_(ss, job) {
     if (/^\[/.test(f.op)) { lineas.push('⚠️ ' + fuente + ': no pudo leer el voucher (' + TG_esc_(f.op) + ').'); return; }
     var l = '✅ <b>' + TG_esc_(it.nuevo.nombre) + '</b> registrado en <b>' + fuente + '</b> (' + TGP_monto_(it.v) + ')';
     TGR_guardarUltimo_(job.clave, { doc: it.fac && it.fac.serie || '', fila: fuente });
+    if (it.fac && it.fac.serie) (job.paresCre = job.paresCre || []).push({ doc: it.fac.serie, fila: fuente, cuadra: it.cuadra || '' });
     if (it.fac && it.fac.serie) {
       try {
         ANX_HERR_.asignar_voucher(c, { fila: fuente, empresa: it.fac.empresa, proveedor_ruc: it.fac.proveedor, facturas: it.fac.serie, motivo: '🧾 Procesar documento: ' + it.fac.serie });
@@ -624,7 +628,52 @@ function TGP_revisar_(ss, job) {
   // Aviso que llega tarde (el trabajo estuvo detenido): que se note que es de un envío anterior.
   var tarde = fin - job.t > 2 * 3600000 ? ' · <i>aviso atrasado de su envío del ' + Utilities.formatDate(new Date(job.t), 'America/Lima', 'dd/MM HH:mm') + '</i>' : '';
   TGP_avisar_(job, '🧾 <b>Listo</b>' + tarde + '\n' + lineas.join('\n') + (tarde ? '' : tiempos));
+  try {
+    var cre = TGP_ofrecerCre_(ss, job.canal, job.destino, job.paresCre);
+    if (job.canal !== 'tg') TGP_colaWA_(job.clave, cre);   // va DESPUÉS del «Listo» en la misma cola
+  } catch (e) { console.warn('CRE tras procesar: ' + e.message); }
   return true;
+}
+
+/**
+ * 🧾 Después de registrar / completar: si el pago corresponde a una factura por pagar que lleva retención (la empresa
+ * del grupo es agente de retención y el pago es neto del 3 %, según la hoja de Cobranzas), ofrece emitir el CRE con
+ * sus botones 👁 Vista previa / ✅ Emitir (la emisión siempre pide confirmar y solo la hacen los autorizados).
+ * pares = [{doc:'F001-301', fila:'Fotos!266', cuadra:'el total menos la retención'}]. Nunca rompe el aviso principal.
+ */
+function TGP_ofrecerCre_(ss, canal, destino, pares) {
+  var vistos = {}, props = [], motivos = [];
+  (pares || []).forEach(function (x) {
+    var doc = TGR_normDoc_(x.doc);
+    if (!doc || vistos[doc]) return;
+    vistos[doc] = true;
+    var r;
+    try { r = TGR_buscar_(ss, TG_cfg_(ss).cob, { doc: doc, voucher: x.fila ? { fila: x.fila } : null }); } catch (e) { console.warn('CRE tras procesar: ' + e.message); return; }
+    if (r && r.lista && r.lista.length) props = props.concat(r.lista.slice(0, 1));
+    // pagó el total menos la retención pero no se puede emitir: se dice por qué (si no, el silencio confunde)
+    else if (r && r.motivo && /retenci/i.test(x.cuadra || '') && !/^Ya (está retenida|tiene comprobante)/.test(r.motivo)) motivos.push('🧾 ' + doc + ': ' + r.motivo);
+  });
+  if (!props.length && !motivos.length) return;
+  var cab = '🧾 <b>Comprobante de retención</b>\n' + (props.length ? 'Este pago lleva retención del 3 % y todavía no tiene su comprobante (CRE). ¿Lo emito?\n' +
+    '<i>👁 Vista previa lo llena en SUNAT sin emitir. ✅ Emitir le pide confirmar antes.</i>' : '');
+  if (canal === 'tg') {
+    if (props.length) TGR_proponerTG_({ chatId: destino }, props, cab);
+    if (motivos.length) TG_enviar_(destino, motivos.map(TG_esc_).join('\n'));
+    return;
+  }
+  // WhatsApp: mensajes {texto, botones} que la app manda EN ORDEN después del «Listo» (o junto a la respuesta de ✅)
+  var out = [];
+  if (motivos.length) out.push({ texto: motivos.join('\n') });
+  TGR_botonesWA_(props).forEach(function (b, i) { b.texto = (i === 0 ? cab + '\n\n' : '') + b.texto; out.push({ texto: '', botones: b }); });
+  return out;
+}
+
+/** Deja mensajes (texto o {texto, botones}) en la cola que la app de WhatsApp recoge (accion=procesar, modo=mensajes). */
+function TGP_colaWA_(clave, items) {
+  if (!items || !items.length) return;
+  var p = PropertiesService.getScriptProperties(), k = TGP_PROP_MSG_ + clave, l = [];
+  try { l = JSON.parse(p.getProperty(k) || '[]'); } catch (e) {}
+  p.setProperty(k, JSON.stringify(l.concat(items).slice(-12)));
 }
 
 function TGP_avisar_(job, html) {
@@ -724,6 +773,7 @@ function TGP_alBotonTG_(ctx, op, k) {
   var r;
   try { r = TGP_ejecutar_(ctx.ss, k); } catch (e) { return TG_enviar_(ctx.chatId, '❌ ' + TG_esc_(e.message)); }
   TG_enviar_(ctx.chatId, r.texto, r.pendiente ? null : [[{ text: '↩️ Deshacer todo', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]]);
+  try { TGP_ofrecerCre_(ctx.ss, 'tg', ctx.chatId, r.paresCre); } catch (e) { console.warn('CRE tras procesar: ' + e.message); }
   if (r.pendiente) TGP_trabajarYa_();
 }
 
@@ -761,7 +811,11 @@ function TGP_wa_(q) {
     var x = CacheService.getScriptCache().get('tgp_r_' + clave);
     return x ? JSON.parse(x) : { ok: false, pendiente: true };
   }
-  if (q.modo === 'hacer') return Object.assign({ ok: true }, TGP_ejecutar_(ss, q.k));
+  if (q.modo === 'hacer') {
+    var hx = Object.assign({ ok: true }, TGP_ejecutar_(ss, q.k));
+    try { hx.siguientes = TGP_ofrecerCre_(ss, 'wa', String(q.numero), hx.paresCre) || []; } catch (e) { console.warn('CRE tras procesar: ' + e.message); }
+    return hx;
+  }
   if (q.modo === 'cancelar') return { ok: true, texto: TGP_cancelar_(ss, q.k) };
   if (q.modo === 'nombre') { var n = TGP_cambiarNombre_(q.k, q.texto || ''); n.ok = !n.error; return n; }
   if (q.modo === 'trabajar') { TGP_trabajarYa_(); return { ok: true }; }
