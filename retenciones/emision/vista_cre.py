@@ -303,6 +303,60 @@ def preparar_seguro(p, nav_args, s, docs, avisos_ok, ruc, usuario, clave, al_dia
     alto("SUNAT no aceptó ninguna fecha de emisión permitida")
 
 
+JS_FECHA_DP = """([sel, d, m, y]) => {
+  const e = document.querySelector(sel);
+  if (!e || !window.jQuery || !jQuery.fn.datepicker) return '';
+  const $e = jQuery(e);
+  try { $e.datepicker('setDate', new Date(y, m - 1, d, 23, 0, 0)); } catch (x) { return ''; }
+  $e.trigger('changeDate').trigger('change');
+  return e.value; }"""
+
+JS_DIA_CALENDARIO = r"""([d, m, y]) => {
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre',
+                 'january','february','march','april','may','june','july','august','september','october','november','december'];
+  const vis = x => x && x.offsetParent !== null;
+  const cal = [...document.querySelectorAll('.datepicker-days, .datepicker, .ui-datepicker')].find(vis);
+  if (!cal) return 'sin calendario';
+  const titulo = (cal.querySelector('.datepicker-switch, .ui-datepicker-title') || {}).innerText || '';
+  const t = titulo.toLowerCase();
+  const mesVisto = meses.findIndex(x => t.includes(x)) % 12 + 1, anioVisto = Number((t.match(/\d{4}/) || [0])[0]);
+  if (mesVisto && anioVisto && (anioVisto * 12 + mesVisto) > (y * 12 + m)) {
+    const prev = cal.querySelector('th.prev, .ui-datepicker-prev'); if (prev) { prev.click(); return 'atras'; }
+  }
+  const celda = [...cal.querySelectorAll('td.day, td a.ui-state-default')].find(c => vis(c) && c.innerText.trim() === String(d)
+     && !c.classList.contains('old') && !c.classList.contains('new') && !c.classList.contains('disabled')
+     && !(c.parentElement && c.parentElement.classList.contains('ui-datepicker-unselectable')));
+  if (!celda) return 'dia bloqueado';
+  celda.click(); return 'ok'; }"""
+
+
+def poner_fecha_calendario(fr, sel, f):
+    """Pone la fecha como lo hace una persona: con el calendario de la página (escribirla como texto hace que el
+    calendario de SUNAT la borre si es de días atrás). 1) API del calendario; 2) abre el calendario y toca el día."""
+    d, m, y = [int(x) for x in f.split("/")]
+    try:
+        if fr.evaluate(JS_FECHA_DP, [sel, d, m, y]) == f:
+            return True
+    except Exception:
+        pass
+    try:   # abrir el calendario: el botón de al lado (📅) o la casilla misma
+        boton = fr.query_selector(f"{sel} ~ .input-group-addon, {sel} ~ span .btn, {sel} ~ .input-group-btn button, {sel} + span")
+        (boton or fr.query_selector(sel)).click()
+        for _ in range(4):
+            fr.wait_for_timeout(400)
+            r = fr.evaluate(JS_DIA_CALENDARIO, [d, m, y])
+            if r != "atras":
+                break
+        fr.wait_for_timeout(600)
+        try:
+            fr.evaluate("() => { const b = document.activeElement; if (b && b.blur) b.blur(); }")
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return valor(fr, sel) == f
+
+
 def elegir_fecha(fr, s, hoy):
     """Fecha de emisión: prueba las fechas en orden (la del pago, la del último CRE de la empresa, luego desde 5 días
     atrás hasta hoy; las arma el bot en "fechas_emision") y se queda con la primera que SUNAT acepta.
@@ -315,7 +369,7 @@ def elegir_fecha(fr, s, hoy):
             print(f"::notice title=Fecha de emisión::{f}")
             FECHA_ELEGIDA[0] = f
             return f
-        poner(fr, "#txtFecEmision", f)
+        poner_fecha_calendario(fr, "#txtFecEmision", f)
         fr.wait_for_timeout(1500)
         aviso = ""
         try:
