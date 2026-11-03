@@ -58,9 +58,14 @@ function TGP_leer_(c, adj) {
  * Si la cuenta no lo tiene o está saturado, sigue con el modelo de siempre (nunca se queda sin leer).
  */
 var TGP_MODELO_LECTOR_ = 'gemini-3.8-flash';
+var TGP_T0_ = 0;   // inicio de la revisión (para no pasar el límite de 6 min de Google)
+function TGP_seg_() { return TGP_T0_ ? (Date.now() - TGP_T0_) / 1000 : 0; }
+
 function TGP_iaLectora_(c, opts) {
   var prov = IA_PROVEEDORES_[c.ia.proveedor] || {}, sp = PropertiesService.getScriptProperties();
   var lector = sp.getProperty('TGP_MODELO_LECTOR') || TGP_MODELO_LECTOR_;
+  // El modelo fuerte es más lento: solo mientras queda tiempo de sobra (después, el de siempre, que es rápido)
+  if (TGP_seg_() > 120) lector = '';
   if (prov.tipo === 'gemini' && lector && lector !== c.ia.modelo && sp.getProperty('TGP_SIN_LECTOR') !== lector) {
     var o = {};
     for (var x in opts) o[x] = opts[x];
@@ -139,6 +144,7 @@ function TGP_datosFactura_(c, f) {
  * op = {canal:'tg'|'wa', destino, clave}. Devuelve {texto (HTML), k, hayAcciones, hayNuevos}.
  */
 function TGP_analizar_(ss, adjs, op) {
+  TGP_T0_ = Date.now();
   var c = TGP_ctx_(ss);
   var items = [], resumenArch = [], facturasTodas = [];
   var leidos = adjs.map(function (a) {
@@ -164,6 +170,7 @@ function TGP_analizar_(ss, adjs, op) {
   vouchers.forEach(function (v, i) {
     var est = String((cruce.filas[i] || [])[4] || '');
     if (!/^(❌|⚠️)/.test(est)) return;
+    if (TGP_seg_() > 200) return;   // sin tiempo para la segunda lectura: queda la duda / «no está» (la persona decide)
     var re = TGP_releerOp_(c, v);
     if (!re) return;
     var dig = function (t) { return String(t || '').replace(/\D/g, '').replace(/^0+/, ''); };
@@ -918,7 +925,9 @@ function TGP_wa_(q) {
     var r;
     try {
       r = TGP_analizar_(ss, q.archivos || [], { canal: 'wa', destino: String(q.numero), clave: clave, nombre: q.nombre || '', fecha: q.fecha || '', pestana: q.pestana || '' }); r.ok = true;
-      try { r.siguientes = TGP_ofrecerCre_(ss, 'wa', String(q.numero), r.paresListo) || []; } catch (e2) { console.warn('CRE tras revisar: ' + e2.message); }
+      if (TGP_seg_() < 280) {   // revisar la retención solo si queda tiempo (si no, se ofrece al tocar ✅ o escribiendo «emite la retención…»)
+        try { r.siguientes = TGP_ofrecerCre_(ss, 'wa', String(q.numero), r.paresListo) || []; } catch (e2) { console.warn('CRE tras revisar: ' + e2.message); }
+      }
     }
     catch (e) { r = { ok: false, error: 'No pude revisarlo: ' + e.message }; }
     CacheService.getScriptCache().put('tgp_r_' + clave, JSON.stringify(r), 3600);
