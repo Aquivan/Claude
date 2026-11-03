@@ -510,6 +510,7 @@ def preparar(pag, s, docs, avisos_ok, ruc, usuario, clave):
               f" · pago − retención = neto {'✅' if cuadra else '❌'}")
         if not ok or not cuadra:
             fallar(fr, f"Documento {i}: los montos no cuadran")
+        total_ret += ret   # lo que calculó SUNAT (emitir lo compara con lo aprobado antes de tocar Emitir)
         antes = fr.evaluate(JS_FILAS, "#tblDocuRela")
         fr.click("#btnModalAddDocu")
         agregado = False
