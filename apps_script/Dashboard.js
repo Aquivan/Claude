@@ -86,6 +86,7 @@ function generarPanelDeControl_(rucFiltro) {
     medidas.tabla[i] = Math.max(medidas.tabla[i], String(texto).length);
   }
   var ULT_COL = 7 + NUM_COLS_IGV_; // ultima columna del panel (M)
+  var sinPermiso = [];   // bloques cuyo IMPORTRANGE no conecto al primer intento (se reintenta al final)
 
   var raiz = obtenerCarpetaRaiz_();
   var urlRaiz = raiz ? raiz.getUrl() : '';
@@ -373,6 +374,7 @@ function generarPanelDeControl_(rucFiltro) {
       conFormulas = true;
       if (!importrangeConectado_(ss, sheet, liqConDatos, filaActual - 1)) {
         celdaPermisoImportrange_(ss, sheet, liqConDatos, filaActual - 1);
+        sinPermiso.push({ fila: filaActual - 1, liq: liqConDatos, ruc: ruc });
         sheet.getRange(filaActual - 2, 8).setNote('Este bloque aún no lee la liquidación EN VIVO: muestra los montos copiados al actualizar el panel. ' +
           'Toque la celda amarilla 🔓 de la derecha y pulse «Permitir acceso» (una sola vez); luego actualice el panel.');
       }
@@ -405,6 +407,7 @@ function generarPanelDeControl_(rucFiltro) {
     filaActual++;
   });
 
+  reintentarPermisosImportrange_(ss, sheet, sinPermiso);
   ajustarColumnasDashboard_(sheet, largoMaxIgv, medidas);
   limpiarHojasVacias_(ss);
 }
@@ -710,8 +713,47 @@ function permitirImportrange_(ss, idOrigen) {
   try {
     var r = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + ss.getId() + '/externaldata/addimportrangepermissions?donorDoc=' + idOrigen,
       { method: 'post', headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
-    if (r.getResponseCode() !== 200) Logger.log('IMPORTRANGE permiso: HTTP ' + r.getResponseCode());
-  } catch (e) { Logger.log('IMPORTRANGE: ' + e.message); }
+    var cod = r.getResponseCode();
+    if (cod !== 200) Logger.log('IMPORTRANGE permiso: HTTP ' + cod);
+    return 'HTTP ' + cod;
+  } catch (e) { Logger.log('IMPORTRANGE: ' + e.message); return e.message; }
+}
+
+/**
+ * Segundo intento, al FINAL del panel, para los bloques que no conectaron (a veces Google aun no tiene lista una
+ * liquidacion recien rehecha, o tarda en registrar el permiso). Se pide el permiso de nuevo, se espera y se revisa;
+ * los que conectan quedan igual que los demas (sin la celda 🔓). Lo que Google rechace queda anotado en el Registro.
+ */
+function reintentarPermisosImportrange_(ss, sheet, pendientes) {
+  for (var ronda = 0; ronda < 2 && pendientes.length; ronda++) {
+    if (Date.now() - INICIO_EJECUCION_ > 4.5 * 60 * 1000) break;
+    pendientes.forEach(function (p) {
+      p.resp = permitirImportrange_(ss, p.liq.getId());
+      var c = sheet.getRange(p.fila, COL_AYUDA_IGV_);
+      c.setFormula(c.getFormula());
+      var v = sheet.getRange(p.fila - 1, 14);
+      if (v.getFormula()) v.setFormula(v.getFormula());
+    });
+    SpreadsheetApp.flush();
+    Utilities.sleep(4000 + ronda * 4000);
+    SpreadsheetApp.flush();
+    pendientes = pendientes.filter(function (p) {
+      var val = sheet.getRange(p.fila, COL_AYUDA_IGV_).getValue();
+      if (val === '' || /^#/.test(String(val))) return true;
+      // conecto: se quita la celda 🔓 y su aviso
+      sheet.getRange(p.fila - 1, 14).clear().clearNote();
+      sheet.getRange(p.fila - 2, 14).clear();
+      sheet.getRange(p.fila - 1, 8).clearNote();
+      return false;
+    });
+  }
+  if (pendientes.length) {
+    try {
+      registrarEnBitacora_('Panel SIRE: Google no dio el permiso automático de IMPORTRANGE a ' + pendientes.map(function (p) {
+        return p.ruc + ' (' + p.resp + ')';
+      }).join(', ') + '. Quedó la celda 🔓 «Permitir acceso» en esos bloques.');
+    } catch (e) {}
+  }
 }
 
 /** Colores por formato condicional en H..M de un bloque (solo celdas con formula). */
