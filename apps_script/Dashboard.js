@@ -202,6 +202,8 @@ function generarPanelDeControl_(rucFiltro) {
     }
 
     // Resumen IGV por periodo, leido (solo lectura) de la hoja "Liquidacion"
+    // Montos escritos a mano en el panel (ventas, compras, IR) -> ajuste en la liquidacion (asi se recalcula todo)
+    try { llevarAjustesALiquidacion_(archivoLiq, ruc, ajustesPrevios); } catch (eA) { Logger.log('Ajustes a la liquidacion: ' + eA.message); }
     var resumenIgv = leerResumenIgvLiquidacion_(archivoLiq);
     // Liquidacion a medio generar (p. ej. Google corto la ejecucion y quedo solo con titulos): se rehace aqui
     // mismo si queda tiempo; si no, el bloque lo dice claro (en vez de quedar vacio sin explicacion).
@@ -405,6 +407,7 @@ function generarPanelDeControl_(rucFiltro) {
       if (typeof f[2] === 'number' && f[2] !== 0) sheet.getRange(fila, 10).setFontColor('#92400E').setBackground('#FEF3C7');
     });
     aplicarAjustesPanel_(sheet, ajustesPrevios, ruc, filaActual);
+    if (liqConDatos && resumenIgv.hayAjustes) marcarAjustesLiquidacionPanel_(sheet, filaActual, resumenIgv, anioActual);
     sheet.getRange(filaActual - 1, 8, 13, NUM_COLS_IGV_)
       .setBorder(true, true, true, true, true, true, '#C4B5FD', SpreadsheetApp.BorderStyle.SOLID);
 
@@ -460,7 +463,8 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
       res.incompleta = true;
       return res;
     }
-    var datos = hoja.getRange(1, 1, Math.min(hoja.getLastRow(), 20), hoja.getLastColumn()).getValues();
+    var rangoLiq = hoja.getRange(1, 1, Math.min(hoja.getLastRow(), 20), hoja.getLastColumn());
+    var datos = rangoLiq.getValues(), formulasLiq = rangoLiq.getFormulas();
     var enc = datos[0].map(function (t) { return String(t).trim(); });
     function col(clave) {
       var titulo = COLUMNAS_TABLERO_.filter(function (c) { return c.clave === clave; })[0].titulo;
@@ -499,7 +503,15 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
           var v = ix === -1 ? 0 : datos[i][ix];
           return a + (typeof v === 'number' ? v : 0);
         }, 0),
+        // columnas de la liquidacion escritas A MANO (sin formula): se marcan en rojo en el panel
+        ajustadas: Object.keys(CLAVE_LIQ_POR_TITULO_PANEL_).map(function (t) { return CLAVE_LIQ_POR_TITULO_PANEL_[t]; })
+          .filter(function (clave) { var ix = col(clave); return ix !== -1 && !formulasLiq[i][ix] && datos[i][ix] !== ''; }),
       };
+      if (res.porPeriodo[per].ajustadas.length) res.hayAjustes = true;
+    }
+    // Montos ORIGINALES (lo que trae el SIRE) de los meses ajustados, para el comentario «excluido»
+    if (res.hayAjustes) {
+      try { res.originales = sumasOriginalesLiquidacion_(hoja.getParent()); } catch (eO) { Logger.log('Originales: ' + eO.message); }
     }
     // Solo titulos y ningun mes: la liquidacion quedo a medio generar
     if (!Object.keys(res.porPeriodo).length) res.incompleta = true;
@@ -508,6 +520,114 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
     res.error = 'no se pudo leer la liquidación';
   }
   return res;
+}
+
+/** Columnas del panel que equivalen a UNA columna de la liquidacion (un ajuste escrito ahi se pasa a la liquidacion). */
+var CLAVE_LIQ_POR_TITULO_PANEL_ = {
+  'IGV Ventas (Débito)': 'debitoTotal',
+  'IGV Compras del mes': 'creditoDgDelMes',
+  'IGV Compras de meses anteriores': 'creditoDgAnt',
+  'Total IGV Compras (Crédito)': 'creditoDgTotal',
+  'IR por pagar (Pago a cuenta Renta)': 'pagoACuentaRenta'
+};
+
+/**
+ * Lo que trae el SIRE por periodo (sin ajustes), sumado de las pestañas Detalle Ventas / Detalle Compras de la
+ * liquidacion: { '202610': { debitoTotal, creditoDgDelMes, creditoDgAnt, creditoDgTotal } }.
+ */
+function sumasOriginalesLiquidacion_(ssLiq) {
+  var out = {};
+  function norm(t) { return String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase(); }
+  function sumar(nombreHoja, columnasMonto, claveDelMes, claveAnt) {
+    var h = ssLiq.getSheetByName(nombreHoja);
+    if (!h || h.getLastRow() < 2) return;
+    var v = h.getDataRange().getValues();
+    var enc = v[0].map(norm);
+    var iPer = enc.indexOf('periodo'), iOri = enc.indexOf('origen');
+    var iMontos = columnasMonto.map(function (c) { return enc.indexOf(c); }).filter(function (x) { return x !== -1; });
+    if (iPer === -1 || !iMontos.length) return;
+    for (var r = 1; r < v.length; r++) {
+      var per = String(v[r][iPer]).trim();
+      if (!/^\d{6}$/.test(per)) continue;
+      var monto = iMontos.reduce(function (a, ix) { return a + (Number(String(v[r][ix]).replace(/,/g, '')) || 0); }, 0);
+      var o = out[per] = out[per] || { debitoTotal: 0, creditoDgDelMes: 0, creditoDgAnt: 0, creditoDgTotal: 0 };
+      var anterior = iOri !== -1 && norm(v[r][iOri]) === 'anterior';
+      if (claveDelMes === 'debitoTotal') o.debitoTotal += monto;
+      else { o[anterior ? claveAnt : claveDelMes] += monto; o.creditoDgTotal += monto; }
+    }
+  }
+  sumar('Detalle Ventas', ['igv / ipm', 'dscto igv / ipm'], 'debitoTotal');
+  sumar('Detalle Compras', ['igv / ipm dg'], 'creditoDgDelMes', 'creditoDgAnt');
+  return out;
+}
+
+/**
+ * Montos escritos a mano en el PANEL en una columna que existe en la liquidacion (ventas, compras del mes, compras
+ * de meses anteriores, total compras, IR): se pasan a la LIQUIDACION como ajuste (en rojo, igual que un ajuste hecho
+ * alli). Asi el total, el IGV a pagar y los saldos se recalculan con ese monto, y no se pierde al actualizar.
+ * Los que se pasan se quitan de «ajustes» (el panel vuelve a mostrar la formula, que ya lee el monto ajustado).
+ */
+function llevarAjustesALiquidacion_(archivoLiq, ruc, ajustes) {
+  var claves = Object.keys(ajustes).filter(function (k) {
+    var p = k.split('|');
+    return p[0] === ruc && CLAVE_LIQ_POR_TITULO_PANEL_[p[2]] && typeof ajustes[k] === 'number';
+  });
+  if (!claves.length || !archivoLiq) return 0;
+  var hoja = SpreadsheetApp.openById(archivoLiq.getId()).getSheetByName('Liquidacion');
+  if (!hoja || hoja.getLastRow() < 2) return 0;
+  var enc = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0].map(function (t) { return String(t).trim(); });
+  var pers = hoja.getRange(1, 2, Math.min(hoja.getLastRow(), 14), 1).getValues().map(function (r) { return String(r[0]).trim(); });
+  var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm');
+  var n = 0;
+  claves.forEach(function (k) {
+    var p = k.split('|');
+    var col = enc.indexOf(tituloLiq_(CLAVE_LIQ_POR_TITULO_PANEL_[p[2]])) + 1, fila = pers.indexOf(p[1]) + 1;
+    if (col < 1 || fila < 2) return;
+    var c = hoja.getRange(fila, col), antes = c.getValue();
+    c.setValue(ajustes[k]).setBackground(COLOR_OVERRIDE_FONDO_).setFontColor(COLOR_OVERRIDE_TEXTO_).setFontWeight('bold')
+      .setNote('✋ Ajuste a mano (escrito en el Panel de Control el ' + hoy + ').\nAntes: ' + textoMonto_(Number(antes) || 0) +
+        '\nAhora: ' + textoMonto_(ajustes[k]) + '\n\nPara volver al cálculo automático: borre esta celda y actualice la liquidación.');
+    delete ajustes[k];
+    n++;
+  });
+  if (n) SpreadsheetApp.flush();
+  return n;
+}
+
+/**
+ * Celdas del panel cuyo monto viene de un AJUSTE A MANO en la liquidacion: en rojo con letra blanca (regla primera,
+ * gana a los demas colores) y un comentario con lo que trae el SIRE, lo considerado y lo EXCLUIDO.
+ */
+function marcarAjustesLiquidacionPanel_(sheet, fila1, resumenIgv, anio) {
+  var reglas = [], hay = false;
+  for (var m = 1; m <= 12; m++) {
+    var per = anio + ('' + m).padStart(2, '0');
+    var igv = resumenIgv.porPeriodo[per];
+    if (!igv || !igv.ajustadas || !igv.ajustadas.length) continue;
+    TITULOS_IGV_DASHBOARD_.forEach(function (titulo, k) {
+      var clave = CLAVE_LIQ_POR_TITULO_PANEL_[titulo];
+      if (!clave || igv.ajustadas.indexOf(clave) === -1) return;
+      var valor = { debitoTotal: igv.debito, creditoDgDelMes: igv.creditoMes, creditoDgAnt: igv.creditoAnt,
+        creditoDgTotal: igv.credito, pagoACuentaRenta: igv.irPagar }[clave];
+      var orig = resumenIgv.originales && resumenIgv.originales[per] ? resumenIgv.originales[per][clave] : undefined;
+      var texto = '✋ AJUSTADO A MANO (en la liquidación).\n';
+      if (typeof orig === 'number' && typeof valor === 'number') {
+        var dif = orig - valor;
+        texto += '\nSegún el SIRE: ' + textoMonto_(orig) + '\nConsiderado: ' + textoMonto_(valor) +
+          '\n' + (dif >= 0 ? 'IGV EXCLUIDO: ' : 'IGV agregado: ') + textoMonto_(Math.abs(dif)) + '\n';
+      } else if (typeof valor === 'number') {
+        texto += '\nConsiderado: ' + textoMonto_(valor) + '\n';
+      }
+      texto += '\nEl total, el IGV a pagar y los saldos ya usan este monto. Para volver al automático: en la liquidación ' +
+        'borre la celda roja y actualice.';
+      var rg = sheet.getRange(fila1 + m - 1, 8 + k);
+      rg.setNote(texto);
+      reglas.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=TRUE')
+        .setBackground('#CC0000').setFontColor('#FFFFFF').setBold(true).setRanges([rg]).build());
+      hay = true;
+    });
+  }
+  if (hay) sheet.setConditionalFormatRules(reglas.concat(sheet.getConditionalFormatRules()));
 }
 
 /**
