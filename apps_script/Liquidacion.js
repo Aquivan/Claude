@@ -195,6 +195,22 @@ function menuGenerarLiquidacion() {
 }
 
 var LIMITE_COLA_LIQ_MS_ = 4.5 * 60 * 1000;
+// Inicio de ESTA ejecucion de Apps Script (el codigo global corre al empezar cada ejecucion): sirve para no pasar
+// el limite de 6 minutos de Google sumando todo lo que ya se hizo antes (importacion, panel, etc.).
+var INICIO_EJECUCION_ = Date.now();
+var LIMITE_LIQ_EN_IMPORTACION_MS_ = 3.5 * 60 * 1000;
+
+/** Agrega liquidaciones ('ruc|anio') a la cola en segundo plano (se suman a las que ya estuvieran esperando). */
+function encolarLiquidaciones_(items) {
+  var props = PropertiesService.getScriptProperties();
+  var cola = null;
+  try { cola = JSON.parse(props.getProperty('COLA_LIQUIDACIONES') || 'null'); } catch (e) {}
+  if (!cola) cola = { anio: new Date().getFullYear(), rucs: [], listas: [], errores: [] };
+  items.forEach(function (it) { if (cola.rucs.indexOf(it) === -1) cola.rucs.push(it); });
+  props.setProperty('COLA_LIQUIDACIONES', JSON.stringify(cola));
+  var ya = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'continuarColaLiquidaciones'; });
+  if (!ya) ScriptApp.newTrigger('continuarColaLiquidaciones').timeBased().after(60 * 1000).create();
+}
 
 /**
  * Genera las liquidaciones de cola.rucs (se van sacando de la lista). Si se
@@ -209,9 +225,10 @@ function procesarColaLiquidaciones_(cola) {
       ScriptApp.newTrigger('continuarColaLiquidaciones').timeBased().after(60 * 1000).create();
       return false;
     }
-    var ruc = cola.rucs.shift();
+    var item = String(cola.rucs.shift()).split('|');   // 'ruc' o 'ruc|anio'
+    var ruc = item[0];
     try {
-      construirLiquidacion_(ruc, cola.anio);
+      construirLiquidacion_(ruc, item[1] ? parseInt(item[1], 10) : cola.anio);
       cola.listas.push(ruc);
     } catch (e) {
       cola.errores.push(ruc + ': ' + e.message);
@@ -232,6 +249,10 @@ function continuarColaLiquidaciones() {
   if (procesarColaLiquidaciones_(cola)) {
     registrarEnBitacora_('Liquidaciones IGV ' + cola.anio + ' de todas las empresas: ' + cola.listas.length +
       ' actualizadas (' + cola.listas.join(', ') + ').' + (cola.errores.length ? ' Con error: ' + cola.errores.join(' | ') : ''));
+    // El panel muestra enseguida los montos de las liquidaciones recien hechas (si queda tiempo en esta ejecucion)
+    if (Date.now() - INICIO_EJECUCION_ < 3 * 60 * 1000) {
+      try { generarPanelDeControl_(); } catch (eP) { Logger.log('Panel tras la cola: ' + eP.message); }
+    }
   }
 }
 
@@ -1076,7 +1097,9 @@ function escribirTablero_(ss, anio) {
 
   var encabezado = COLUMNAS_TABLERO_.map(function (c) { return c.titulo; });
 
-  sheet.getRange(1, 1, 1, encabezado.length).setValues([encabezado])
+  // Los titulos se escriben JUNTO con los 12 meses (mas abajo, en una sola escritura): asi la hoja nunca queda
+  // con solo los titulos si la ejecucion se corta a la mitad.
+  sheet.getRange(1, 1, 1, encabezado.length)
     .setFontWeight('bold').setFontColor('#FFFFFF')
     .setWrap(true).setVerticalAlignment('middle');
   sheet.setFrozenRows(1);
@@ -1154,7 +1177,7 @@ function escribirTablero_(ss, anio) {
     ]);
   }
 
-  sheet.getRange(2, 1, filas.length, encabezado.length).setValues(filas);
+  sheet.getRange(1, 1, filas.length + 1, encabezado.length).setValues([encabezado].concat(filas));
 
   // Fondo suave SOLO en las columnas "principales" de cada grupo (ver
   // COLUMNAS_IMPORTANTES_), no en todo el bloque -- para que el resaltado
