@@ -258,6 +258,10 @@ function generarPanelDeControl_(rucFiltro) {
       .setFontWeight('bold').setFontSize(9).setWrap(true)
       .setFontColor('#3B2470').setBackground('#DDD3F3')
       .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sheet.getRange(filaActual, 9).setNote('IGV de las compras con fecha de este mes.');
+    sheet.getRange(filaActual, 10).setNote('IGV de compras de meses pasados que llegaron recién a este SIRE (se usan este mes).');
+    sheet.getRange(filaActual, 11).setNote('Crédito fiscal total del mes = compras del mes + compras de meses anteriores.');
+    sheet.getRange(filaActual, 12).setNote('Resultado del mes (ya con saldo anterior, percepciones y retenciones): «Pagar» = IGV a pagar a SUNAT; «A favor» = saldo que pasa al mes siguiente.');
     sheet.setRowHeight(filaActual, 42); // titulos IGV en hasta 3 lineas
     filaActual++;
 
@@ -311,11 +315,14 @@ function generarPanelDeControl_(rucFiltro) {
         estadoGlobal, fechaActualizacion].forEach(function (t, i) { medir(i, t); });
 
       var igv = resumenIgv.porPeriodo[periodoStr];
+      // IGV: un solo número, positivo = a pagar, negativo = saldo a favor (el formato lo dice con palabras)
+      var neto = !igv ? '' : (typeof igv.aPagar === 'number' && igv.aPagar > 0) ? igv.aPagar
+        : (typeof igv.aFavor === 'number' && igv.aFavor > 0) ? -igv.aFavor : (igv.aPagar === '' && igv.aFavor === '' ? '' : 0);
       var valoresIgv = igv
-        ? [igv.debito, igv.credito, igv.creditoAnt, igv.aPagar, igv.aFavor, igv.irPagar]
+        ? [igv.debito, igv.creditoMes, igv.creditoAnt, igv.credito, neto, igv.irPagar]
         : TITULOS_IGV_DASHBOARD_.map(function () { return ''; });
       valoresIgv.forEach(function (v, k) {
-        largoMaxIgv[k] = Math.max(largoMaxIgv[k], textoMonto_(v).length);
+        largoMaxIgv[k] = Math.max(largoMaxIgv[k], textoMonto_(v).length + (k === 4 && v ? 8 : 0));   // «Pagar » / «A favor »
       });
       filasIgv.push(valoresIgv);
       coloresFila.push({ fondo: colorFila, texto: colorEstado });
@@ -346,22 +353,24 @@ function generarPanelDeControl_(rucFiltro) {
     rangoIgv.setValues(filasIgv).setFontSize(9).setVerticalAlignment('middle')
       .setHorizontalAlignment('right').setNumberFormat('#,##0.00;-#,##0.00;"-"')
       .setBackground('#FAF7FF');
+    // Total crédito (compras del mes + meses anteriores): en negrita, es el que se usa
+    sheet.getRange(filaActual, 11, 12, 1).setFontWeight('bold').setBackground('#F1ECFB');
+    // IGV del mes: "Pagar 12,130.86" (rojo) o "A favor 9,326.32" (verde) en una sola columna
+    sheet.getRange(filaActual, 12, 12, 1).setNumberFormat('"Pagar "#,##0.00;"A favor "#,##0.00;"-"');
     for (var ri = 0; ri < 12; ri++) {
       var fIgv = filasIgv[ri];
-      // IGV por pagar en rojo, saldo a favor en verde (solo si hay monto)
-      if (typeof fIgv[3] === 'number' && fIgv[3] > 0) {
-        sheet.getRange(filaActual + ri, 11).setFontColor('#B91C1C').setFontWeight('bold').setBackground('#FDECEC');
+      if (typeof fIgv[4] === 'number' && fIgv[4] > 0) {
+        sheet.getRange(filaActual + ri, 12).setFontColor('#B91C1C').setFontWeight('bold').setBackground('#FDECEC');
+      } else if (typeof fIgv[4] === 'number' && fIgv[4] < 0) {
+        sheet.getRange(filaActual + ri, 12).setFontColor('#166534').setFontWeight('bold').setBackground('#E7F8EC');
       }
       // IR por pagar (pago a cuenta de renta), con el color de renta de la liquidacion
       if (typeof fIgv[5] === 'number' && fIgv[5] > 0) {
         sheet.getRange(filaActual + ri, 13).setFontColor('#A64D79').setFontWeight('bold').setBackground('#FBEAF1');
       }
-      if (typeof fIgv[4] === 'number' && fIgv[4] > 0) {
-        sheet.getRange(filaActual + ri, 12).setFontColor('#166534').setFontWeight('bold').setBackground('#E7F8EC');
-      }
-      // Credito de compras de meses anteriores: resaltado en ambar como referencia
+      // Compras de meses anteriores (llegaron tarde al SIRE): en ámbar, como referencia
       if (typeof fIgv[2] === 'number' && fIgv[2] !== 0) {
-        sheet.getRange(filaActual + ri, 10).setFontColor('#92400E').setFontWeight('bold').setBackground('#FEF3C7');
+        sheet.getRange(filaActual + ri, 10).setFontColor('#92400E').setBackground('#FEF3C7');
       }
     }
     sheet.getRange(filaActual - 1, 8, 13, NUM_COLS_IGV_)
@@ -392,10 +401,10 @@ function textoMonto_(v) {
 // la liquidacion.
 var TITULOS_IGV_DASHBOARD_ = [
   'IGV Ventas (Débito)',
-  'IGV Compras (Crédito total)',
-  'Crédito de compras de meses anteriores',
-  'IGV POR PAGAR',
-  'Saldo a favor (pasa al mes sig.)',
+  'IGV Compras del mes',
+  'IGV Compras de meses anteriores',
+  'Total IGV Compras (Crédito)',
+  'IGV: a pagar o saldo a favor',
   'IR por pagar (Pago a cuenta Renta)',
 ];
 var NUM_COLS_IGV_ = TITULOS_IGV_DASHBOARD_.length;
@@ -419,8 +428,8 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
       return enc.indexOf(titulo);
     }
     var iPer = col('periodo'), iDeb = col('debitoTotal'), iCred = col('creditoDgTotal'),
-        iCredAnt = col('creditoDgAnt'), iPagar = col('igvAPagar'), iFavor = col('saldoArrastrar');
-    if ([iPer, iDeb, iCred, iCredAnt, iPagar, iFavor].indexOf(-1) !== -1) {
+        iCredMes = col('creditoDgDelMes'), iCredAnt = col('creditoDgAnt'), iPagar = col('igvAPagar'), iFavor = col('saldoArrastrar');
+    if ([iPer, iDeb, iCred, iCredMes, iCredAnt, iPagar, iFavor].indexOf(-1) !== -1) {
       res.error = 'columnas de la liquidación no reconocidas';
       return res;
     }
@@ -434,6 +443,7 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
       res.porPeriodo[per] = {
         debito: num(datos[i][iDeb]),
         credito: num(datos[i][iCred]),
+        creditoMes: num(datos[i][iCredMes]),
         creditoAnt: num(datos[i][iCredAnt]),
         aPagar: num(datos[i][iPagar]),
         // En la liquidacion el saldo a favor se guarda en negativo; aqui positivo
