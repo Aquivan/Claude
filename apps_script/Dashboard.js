@@ -75,7 +75,7 @@ function generarPanelDeControl_(rucFiltro) {
     }
   } catch (e) {}
 
-  // Largo (en caracteres) del monto mas largo de cada columna H..M, para
+  // Largo (en caracteres) del monto mas largo de cada columna H..O, para
   // ajustar el ancho de esas columnas al contenido al final.
   var largoMaxIgv = TITULOS_IGV_DASHBOARD_.map(function () { return 0; });
   // Lo mismo para B..G (largo del texto visible mas largo de cada columna) y
@@ -97,7 +97,7 @@ function generarPanelDeControl_(rucFiltro) {
   // -------------------------------------------------------------
   sheet.setRowHeight(1, 15);
 
-  // Fila 2: Título principal (B..M: tabla B..G + resumen IGV/IR H..M)
+  // Fila 2: Título principal (B..O: tabla B..G + resumen IGV/IR H..O)
   sheet.getRange(2, 2, 1, ULT_COL - 1).merge()
     .setValue('📊  SIRE SUNAT — PANEL DE CONTROL & NAVEGACIÓN')
     .setFontWeight('bold')
@@ -252,7 +252,7 @@ function generarPanelDeControl_(rucFiltro) {
       .setBackground(VERDE_BTN).setHorizontalAlignment('center').setVerticalAlignment('middle')
       .setBorder(false, true, false, true, false, false, '#1E3A5F', SpreadsheetApp.BorderStyle.SOLID);
 
-    // 4. Titulo del bloque Resumen IGV + IR (cols H..M)
+    // 4. Titulo del bloque Resumen IGV + IR (cols H..O)
     sheet.getRange(filaActual, 8, 1, NUM_COLS_IGV_).merge()
       .setValue(resumenIgv.error
         ? '💰 Resumen IGV e IR — ' + resumenIgv.error
@@ -278,7 +278,11 @@ function generarPanelDeControl_(rucFiltro) {
     sheet.getRange(filaActual, 9).setNote('IGV de las compras con fecha de este mes.');
     sheet.getRange(filaActual, 10).setNote('IGV de compras de meses pasados que llegaron recién a este SIRE (se usan este mes).');
     sheet.getRange(filaActual, 11).setNote('Crédito fiscal total del mes = compras del mes + compras de meses anteriores.');
-    sheet.getRange(filaActual, 12).setNote('Resultado del mes (ya con saldo anterior, percepciones y retenciones): «Pagar» = IGV a pagar a SUNAT; «A favor» = saldo que pasa al mes siguiente.');
+    sheet.getRange(filaActual, 12).setNote('Saldo a favor que venía del mes anterior: se usa (compensa) contra el IGV de este mes.');
+    sheet.getRange(filaActual, 13).setNote('Retenciones (CRE recibidos, automático del proyecto de Retenciones) + percepciones del mes + lo que sobró de meses anteriores. ' +
+      'Se descuentan del IGV a pagar; si sobra, pasa al mes siguiente.');
+    sheet.getRange(filaActual, 14).setNote('Resultado final del mes = IGV Ventas − Total IGV Compras − Saldo a favor anterior − Retenciones y percepciones.\n' +
+      '«Pagar» = IGV a pagar a SUNAT; «A favor» = saldo que pasa al mes siguiente; «-» = quedó en cero (todo compensado).');
     sheet.setRowHeight(filaActual, 42); // titulos IGV en hasta 3 lineas
     filaActual++;
 
@@ -336,10 +340,10 @@ function generarPanelDeControl_(rucFiltro) {
       var neto = !igv ? '' : (typeof igv.aPagar === 'number' && igv.aPagar > 0) ? igv.aPagar
         : (typeof igv.aFavor === 'number' && igv.aFavor > 0) ? -igv.aFavor : (igv.aPagar === '' && igv.aFavor === '' ? '' : 0);
       var valoresIgv = igv
-        ? [igv.debito, igv.creditoMes, igv.creditoAnt, igv.credito, neto, igv.irPagar]
+        ? [igv.debito, igv.creditoMes, igv.creditoAnt, igv.credito, igv.saldoAnt, igv.retPer, neto, igv.irPagar]
         : TITULOS_IGV_DASHBOARD_.map(function () { return ''; });
       valoresIgv.forEach(function (v, k) {
-        largoMaxIgv[k] = Math.max(largoMaxIgv[k], textoMonto_(v).length + (k === 4 && v ? 8 : 0));   // «Pagar » / «A favor »
+        largoMaxIgv[k] = Math.max(largoMaxIgv[k], textoMonto_(v).length + (k === 6 && v ? 8 : 0));   // «Pagar » / «A favor »
       });
       filasIgv.push(valoresIgv);
       coloresFila.push({ fondo: colorFila, texto: colorEstado });
@@ -365,7 +369,7 @@ function generarPanelDeControl_(rucFiltro) {
     sheet.getRange(filaActual - 1, 2, 13, NUM_COLS)
       .setBorder(true, true, true, true, true, true, '#93C5FD', SpreadsheetApp.BorderStyle.SOLID);
 
-    // --- BLOQUE RESUMEN IGV + IR (H..M): FORMULAS que leen la Liquidacion (se actualizan solas) ---
+    // --- BLOQUE RESUMEN IGV + IR (H..O): FORMULAS que leen la Liquidacion (se actualizan solas) ---
     var rangoIgv = sheet.getRange(filaActual, 8, 12, NUM_COLS_IGV_);
     var conFormulas = false;
     if (liqConDatos) {
@@ -387,15 +391,17 @@ function generarPanelDeControl_(rucFiltro) {
     // Total crédito (compras del mes + meses anteriores): en negrita, es el que se usa
     sheet.getRange(filaActual, 11, 12, 1).setFontWeight('bold').setBackground('#F1ECFB');
     // IGV del mes: "Pagar 12,130.86" (rojo) o "A favor 9,326.32" (verde) en una sola columna
-    sheet.getRange(filaActual, 12, 12, 1).setNumberFormat('"Pagar "#,##0.00;"A favor "#,##0.00;"-"');
+    sheet.getRange(filaActual, 14, 12, 1).setNumberFormat('"Pagar "#,##0.00;"A favor "#,##0.00;"-"');
     // Colores segun el monto (formato condicional: siguen el valor aunque cambie la liquidacion).
     // Solo en celdas con formula: un monto escrito a mano se ve en rojo (ajuste), como en la liquidacion.
     coloresResumenIgv_(sheet, filaActual);
     if (!conFormulas) filasIgv.forEach(function (f, ri) {   // montos fijos: colores fijos
       var fila = filaActual + ri;
-      if (typeof f[4] === 'number' && f[4] > 0) sheet.getRange(fila, 12).setFontColor('#B91C1C').setFontWeight('bold').setBackground('#FDECEC');
-      else if (typeof f[4] === 'number' && f[4] < 0) sheet.getRange(fila, 12).setFontColor('#166534').setFontWeight('bold').setBackground('#E7F8EC');
-      if (typeof f[5] === 'number' && f[5] > 0) sheet.getRange(fila, 13).setFontColor('#A64D79').setFontWeight('bold').setBackground('#FBEAF1');
+      if (typeof f[6] === 'number' && f[6] > 0) sheet.getRange(fila, 14).setFontColor('#B91C1C').setFontWeight('bold').setBackground('#FDECEC');
+      else if (typeof f[6] === 'number' && f[6] < 0) sheet.getRange(fila, 14).setFontColor('#166534').setFontWeight('bold').setBackground('#E7F8EC');
+      if (typeof f[7] === 'number' && f[7] > 0) sheet.getRange(fila, 15).setFontColor('#A64D79').setFontWeight('bold').setBackground('#FBEAF1');
+      if (typeof f[4] === 'number' && f[4] > 0) sheet.getRange(fila, 12).setFontColor('#166534').setBackground('#F0FAF3');
+      if (typeof f[5] === 'number' && f[5] > 0) sheet.getRange(fila, 13).setFontColor('#075985').setBackground('#E0F2FE');
       if (typeof f[2] === 'number' && f[2] !== 0) sheet.getRange(fila, 10).setFontColor('#92400E').setBackground('#FEF3C7');
     });
     aplicarAjustesPanel_(sheet, ajustesPrevios, ruc, filaActual);
@@ -423,7 +429,7 @@ function textoMonto_(v) {
   return (v < 0 ? '-' : '') + partes.join('.');
 }
 
-// Columnas H..M del Panel: resumen IGV e IR por mes, leido de la hoja "Liquidacion"
+// Columnas H..O del Panel: resumen IGV e IR por mes, leido de la hoja "Liquidacion"
 // de cada empresa (Liquidacion.js). Solo lectura: el Panel nunca escribe en
 // la liquidacion.
 var TITULOS_IGV_DASHBOARD_ = [
@@ -431,6 +437,8 @@ var TITULOS_IGV_DASHBOARD_ = [
   'IGV Compras del mes',
   'IGV Compras de meses anteriores',
   'Total IGV Compras (Crédito)',
+  'Saldo a favor del mes anterior',
+  'Retenciones y percepciones',
   'IGV: a pagar o saldo a favor',
   'IR por pagar (Pago a cuenta Renta)',
 ];
@@ -467,6 +475,8 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
     }
     // Pago a cuenta de renta: opcional (si no existiera, la columna IR queda vacia)
     var iRenta = col('pagoACuentaRenta');
+    // Compensaciones (opcionales): saldo a favor anterior y retenciones/percepciones
+    var iSaldoAnt = col('saldoAnt'), iPer1 = col('percepciones'), iRet = col('retenciones'), iArr = col('percepRetencArrastre');
     function num(v) { return typeof v === 'number' ? v : ''; }
     for (var i = 1; i < datos.length; i++) {
       var per = String(datos[i][iPer]).trim();
@@ -483,6 +493,12 @@ function leerResumenIgvLiquidacion_(archivoLiq) {
         // En la liquidacion el saldo a favor se guarda en negativo; aqui positivo
         aFavor: favor === '' ? '' : Math.abs(favor),
         irPagar: iRenta === -1 ? '' : num(datos[i][iRenta]),
+        // saldo a favor del mes anterior (en la liquidacion va en negativo): aqui positivo
+        saldoAnt: iSaldoAnt === -1 || typeof datos[i][iSaldoAnt] !== 'number' ? '' : Math.abs(datos[i][iSaldoAnt]),
+        retPer: [iPer1, iRet, iArr].reduce(function (a, ix) {
+          var v = ix === -1 ? 0 : datos[i][ix];
+          return a + (typeof v === 'number' ? v : 0);
+        }, 0),
       };
     }
     // Solo titulos y ningun mes: la liquidacion quedo a medio generar
@@ -616,7 +632,7 @@ function ajustarColumnasDashboard_(sheet, largoMaxIgv, medidas) {
   }
   anchos.forEach(function (w, i) { sheet.setColumnWidth(2 + i, w); });
 
-  // H..M (resumen IGV e IR): ancho ajustado al monto mas largo de cada columna.
+  // H..O (resumen IGV e IR): ancho ajustado al monto mas largo de cada columna.
   // ~6.6px por caracter en letra 9 (negrita incluida) + margen chico; minimo 74px
   // para que el titulo quepa en 3 lineas.
   for (var k = 0; k < NUM_COLS_IGV_; k++) {
@@ -630,13 +646,15 @@ function ajustarColumnasDashboard_(sheet, largoMaxIgv, medidas) {
 /* ===================== Resumen IGV con FORMULAS (lee la Liquidacion) ===================== */
 
 var COL_AYUDA_IGV_ = 30;   // AD: aqui va el IMPORTRANGE de la liquidacion (columnas ocultas)
+/** Columna (visible) de la celda 🔓 «Permitir acceso»: la primera despues del resumen IGV. */
+function COL_PERMISO_() { return 8 + NUM_COLS_IGV_; }
 var ANCHO_AYUDA_IGV_ = 80; // AD..DE
 
 /** Titulo de una columna de la liquidacion por su clave (asi las formulas siguen a la columna aunque se mueva). */
 function tituloLiq_(clave) { return COLUMNAS_TABLERO_.filter(function (c) { return c.clave === clave; })[0].titulo; }
 
 /**
- * Formulas H..M de los 12 meses. filaTit = fila de titulos del bloque (alli va el IMPORTRANGE oculto, que trae la
+ * Formulas H..O de los 12 meses. filaTit = fila de titulos del bloque (alli va el IMPORTRANGE oculto, que trae la
  * fila de titulos + los 12 meses de la liquidacion, alineados con las filas del panel).
  */
 function formulasResumenIgv_(ss, sheet, archivoLiq, filaTit, respaldo) {
@@ -662,9 +680,11 @@ function formulasResumenIgv_(ss, sheet, archivoLiq, filaTit, respaldo) {
       '=IFERROR(' + X('creditoDgDelMes') + S + lit(rs[1]) + ')',
       '=IFERROR(' + X('creditoDgAnt') + S + lit(rs[2]) + ')',
       '=IFERROR(' + X('creditoDgTotal') + S + lit(rs[3]) + ')',
+      '=IFERROR(ABS(' + X('saldoAnt') + ')' + S + lit(rs[4]) + ')',
+      '=IFERROR(N(' + X('percepciones') + ')+N(' + X('retenciones') + ')+N(' + X('percepRetencArrastre') + ')' + S + lit(rs[5]) + ')',
       // un solo numero: positivo = a pagar, negativo = saldo a favor
-      '=IFERROR(IF(' + X('igvAPagar') + '>0' + S + X('igvAPagar') + S + '-ABS(' + X('saldoArrastrar') + '))' + S + lit(rs[4]) + ')',
-      '=IFERROR(' + X('pagoACuentaRenta') + S + lit(rs[5]) + ')'
+      '=IFERROR(IF(' + X('igvAPagar') + '>0' + S + X('igvAPagar') + S + '-ABS(' + X('saldoArrastrar') + '))' + S + lit(rs[6]) + ')',
+      '=IFERROR(' + X('pagoACuentaRenta') + S + lit(rs[7]) + ')'
     ]);
   }
   sheet.hideColumns(COL_AYUDA_IGV_, ANCHO_AYUDA_IGV_);
@@ -694,7 +714,7 @@ function importrangeConectado_(ss, sheet, archivoLiq, filaTit) {
  */
 function celdaPermisoImportrange_(ss, sheet, archivoLiq, filaTit) {
   var S = separadorFormula_(ss);
-  var c = sheet.getRange(filaTit - 1, 14);
+  var c = sheet.getRange(filaTit - 1, COL_PERMISO_());
   c.setFormula('=IMPORTRANGE("' + archivoLiq.getId() + '"' + S + '"Liquidacion!B1")')
     .setBackground('#FFF4CC').setFontColor('#92400E').setFontWeight('bold').setFontSize(9)
     .setHorizontalAlignment('center').setVerticalAlignment('middle')
@@ -702,9 +722,9 @@ function celdaPermisoImportrange_(ss, sheet, archivoLiq, filaTit) {
     .setNote('🔓 PERMISO (una sola vez por empresa): pase el mouse por esta celda (en el celular, tóquela) y pulse ' +
       '«Permitir acceso». Luego use «Actualizar panel»: el resumen IGV de esta empresa leerá la liquidación en vivo.\n\n' +
       'Mientras tanto los montos que ve son los copiados de la liquidación al actualizar el panel.');
-  sheet.getRange(filaTit - 2, 14).setValue('🔓 Permitir ↓').setFontSize(8).setFontColor('#92400E')
+  sheet.getRange(filaTit - 2, COL_PERMISO_()).setValue('🔓 Permitir ↓').setFontSize(8).setFontColor('#92400E')
     .setHorizontalAlignment('center').setVerticalAlignment('bottom');
-  sheet.setColumnWidth(14, 92);
+  sheet.setColumnWidth(COL_PERMISO_(), 92);
 }
 
 /** Deja que este panel lea la liquidacion con IMPORTRANGE sin pedir «Permitir acceso» (mismo dueño). Si Google no lo
@@ -731,7 +751,7 @@ function reintentarPermisosImportrange_(ss, sheet, pendientes) {
       p.resp = permitirImportrange_(ss, p.liq.getId());
       var c = sheet.getRange(p.fila, COL_AYUDA_IGV_);
       c.setFormula(c.getFormula());
-      var v = sheet.getRange(p.fila - 1, 14);
+      var v = sheet.getRange(p.fila - 1, COL_PERMISO_());
       if (v.getFormula()) v.setFormula(v.getFormula());
     });
     SpreadsheetApp.flush();
@@ -741,8 +761,8 @@ function reintentarPermisosImportrange_(ss, sheet, pendientes) {
       var val = sheet.getRange(p.fila, COL_AYUDA_IGV_).getValue();
       if (val === '' || /^#/.test(String(val))) return true;
       // conecto: se quita la celda 🔓 y su aviso
-      sheet.getRange(p.fila - 1, 14).clear().clearNote();
-      sheet.getRange(p.fila - 2, 14).clear();
+      sheet.getRange(p.fila - 1, COL_PERMISO_()).clear().clearNote();
+      sheet.getRange(p.fila - 2, COL_PERMISO_()).clear();
       sheet.getRange(p.fila - 1, 8).clearNote();
       return false;
     });
@@ -756,7 +776,7 @@ function reintentarPermisosImportrange_(ss, sheet, pendientes) {
   }
 }
 
-/** Colores por formato condicional en H..M de un bloque (solo celdas con formula). */
+/** Colores por formato condicional en H..O de un bloque (solo celdas con formula). */
 function coloresResumenIgv_(sheet, fila1) {
   var reglas = sheet.getConditionalFormatRules();
   var S = separadorFormula_(sheet.getParent());
@@ -765,33 +785,38 @@ function coloresResumenIgv_(sheet, fila1) {
     return SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISFORMULA(' + L + fila1 + ')' + S + 'ISNUMBER(' + L + fila1 + ')' + S + L + fila1 + cond + ')')
       .setBackground(fondo).setFontColor(letra).setBold(true).setRanges([rg]).build();
   };
-  reglas.push(regla(12, '>0', '#FDECEC', '#B91C1C'));   // L: pagar (rojo)
-  reglas.push(regla(12, '<0', '#E7F8EC', '#166534'));   // L: a favor (verde)
-  reglas.push(regla(13, '>0', '#FBEAF1', '#A64D79'));   // M: IR por pagar
+  reglas.push(regla(14, '>0', '#FDECEC', '#B91C1C'));   // N: pagar (rojo)
+  reglas.push(regla(14, '<0', '#E7F8EC', '#166534'));   // N: a favor (verde)
+  reglas.push(regla(15, '>0', '#FBEAF1', '#A64D79'));   // O: IR por pagar
+  reglas.push(regla(12, '>0', '#F0FAF3', '#166534'));   // L: saldo a favor anterior usado (verde suave)
+  reglas.push(regla(13, '>0', '#E0F2FE', '#075985'));   // M: retenciones y percepciones (azul)
   reglas.push(regla(10, '<>0', '#FEF3C7', '#92400E'));  // J: compras de meses anteriores (ambar)
   sheet.setConditionalFormatRules(reglas);
 }
 
 /**
- * Antes de rehacer el panel: montos que la persona escribio a mano en H..M (celda sin formula con valor) de los
+ * Antes de rehacer el panel: montos que la persona escribio a mano en H..O (celda sin formula con valor) de los
  * bloques que YA eran formulas. Se guardan por RUC + periodo + columna, para volver a ponerlos (en rojo).
  */
 function leerAjustesPanel_(sheet) {
   var out = {};
   var n = sheet.getLastRow();
   if (n < 10) return out;
-  var vals = sheet.getRange(1, 2, n, 12).getValues(), forms = sheet.getRange(1, 8, n, 6).getFormulas();
-  var ruc = '', conFormulas = false;
+  var W = NUM_COLS_IGV_;
+  // Se guardan por TITULO de columna (no por posicion): asi sobreviven si el panel cambia de columnas
+  var vals = sheet.getRange(1, 2, n, 6 + W).getValues(), forms = sheet.getRange(1, 8, n, W).getFormulas();
+  var ruc = '', conFormulas = false, titulos = [];
   for (var i = 0; i < n; i++) {
     var m = String(vals[i][0]).match(/^\s*[▶■]\s*\d+\.\s*(\d{11})/);
-    if (m) { ruc = m[1]; conFormulas = false; continue; }
+    if (m) { ruc = m[1]; conFormulas = false; titulos = []; continue; }
+    if (String(vals[i][0]).trim() === 'Mes') { titulos = vals[i].slice(6).map(function (t) { return String(t).trim(); }); continue; }
     var per = String(vals[i][1]).trim();
     if (!ruc || !/^\d{6}$/.test(per)) continue;
     if (forms[i].some(function (f) { return f; })) conFormulas = true;
     if (!conFormulas) continue;   // bloque antiguo (todo valores): nada es ajuste
-    for (var k = 0; k < 6; k++) {
+    for (var k = 0; k < W; k++) {
       var v = vals[i][6 + k];
-      if (!forms[i][k] && v !== '' && v !== null) out[ruc + '|' + per + '|' + k] = v;
+      if (titulos[k] && !forms[i][k] && v !== '' && v !== null) out[ruc + '|' + per + '|' + titulos[k]] = v;
     }
   }
   return out;
@@ -801,8 +826,8 @@ function leerAjustesPanel_(sheet) {
 function aplicarAjustesPanel_(sheet, ajustes, ruc, fila1) {
   for (var i = 0; i < 12; i++) {
     var per = String(sheet.getRange(fila1 + i, 3).getValue()).trim();
-    for (var k = 0; k < 6; k++) {
-      var v = ajustes[ruc + '|' + per + '|' + k];
+    for (var k = 0; k < NUM_COLS_IGV_; k++) {
+      var v = ajustes[ruc + '|' + per + '|' + TITULOS_IGV_DASHBOARD_[k]];
       if (v === undefined) continue;
       sheet.getRange(fila1 + i, 8 + k).setValue(v).setBackground('#CC0000').setFontColor('#FFFFFF').setFontWeight('bold');
     }
