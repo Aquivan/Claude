@@ -41,7 +41,7 @@ function TGR_pendientes_(ss) {
     var empresa = String(r[I['Empresa']]), empresaRuc = rucDe[empresa] || '', prov = String(r[I['RUC']]).replace(/\D/g, '');
     var fecha = aFecha_(r[I['Fecha']]), op = String(r[I['N° operación']]);
     if (!fecha || !empresaRuc || String(r[I['Moneda']]) !== 'PEN') { out.otras++; return; }
-    if (fecha > hoy) { out.fuera++; return; }
+    if (fecha < minPago || fecha > hoy) { out.fuera++; return; }   // meses anteriores: SUNAT ya no deja fecha de emisión en ese mes
     // Pagos de meses anteriores: también se proponen (el robot prueba fechas de emisión, ver TGR_fechasEmision_)
     var docsS = [], total = 0;
     String(r[I['Facturas que pagó (sujetas)']]).split(/\s*,\s*/).filter(String).forEach(function (etq) {
@@ -114,11 +114,12 @@ function TGR_clave_(s) {
 }
 
 /** Pide la corrida. Devuelve el enlace 📺 en vivo ('' si ese modo está apagado). */
-function TGR_pedir_(cfg, s, modo, chat) {
+function TGR_pedir_(cfg, s, modo, chat, k) {
   try { s.fechas_emision = TGR_fechasEmision_(s); } catch (e) { console.warn('Fechas de emisión: ' + e.message); }
   // caso: siempre (el robot manda al chat la FOTO de la vista preliminar apenas la ve); 📺 en vivo solo si está activo
   var caso = 'cre' + Utilities.getUuid().replace(/-/g, '').slice(0, 8), url = '';
   if (chat) CacheService.getScriptCache().put('tgv_chat_' + caso, String(chat), 21600);
+  if (k && modo === 'vista') CacheService.getScriptCache().put('tgv_k_' + caso, String(k), 21600);   // ✅ Emitir junto a la foto
   try { if (TGEV_activo_()) url = TGEV_abrir_(caso, chat); } catch (e) {}
   TG_gh_(cfg, '/actions/workflows/' + TGR_WF_ + '/dispatches', 'post', { ref: cfg.rama, inputs: {
     ruc: s.empresa_ruc, solicitud: JSON.stringify(s), modo: modo, confirmar: modo === 'emitir' ? TGR_clave_(s) : '', caso: caso } });
@@ -701,7 +702,7 @@ function TGR_alBotonTG_(ctx, datos, op, k) {
     if (TG_yaVisto_('cre' + modo + k)) return TG_enviar_(ctx.chatId, 'Eso ya se pidió.');
     if (op === 'ok') TG_llamar_('editMessageReplyMarkup', { chat_id: ctx.chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
     var vivo = '';
-    try { vivo = TGR_pedir_(cfg, p.s, modo, ctx.chatId); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ No pude pedirlo a GitHub: ' + TG_esc_(e.message)); }
+    try { vivo = TGR_pedir_(cfg, p.s, modo, ctx.chatId, k); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ No pude pedirlo a GitHub: ' + TG_esc_(e.message)); }
     TG_seguir_(ctx.chatId, TGR_WF_, null, p.titulo, { tipo: 'cre', modo: modo, k: k, total: p.total, docs: p.s.documentos.map(function (x) { return x.serie + '-' + x.numero; }) });
     return TG_enviar_(ctx.chatId, (modo === 'emitir' ? '🧾 <b>Emitiendo</b> en SUNAT' : '👁 <b>Preparando la vista previa</b> en SUNAT (no se emite)') +
       ': ' + TG_esc_(p.titulo) + '\nTarda 1–2 minutos; le aviso aquí el resultado.' +
@@ -1006,7 +1007,10 @@ function TGR_avisarFin_(cfg, s, r) {
   else html = '❌ <b>El robot de retenciones falló</b>: ' + TG_esc_(t) + '. No se emitió nada.' +
     (paso ? '\nFalló en el paso «' + TG_esc_(paso) + '»' + (/^CRE /.test(paso) ? '.' : ' (antes de entrar a SUNAT): puede volver a pedirlo.') : '');
   html += '\n<a href="' + r.html_url + '">ver en GitHub</a>';
-  if (String(s.chat).indexOf('wa') === 0) return TGR_guardarWA_(s.chat, html + (vista ? '\n\nPara emitirlo, escriba *emitir* y toque ✅ Emitir.' : ''));
+  if (String(s.chat).indexOf('wa') === 0) {
+    if (vista && k) return TGR_guardarWA_(s.chat, { texto: html, botones: { k: k, texto: '¿Emito este comprobante en SUNAT? (le pido confirmar antes)', opciones: [{ op: 'em', titulo: '✅ Emitir' }] } });
+    return TGR_guardarWA_(s.chat, html);
+  }
   TG_enviar_(s.chat, html, vista && k ? [[{ text: '✅ Emitir', callback_data: 'k:' + k + ':em' }]] : null);
 }
 
@@ -1016,12 +1020,15 @@ function TGR_fotoGh_(q) {
   if (!chat) return { ok: false, error: 'sin chat' };
   var b64 = String(q.img || '');
   if (b64.length < 1000 || b64.length > 6 * 1024 * 1024) return { ok: false, error: 'foto rara' };
-  var texto = String(q.texto || '').slice(0, 900);
+  var texto = String(q.texto || '').slice(0, 900), k = CacheService.getScriptCache().get('tgv_k_' + String(q.caso || ''));
+  if (k && /Vista preliminar/.test(texto)) texto = texto.replace(/Si está bien, toque[^.]*\./, 'Si está bien, toque ✅ Emitir aquí abajo.');
   try {
     if (String(chat).indexOf('wa') === 0) {
-      TGC_wa_({ tipo: 'imagen', numero: String(chat).slice(2), mime: 'image/jpeg', base64: b64, texto: texto });
+      var bt = k && /Vista preliminar/.test(texto) ? { k: k, texto: '¿Emito este comprobante en SUNAT? (le pido confirmar antes)', opciones: [{ op: 'em', titulo: '✅ Emitir' }] } : undefined;
+      TGC_wa_({ tipo: 'imagen', numero: String(chat).slice(2), mime: 'image/jpeg', base64: b64, texto: texto, botones: bt });
     } else {
-      TG_llamar_('sendPhoto', { chat_id: chat, photo: Utilities.newBlob(Utilities.base64Decode(b64), 'image/jpeg', 'vista.jpg'), caption: TG_esc_(texto) });
+      TG_llamar_('sendPhoto', { chat_id: chat, photo: Utilities.newBlob(Utilities.base64Decode(b64), 'image/jpeg', 'vista.jpg'), caption: TG_esc_(texto),
+        reply_markup: k && /Vista preliminar/.test(texto) ? JSON.stringify({ inline_keyboard: [[{ text: '✅ Emitir', callback_data: 'k:' + k + ':em' }]] }) : undefined });
     }
     return { ok: true };
   } catch (e) { return { ok: false, error: e.message }; }
@@ -1162,7 +1169,7 @@ function TGR_botonWA_(acc, k, op, numero) {
   var modo = op === 'ok' ? 'emitir' : 'vista';
   if (TG_yaVisto_('cre' + modo + k)) return { ok: true, respuesta: 'Eso ya se pidió.' };
   var vivo = '';
-  try { vivo = TGR_pedir_(cfg, p.s, modo, clave); } catch (e) { return { ok: false, error: 'No pude pedirlo a GitHub: ' + e.message }; }
+  try { vivo = TGR_pedir_(cfg, p.s, modo, clave, k); } catch (e) { return { ok: false, error: 'No pude pedirlo a GitHub: ' + e.message }; }
   TG_seguir_(clave, TGR_WF_, null, p.titulo, { tipo: 'cre', modo: modo, k: k, total: p.total, docs: p.s.documentos.map(function (x) { return x.serie + '-' + x.numero; }) });
   return { ok: true, seguir: true, respuesta: (modo === 'emitir' ? '🧾 *Emitiendo* en SUNAT' : '👁 *Preparando la vista previa* en SUNAT (no se emite)') +
     ': ' + p.titulo + '\nTarda 1–2 minutos; le aviso aquí el resultado.' + (vivo ? '\n📺 Véalo en vivo: ' + vivo : '\n_📺 Para verlo en vivo la próxima vez, escriba «en vivo sí»._') };
