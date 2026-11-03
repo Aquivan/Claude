@@ -213,6 +213,58 @@ def pasar_avisos_sol(pag, rondas=4):
     return hechos
 
 
+CODIGO_CONSULTA = "11.9.7.1.1"   # Comprobantes de retención → Consulta (solo lee)
+BASE_CONSULTA = "https://ww1.sunat.gob.pe/ol-ti-itcpretencion/consulta"
+
+
+def ultimo_emitido_sunat(pag):
+    """Solo consulta: fecha (date) del último comprobante de retención emitido por la empresa en los últimos 60 días,
+    leída de SUNAT en esta misma sesión. None si no se pudo (sigue con las fechas que mandó el bot)."""
+    try:
+        for intento in range(2):
+            try:
+                pag.goto(f"{MENU}?action=execute&code={CODIGO_CONSULTA}", wait_until="domcontentloaded", timeout=60000)
+                break
+            except Exception:
+                pag.wait_for_timeout(2500)
+        pag.wait_for_timeout(4000)
+        hoy = datetime.now(LIMA)
+        ini = (hoy - timedelta(days=60)).strftime("%d/%m/%Y")
+        mejor = None
+        for serie in ["", "E001"]:
+            r = pag.context.request.post(f"{BASE_CONSULTA}/buscarComprobanteEmiRec", form={
+                "opcionTipoCompReten": "emitido", "tipoDocReceptor": "000", "numDocReceptor": "", "serieCompReten": serie,
+                "numeroCompReten": "", "fechaInicio": ini, "fechaFin": hoy.strftime("%d/%m/%Y"), "estadoCompReten": "000"},
+                headers={"X-Requested-With": "XMLHttpRequest", "Referer": f"{BASE_CONSULTA}/iniConsulComp",
+                         "Accept": "application/json, text/javascript, */*; q=0.01"}, timeout=60000)
+            try:
+                d = r.json()
+            except Exception:
+                continue
+            for cre in d.get("listaCompRetencion") or []:
+                v = cre.get("fechaEmision")
+                if isinstance(v, (int, float)):
+                    f = datetime.fromtimestamp(v / 1000, LIMA).date()
+                else:
+                    try:
+                        f = datetime.strptime(str(v)[:10], "%d/%m/%Y").date()
+                    except Exception:
+                        continue
+                if not mejor or f > mejor:
+                    mejor = f
+            if d.get("listaCompRetencion"):
+                break
+        if mejor:
+            print(f"Último comprobante emitido según SUNAT (consulta de hoy): {mejor.strftime('%d/%m/%Y')}")
+            print(f"::notice title=Último CRE en SUNAT::{mejor.strftime('%d/%m/%Y')}")
+        else:
+            print("Consulta de emitidos en SUNAT: sin comprobantes en los últimos 60 días (o no respondió)")
+        return mejor
+    except Exception as e:
+        print("Consulta de emitidos en SUNAT: no se pudo (" + type(e).__name__ + "); sigo con las fechas del bot")
+        return None
+
+
 class FechaFueraDeRango(Exception):
     """SUNAT: «La fecha de emisión debe estar en un rango de N días antes…» (aparece recién al agregar la factura)."""
     def __init__(self, antes):
@@ -304,6 +356,13 @@ def preparar(pag, s, docs, avisos_ok, ruc, usuario, clave):
     pag.wait_for_timeout(2500)
     pasar_avisos_sol(pag)   # «datos de contacto», campañas: se pasan sin confirmar nada
     print("Ingreso a SOL: OK")
+
+    # 1b) Último comprobante de retención EMITIDO según SUNAT (Consulta, ahora mismo; el Sheet puede estar atrasado):
+    #     la fecha de emisión nunca puede ser anterior a esa (los comprobantes van en orden).
+    ultimo = ultimo_emitido_sunat(pag)
+    if ultimo:
+        fechas = [f for f in (s.get("fechas_emision") or []) if datetime.strptime(f, "%d/%m/%Y").date() >= ultimo]
+        s = dict(s, fechas_emision=fechas or [hoy])
 
     # 2) Formulario del comprobante de retención. SOL a veces muestra un aviso al salir del menú («¿salir de la
     #    página?») que cortaba la carga (ERR_ABORTED): se acepta ese aviso y se reintenta.
