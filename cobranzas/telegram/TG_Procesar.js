@@ -217,16 +217,29 @@ function TGP_buscarVouchers_(c, vouchers) {
     if (!q.monto) return fila('❌ No está en la hoja de vouchers');
     // 2) Sin N° (o no encontrado): el monto solo no basta. Mismo monto, misma moneda y, si los dos lo tienen,
     //    el mismo beneficiario (otro beneficiario = otro pago).
+    // Si los dos tienen N° de operación y NO se parecen, es otro pago. Si se parecen (la IA leyó mal un dígito:
+    // «068686» por «0686860»), puede ser el mismo: se decide con la fecha.
+    var conOp = q.op.length >= 3;
     var porMonto = pagos.filter(function (p) {
       return Math.abs(p.monto - q.monto) <= 0.05 && (!q.moneda || !p.moneda || q.moneda === p.moneda) && TGP_mismoBenef_(q.benef, p.benef) &&
-        (!q.op || !p.op || q.op.length < 3);   // si los dos tienen N° y es distinto, es otro pago
+        (!conOp || !p.op || TGP_opParecido_(q.op, p.op));
     });
-    if (!porMonto.length) return fila('❌ No está en la hoja de vouchers');
+    if (!porMonto.length) {
+      // Misma fecha exacta, monto y beneficiario pero con otro N° de operación: puede ser el mismo mal leído → pregunta
+      var otroOp = !conOp || !q.fecha ? [] : pagos.filter(function (p) {
+        return Math.abs(p.monto - q.monto) <= 0.05 && (!q.moneda || !p.moneda || q.moneda === p.moneda) && p.benef && q.benef &&
+          TGP_mismoBenef_(q.benef, p.benef) && p.fecha && dias(p.fecha, q.fecha) === 0;
+      });
+      if (otroOp.length) return fila('⚠️ Hay un pago con la misma fecha, monto y beneficiario pero con otro N° de operación', 'monto y fecha', '',
+        otroOp.slice(0, 3).map(function (p) { return opcion(p, 'leí op ' + v.d.operacion + ', en la hoja ' + (p.opTxt || 'sin N°')); }));
+      return fila('❌ No está en la hoja de vouchers');
+    }
     if (!q.fecha) return fila('⚠️ El voucher no muestra fecha' + (q.op.length >= 3 ? '' : ' ni N° de operación') + ' y hay pago(s) con el mismo monto', 'solo monto', '',
       porMonto.slice(-3).reverse().map(function (p) { return opcion(p, 'mismo monto' + (p.benef && q.benef ? ' y beneficiario' : '')); }));
     // 3) Con fecha: la del voucher y la de la hoja salen del MISMO comprobante, deben ser iguales.
     var exactos = porMonto.filter(function (p) { return p.fecha && dias(p.fecha, q.fecha) === 0; });
-    if (exactos.length === 1 && !q.op) return fila('🟡 Registrado', 'monto, fecha y beneficiario', exactos[0].fuente);
+    if (exactos.length === 1) return fila('🟡 Registrado', 'monto, fecha y beneficiario' +
+      (conOp && exactos[0].op && exactos[0].op !== q.op ? ' (N° de operación parecido: leí ' + v.d.operacion + ', en la hoja ' + exactos[0].opTxt + ')' : ''), exactos[0].fuente);
     if (exactos.length) return fila('⚠️ ' + (exactos.length > 1 ? 'Hay ' + exactos.length + ' pagos' : 'Hay un pago') + ' con el mismo monto y fecha' +
       (q.op.length >= 3 ? ', pero con otro N° de operación o sin N°' : ''), 'monto y fecha', '',
       exactos.slice(0, 5).map(function (p) { return opcion(p, 'misma fecha y monto'); }));
@@ -237,6 +250,24 @@ function TGP_buscarVouchers_(c, vouchers) {
     }));
     return fila('❌ No está en la hoja de vouchers');
   });
+}
+
+/**
+ * ¿Dos N° de operación pueden ser el mismo mal leído? Uno contiene al otro (se perdió o sobró un dígito al inicio o al
+ * final), o difieren en 1–2 dígitos (distancia de edición). Solo números de 5+ dígitos.
+ */
+function TGP_opParecido_(a, b) {
+  a = String(a || ''); b = String(b || '');
+  if (a === b) return true;
+  if (a.length < 5 || b.length < 5) return false;
+  if (a.indexOf(b) >= 0 || b.indexOf(a) >= 0) return true;
+  var m = a.length, n = b.length, d = [];
+  if (Math.abs(m - n) > 2) return false;
+  for (var i = 0; i <= m; i++) { d[i] = [i]; }
+  for (var j = 1; j <= n; j++) d[0][j] = j;
+  for (i = 1; i <= m; i++) for (j = 1; j <= n; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[m][n] <= 2;
 }
 
 function TGP_fechaTxt_(d) {
