@@ -144,6 +144,9 @@ function TGP_analizar_(ss, adjs, op) {
   var conFila = items.filter(function (x) { return x.fuente; })[0];   // 🧾 para "completa / emite la retención de la factura" sin decir cuál (TG_Retener.js)
   TGR_guardarUltimo_(op.clave, { doc: (facturasTodas[0] || {}).serie_numero || '', fila: conFila ? conFila.fuente : '' });
   TGP_recordar_(op.clave, adjs, facturasTodas, items, res.texto);
+  // 🧾 Vouchers que YA estaban registrados con su factura: no hay ✅ que tocar, así que la retención se revisa aquí mismo
+  res.paresListo = items.filter(function (x) { return x.tipo === 'listo' && x.fuente && x.fac && x.fac.serie; })
+    .map(function (x) { return { doc: x.fac.serie, fila: x.fuente, cuadra: x.cuadra || '' }; });
   return res;
 }
 
@@ -730,6 +733,7 @@ function TGP_iniciarTG_(ctx, adjs) {
   try { r = TGP_analizar_(ctx.ss, adjs, { canal: 'tg', destino: ctx.chatId, clave: ctx.chatId }); }
   catch (e) { return TG_enviar_(ctx.chatId, '❌ No pude revisarlo: ' + TG_esc_(e.message)); }
   var msg = TG_enviar_(ctx.chatId, r.texto, TGP_tecladoTG_(r));
+  try { TGP_ofrecerCre_(ctx.ss, 'tg', ctx.chatId, r.paresListo); } catch (e) { console.warn('CRE tras revisar: ' + e.message); }
   var p = TG_leerBoton_(r.k);
   if (p && msg) { p.msg = msg; CacheService.getScriptCache().put('tg_b_' + r.k, JSON.stringify(p), 21600); }
   // Mientras espera ✅, "21-10-26 Edit" escrito directo cambia el nombre (TGP_nombreDirectoTG_).
@@ -833,7 +837,10 @@ function TGP_wa_(q) {
   if (q.procesarUrl) PropertiesService.getScriptProperties().setProperty('TGP_PROCESAR_URL', q.procesarUrl);
   if (q.modo === 'analizar') {
     var r;
-    try { r = TGP_analizar_(ss, q.archivos || [], { canal: 'wa', destino: String(q.numero), clave: clave, nombre: q.nombre || '', fecha: q.fecha || '', pestana: q.pestana || '' }); r.ok = true; }
+    try {
+      r = TGP_analizar_(ss, q.archivos || [], { canal: 'wa', destino: String(q.numero), clave: clave, nombre: q.nombre || '', fecha: q.fecha || '', pestana: q.pestana || '' }); r.ok = true;
+      try { r.siguientes = TGP_ofrecerCre_(ss, 'wa', String(q.numero), r.paresListo) || []; } catch (e2) { console.warn('CRE tras revisar: ' + e2.message); }
+    }
     catch (e) { r = { ok: false, error: 'No pude revisarlo: ' + e.message }; }
     CacheService.getScriptCache().put('tgp_r_' + clave, JSON.stringify(r), 3600);
     return r;
