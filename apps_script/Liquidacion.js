@@ -543,6 +543,10 @@ function construirLiquidacion_(ruc, anio) {
   try { escribirComprasCompleto_(ss, versiones, compras, ruc); } catch (eC) {
     Logger.log('Compras SIRE completo: ' + eC.message);
   }
+  // Retenciones del mes AUTOMATICAS: CRE recibidos del proyecto de Retenciones (LiquidacionRetenciones.js).
+  try { escribirRetenciones_(ss, leerRetencionesRecibidas_(cargarConfigGitHub_(), ruc, anio)); } catch (eR) {
+    Logger.log('Retenciones recibidas: ' + eR.message);
+  }
   escribirParametros_(ss);
   escribirTablero_(ss, anio);
   limpiarHojasVacias_(ss);
@@ -782,8 +786,9 @@ function escribirParametros_(ss) {
     ['  calculo de prorrata. Las compras DNG (no gravadas) NO dan credito fiscal', ''],
     ['  y por eso el tablero las muestra aparte, sin sumarlas al credito.', ''],
     ['- El credito de compras DG se toma al 100%.', ''],
-    ['- Las columnas de Percepciones y Retenciones del tablero son de CARGA MANUAL:', ''],
-    ['  escribelas cada mes y el saldo a pagar se recalcula solo.', ''],
+    ['- Percepciones del tablero es de CARGA MANUAL (escribala cada mes).', ''],
+    ['- Retenciones del mes es AUTOMATICA: suma los CRE RECIBIDOS del proyecto de', ''],
+    ['  Retenciones (pestaña "Retenciones recibidas"). Escribir encima = ajuste.', ''],
     ['- Si en un mes no se puede aplicar toda la percepcion/retencion (porque no', ''],
     ['  hay suficiente IGV resultante ese mes), el saldo sobrante SE ARRASTRA', ''],
     ['  automaticamente al mes siguiente (igual que el saldo a favor de IGV).', ''],
@@ -897,7 +902,7 @@ function indiceColumna_(clave) {
 // para escribir). Son funciones (no un array fijo) para no depender del
 // orden en que Apps Script cargue los archivos del proyecto.
 function colsManualesLiquidacion_() {
-  return ['percepciones', 'retenciones', 'coeficienteRenta'].map(indiceColumna_);
+  return ['percepciones', 'coeficienteRenta'].map(indiceColumna_);   // «Retenciones» ya es automatica (LiquidacionRetenciones.js)
 }
 
 // Titulos (NO numero de columna -- ver nota mas abajo) que NUNCA se tratan
@@ -906,7 +911,7 @@ function colsManualesLiquidacion_() {
 // percep/retenc) -- sobreescribirlas ahi rompe la cadena de arrastre; mejor
 // ajustar en la columna de origen si hace falta (ej. Debito Fiscal).
 function titulosSinOverride_() {
-  return ['mes', 'periodo', 'percepciones', 'retenciones', 'coeficienteRenta',
+  return ['mes', 'periodo', 'percepciones', 'coeficienteRenta',
     'saldoAnt', 'igvAcumulado', 'saldoArrastrar', 'percepRetencArrastre',
     'saldoPercepRetencArrastrar'].map(function (clave) {
       var col = COLUMNAS_TABLERO_.filter(function (c) { return c.clave === clave; })[0];
@@ -955,6 +960,8 @@ function leerOverridesFormula_(ss) {
       var celda = sheet.getRange(fila, col);
       var formula = celda.getFormula();
       var valor = celda.getValue();
+      // «Retenciones del mes» antes era manual y empezaba en 0: ese 0 no es un ajuste (deja la formula automatica).
+      if (titulo === 'Retenciones del mes' && (valor === '' || Number(valor) === 0)) continue;
       if (formula === '' && String(valor) !== '') {
         overrides.push({ fila: fila, titulo: titulo, valor: valor });
       }
@@ -1087,6 +1094,7 @@ function escribirTablero_(ss, anio) {
     }
   }
 
+  var RR = ss.getSheetByName(HOJA_RETENCIONES_) ? "'" + HOJA_RETENCIONES_ + "'!" : '';   // retenciones automaticas
   var filas = [];
   for (var m = 1; m <= 12; m++) {
     var r = m + 1;
@@ -1133,7 +1141,7 @@ function escribirTablero_(ss, anio) {
       saldoAnterior,
       '=' + ref('igvResultante') + '+' + ref('saldoAnt'),
       0,
-      0,
+      RR ? '=SUMIFS(' + RR + '$F:$F' + S + RR + '$A:$A' + S + '$B' + r + S + RR + '$J:$J' + S + '"SI")' : 0,
       '=MAX(0' + S + ref('igvAcumulado') + '-' + ref('percepciones') + '-' + ref('retenciones') +
       '-' + ref('percepRetencArrastre') + ')',
       '=MIN(0' + S + ref('igvAcumulado') + ')',
@@ -1188,7 +1196,11 @@ function escribirTablero_(ss, anio) {
   var colCoefRenta = indiceColumna_('coeficienteRenta');
   sheet.getRange(2, colCoefRenta, filas.length, 1).setNumberFormat('0.00%');
   // Columnas de carga manual (Percepciones / Retenciones / Coeficiente Renta) resaltadas
-  sheet.getRange(2, indiceColumna_('percepciones'), filas.length, 2).setBackground('#FFF2CC');
+  sheet.getRange(2, indiceColumna_('percepciones'), filas.length, 1).setBackground('#FFF2CC');
+  // Retenciones: automaticas desde el proyecto de Retenciones (escribiendo encima se ajusta: queda en rojo)
+  sheet.getRange(2, indiceColumna_('retenciones'), filas.length, 1).setBackground('#E8F5E9');
+  sheet.getRange(1, indiceColumna_('retenciones')).setNote('AUTOMATICO: suma de los CRE RECIBIDOS del mes (pestaña «' + HOJA_RETENCIONES_ +
+    '», del proyecto de Retenciones). Si escribe un monto encima queda como ajuste manual (en rojo); para volver al automatico, borre la celda y actualice.');
   sheet.getRange(2, colCoefRenta, filas.length, 1).setBackground('#FFF2CC');
   // IGV a pagar y Pago a Cuenta Renta destacados
   sheet.getRange(2, indiceColumna_('igvAPagar'), filas.length, 1)
