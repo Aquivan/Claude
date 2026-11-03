@@ -169,9 +169,18 @@ function WA_seguirProcesar_(props) {
   Object.keys(props).forEach(function (k) {
     if (k.indexOf('WA_PRA_') === 0) {
       var de = k.slice(7), r = WA_cobranzas_('procesar', { modo: 'resultado', numero: de });
-      if (r && r.pendiente && Date.now() - Number(props[k]) < 10 * 60000) { activo = true; return; }
+      var espera = Date.now() - Number(props[k]);
+      if (r && r.pendiente && espera < 8 * 60000) {
+        if (espera > 3 * 60000 && !props['WA_PRAV_' + de]) {   // que la persona sepa que sigue trabajando
+          WA_props_().setProperty('WA_PRAV_' + de, '1');
+          WA_enviarTexto_(de, '⏳ Sigo leyendo los archivos (con varios archivos puede tardar unos minutos). Le aviso aquí apenas termine.');
+        }
+        activo = true; return;
+      }
+      WA_props_().deleteProperty('WA_PRAV_' + de);
       WA_props_().deleteProperty(k);
-      WA_mostrarPlan_(de, r && r.pendiente ? { ok: false, error: 'La revisión no terminó a tiempo.' } : r);
+      WA_mostrarPlan_(de, r && r.pendiente ? { ok: false, error: 'La revisión no terminó a tiempo (Google corta a los 6 minutos). ' +
+        'Mándeme los archivos de nuevo: lo ya leído quedó guardado y la segunda vez es más rápido. O mándelos de a 1 o 2.' } : r);
     }
     if (k.indexOf('WA_PROC_') === 0) {
       var de2 = k.slice(8), m = WA_cobranzas_('procesar', { modo: 'mensajes', numero: de2 });
