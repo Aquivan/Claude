@@ -988,6 +988,8 @@ function TGR_avisarFin_(cfg, s, r) {
   var nota = function (rx) { return notas.filter(function (n) { return rx.test(n.title || ''); })[0]; };
   var ok = nota(/^CRE emitido/), vista = nota(/^CRE vista/), no = nota(/^CRE no emitido/), sin = nota(/^CRE sin confirmar/);
   var fEm = nota(/^Fecha de emisi/), conFecha = fEm ? '\n📅 Fecha de emisión: <b>' + TG_esc_(fEm.message) + '</b>' : '';
+  var uSun = nota(/^Último CRE en SUNAT/);
+  if (uSun) conFecha += '\n🔎 Último comprobante emitido según SUNAT (consultado ahora): ' + TG_esc_(uSun.message);
   var html, k = s.extra.k;
   // A qué pedido corresponde (puede haber varios del mismo comprobante).
   var t = s.texto + ((s.extra.docs || []).length ? ' · factura ' + s.extra.docs.join(', ') : '') + ' (' + (s.extra.modo === 'emitir' ? 'emisión' : 'vista previa') + ' pedida a las ' + Utilities.formatDate(new Date(s.desde), 'America/Lima', 'HH:mm') + ')';
