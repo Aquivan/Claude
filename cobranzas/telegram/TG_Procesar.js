@@ -285,6 +285,9 @@ function TGP_buscarVouchers_(c, vouchers) {
           porOp.slice(0, 3).map(function (p) { return opcion(p, 'mismo N° de operación, monto ' + TGP_num_(p.monto)); }));
         if (mismos.length > 1) return fila('⚠️ Hay ' + mismos.length + ' vouchers con el mismo N° de operación y monto', 'N° de operación', '',
           mismos.slice(0, 5).map(function (p) { return opcion(p, 'mismo N° y monto'); }));
+        // El N° coincide solo en los últimos 6 dígitos (no exacto): se le pregunta a la persona
+        if (mismos[0].op !== q.op) return fila('⚠️ El N° de operación coincide solo en parte (leí ' + v.d.operacion + ', en la hoja ' + mismos[0].opTxt + ')',
+          'N° de operación parecido', '', [opcion(mismos[0], 'mismo monto; N° de operación parecido')]);
         return fila('🟡 Registrado', 'N° de operación', mismos[0].fuente);
       }
       // con N° de operación y no está: sigue abajo por si se registró sin el N°
@@ -313,8 +316,11 @@ function TGP_buscarVouchers_(c, vouchers) {
       porMonto.slice(-3).reverse().map(function (p) { return opcion(p, 'mismo monto' + (p.benef && q.benef ? ' y beneficiario' : '')); }));
     // 3) Con fecha: la del voucher y la de la hoja salen del MISMO comprobante, deben ser iguales.
     var exactos = porMonto.filter(function (p) { return p.fecha && dias(p.fecha, q.fecha) === 0; });
-    if (exactos.length === 1) return fila('🟡 Registrado', 'monto, fecha y beneficiario' +
-      (conOp && exactos[0].op && exactos[0].op !== q.op ? ' (N° de operación parecido: leí ' + v.d.operacion + ', en la hoja ' + exactos[0].opTxt + ')' : ''), exactos[0].fuente);
+    // N° de operación parecido pero no igual (¿mal leído?): no se decide solo, se pregunta
+    if (exactos.length === 1 && conOp && exactos[0].op && exactos[0].op !== q.op) return fila('⚠️ Encontré un pago con la misma fecha, monto y beneficiario, ' +
+      'pero el N° de operación no es igual (leí ' + v.d.operacion + ', en la hoja ' + exactos[0].opTxt + ')', 'N° de operación parecido', '',
+      [opcion(exactos[0], 'misma fecha, monto y beneficiario; ¿N° mal leído?')]);
+    if (exactos.length === 1) return fila('🟡 Registrado', 'monto, fecha y beneficiario', exactos[0].fuente);
     if (exactos.length) return fila('⚠️ ' + (exactos.length > 1 ? 'Hay ' + exactos.length + ' pagos' : 'Hay un pago') + ' con el mismo monto y fecha' +
       (q.op.length >= 3 ? ', pero con otro N° de operación o sin N°' : ''), 'monto y fecha', '',
       exactos.slice(0, 5).map(function (p) { return opcion(p, 'misma fecha y monto'); }));
