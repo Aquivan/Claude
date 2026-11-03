@@ -174,15 +174,20 @@ function TGP_buscarVouchers_(c, vouchers) {
     if (h.getLastRow() < 2) return;
     var col = indiceColumnas_(h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0]);
     var cO = col('Numero de oper', 'Numero de operacion'), cM = col('Monto'), cF = col('Fecha de depos', 'Fecha de deposito');
+    var cB = col('Proveedor (Beneficiario)', 'Proveedor', 'Beneficiario'), cMo = col('Moneda', 'M');
     if (cO < 0 || cM < 0) return;
-    h.getRange(2, 1, h.getLastRow() - 1, Math.max(cO, cM, cF) + 1).getValues().forEach(function (r, i) {
+    h.getRange(2, 1, h.getLastRow() - 1, Math.max(cO, cM, cF, cB, cMo) + 1).getValues().forEach(function (r, i) {
       var op = String(r[cO] == null ? '' : r[cO]);
       if (/^\[/.test(op) || (!op && !r[cM])) return;   // [DUPLICADO], [OMITIDO], vacías
-      pagos.push({ fuente: h.getName() + '!' + (i + 2), op: dig(op), monto: AUV_num_(r[cM]), fecha: cF >= 0 ? AUV_fecha_(r[cF]) : null });
+      pagos.push({ fuente: h.getName() + '!' + (i + 2), op: dig(op), monto: AUV_num_(r[cM]), fecha: cF >= 0 ? AUV_fecha_(r[cF]) : null,
+        benef: cB >= 0 ? String(r[cB] || '') : '', moneda: cMo >= 0 ? TGP_moneda_(r[cMo]) : '' });
     });
   });
   return vouchers.map(function (v, n) {
-    var q = { op: dig(v.d.operacion), monto: AUV_num_(v.d.monto), fecha: AUV_fecha_(v.d.fecha) };
+    // Solo cuenta como N° de operación si tiene dígitos (a veces la IA pone el TIPO de operación, p. ej.
+    // «Transferencia a cuentas de terceros BCP local», que no sirve para buscar).
+    var q = { op: dig(v.d.operacion), monto: AUV_num_(v.d.monto), fecha: AUV_fecha_(v.d.fecha), moneda: TGP_moneda_(v.d.moneda),
+      benef: String(v.d.beneficiario || '') };
     var cand = [], como = '';
     if (q.op.length >= 3) {
       cand = pagos.filter(function (p) { return p.op === q.op || (q.op.length >= 5 && p.op.length >= 5 && p.op.slice(-6) === q.op.slice(-6)); });
@@ -194,14 +199,46 @@ function TGP_buscarVouchers_(c, vouchers) {
       if (cand.length) como = 'N° de operación';
     }
     if (!cand.length && q.monto) {
-      cand = pagos.filter(function (p) { return Math.abs(p.monto - q.monto) <= 0.05 && (!q.fecha || !p.fecha || Math.abs(p.fecha - q.fecha) <= 5 * 864e5); });
-      if (cand.length) como = 'monto y fecha';
+      // SIN N° de operación: el monto solo no basta (muchos pagos repiten montos). Tiene que coincidir también la
+      // moneda, la FECHA (±5 días; sin fecha no se da por registrado) y, si ambos lo tienen, el beneficiario.
+      var porMonto = pagos.filter(function (p) {
+        return Math.abs(p.monto - q.monto) <= 0.05 && (!q.moneda || !p.moneda || q.moneda === p.moneda);
+      });
+      // otro beneficiario (cuando los dos lo tienen) = otro pago
+      porMonto = porMonto.filter(function (p) { return TGP_mismoBenef_(q.benef, p.benef); });
+      if (!q.fecha) {
+        if (porMonto.length) return ['V' + (n + 1), '', q.monto, q.op, '⚠️ El voucher no muestra N° de operación ni fecha; hay ' + porMonto.length +
+          ' pago(s) con el mismo monto (' + porMonto.slice(0, 3).map(function (p) { return p.fuente; }).join(', ') + '), pero no puedo saber si es el mismo', '', ''];
+        cand = [];
+      } else {
+        cand = porMonto.filter(function (p) {
+          return p.fecha && Math.abs(p.fecha - q.fecha) <= 5 * 864e5;
+        });
+        if (cand.length) como = 'monto, fecha y beneficiario';
+      }
     }
     var estado = !cand.length ? '❌ No está en la hoja de vouchers'
       : cand.length > 1 ? '⚠️ ' + cand.length + ' posibles: ' + cand.slice(0, 4).map(function (p) { return p.fuente; }).join(', ')
       : '🟡 Registrado';
     return ['V' + (n + 1), q.fecha || '', q.monto, q.op, estado, como, cand.length === 1 ? cand[0].fuente : ''];
   });
+}
+
+/** 'PEN' | 'USD' | '' */
+function TGP_moneda_(m) {
+  var t = String(m || '').toUpperCase();
+  return /USD|US\$|DOL/.test(t) ? 'USD' : /PEN|S\/|SOL/.test(t) ? 'PEN' : '';
+}
+
+/** ¿Mismo beneficiario? Si falta en alguno, no se puede descartar (true). Si están los dos: alguna palabra de 4+ letras en común. */
+function TGP_mismoBenef_(a, b) {
+  var pal = function (t) {
+    return String(t || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^A-Z0-9]+/)
+      .filter(function (w) { return w.length >= 4 && !/^(SOCIEDAD|ANONIMA|CERRADA|EMPRESA|CORPORACION|INVERSIONES|SERVICIOS|COMERCIAL|GRUPO|PERU|EIRL|S\.?A\.?C)$/.test(w); });
+  };
+  var x = pal(a), y = pal(b);
+  if (!x.length || !y.length) return true;
+  return x.some(function (w) { return y.indexOf(w) !== -1; });
 }
 
 /** El recálculo de Cuentas por Cobrar y Pagar va aparte (1 min después), para no hacer esperar el aviso. */
