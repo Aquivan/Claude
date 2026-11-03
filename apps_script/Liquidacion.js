@@ -250,9 +250,7 @@ function continuarColaLiquidaciones() {
     registrarEnBitacora_('Liquidaciones IGV ' + cola.anio + ' de todas las empresas: ' + cola.listas.length +
       ' actualizadas (' + cola.listas.join(', ') + ').' + (cola.errores.length ? ' Con error: ' + cola.errores.join(' | ') : ''));
     // El panel muestra enseguida los montos de las liquidaciones recien hechas (si queda tiempo en esta ejecucion)
-    if (Date.now() - INICIO_EJECUCION_ < 3 * 60 * 1000) {
-      try { generarPanelDeControl_(); } catch (eP) { Logger.log('Panel tras la cola: ' + eP.message); }
-    }
+    programarPanelSegundoPlano_();
   }
 }
 

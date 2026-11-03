@@ -394,18 +394,36 @@ function ejecutarImportacion_(periodos, mostrarResultado, rucFiltro) {
   if (errores.length > 0) mensaje += '\n\nERRORES:\n' + errores.join('\n');
   if (!mensaje) mensaje = '(sin resultados)';
 
-  // Actualizar Panel de Control automaticamente para reflejar los nuevos enlaces
-  try {
-    generarPanelDeControl_();
-  } catch (e) {
-    Logger.log('No se pudo refrescar el panel de control: ' + e.message);
+  // Primero se anota el resultado (si Google cortara despues por tiempo, igual queda registrado)
+  if (!ui) registrarEnBitacora_('Importacion automatica:\n' + mensaje);
+
+  // Panel de Control: en su PROPIA ejecucion (1 minuto despues), con sus 6 minutos completos. Antes se rehacia aqui
+  // mismo y, sumado a la importacion y la liquidacion, Google cortaba por tiempo y el panel no se actualizaba.
+  // Con el menu (ui) y si queda tiempo, se hace aqui para que lo vea al cerrar el aviso.
+  if (ui && Date.now() - INICIO_EJECUCION_ < 2.5 * 60 * 1000) {
+    try { generarPanelDeControl_(); } catch (e) { Logger.log('No se pudo refrescar el panel de control: ' + e.message); }
+  } else {
+    programarPanelSegundoPlano_();
   }
 
-  if (ui) {
-    ui.alert('Importacion terminada', mensaje, ui.ButtonSet.OK);
-  } else {
-    registrarEnBitacora_('Importacion automatica:\n' + mensaje);
-  }
+  if (ui) ui.alert('Importacion terminada', mensaje, ui.ButtonSet.OK);
+}
+
+/** Programa (una sola vez) la actualizacion del Panel de Control en segundo plano, 1 minuto despues. */
+function programarPanelSegundoPlano_() {
+  try {
+    var ya = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'actualizarPanelSegundoPlano'; });
+    if (!ya) ScriptApp.newTrigger('actualizarPanelSegundoPlano').timeBased().after(60 * 1000).create();
+  } catch (e) { Logger.log('Panel en segundo plano: ' + e.message); }
+}
+
+/** Activador de un solo uso: rehace el Panel de Control con los datos recien importados. */
+function actualizarPanelSegundoPlano() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'actualizarPanelSegundoPlano') ScriptApp.deleteTrigger(t);
+  });
+  try { generarPanelDeControl_(); }
+  catch (e) { registrarEnBitacora_('Panel de Control (segundo plano): ' + e.message); }
 }
 
 /** 'AAAAMM' del mes actual. */
