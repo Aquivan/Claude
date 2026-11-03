@@ -352,8 +352,16 @@ function generarPanelDeControl_(rucFiltro) {
 
     // --- BLOQUE RESUMEN IGV + IR (H..M): FORMULAS que leen la Liquidacion (se actualizan solas) ---
     var rangoIgv = sheet.getRange(filaActual, 8, 12, NUM_COLS_IGV_);
-    if (archivoLiq) rangoIgv.setFormulas(formulasResumenIgv_(ss, sheet, archivoLiq, filaActual - 1));
-    else rangoIgv.setValues(filasIgv);
+    var conFormulas = false;
+    if (archivoLiq) {
+      rangoIgv.setFormulas(formulasResumenIgv_(ss, sheet, archivoLiq, filaActual - 1));
+      conFormulas = importrangeConectado_(ss, sheet, archivoLiq, filaActual - 1);
+    }
+    if (!conFormulas) {   // sin permiso para leer la liquidacion (o sin liquidacion): los montos como valores, como antes
+      rangoIgv.setValues(filasIgv);
+      if (archivoLiq) sheet.getRange(filaActual - 2, 8).setNote('Montos fijos (copiados de la liquidación al actualizar el panel): Google no dejó conectar este bloque con la liquidación. ' +
+        'Para que se actualicen solos: abra la liquidación una vez desde «📊 Liquidación» y vuelva a actualizar el panel.');
+    }
     rangoIgv.setFontSize(9).setVerticalAlignment('middle')
       .setHorizontalAlignment('right').setNumberFormat('#,##0.00;-#,##0.00;"-"')
       .setBackground('#FAF7FF');
@@ -364,6 +372,13 @@ function generarPanelDeControl_(rucFiltro) {
     // Colores segun el monto (formato condicional: siguen el valor aunque cambie la liquidacion).
     // Solo en celdas con formula: un monto escrito a mano se ve en rojo (ajuste), como en la liquidacion.
     coloresResumenIgv_(sheet, filaActual);
+    if (!conFormulas) filasIgv.forEach(function (f, ri) {   // montos fijos: colores fijos
+      var fila = filaActual + ri;
+      if (typeof f[4] === 'number' && f[4] > 0) sheet.getRange(fila, 12).setFontColor('#B91C1C').setFontWeight('bold').setBackground('#FDECEC');
+      else if (typeof f[4] === 'number' && f[4] < 0) sheet.getRange(fila, 12).setFontColor('#166534').setFontWeight('bold').setBackground('#E7F8EC');
+      if (typeof f[5] === 'number' && f[5] > 0) sheet.getRange(fila, 13).setFontColor('#A64D79').setFontWeight('bold').setBackground('#FBEAF1');
+      if (typeof f[2] === 'number' && f[2] !== 0) sheet.getRange(fila, 10).setFontColor('#92400E').setBackground('#FEF3C7');
+    });
     aplicarAjustesPanel_(sheet, ajustesPrevios, ruc, filaActual);
     sheet.getRange(filaActual - 1, 8, 13, NUM_COLS_IGV_)
       .setBorder(true, true, true, true, true, true, '#C4B5FD', SpreadsheetApp.BorderStyle.SOLID);
@@ -620,6 +635,22 @@ function formulasResumenIgv_(ss, sheet, archivoLiq, filaTit) {
   }
   sheet.hideColumns(COL_AYUDA_IGV_, ANCHO_AYUDA_IGV_);
   return filas;
+}
+
+/** ¿El IMPORTRANGE del bloque ya trae datos? Si no, reintenta el permiso y espera un poco; si sigue sin datos, false
+ * (y se borra la formula oculta, para no dejar un error escondido). */
+function importrangeConectado_(ss, sheet, archivoLiq, filaTit) {
+  var celda = sheet.getRange(filaTit, COL_AYUDA_IGV_);
+  for (var intento = 0; intento < 3; intento++) {
+    SpreadsheetApp.flush();
+    var v = celda.getValue();
+    if (v !== '' && !/^#/.test(String(v))) return true;
+    permitirImportrange_(ss, archivoLiq.getId());
+    Utilities.sleep(1500 + intento * 1500);
+    celda.setFormula(celda.getFormula());   // vuelve a calcular
+  }
+  celda.clearContent();
+  return false;
 }
 
 /** Deja que este panel lea la liquidacion con IMPORTRANGE sin pedir «Permitir acceso» (mismo dueño). Si no se puede,
