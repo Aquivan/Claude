@@ -213,7 +213,7 @@ function generarPanelDeControl_(rucFiltro) {
     sheet.getRange(filaActual, 2, 1, 4).merge()
       .setValue(textoNombre)
       .setFontWeight('bold').setFontSize(10).setFontColor('#F8FAFC')
-      .setBackground(AZUL_EMP).setVerticalAlignment('middle');
+      .setBackground(AZUL_EMP).setVerticalAlignment('middle').setWrap(true);   // un nombre largo baja de línea (no ensancha columnas)
 
     // 2. Botón: Abrir en Drive (col F)
     var linkCarpeta = urlCarpetaEmp ? '=HYPERLINK("' + urlCarpetaEmp + '", "📂 Abrir en Drive")' : '(Sin carpeta)';
@@ -243,7 +243,7 @@ function generarPanelDeControl_(rucFiltro) {
       .setFontWeight('bold').setFontSize(9).setFontColor('#FFFFFF')
       .setBackground('#674EA7').setHorizontalAlignment('center').setVerticalAlignment('middle');
 
-    sheet.setRowHeight(filaActual, 28);
+    sheet.setRowHeight(filaActual, textoNombre.length > 44 ? 34 : 28);   // nombre largo: 2 líneas
     filaActual++;
 
     // --- CABECERA TABLA MENSUAL (6 columnas: B..G) ---
@@ -555,12 +555,12 @@ function preEscanearArchivosEmpresaRapido_(carpetaEmpresa, anio) {
 function ajustarColumnasDashboard_(sheet, largoMaxIgv, medidas) {
   sheet.setColumnWidth(1, 18);  // A: Margen izquierdo
 
-  // B..G ajustadas al texto visible mas largo de cada columna (~7px por
-  // caracter en letra 9 + margen), con un minimo para que no queden apretadas.
-  var minimos = [45, 60, 90, 90, 95, 115];
+  // B..G ajustadas al texto visible mas largo de cada columna (~6.2px por
+  // caracter en letra 9 + margen chico), con un minimo para que no queden apretadas.
+  var minimos = [38, 56, 80, 80, 88, 104];
   var anchos = minimos.map(function (min, i) {
     var largo = medidas ? medidas.tabla[i] : 0;
-    return Math.max(min, Math.round(largo * 7 + 20));
+    return Math.max(min, Math.round(largo * 6.2 + 12));
   });
   if (medidas) {
     // Textos combinados: si no caben en la suma de sus columnas, el faltante
@@ -575,17 +575,17 @@ function ajustarColumnasDashboard_(sheet, largoMaxIgv, medidas) {
         else anchos[2] += Math.ceil(falta / 2);
       }
     }
-    asegurar(0, 3, Math.round(medidas.nombreEmpresa * 7.8 + 24)); // nombre empresa B..E (letra 10)
-    asegurar(0, 2, Math.round(medidas.carpetaRaiz * 7 + 24));      // boton carpeta raiz B..D
+    // El nombre de la empresa (B..E) ya no ensancha columnas: si es largo baja de línea (setWrap arriba).
+    asegurar(0, 2, Math.round(medidas.carpetaRaiz * 6.4 + 16));    // boton carpeta raiz B..D
   }
   anchos.forEach(function (w, i) { sheet.setColumnWidth(2 + i, w); });
 
   // H..M (resumen IGV e IR): ancho ajustado al monto mas largo de cada columna.
-  // ~7px por caracter en letra 9 (negrita incluida) + margen; minimo 82px
+  // ~6.6px por caracter en letra 9 (negrita incluida) + margen chico; minimo 74px
   // para que el titulo quepa en 3 lineas.
   for (var k = 0; k < NUM_COLS_IGV_; k++) {
     var largo = largoMaxIgv ? largoMaxIgv[k] : 12;
-    sheet.setColumnWidth(8 + k, Math.max(82, largo * 7 + 18));
+    sheet.setColumnWidth(8 + k, Math.max(74, Math.round(largo * 6.6 + 12)));
   }
 }
 
