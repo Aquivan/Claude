@@ -23,6 +23,10 @@ on:
         description: "Clave de confirmación (la pone el bot cuando la persona aprueba). Obligatoria para emitir."
         required: false
         default: ''
+      caso:
+        description: "📺 En vivo: código de la transmisión (lo pone el bot si «en vivo» está activo; vacío = sin fotos)"
+        required: false
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -40,9 +44,10 @@ jobs:
           sparse-checkout: |
             retenciones/emision
             cobranzas/.clasp.json
+            guias/scripts/en_vivo.py
           sparse-checkout-cone-mode: false
-      - name: Dirección del bot (para mandarle el PDF; si falla, igual se emite)
-        if: inputs.modo == 'emitir'
+      - name: Dirección del bot (PDF del CRE y 📺 en vivo; si falla, igual sigue)
+        if: inputs.modo == 'emitir' || inputs.caso != ''
         continue-on-error: true
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
@@ -67,7 +72,7 @@ jobs:
           python-version: "3.12"
       - name: Instalar navegador
         run: |
-          pip install -q playwright==1.47.0
+          pip install -q playwright==1.47.0 websockets
           python -m playwright install --with-deps chromium >/dev/null
       - name: CRE ${{ inputs.modo }}
         env:
@@ -76,6 +81,8 @@ jobs:
           SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
           SOLICITUD: ${{ inputs.solicitud }}
           CONFIRMAR: ${{ inputs.confirmar }}
+          CASO_VIVO: ${{ inputs.caso }}
+          PYTHONPATH: ${{ github.workspace }}/guias/scripts
         run: |
           cd retenciones/emision
           if [ "${{ inputs.modo }}" = "emitir" ]; then python emitir_cre.py; else python vista_cre.py; fi

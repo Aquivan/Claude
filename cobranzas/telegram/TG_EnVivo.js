@@ -25,6 +25,16 @@ function TGEV_iniciar_(c) {
   return url;
 }
 
+/** Abre una transmisión para otro robot (p. ej. el del comprobante de retención): caso → enlace secreto (o '' si apagado). */
+function TGEV_abrir_(caso) {
+  if (!TGEV_activo_() || !caso) return '';
+  var cache = CacheService.getScriptCache(), tok = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+  cache.put('tgv_t_' + tok, String(caso), 21600);
+  cache.put('tgv_on_' + caso, '1', 3600);
+  cache.removeAll(['tgv_m_' + caso, 'tgv_v_' + caso]);
+  return TGEV_url_() + '?vivo=' + tok;
+}
+
 function TGEV_url_() {
   return TG_urlWebApp_();   // la misma dirección pública que usa Telegram (la de la implementación vigente)
 }
