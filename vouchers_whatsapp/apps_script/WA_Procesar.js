@@ -42,6 +42,7 @@ function WA_mostrarPlan_(de, r) {
 function WA_botonesPlan_(de, r, pregunta) {
   if (!r.hayAcciones) return;
   WA_props_().setProperty('WA_PRK_' + de, r.k);
+  if (r.pregunta) { WA_botonesDuda_(de, r); return; }   // 🤔 primero la duda; después ✅ Hacerlo
   var botones = [{ type: 'reply', reply: { id: 'pr:' + r.k + ':si', title: '✅ Hacerlo' } }];
   if (r.hayNuevos) {
     botones.push(r.pestana === 'foto' ? { type: 'reply', reply: { id: 'pr:' + r.k + ':dor', title: '📄 A Originales' } }
@@ -56,9 +57,40 @@ function WA_botonesPlan_(de, r, pregunta) {
   if (!s.ok) WA_enviarTexto_(de, 'Responda *sí* para hacerlo o *no* para cancelar.');
 }
 
-/** Botones "pr:<k>:si|nom|no". */
+/**
+ * 🤔 El bot no está seguro si un voucher ya está registrado: muestra las alternativas (A, B…), «es un pago nuevo» y
+ * «no tocarlo». Con 3 o menos van como botones; con más, como lista. La persona elige y recién después sale ✅ Hacerlo.
+ */
+function WA_botonesDuda_(de, r) {
+  var pq = r.pregunta, s;
+  var corto = function (t, n) { t = String(t || ''); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+  if (pq.botones.length <= 3) {
+    s = WA_graph_('POST', WA_prop_('WA_PHONE_ID') + '/messages', {
+      messaging_product: 'whatsapp', to: de, type: 'interactive',
+      interactive: { type: 'button', body: { text: pq.texto + pq.botones.filter(function (b) { return /^Es /.test(b.title); })
+        .map(function (b) { return '\n• ' + b.title + (b.desc ? ' · ' + b.desc : ''); }).join('') },
+        action: { buttons: pq.botones.map(function (b) { return { type: 'reply', reply: { id: 'pr:' + r.k + ':' + b.op, title: corto(b.title, 20) } }; }) } }
+    });
+  } else {
+    s = WA_graph_('POST', WA_prop_('WA_PHONE_ID') + '/messages', {
+      messaging_product: 'whatsapp', to: de, type: 'interactive',
+      interactive: { type: 'list', body: { text: pq.texto }, action: { button: 'Elegir', sections: [{ title: 'Voucher ' + pq.n,
+        rows: pq.botones.slice(0, 10).map(function (b) { return { id: 'pr:' + r.k + ':' + b.op, title: corto(b.title, 24), description: corto(b.desc, 72) }; }) }] } }
+    });
+  }
+  if (!s.ok) WA_enviarTexto_(de, '⚠️ No pude mostrar las opciones (' + (s.error || 'WhatsApp') + '). Cancele y mándeme el archivo de nuevo.');
+}
+
+/** Botones "pr:<k>:si|nom|no|q<n>_…". */
 function WA_procesarBoton_(de, id) {
   var p = String(id).split(':'), k = p[1], op = p[2];
+  if (/^q\d+_/.test(op || '')) {   // 🤔 respuesta a una duda
+    var rd;
+    try { rd = WA_cobranzas_('procesar', { modo: 'decidir', numero: de, k: k, op: op }); } catch (e) { rd = { ok: false, error: e.message }; }
+    if (!rd || !rd.ok) { WA_enviarTexto_(de, '⚠️ ' + ((rd && rd.error) || 'No respondió Cobranzas.')); return; }
+    WA_botonesPlan_(de, rd, '✅ Anotado: ' + (rd.anotado || '') + '.\n¿Lo hago?');
+    return;
+  }
   if (op === 'dfo' || op === 'dor') {   // 📸 / 📄 pestaña de la hoja de Vouchers
     var rp;
     try { rp = WA_cobranzas_('procesar', { modo: 'pestana', numero: de, k: k, pestana: op === 'dfo' ? 'foto' : 'original' }); } catch (e) { rp = { ok: false, error: e.message }; }
