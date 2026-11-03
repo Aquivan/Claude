@@ -368,13 +368,16 @@ function generarPanelDeControl_(rucFiltro) {
     var rangoIgv = sheet.getRange(filaActual, 8, 12, NUM_COLS_IGV_);
     var conFormulas = false;
     if (liqConDatos) {
-      rangoIgv.setFormulas(formulasResumenIgv_(ss, sheet, liqConDatos, filaActual - 1));
-      conFormulas = importrangeConectado_(ss, sheet, liqConDatos, filaActual - 1);
-    }
-    if (!conFormulas) {   // sin permiso para leer la liquidacion (o sin liquidacion): los montos como valores, como antes
+      // Siempre formulas; si aun no hay permiso de IMPORTRANGE, muestran el monto copiado (y aparece la celda 🔓)
+      rangoIgv.setFormulas(formulasResumenIgv_(ss, sheet, liqConDatos, filaActual - 1, filasIgv));
+      conFormulas = true;
+      if (!importrangeConectado_(ss, sheet, liqConDatos, filaActual - 1)) {
+        celdaPermisoImportrange_(ss, sheet, liqConDatos, filaActual - 1);
+        sheet.getRange(filaActual - 2, 8).setNote('Este bloque aún no lee la liquidación EN VIVO: muestra los montos copiados al actualizar el panel. ' +
+          'Toque la celda amarilla 🔓 de la derecha y pulse «Permitir acceso» (una sola vez); luego actualice el panel.');
+      }
+    } else {   // sin liquidacion: los montos como valores
       rangoIgv.setValues(filasIgv);
-      if (liqConDatos) sheet.getRange(filaActual - 2, 8).setNote('Montos fijos (copiados de la liquidación al actualizar el panel): Google no dejó conectar este bloque con la liquidación. ' +
-        'Para que se actualicen solos: abra la liquidación una vez desde «📊 Liquidación» y vuelva a actualizar el panel.');
     }
     rangoIgv.setFontSize(9).setVerticalAlignment('middle')
       .setHorizontalAlignment('right').setNumberFormat('#,##0.00;-#,##0.00;"-"')
@@ -633,55 +636,81 @@ function tituloLiq_(clave) { return COLUMNAS_TABLERO_.filter(function (c) { retu
  * Formulas H..M de los 12 meses. filaTit = fila de titulos del bloque (alli va el IMPORTRANGE oculto, que trae la
  * fila de titulos + los 12 meses de la liquidacion, alineados con las filas del panel).
  */
-function formulasResumenIgv_(ss, sheet, archivoLiq, filaTit) {
+function formulasResumenIgv_(ss, sheet, archivoLiq, filaTit, respaldo) {
   var S = separadorFormula_(ss);
   var ini = letraColumna_(COL_AYUDA_IGV_), fin = letraColumna_(COL_AYUDA_IGV_ + ANCHO_AYUDA_IGV_ - 1);
   var falta = COL_AYUDA_IGV_ + ANCHO_AYUDA_IGV_ - 1 - sheet.getMaxColumns();   // la hoja puede tener menos columnas
   if (falta > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), falta);
   sheet.getRange(filaTit, COL_AYUDA_IGV_).setFormula('=IMPORTRANGE("' + archivoLiq.getId() + '"' + S + '"Liquidacion!A1:' + letraColumna_(ANCHO_AYUDA_IGV_) + '13")');
   permitirImportrange_(ss, archivoLiq.getId());
+  // Si el IMPORTRANGE no conecta (falta «Permitir acceso»), la formula muestra el monto copiado de la liquidacion al
+  // actualizar el panel: la celda SIEMPRE es formula (asi un monto escrito encima se ve en rojo) y nunca queda vacia.
+  // El monto va en centimos enteros (12345/100) para no depender del separador decimal del idioma de la hoja.
+  function lit(v) { return typeof v === 'number' ? '(' + Math.round(v * 100) + '/100)' : '""'; }
   var filas = [];
   for (var i = 1; i <= 12; i++) {
     var r = filaTit + i;
+    var rs = (respaldo && respaldo[i - 1]) || [];
     var X = function (clave) {
       return 'INDEX($' + ini + r + ':$' + fin + r + S + 'MATCH("' + tituloLiq_(clave) + '"' + S + '$' + ini + '$' + filaTit + ':$' + fin + '$' + filaTit + S + '0))';
     };
     filas.push([
-      '=IFERROR(' + X('debitoTotal') + S + '"")',
-      '=IFERROR(' + X('creditoDgDelMes') + S + '"")',
-      '=IFERROR(' + X('creditoDgAnt') + S + '"")',
-      '=IFERROR(' + X('creditoDgTotal') + S + '"")',
+      '=IFERROR(' + X('debitoTotal') + S + lit(rs[0]) + ')',
+      '=IFERROR(' + X('creditoDgDelMes') + S + lit(rs[1]) + ')',
+      '=IFERROR(' + X('creditoDgAnt') + S + lit(rs[2]) + ')',
+      '=IFERROR(' + X('creditoDgTotal') + S + lit(rs[3]) + ')',
       // un solo numero: positivo = a pagar, negativo = saldo a favor
-      '=IFERROR(IF(' + X('igvAPagar') + '>0' + S + X('igvAPagar') + S + '-ABS(' + X('saldoArrastrar') + '))' + S + '"")',
-      '=IFERROR(' + X('pagoACuentaRenta') + S + '"")'
+      '=IFERROR(IF(' + X('igvAPagar') + '>0' + S + X('igvAPagar') + S + '-ABS(' + X('saldoArrastrar') + '))' + S + lit(rs[4]) + ')',
+      '=IFERROR(' + X('pagoACuentaRenta') + S + lit(rs[5]) + ')'
     ]);
   }
   sheet.hideColumns(COL_AYUDA_IGV_, ANCHO_AYUDA_IGV_);
   return filas;
 }
 
-/** ¿El IMPORTRANGE del bloque ya trae datos? Si no, reintenta el permiso y espera un poco; si sigue sin datos, false
- * (y se borra la formula oculta, para no dejar un error escondido). */
+/** ¿El IMPORTRANGE del bloque ya trae datos? Si no, reintenta el permiso una vez. La formula oculta se queda siempre
+ * (en cuanto se de el permiso, el bloque empieza a leer la liquidacion en vivo). */
 function importrangeConectado_(ss, sheet, archivoLiq, filaTit) {
   var celda = sheet.getRange(filaTit, COL_AYUDA_IGV_);
-  for (var intento = 0; intento < 3; intento++) {
+  for (var intento = 0; intento < 2; intento++) {
     SpreadsheetApp.flush();
     var v = celda.getValue();
     if (v !== '' && !/^#/.test(String(v))) return true;
+    if (intento) break;
     permitirImportrange_(ss, archivoLiq.getId());
-    Utilities.sleep(1500 + intento * 1500);
+    Utilities.sleep(2500);
     celda.setFormula(celda.getFormula());   // vuelve a calcular
   }
-  celda.clearContent();
   return false;
 }
 
-/** Deja que este panel lea la liquidacion con IMPORTRANGE sin pedir «Permitir acceso» (mismo dueño). Si no se puede,
- * la primera vez la celda muestra #REF y basta tocar «Permitir acceso» una vez. */
+/**
+ * Bloque sin conexion: celda VISIBLE (columna N, junto al titulo del bloque) con un IMPORTRANGE simple de la misma
+ * liquidacion. Google pone ahi el boton «Permitir acceso» (al pasar el mouse o tocar la celda). Se permite UNA vez por
+ * empresa y queda para siempre; al actualizar el panel el bloque ya lee en vivo y esta celda desaparece.
+ */
+function celdaPermisoImportrange_(ss, sheet, archivoLiq, filaTit) {
+  var S = separadorFormula_(ss);
+  var c = sheet.getRange(filaTit - 1, 14);
+  c.setFormula('=IMPORTRANGE("' + archivoLiq.getId() + '"' + S + '"Liquidacion!B1")')
+    .setBackground('#FFF4CC').setFontColor('#92400E').setFontWeight('bold').setFontSize(9)
+    .setHorizontalAlignment('center').setVerticalAlignment('middle')
+    .setBorder(true, true, true, true, false, false, '#F59E0B', SpreadsheetApp.BorderStyle.SOLID_MEDIUM)
+    .setNote('🔓 PERMISO (una sola vez por empresa): pase el mouse por esta celda (en el celular, tóquela) y pulse ' +
+      '«Permitir acceso». Luego use «Actualizar panel»: el resumen IGV de esta empresa leerá la liquidación en vivo.\n\n' +
+      'Mientras tanto los montos que ve son los copiados de la liquidación al actualizar el panel.');
+  sheet.getRange(filaTit - 2, 14).setValue('🔓 Permitir ↓').setFontSize(8).setFontColor('#92400E')
+    .setHorizontalAlignment('center').setVerticalAlignment('bottom');
+  sheet.setColumnWidth(14, 92);
+}
+
+/** Deja que este panel lea la liquidacion con IMPORTRANGE sin pedir «Permitir acceso» (mismo dueño). Si Google no lo
+ * acepta, queda la celda visible para tocar «Permitir acceso» una vez. */
 function permitirImportrange_(ss, idOrigen) {
   try {
-    UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + ss.getId() + '/externaldata/addimportrangepermissions?donorDoc=' + idOrigen,
+    var r = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + ss.getId() + '/externaldata/addimportrangepermissions?donorDoc=' + idOrigen,
       { method: 'post', headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+    if (r.getResponseCode() !== 200) Logger.log('IMPORTRANGE permiso: HTTP ' + r.getResponseCode());
   } catch (e) { Logger.log('IMPORTRANGE: ' + e.message); }
 }
 
