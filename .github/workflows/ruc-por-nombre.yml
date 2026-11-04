@@ -76,6 +76,9 @@ jobs:
       - name: Descargar el padrón de SUNAT
         id: bajar
         if: steps.cache.outputs.cache-matched-key == ''
+        # Al buscar no se espera más de 8 min (la página de SUNAT a veces está lentísima): sin padrón, el bot igual
+        # busca esos nombres con IA en internet. La actualización de los lunes sí espera lo que haga falta.
+        timeout-minutes: ${{ (inputs.lote == 'actualizar' || github.event_name == 'schedule') && 25 || 8 }}
         run: |
           for url in https://www.sunat.gob.pe/descargaPRR/padron_reducido_ruc.zip https://www2.sunat.gob.pe/padron_reducido_ruc.zip; do
             for i in 1 2 3; do
