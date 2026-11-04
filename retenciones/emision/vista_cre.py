@@ -118,9 +118,10 @@ def fallar(fr, texto):
     alto(texto + (f" · SUNAT dice: {sin_datos(aviso)[:300]}" if aviso else ""))
 
 
-def pagos_con_retencion(fr):
+def pagos_con_retencion(fr, factura=""):
     """Solo consulta: botón de SUNAT "Pagos realizados con comprobantes de retención" de la factura que se está
-    agregando. Devuelve los comprobantes que SUNAT ya tiene para ella (p. ej. ["E001-85"]) y cierra la ventana."""
+    agregando. Devuelve los pagos que SUNAT ya tiene con comprobante: [{"cre": "E001-237", "fecha": "15/10/2026",
+    "montos": [51546.39, 1546.39, 50000.0]}] (la factura misma no se cuenta como comprobante) y cierra la ventana."""
     if not fr.query_selector("#btnConsultaCobrosModal") or not fr.is_visible("#btnConsultaCobrosModal"):
         return []
     fr.click("#btnConsultaCobrosModal")
@@ -129,14 +130,47 @@ def pagos_con_retencion(fr):
     except Exception:
         return []
     fr.wait_for_timeout(1500)
-    texto = fr.eval_on_selector("#divModalCobrosRealizados", "e => e.innerText")
-    cre = sorted(set(re.findall(r"\b[EeRrPp]\d{3}\s*-\s*\d+\b", texto or "")))
+    filas = fr.eval_on_selector("#divModalCobrosRealizados", """e => [...e.querySelectorAll('tbody tr')]
+        .filter(r => !r.querySelector('.dataTables_empty'))
+        .map(r => [...r.querySelectorAll('td')].map(c => c.innerText.trim()))""") or []
+    texto = fr.eval_on_selector("#divModalCobrosRealizados", "e => e.innerText") or ""
     if fr.query_selector("#btnCerrarCobrosRealizados"):
         fr.click("#btnCerrarCobrosRealizados")
     fr.wait_for_timeout(800)
     if not fr.is_visible("#txtSerieDoc"):   # al cerrar puede volver a la pantalla principal: reabrir no hace falta, avisar
         print("  (la ventana de la factura se cerró al cerrar la consulta)")
-    return [c.replace(" ", "").upper() for c in cre]
+    fac = factura.replace(" ", "").upper()
+    def es_cre(t):
+        t = t.replace(" ", "").upper()
+        try:
+            return not (fac and t.split("-")[0] == fac.split("-")[0] and int(t.split("-")[1]) == int(fac.split("-")[1]))
+        except Exception:
+            return t != fac
+    pagos = []
+    for celdas in filas:
+        unido = " | ".join(celdas)
+        cres = [c.replace(" ", "").upper() for c in re.findall(r"\b[EeRrPp]\d{3}\s*-\s*\d+\b", unido) if es_cre(c)]
+        if not cres:
+            continue
+        fecha = (re.findall(r"\b\d{2}/\d{2}/\d{4}\b", unido) or [""])[0]
+        montos = [num(m) for m in re.findall(r"\b\d{1,3}(?:,\d{3})*\.\d{2}\b|\b\d+\.\d{2}\b", unido)]
+        pagos.append({"cre": cres[0], "fecha": fecha, "montos": montos})
+    if not pagos:   # tabla sin filas legibles: al menos los números de comprobante (sin la factura)
+        for c in sorted(set(re.findall(r"\b[EeRrPp]\d{3}\s*-\s*\d+\b", texto))):
+            if es_cre(c):
+                pagos.append({"cre": c.replace(" ", "").upper(), "fecha": "", "montos": []})
+    return pagos
+
+
+JS_CORRELATIVO = """(n) => {   // «Número correlativo de pago»: la casilla junto a esa etiqueta
+  const lab = [...document.querySelectorAll('label, td, span, div')].find(e => /correlativo\\s+de\\s+pago/i.test(e.innerText || '') && e.children.length < 3);
+  let inp = lab && lab.htmlFor ? document.getElementById(lab.htmlFor) : null;
+  if (!inp && lab) { const g = lab.closest('.form-group, tr, .row') || lab.parentElement; inp = g && g.querySelector('input:not([type=hidden])'); }
+  if (!inp) return '';
+  inp.disabled = false; inp.readOnly = false; inp.value = String(n);
+  ['input', 'keyup', 'change', 'blur'].forEach(t => inp.dispatchEvent(new Event(t, {bubbles: true})));
+  if (window.jQuery) jQuery(inp).trigger('change');
+  return inp.id || inp.name || 'ok'; }"""
 
 
 def agregar_notas_credito(fr, i, notas):
@@ -496,16 +530,44 @@ def preparar(pag, s, docs, avisos_ok, ruc, usuario, clave):
             esperar_valor(fr, "#txtImpTot")
         except Exception:
             fallar(fr, f"Documento {i}: SUNAT no lo encontró o no lo acepta")
-        previos = pagos_con_retencion(fr)
+        factura = f'{str(d["serie"]).upper()}-{int(str(d["numero"]))}'
+        previos = pagos_con_retencion(fr, factura)
+        correlativo = 1
         if previos:
-            print(f"  Documento {i}: SUNAT ya registra pagos con comprobante de retención: {', '.join(previos)}")
-            if not d.get("permitir_retencion_previa"):
-                fallar(fr, f"Documento {i}: ya tiene comprobante(s) de retención ({', '.join(previos)}). "
-                           "Revise si falta retener algo antes de seguir")
+            lista = ", ".join(p["cre"] + (f" ({p['fecha']})" if p["fecha"] else "") for p in previos)
+            print(f"  Documento {i}: SUNAT ya registra {len(previos)} pago(s) con comprobante de retención: {lista}")
+            # PAGOS PARCIALES: cada pago lleva su propio comprobante. Solo se detiene si ESTE pago ya tiene el suyo
+            # (mismo monto de pago, de neto pagado o de retención) o si la suma de pagos pasaría el total de la factura.
+            pago = num(d["importe_pago"])
+            ret_esp = num(d["retencion"]) if d.get("retencion") not in (None, "") else round(pago * 0.03, 2)
+            neto_esp = round(pago - ret_esp, 2)
+            ya = [p for p in previos if any(abs(m - x) <= 0.05 for m in p["montos"] for x in (pago, neto_esp))
+                  and any(abs(m - ret_esp) <= 0.05 for m in p["montos"])]
+            if ya:
+                fallar(fr, f"Documento {i}: este pago ya tiene su comprobante de retención ({ya[0]['cre']}"
+                           f"{' del ' + ya[0]['fecha'] if ya[0]['fecha'] else ''}). No se emite otro")
+            if any(not p["montos"] for p in previos):
+                fallar(fr, f"Documento {i}: ya tiene comprobante(s) de retención ({lista}) y no pude leer sus montos "
+                           "para saber si este pago es otro. Revíselo en SOL antes de seguir")
+            total_fac = num(valor(fr, "#txtImpTot") or 0)
+            # importe de cada pago anterior: el mayor monto de su fila que no sea el total de la factura
+            pagado_antes = sum(max([m for m in p["montos"] if not total_fac or abs(m - total_fac) > 0.05] or [0])
+                               for p in previos)
+            if total_fac and pagado_antes + pago > total_fac + 0.05:
+                fallar(fr, f"Documento {i}: con este pago se pasaría el total de la factura (ya pagado con retención "
+                           f"S/ {pagado_antes:,.2f} + este S/ {pago:,.2f} > total S/ {total_fac:,.2f}). Revíselo en SOL")
+            correlativo = len(previos) + 1
+            print(f"  Documento {i}: pago parcial N° {correlativo} (los anteriores ya tienen comprobante) ✅")
         if d.get("notas_credito"):
             agregar_notas_credito(fr, i, d["notas_credito"])
         poner(fr, "#txtFecPago", d["fecha_pago"])
         fr.wait_for_timeout(800)
+        if correlativo > 1:   # «Número correlativo de pago»: 2, 3… para los pagos parciales
+            campo = fr.evaluate(JS_CORRELATIVO, correlativo)
+            if not campo:
+                fallar(fr, f"Documento {i}: no encontré la casilla «Número correlativo de pago» para poner el pago N° {correlativo}")
+            fr.wait_for_timeout(600)
+            print(f"  Número correlativo de pago: {correlativo}")
         poner(fr, "#txtImpCobro", f'{num(d["importe_pago"]):.2f}')
         fr.wait_for_timeout(1200)
         ret = num(valor(fr, "#txtImpPerc") or 0)
