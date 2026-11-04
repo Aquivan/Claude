@@ -64,9 +64,15 @@ jobs:
 
       # Búsqueda: usa el ÚLTIMO padrón guardado (aunque sea de la semana pasada) → empieza al instante.
       # Solo si no hay ninguno guardado se descarga aquí. Actualizar (lunes o a mano): siempre baja el nuevo.
+      - name: Diagnóstico de la búsqueda con IA en internet
+        if: inputs.lote == 'diag'
+        run: |
+          curl -sSL --max-time 300 -H 'Content-Type: application/json' "$BOT_URL?canal=gh" \
+            -d "{\"accion\":\"rpn_diag\",\"lote\":\"diag\",\"run\":\"$GITHUB_RUN_ID\"}" | python3 -m json.tool
+
       - name: Padrón en caché
         id: cache
-        if: inputs.lote != 'actualizar' && github.event_name != 'schedule'
+        if: inputs.lote != 'actualizar' && inputs.lote != 'diag' && github.event_name != 'schedule'
         uses: actions/cache/restore@v4
         with:
           path: padron_reducido_ruc.zip
@@ -74,7 +80,7 @@ jobs:
           restore-keys: padron-ruc-
 
       - name: Avisar que se descarga el padrón
-        if: steps.cache.outputs.cache-matched-key == '' && env.BOT_URL != ''
+        if: steps.cache.outputs.cache-matched-key == '' && env.BOT_URL != '' && inputs.lote != 'diag'
         continue-on-error: true
         env:
           LOTE: ${{ inputs.lote }}
@@ -84,7 +90,7 @@ jobs:
 
       - name: Descargar el padrón de SUNAT
         id: bajar
-        if: steps.cache.outputs.cache-matched-key == ''
+        if: steps.cache.outputs.cache-matched-key == '' && inputs.lote != 'diag'
         # Se espera la descarga (sin padrón la búsqueda queda incompleta). Si aun así no baja, el bot busca con IA en internet.
         timeout-minutes: 25
         run: |
@@ -106,7 +112,7 @@ jobs:
           key: padron-ruc-${{ steps.semana.outputs.s }}-${{ github.run_id }}
 
       - name: Buscar los nombres
-        if: always() && inputs.lote != 'actualizar' && github.event_name != 'schedule'
+        if: always() && inputs.lote != 'actualizar' && inputs.lote != 'diag' && github.event_name != 'schedule'
         env:
           LOTE: ${{ inputs.lote }}
         run: |
