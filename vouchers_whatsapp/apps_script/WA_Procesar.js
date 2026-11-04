@@ -16,7 +16,10 @@ function WA_cobranzas_(accion, cuerpo) {
 function WA_revisarConIA_(de, it) {
   var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues(), filas = WA_filasEspera_(datos, de);
   if (!filas.length) { WA_enviarTexto_(de, 'Esos archivos ya se registraron 👍'); return; }
-  WA_enviarTexto_(de, '🧾 Leyendo ' + (filas.length > 1 ? 'los ' + filas.length + ' archivos' : 'el archivo') + ' página por página…');
+  // Con la lista: si mandó más archivos de los que dice, se ve cuál no entró (llegó tarde, fue a una guía, etc.)
+  WA_enviarTexto_(de, '🧾 Leyendo ' + (filas.length > 1 ? 'los ' + filas.length + ' archivos' : 'el archivo') + ' página por página…\n' +
+    filas.map(function (i) { return '• ' + String(datos[i][4]).replace(/_wa[A-Za-z0-9]{6}(?=\.\w+$)/, ''); }).join('\n') +
+    '\n_Si falta alguno, mándemelo después: lo reviso aparte._');
   filas.forEach(function (i) { hoja.getRange(i + 1, 7, 1, 2).setValues([['Revisando', '🧾 revisando…']]); hoja.getRange(i + 1, 11).setValue('resultado'); });
   WA_props_().deleteProperty('WA_PREG_' + de);
   var archivos = filas.map(function (i) { return { id: datos[i][9], nombre: datos[i][4], mime: /\.pdf$/i.test(datos[i][4]) ? 'application/pdf' : 'image/jpeg' }; });
