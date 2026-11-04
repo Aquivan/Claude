@@ -91,7 +91,7 @@ function TGQ_coincide_(q, archivo, conFecha, exacto) {
 }
 
 /** Lee la hoja de Vouchers y arma las tandas pedidas, con RUC sugerido donde falte. */
-function TGQ_buscar_(ss, texto) {
+function TGQ_buscar_(ss, texto, soloFilas) {
   var q = TGQ_interpretar_(texto), cfg = leerConfig_(ss);
   if (!cfg.idVouchers) throw new Error('falta el ID de la hoja de Vouchers en ⚙️ Config.');
   var libro = SpreadsheetApp.openById(cfg.idVouchers), filas = [];
@@ -115,6 +115,21 @@ function TGQ_buscar_(ss, texto) {
         idUsuario: v.idUsuario ? aRuc_(v.idUsuario[i][0]) : '' });
     }
   });
+  // 🔎 Vouchers puntuales (botón del aviso «voucher(s) nuevo(s)»): pestaña | N° de operación | monto
+  if (soloFilas && soloFilas.length) {
+    var claves = {};
+    soloFilas.forEach(function (k) { claves[k] = true; });
+    var elegidasF = filas.filter(function (f) { return claves[[f.hoja, String(f.op).replace(/\D/g, ''), f.monto].join('|')]; });
+    var tandasF = {}, ordenF = [];
+    elegidasF.forEach(function (f) {
+      if (!tandasF[f.archivo]) { tandasF[f.archivo] = { nombre: f.archivo, filas: [], ultimaFila: 0 }; ordenF.push(f.archivo); }
+      tandasF[f.archivo].filas.push(f);
+    });
+    var listaF = ordenF.map(function (k) { return tandasF[k]; });
+    TGQ_sugerir_(ss, cfg, listaF);
+    q.archivos = []; q.fechas = ['los ' + elegidasF.length + ' vouchers nuevos del aviso']; q.nombres = []; q.ultimos = 0;
+    return { q: q, tandas: listaF, ampliado: elegidasF.length < soloFilas.length ? 'No encontré ' + (soloFilas.length - elegidasF.length) + ' de los vouchers del aviso (¿se movieron?).' : '' };
+  }
   // Palabras que no son nombre de ninguna tanda ("porfa", "revisame"…) no filtran.
   if (q.nombres.length) {
     var conocidas = {};
@@ -559,10 +574,10 @@ var TGQ_TXT_IA_ = '🤖 ¿Analizo con IA a qué factura o recibo por honorarios 
 
 /* ============================================================ Telegram */
 
-function TGQ_tg_(ctx, texto) {
+function TGQ_tg_(ctx, texto, soloFilas) {
   TG_accion_(ctx.chatId, 'typing');
   var r;
-  try { r = TGQ_buscar_(ctx.ss, texto); } catch (e) { return TG_enviar_(ctx.chatId, '❌ ' + TG_esc_(e.message)); }
+  try { r = TGQ_buscar_(ctx.ss, texto, soloFilas); } catch (e) { return TG_enviar_(ctx.chatId, '❌ ' + TG_esc_(e.message)); }
   TG_enviar_(ctx.chatId, TGQ_texto_(r, true));
   var cambios = TGQ_cambios_(ctx.ss, r.tandas);
   if (cambios.length) TG_mostrarCambios_(ctx, cambios);   // ✅ Escribir · ✖ No (TG_IA.js) · ↩️ Deshacer
