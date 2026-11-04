@@ -88,6 +88,35 @@ function VIA_menuProcesados() {
   VIA_menuAbrirChat();
 }
 
+/**
+ * 🔎 Identificar RUC de los proveedores de las FILAS SELECCIONADAS (Originales o Fotos): lo mismo que el botón del
+ * aviso de Telegram. Cobranzas busca el RUC (alias, SIRE, otros vouchers, honorarios, retenciones) y, con ✅, lo
+ * escribe en ID Beneficiario (solo celdas vacías; se deshace con ↩️ Deshacer últimos cambios de la IA).
+ */
+function VIA_menuIdentificarRuc() {
+  var ui = SpreadsheetApp.getUi(), sh = SpreadsheetApp.getActiveSheet(), nombre = sh.getName();
+  if (!/^(originales|fotos)$/i.test(nombre)) return ui.alert('🔎 Identificar RUC', 'Seleccione las filas en la pestaña Originales o Fotos.', ui.ButtonSet.OK);
+  var filas = [], vistas = {};
+  (sh.getActiveRangeList() ? sh.getActiveRangeList().getRanges() : [sh.getActiveRange()]).forEach(function (rg) {
+    for (var i = rg.getRow(); i < rg.getRow() + rg.getNumRows() && filas.length < 2000; i++) {
+      if (i >= 2 && !vistas[i]) { vistas[i] = 1; filas.push(nombre + '!' + i); }
+    }
+  });
+  if (!filas.length) return ui.alert('🔎 Identificar RUC', 'Seleccione una o varias filas de vouchers (no el encabezado).', ui.ButtonSet.OK);
+  SpreadsheetApp.getActiveSpreadsheet().toast('Buscando el RUC de ' + filas.length + ' fila(s)…', '🔎 Identificar RUC', 30);
+  var r = VIA_llamar_('rucfilas', { filas: filas });
+  if (r.error) return ui.alert(r.error);
+  var txt = String(r.texto || '');
+  if (txt.length > 1800) txt = txt.slice(0, 1800) + '\n…';
+  var pie = r.faltan ? '\n\n❓ ' + r.faltan + ' sin RUC encontrado: pídalo en 💬 Chat («busca el RUC de …») o en Cobranzas → 📋 Vouchers procesados → 🏛 Buscar en padrón SUNAT e internet.' : '';
+  var cambios = r.cambios || [];
+  if (!cambios.length) return ui.alert('🔎 Identificar RUC', txt + pie + '\n\nNo hay RUC nuevos para escribir.', ui.ButtonSet.OK);
+  if (ui.alert('🔎 Identificar RUC', txt + pie + '\n\n¿Escribo ' + cambios.length + ' RUC sugerido(s) en la columna ID Beneficiario? ' +
+    '(solo celdas vacías; se puede deshacer con 🧠 Asistente IA → ↩️ Deshacer últimos cambios de la IA)', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  var a = VIA_aplicar(cambios.map(function (x) { return x.id; }), false) || {};
+  ui.alert('🔎 Identificar RUC', a.mensaje || a.error || 'Listo.', ui.ButtonSet.OK);
+}
+
 /** Lo que se trabaja en pestañas de Cobranzas: enlace para abrir esa hoja (y decir qué usar allá). */
 function VIA_abrirCobranzas_(pestana, nota) {
   var r = {};

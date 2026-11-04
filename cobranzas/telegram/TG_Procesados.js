@@ -119,7 +119,7 @@ function TGQ_buscar_(ss, texto, soloFilas) {
   if (soloFilas && soloFilas.length) {
     var claves = {};
     soloFilas.forEach(function (k) { claves[k] = true; });
-    var elegidasF = filas.filter(function (f) { return claves[[f.hoja, String(f.op).replace(/\D/g, ''), f.monto].join('|')]; });
+    var elegidasF = filas.filter(function (f) { return claves[[f.hoja, String(f.op).replace(/\D/g, ''), f.monto].join('|')] || claves[f.hoja + '!' + f.fila]; });
     var tandasF = {}, ordenF = [];
     elegidasF.forEach(function (f) {
       if (!tandasF[f.archivo]) { tandasF[f.archivo] = { nombre: f.archivo, filas: [], ultimaFila: 0 }; ordenF.push(f.archivo); }
@@ -127,7 +127,7 @@ function TGQ_buscar_(ss, texto, soloFilas) {
     });
     var listaF = ordenF.map(function (k) { return tandasF[k]; });
     TGQ_sugerir_(ss, cfg, listaF);
-    q.archivos = []; q.fechas = ['los ' + elegidasF.length + ' vouchers nuevos del aviso']; q.nombres = []; q.ultimos = 0;
+    q.archivos = []; q.fechas = ['los ' + elegidasF.length + ' vouchers elegidos']; q.nombres = []; q.ultimos = 0;
     return { q: q, tandas: listaF, ampliado: elegidasF.length < soloFilas.length ? 'No encontré ' + (soloFilas.length - elegidasF.length) + ' de los vouchers del aviso (¿se movieron?).' : '' };
   }
   // Palabras que no son nombre de ninguna tanda ("porfa", "revisame"…) no filtran.
@@ -808,6 +808,53 @@ function menuEscribirRucProcesados() {
 }
 
 /** 🤖 Analizar con IA la tanda de 📋 Procesados: abre el 💬 Chat con la IA con el pedido ya enviado (se aprueba con ✅ en el panel). */
+/**
+ * 🔎 Identificar RUC de los proveedores de filas puntuales de Vouchers (["Originales!2656", …]): lo mismo que el botón
+ * del aviso de Telegram. Devuelve {texto, cambios (para ✅ escribir en ID Beneficiario), faltan}.
+ */
+function TGQ_rucDeFilas_(ss, filas) {
+  var t = TGQ_buscar_(ss, 'procesados', filas);
+  var faltan = 0;
+  t.tandas.forEach(function (x) { x.filas.forEach(function (f) { if (!f.ruc && !f.sug) faltan++; }); });
+  return { texto: TGQ_texto_(t, false).replace(/\*/g, ''), cambios: TGQ_cambios_(ss, t.tandas), faltan: faltan };
+}
+
+/** «Originales 2656-2666, Fotos 382» → ["Originales!2656", …, "Fotos!382"] */
+function TGQ_filasDeTexto_(texto) {
+  var out = [], hoja = 'Originales';
+  String(texto || '').split(/[,;\s]+(?=[A-Za-z])|,/).forEach(function (parte) {
+    var m = parte.match(/(originales?|fotos?)/i);
+    if (m) hoja = /^o/i.test(m[1]) ? 'Originales' : 'Fotos';
+    (parte.match(/\d+\s*-\s*\d+|\d+/g) || []).forEach(function (x) {
+      var r = x.split('-').map(Number), a = r[0], b = r[1] || r[0];
+      for (var i = Math.min(a, b); i <= Math.max(a, b) && out.length < 2000; i++) out.push(hoja + '!' + i);
+    });
+  });
+  return out;
+}
+
+/** Menú 🧠 Asistente IA (Cobranzas): pide las filas; en la hoja de Vouchers se usan las filas seleccionadas. */
+function menuIdentificarRucFilas() {
+  var ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive();
+  var p = ui.prompt('🔎 Identificar RUC de los proveedores', '¿Qué filas de la hoja de Vouchers?\nEj.: Originales 2656-2666 · Fotos 382, 383', ui.ButtonSet.OK_CANCEL);
+  if (p.getSelectedButton() !== ui.Button.OK) return;
+  var filas = TGQ_filasDeTexto_(p.getResponseText());
+  if (!filas.length) return ui.alert('No entendí las filas. Ej.: Originales 2656-2666');
+  var r = TGQ_rucDeFilas_(ss, filas);
+  TGQ_confirmarRuc_(ui, r, function (ids) { return ANX_aplicarDet_(ss, ids, false); });
+}
+
+/** Muestra lo encontrado y, si hay RUC sugeridos, pregunta si se escriben. aplicar(ids) → {mensaje}. */
+function TGQ_confirmarRuc_(ui, r, aplicar) {
+  var txt = r.texto.length > 1800 ? r.texto.slice(0, 1800) + '\n…' : r.texto;
+  var pie = r.faltan ? '\n\n❓ ' + r.faltan + ' sin RUC encontrado: búsquelos en 💼 Cobranzas → 📋 Vouchers procesados → 🏛 Buscar en padrón SUNAT e internet.' : '';
+  if (!r.cambios.length) return ui.alert('🔎 Identificar RUC', txt + pie + '\n\nNo hay RUC nuevos para escribir.', ui.ButtonSet.OK);
+  if (ui.alert('🔎 Identificar RUC', txt + pie + '\n\n¿Escribo ' + r.cambios.length + ' RUC sugerido(s) en la columna ID Beneficiario? ' +
+    '(solo celdas vacías; se puede deshacer con ↩️ Deshacer últimos cambios de la IA)', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  var res = aplicar(r.cambios.map(function (x) { return x.id; })) || {};
+  ui.alert('🔎 Identificar RUC', res.mensaje || res.error || 'Listo.', ui.ButtonSet.OK);
+}
+
 function menuAnalizarIAProcesados() {
   var ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive();
   var q = PropertiesService.getDocumentProperties().getProperty('TGQ_ULTIMA');

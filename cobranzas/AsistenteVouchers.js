@@ -39,6 +39,8 @@ function VCH_doPost_(e) {
         var t = TGQ_buscar_(ss, String(q.texto || '').trim() || 'hoy');
         if (!t.tandas.length) return TGW_json_({ error: TGQ_texto_(t, false).replace(/\*/g, '') });
         return TGW_json_({ pedido: TGQ_promptAnalisis_(t.tandas.map(function (x) { return x.nombre; }), TGQ_filasIA_(t.tandas)) });
+      case 'rucfilas':   // 🔎 Identificar RUC de las filas seleccionadas en la hoja de Vouchers
+        return TGW_json_(TGQ_rucDeFilas_(ss, (q.filas || []).slice(0, 2000)));
       case 'hoja':   // enlace a la hoja de Cobranzas (y a una pestaña) para lo que se trabaja allá
         var sh = q.pestana ? ss.getSheetByName(q.pestana) : null;
         return TGW_json_({ url: ss.getUrl() + (sh ? '#gid=' + sh.getSheetId() : '') });
