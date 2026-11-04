@@ -44,6 +44,7 @@ const AYV_SECCIONES_ = [
   { id: 'menu', e: '🤖', t: 'Menú 🤖 Vouchers', p: [
     '• **📤 Subir vouchers**: subir PDF o fotos desde la computadora, con el nombre que usted elija.',
     '• **▶ Procesar Nuevos Archivos**: procesa ya lo que está en la carpeta de entrada.',
+    '• **📂 Abrir carpetas en Drive**: Fotos y Originales procesados (los ya registrados), las de entrada (por procesar) y Descartados.',
     '• **⚙️ Verificar Configuración**: revisa carpetas, claves y conexiones.',
     '• **⏰ Activar / ⏸ Desactivar procesamiento automático** (cada 10 minutos).',
     '• **🔧 Reparar imágenes faltantes**: rehace las que quedaron como «Ver PDF» o vacías. También hay reparación automática cada 30 minutos.',
