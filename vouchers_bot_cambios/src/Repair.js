@@ -192,18 +192,8 @@ function notificarReparacionTelegram_(reparadas, fallidas, pendientesRestantes) 
   });
 }
 
-// Busca un archivo por nombre en las carpetas relevantes (en ese orden).
+// Busca un archivo por nombre en las carpetas de vouchers. Si se volvio a subir con el mismo nombre
+// (p. ej. con una pagina cambiada), usa el MAS NUEVO (ReleerPagina.js).
 function buscarArchivoPorNombre(nombre) {
-  const carpetas = [
-    CFG.CARPETA_ORIGINALES_PROCESADOS_ID, CFG.CARPETA_FOTOS_PROCESADOS_ID,
-    CFG.CARPETA_DESCARTADOS_ID,
-    CFG.CARPETA_ORIGINALES_ENTRADA_ID, CFG.CARPETA_FOTOS_ENTRADA_ID
-  ];
-  for (let i = 0; i < carpetas.length; i++) {
-    try {
-      const it = DriveApp.getFolderById(carpetas[i]).getFilesByName(nombre);
-      if (it.hasNext()) return it.next();
-    } catch (e) {}
-  }
-  return null;
+  return RP_archivoMasNuevo_(nombre);
 }

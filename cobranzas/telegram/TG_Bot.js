@@ -118,6 +118,7 @@ function TG_manejar_(u) {
   if (texto.charAt(0) === '/') return TG_comando_(ctx, texto);
   var atajo = TG_ATAJOS_[texto];
   if (atajo) return TG_comando_(ctx, atajo);
+  if (TGRL_tg_(ctx, texto)) return;   // 🔁 "volver a leer Originales 2666" (TG_Releer.js)
   if (TGQ_RX_.test(texto)) return TGQ_tg_(ctx, texto);   // 📋 "procesados hoy sonia" (TG_Procesados.js)
   var vivo = TGEV_comando_(texto) || TGPC_comando_(texto);   // 📺 «en vivo sí/no» · 🖥 «en pc sí/no» (TG_EnVivo.js)
   if (vivo) return TG_enviar_(chatId, TG_esc_(vivo));
@@ -453,6 +454,7 @@ function TG_alBoton_(ss, q) {
       }
       return TG_preguntar_(ctx, '', adjs);
     case 'sug': return TG_preguntar_(ctx, datos.texto, []);
+    case 'rlee': return TGRL_botonTG_(ctx, datos, op);   // 🔁 volver a leer una página (TG_Releer.js)
     case 'tgqruc': return TGQ_tg_(ctx, 'procesados', datos.filas || []);   // 🔎 RUC de los vouchers del aviso (TG_Procesados.js)
     case 'cambios': return TG_aplicarCambios_(ctx, datos, op);
     case 'rucelige': return TGQ_eligeTG_(ctx, datos, op);
