@@ -32,6 +32,7 @@ var AYU_SECCIONES_ = [
     '• 🔁 **Reasignar una retención** a otra factura.',
     '• 🧾 **Actualizar padrones SUNAT**: agentes de retención, buenos contribuyentes y SSCO (sirven para saber si corresponde retener).',
     '• 📋 **Vouchers procesados**: ver lo que entró (por día o por tanda), buscar el RUC que falta (padrón SUNAT e internet), escribirlo en Vouchers y analizar con IA a qué factura corresponde.',
+    '• 🔁 **Volver a leer una página con IA**: «volver a leer Originales 2666» o «releer Fotos 382» (Telegram y WhatsApp). Usa la versión más nueva del archivo, muestra ANTES/AHORA y con ✅ reemplaza los datos del voucher (no toca lo que usted agregó; ↩️ Deshacer). También en la hoja de Vouchers: menú 🤖 Vouchers → 🔁 Volver a leer.',
     '• En Telegram, el aviso **💳 voucher(s) nuevo(s)** trae el botón **🔎 Identificar RUC de los proveedores**: busca el RUC de ESOS vouchers (alias, SIRE, otros vouchers, padrón SUNAT e internet) y ofrece escribirlo con ✅ (se puede deshacer).',
     '• 🔎 **RUC por nombre**: encuentra el RUC de un nombre (en sus facturas y en el padrón) y lo recuerda como alias.',
     '• ♻️ **Respaldos**: guarda o restaura lo que se escribió a mano.',
