@@ -46,6 +46,19 @@ function IA_guardarClave_(proveedor, clave) {
  * json (default true), maxTokens}. Devuelve el objeto JSON (o el texto si json=false).
  */
 function IA_llamar_(opts) {
+  var pet = IA_peticion_(opts);
+  var resp, code;
+  for (var intento = 0; intento < 2; intento++) {
+    resp = UrlFetchApp.fetch(pet.url, pet.params);
+    code = resp.getResponseCode();
+    if (code === 429 || code >= 500) { Utilities.sleep(pet.prov.pausa * 3); continue; }
+    break;
+  }
+  return IA_respuesta_(pet, resp);
+}
+
+/** Arma la consulta HTTP (sin mandarla): {url, params, prov, json, proveedor}. La usan IA_llamar_ y la lectura en paralelo. */
+function IA_peticion_(opts) {
   var prov = IA_PROVEEDORES_[opts.proveedor];
   if (!prov) throw new Error('Proveedor de IA desconocido: ' + opts.proveedor);
   var clave = opts.clave || IA_clave_(opts.proveedor);
@@ -77,29 +90,39 @@ function IA_llamar_(opts) {
     };
     if (json) carga.response_format = { type: 'json_object' };
   }
+  return { url: url, prov: prov, json: json, proveedor: opts.proveedor,
+    params: { url: url, method: 'post', contentType: 'application/json', headers: headers, payload: JSON.stringify(carga), muteHttpExceptions: true } };
+}
 
-  var params = { method: 'post', contentType: 'application/json', headers: headers, payload: JSON.stringify(carga), muteHttpExceptions: true };
-  var resp, code;
-  for (var intento = 0; intento < 2; intento++) {
-    resp = UrlFetchApp.fetch(url, params);
-    code = resp.getResponseCode();
-    if (code === 429 || code >= 500) { Utilities.sleep(prov.pausa * 3); continue; }
-    break;
-  }
+/** Lee la respuesta de la IA (JSON o texto). Lanza error si no es 200. */
+function IA_respuesta_(pet, resp) {
+  var code = resp.getResponseCode();
   if (code !== 200) {
-    throw new Error('IA ' + opts.proveedor + ' respondió ' + code + ': ' + resp.getContentText().substring(0, 200));
+    throw new Error('IA ' + pet.proveedor + ' respondió ' + code + ': ' + resp.getContentText().substring(0, 200));
   }
   var cuerpo = JSON.parse(resp.getContentText());
   var texto = '';
-  if (prov.tipo === 'gemini') {
+  if (pet.prov.tipo === 'gemini') {
     var cand = (cuerpo.candidates || [])[0];
     texto = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
   } else {
     var ch = (cuerpo.choices || [])[0];
     texto = ch && ch.message ? (ch.message.content || '') : '';
   }
-  if (!json) return String(texto).trim();
+  if (!pet.json) return String(texto).trim();
   return IA_extraerJson_(texto);
+}
+
+/**
+ * ⚡ Varias consultas a la IA AL MISMO TIEMPO (UrlFetchApp.fetchAll): el tiempo total es el de la más lenta, no la suma.
+ * Devuelve [{ok, r} | {ok:false, error}] en el mismo orden. Las que fallan (saturado, etc.) las reintenta el que llama.
+ */
+function IA_llamarVarios_(lista) {
+  var pets = lista.map(function (o) { return IA_peticion_(o); });
+  var resps = UrlFetchApp.fetchAll(pets.map(function (p) { return p.params; }));
+  return resps.map(function (resp, i) {
+    try { return { ok: true, r: IA_respuesta_(pets[i], resp) }; } catch (e) { return { ok: false, error: e.message }; }
+  });
 }
 
 /** Saca el primer objeto {...} de un texto (algunas IA agregan texto alrededor). */
