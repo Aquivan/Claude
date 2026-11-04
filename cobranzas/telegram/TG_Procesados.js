@@ -519,7 +519,7 @@ function TGQ_texto_(r, html) {
         Number(f.monto).toFixed(2) + ' · ' + e((f.prov || '(sin proveedor)').slice(0, 40)) + '\n   ' + e(estado));
     });
   });
-  if (L.length > 90) L = L.slice(0, 90).concat(['…']);
+  if (!html && L.length > 90) L = L.slice(0, 90).concat(['…']);   // WhatsApp; en Telegram se manda en varios mensajes
   return '📋 ' + b('Vouchers procesados') + ' · ' + e(pedido) + (r.ampliado ? '\n' + e(r.ampliado) : '') + '\n' + r.tandas.length + ' tanda(s) · ' + total +
     ' voucher(s) · ' + (sinRuc ? sinRuc + ' sin RUC del proveedor' + (conSug ? ' (' + conSug + ' con RUC sugerido)' : '') : 'todos con RUC ✅') + L.join('\n') +
     '';
@@ -583,9 +583,14 @@ function TGQ_tg_(ctx, texto, soloFilas) {
   if (cambios.length) TG_mostrarCambios_(ctx, cambios);   // ✅ Escribir · ✖ No (TG_IA.js) · ↩️ Deshacer
   var ext = TGQ_externos_(ctx.ss, r.tandas, 'tg', ctx.chatId);
   if (ext) TG_enviar_(ctx.chatId, TG_esc_(ext));
-  if (r.tandas.length) {   // 🤖 el botón pregunta a la IA (t:'sug' → TG_preguntar_)
-    var pedido = TGQ_promptAnalisis_(r.tandas.map(function (t) { return t.nombre; }), TGQ_filasIA_(r.tandas));
-    TG_enviar_(ctx.chatId, TG_esc_(TGQ_TXT_IA_), [[{ text: '🤖 Analizar con IA (factura, empresa, retención)', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: pedido }) }]]);
+  if (r.tandas.length) {   // 🤖 el botón pregunta a la IA (t:'sug' → TG_preguntar_); de a 15 vouchers por análisis
+    var nombres = r.tandas.map(function (t) { return t.nombre; }), todas = TGQ_filasIA_(r.tandas), botones = [];
+    for (var i = 0; i < todas.length && botones.length < 20; i += TGQ_MAX_IA_) {
+      var parte = todas.slice(i, i + TGQ_MAX_IA_);
+      botones.push([{ text: '🤖 Analizar con IA' + (todas.length > TGQ_MAX_IA_ ? ' (vouchers ' + (i + 1) + '–' + (i + parte.length) + ')' : ' (factura, empresa, retención)'),
+        callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: TGQ_promptAnalisis_(nombres, parte) }) }]);
+    }
+    TG_enviar_(ctx.chatId, TG_esc_(TGQ_TXT_IA_) + (botones.length > 1 ? '\n' + TG_esc_('Son ' + todas.length + ' vouchers: la IA los revisa de a ' + TGQ_MAX_IA_ + ' (un botón por grupo).') : ''), botones);
   }
 }
 
