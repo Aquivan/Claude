@@ -106,16 +106,41 @@ function VIA_menuIdentificarRuc() {
   SpreadsheetApp.getActiveSpreadsheet().toast('Buscando el RUC de ' + filas.length + ' fila(s)…', '🔎 Identificar RUC', 30);
   var r = VIA_llamar_('rucfilas', { filas: filas });
   if (r.error) return ui.alert(r.error);
-  var txt = String(r.texto || '');
-  if (txt.length > 1800) txt = txt.slice(0, 1800) + '\n…';
-  var pie = r.faltan ? '\n\n❓ ' + r.faltan + ' sin RUC encontrado: pídalo en 💬 Chat («busca el RUC de …») o en Cobranzas → 📋 Vouchers procesados → 🏛 Buscar en padrón SUNAT e internet.' : '';
-  var cambios = r.cambios || [];
-  if (!cambios.length) return ui.alert('🔎 Identificar RUC', txt + pie + '\n\nNo hay RUC nuevos para escribir.', ui.ButtonSet.OK);
-  if (ui.alert('🔎 Identificar RUC', txt + pie + '\n\n¿Escribo ' + cambios.length + ' RUC sugerido(s) en la columna ID Beneficiario? ' +
-    '(solo celdas vacías; se puede deshacer con 🧠 Asistente IA → ↩️ Deshacer últimos cambios de la IA)', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
-  var a = VIA_aplicar(cambios.map(function (x) { return x.id; }), false) || {};
-  ui.alert('🔎 Identificar RUC', a.mensaje || a.error || 'Listo.', ui.ButtonSet.OK);
+  // Ventana (no un aviso que espera): así la ejecución termina y no se corta por el límite de tiempo de Google.
+  var datos = JSON.stringify({ filas: filas, texto: r.texto || '', ids: (r.cambios || []).map(function (x) { return x.id; }), faltan: r.faltan || 0 })
+    .replace(/</g, '\\u003c');
+  var html = HtmlService.createHtmlOutput(VIA_RUC_HTML_.replace('__DATOS__', datos)).setWidth(680).setHeight(580);
+  ui.showModalDialog(html, '🔎 Identificar RUC de los proveedores');
 }
+
+function VIA_rucEscribir(ids) { try { return VIA_aplicar(ids, false); } catch (e) { return { error: e.message }; } }
+function VIA_rucExternos(filas) { try { return VIA_llamar_('rucexternos', { filas: filas }); } catch (e) { return { error: e.message }; } }
+function VIA_rucEstado(id) { try { return VIA_llamar_('rucestado', { id: id }); } catch (e) { return { error: e.message }; } }
+function VIA_rucElegir(prov, filas, ruc, det) { try { return VIA_llamar_('rucelegir', { prov: prov, filas: filas, ruc: ruc, det: det }); } catch (e) { return { error: e.message }; } }
+
+var VIA_RUC_HTML_ = '<!doctype html><html><head><meta charset="utf-8"><style>' +
+  'body{font:13px Arial,sans-serif;margin:0;padding:10px;color:#222}pre{white-space:pre-wrap;background:#f6f8fa;border:1px solid #ddd;border-radius:6px;padding:8px;max-height:250px;overflow:auto;font:12px Arial}' +
+  'button{padding:8px 12px;margin:4px 4px 4px 0;border:0;border-radius:6px;cursor:pointer;background:#1D4ED8;color:#fff}button.g{background:#6b7280}button:disabled{opacity:.5}' +
+  '#msg{margin:6px 0;color:#065f46}.el{border:1px solid #ddd;border-radius:6px;padding:6px;margin:6px 0}select{max-width:100%}</style></head><body>' +
+  '<pre id="txt"></pre><div id="msg"></div><div id="bot"></div><div id="ext"></div>' +
+  '<script>var D=__DATOS__;function $(i){return document.getElementById(i)}function msg(t){$("msg").textContent=t}' +
+  'function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]})}' +
+  '$("txt").textContent=D.texto;var b="";' +
+  'if(D.ids.length)b+="<button id=\\"w\\" onclick=\\"escribir()\\">✍️ Escribir "+D.ids.length+" RUC en ID Beneficiario</button>";' +
+  'if(D.faltan)b+="<button id=\\"x\\" onclick=\\"externos()\\">🏛 Buscar los "+D.faltan+" que faltan en el padrón SUNAT e internet</button>";' +
+  'b+="<button class=\\"g\\" onclick=\\"google.script.host.close()\\">Cerrar</button>";$("bot").innerHTML=b;' +
+  'function escribir(){$("w").disabled=true;msg("Escribiendo…");google.script.run.withSuccessHandler(function(r){msg((r&&(r.mensaje||r.error))||"Listo.")}).VIA_rucEscribir(D.ids)}' +
+  'function externos(){$("x").disabled=true;msg("Lanzando la búsqueda…");google.script.run.withSuccessHandler(function(r){r=r||{};msg(r.error||r.texto||"");if(r.id)esperar(r.id,0)}).VIA_rucExternos(D.filas)}' +
+  'function esperar(id,n){setTimeout(function(){google.script.run.withSuccessHandler(function(r){r=r||{};if(r.error){msg(r.error);return}' +
+  'if(!r.listo){msg("⏳ Buscando en el padrón de SUNAT e internet… ("+Math.round((n+1)*15/60*10)/10+" min) — deje esta ventana abierta");esperar(id,n+1);return}mostrar(r)}).VIA_rucEstado(id)},15000)}' +
+  'function mostrar(r){msg("");var h="<pre>"+esc(r.texto)+"</pre>";if(r.ids&&r.ids.length)h+="<button id=\\"w2\\" onclick=\\"escribir2()\\">✍️ Escribir "+r.ids.length+" RUC encontrados</button>";' +
+  '(r.elecciones||[]).forEach(function(el,i){h+="<div class=\\"el\\">🤔 <b>"+esc(el.prov)+"</b> ("+el.filas.map(function(f){return f.hoja+"!"+f.fila}).join(", ")+")<br><select id=\\"s"+i+"\\">"+' +
+  'el.opciones.map(function(o,j){return "<option value=\\""+j+"\\">"+esc(o.ruc+" "+o.nombre+" — "+o.det)+"</option>"}).join("")+"</select> <button onclick=\\"elegir("+i+")\\">✅ Es este</button></div>"});' +
+  '$("ext").innerHTML=h;window.R=r}' +
+  'function escribir2(){$("w2").disabled=true;google.script.run.withSuccessHandler(function(x){msg((x&&(x.mensaje||x.error))||"Listo.")}).VIA_rucEscribir(R.ids)}' +
+  'function elegir(i){var el=R.elecciones[i],o=el.opciones[Number($("s"+i).value)];msg("Escribiendo "+o.ruc+"…");' +
+  'google.script.run.withSuccessHandler(function(x){msg((x&&(x.mensaje||x.error))||"Listo.")}).VIA_rucElegir(el.prov,el.filas,o.ruc,o.nombre+" — "+o.det)}' +
+  '</script></body></html>';
 
 /** Lo que se trabaja en pestañas de Cobranzas: enlace para abrir esa hoja (y decir qué usar allá). */
 function VIA_abrirCobranzas_(pestana, nota) {
