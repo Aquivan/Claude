@@ -28,6 +28,7 @@ function CIA_agregarMenu_() {
     .addItem('💬 Chat con la IA (preguntas, fotos, PDF, Excel)', 'CHAT_menuAbrir')
     .addItem('📰 Resumen de cobranzas y pagos con IA', 'CIA_menuResumen')
     .addItem('📋 Analizar vouchers procesados (factura, empresa, retención)', 'menuAnalizarIAProcesados')
+    .addItem('🔎 Identificar RUC de los proveedores (filas seleccionadas)', 'menuIdentificarRucFilas')
     .addSeparator()
     .addItem('🔍 Auditor IA: abrir (compras y pagos de todas las empresas)', 'AUD_menuAbrir')
     .addItem('▶ Auditar con IA (según los filtros)', 'AUD_menuAuditar')
