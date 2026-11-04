@@ -35,24 +35,6 @@ function TGP_ctx_(ss) {
   return c;
 }
 
-/** Lo que trae un archivo, página por página (la lectura se guarda: el mismo archivo no se vuelve a pagar). */
-function TGP_leer_(c, adj) {
-  var f = DriveApp.getFileById(adj.id), blob = f.getBlob(), mime = f.getMimeType();
-  if (!/^image\/|pdf/i.test(mime)) return { error: 'solo fotos o PDF' };
-  var bytes = blob.getBytes();
-  // 'tgp2': lecturas con el modelo lector (las de antes, con el modelo liviano, no se reutilizan)
-  var clave = hashTexto_('tgp3|' + bytes.length + '|' + Utilities.base64Encode(bytes.slice(0, 3000)));
-  var cache = AUV_cache_(c.ss), r = AUV_cacheGet_(cache, 'tgp', clave);
-  if (!r) {
-    r = TGP_iaLectora_(c, { sistema: TGP_SISTEMA_, maxTokens: 8000,
-      adjunto: { mime: /pdf/i.test(mime) ? 'application/pdf' : mime, base64: Utilities.base64Encode(bytes) },
-      texto: 'ARCHIVO: ' + adj.nombre + '\nExtrae todos los documentos que contiene, con su página. ' +
-        'El N° de operación cópialo dígito por dígito, con los ceros del inicio y del final (p. ej. «OP-0686860» → 0686860).' });
-    AUV_cachePut_(cache, 'tgp', clave, r);
-    AUV_cacheGuardar_(cache);
-  }
-  return { docs: Array.isArray(r.documentos) ? r.documentos : [], obs: (r.legible === false ? 'ilegible. ' : '') + String(r.observaciones || ''), mime: mime };
-}
 
 /**
  * 🔍 Para LEER documentos se usa un modelo más fuerte que el del chat (los números de operación en papel térmico
@@ -109,6 +91,53 @@ function TGP_releerOp_(c, v) {
   } catch (e) { console.warn('Releer N° de operación: ' + e.message); return null; }
 }
 
+/**
+ * ⚡ Lee TODOS los archivos a la vez (una consulta por archivo, en paralelo): el tiempo total es el del archivo más
+ * lento. Con el modelo RÁPIDO de siempre (el fuerte se usa solo para releer el N° de operación, TGP_releerOp_).
+ * Lo ya leído se guarda: el mismo archivo no se vuelve a leer. Devuelve [{docs, obs, mime} | {error}] en orden.
+ */
+function TGP_leerVarios_(c, adjs) {
+  var cache = AUV_cache_(c.ss), out = [], pend = [];
+  adjs.forEach(function (adj, i) {
+    try {
+      var f = DriveApp.getFileById(adj.id), blob = f.getBlob(), mime = f.getMimeType();
+      if (!/^image\/|pdf/i.test(mime)) { out[i] = { error: 'solo fotos o PDF' }; return; }
+      var bytes = blob.getBytes();
+      var clave = hashTexto_('tgp3|' + bytes.length + '|' + Utilities.base64Encode(bytes.slice(0, 3000)));
+      var r = AUV_cacheGet_(cache, 'tgp', clave);
+      if (r) { out[i] = TGP_docsDe_(r, mime); return; }
+      pend.push({ i: i, clave: clave, mime: mime, opts: { sistema: TGP_SISTEMA_, maxTokens: 8000,
+        adjunto: { mime: /pdf/i.test(mime) ? 'application/pdf' : mime, base64: Utilities.base64Encode(bytes) },
+        texto: 'ARCHIVO: ' + adj.nombre + '\nExtrae todos los documentos que contiene, con su página. ' +
+          'El N° de operación cópialo dígito por dígito, con los ceros del inicio y del final (p. ej. «OP-0686860» → 0686860).' } });
+    } catch (e) { out[i] = { error: e.message }; }
+  });
+  if (pend.length) {
+    var res = [];
+    try {
+      res = IA_llamarVarios_(pend.map(function (x) {
+        var o = {}; for (var k in x.opts) o[k] = x.opts[k];
+        o.proveedor = c.ia.proveedor; o.modelo = c.ia.modelo; o.clave = c.ia.clave;
+        return o;
+      }));
+    } catch (e) { console.warn('Lectura en paralelo: ' + e.message); }
+    pend.forEach(function (x, j) {
+      var rr = res[j];
+      if (!rr || !rr.ok) {   // saturado o error: ese archivo solo, con reintentos y cambio de modelo
+        try { rr = { ok: true, r: IA_llamarSeguro_(c.ia, x.opts) }; } catch (e) { out[x.i] = { error: e.message }; return; }
+      }
+      AUV_cachePut_(cache, 'tgp', x.clave, rr.r);
+      out[x.i] = TGP_docsDe_(rr.r, x.mime);
+    });
+    AUV_cacheGuardar_(cache);
+  }
+  return out;
+}
+
+function TGP_docsDe_(r, mime) {
+  return { docs: Array.isArray(r.documentos) ? r.documentos : [], obs: (r.legible === false ? 'ilegible. ' : '') + String(r.observaciones || ''), mime: mime };
+}
+
 function TGP_tipo_(d) {
   var t = String(d.tipo || '').toLowerCase();
   if (/voucher|constancia de (dep|transf|pago)|transferencia|dep[oó]sito/.test(t)) return 'voucher';
@@ -149,13 +178,12 @@ function TGP_datosFactura_(c, f) {
 function TGP_analizar_(ss, adjs, op) {
   var c = TGP_ctx_(ss);
   var items = [], resumenArch = [], facturasTodas = [];
-  var leidos = adjs.map(function (a) {
-    // Sin tiempo para leer otro archivo: se corta aquí y sigue en segundo plano (lo ya leído quedó guardado: no se repite)
-    if (TGP_PUEDE_SEGUIR_ && TGP_seg_() > 200) throw new Error('TGP_SIGUE');
-    var r;
-    try { r = TGP_leer_(c, a); } catch (e) { r = { error: e.message }; }
-    return { a: a, r: r };
-  });
+  // Sin tiempo para leer: sigue en segundo plano (lo ya leído quedó guardado: no se repite)
+  if (TGP_PUEDE_SEGUIR_ && TGP_seg_() > 200) throw new Error('TGP_SIGUE');
+  var t0 = Date.now();
+  var lect = TGP_leerVarios_(c, adjs);
+  var leidos = adjs.map(function (a, i) { return { a: a, r: lect[i] || { error: 'sin lectura' } }; });
+  var tLeer = Date.now();
   leidos.forEach(function (x) {
     if (x.r.error) { resumenArch.push('⚠️ ' + TG_esc_(x.a.nombre) + ': ' + TG_esc_(x.r.error)); return; }
     var docs = x.r.docs;
@@ -170,11 +198,13 @@ function TGP_analizar_(ss, adjs, op) {
     (x.r.docs || []).filter(function (d) { return TGP_tipo_(d) === 'voucher'; }).forEach(function (d) { vouchers.push({ a: x.a, d: d, mime: x.r.mime }); });
   });
   var cruce = { filas: vouchers.length ? TGP_buscarVouchers_(c, vouchers) : [] };   // búsqueda directa en la hoja (rápida)
+  var tBuscar = Date.now(), relecturas = 0;
   // 🔎 Los que no aparecen (o con duda): se relee SOLO el N° de operación y se busca otra vez. Si así aparece, vale.
   vouchers.forEach(function (v, i) {
     var est = String((cruce.filas[i] || [])[4] || '');
     if (!/^(❌|⚠️)/.test(est)) return;
     if (TGP_seg_() > 200) return;   // sin tiempo para la segunda lectura: queda la duda / «no está» (la persona decide)
+    relecturas++;
     var re = TGP_releerOp_(c, v);
     if (!re) return;
     var dig = function (t) { return String(t || '').replace(/\D/g, '').replace(/^0+/, ''); };
@@ -222,6 +252,11 @@ function TGP_analizar_(ss, adjs, op) {
   var plan = { t: 'procesar', canal: op.canal, destino: op.destino, clave: op.clave, adjs: adjs, items: items,
     nombre: op.nombre || (nuevos.length ? nuevos[0].nombre : ''), ordenante: op.nombre ? '' : (nuevos.length ? nuevos[0].ordenante : ''),
     fecha: op.fecha || TGE_hoy_(), resumen: resumenArch, pestana: /^(foto|original)$/.test(op.pestana || '') ? op.pestana : '' };
+  // ⏱ dónde se fue el tiempo (para saberlo con datos, no suponerlo)
+  var sg = function (ms) { return Math.max(0, Math.round(ms / 100) / 10) + ' s'; }, tFin = Date.now();
+  plan.tiempos = 'lectura ' + sg(tLeer - t0) + (adjs.length > 1 ? ' (' + adjs.length + ' archivos a la vez)' : '') +
+    ' · búsqueda ' + sg(tBuscar - tLeer) + (relecturas ? ' · relectura de ' + relecturas + ' N° de operación ' + sg(tFin - tBuscar) : '') +
+    ' · total ' + sg(tFin - t0);
   var k = TG_guardarBoton_(plan);
   var res = TGP_texto_(k, plan);
   var conFila = items.filter(function (x) { return x.fuente; })[0];   // 🧾 para "completa / emite la retención de la factura" sin decir cuál (TG_Retener.js)
@@ -230,6 +265,7 @@ function TGP_analizar_(ss, adjs, op) {
   // 🧾 Vouchers que YA estaban registrados con su factura: no hay ✅ que tocar, así que la retención se revisa aquí mismo
   res.paresListo = items.filter(function (x) { return x.tipo === 'listo' && x.fuente && x.fac && x.fac.serie; })
     .map(function (x) { return { doc: x.fac.serie, fila: x.fuente, cuadra: x.cuadra || '' }; });
+  if (res.paresListo.length) { plan.paresListo = res.paresListo; CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(plan), 21600); }
   return res;
 }
 
@@ -450,6 +486,7 @@ function TGP_texto_(k, p) {
   if (preg) acciones++;
   if (nuevos) L.push('\n📂 Pestaña: <b>' + TGP_textoPestana_(p) + '</b>');
   if (nuevos) L.push('🏷 Se guardará como <b>' + TG_esc_(TGE_corta_(p.fecha) + ' ' + p.nombre) + '</b>' + (nuevos > 1 ? ', … 2…' : '') + ' (puede cambiarlo).');
+  if (p.tiempos) L.push('\n⏱ <i>' + TG_esc_(p.tiempos) + '</i>');
   L.push('\n<i>El archivo original queda en la carpeta temporal (se borra sola en 7 días). Todo se puede deshacer.</i>');
   if (preg) L.push('\n🤔 <b>Antes de hacer nada, dígame la duda del voucher ' + preg.n + '</b> (botones abajo).');
   return { texto: L.join('\n'), k: k, hayAcciones: acciones > 0, hayNuevos: nuevos > 0, pregunta: preg, etiqueta: TGE_corta_(p.fecha) + ' ' + p.nombre, msg: p.msg || 0,
@@ -860,7 +897,11 @@ function TGP_seguirAnalisis() {
     var job = JSON.parse(todas[k]), clave = k.slice(8);
     props.deleteProperty(k);
     if (Date.now() - job.t > 40 * 60000) return;   // muy viejo: se descarta
-    if (job.canal === 'wa') { TGP_wa_(job.q); return; }   // deja el resultado donde la app de WhatsApp lo recoge
+    if (job.canal === 'wa') {   // deja el resultado donde la app de WhatsApp lo recoge y le avisa que lo recoja YA
+      var rw = TGP_wa_(job.q);
+      if (rw && !rw.pendiente) { try { TGC_wa_({ tipo: 'procesar_listo' }); } catch (e) {} }
+      return;
+    }
     TGP_PUEDE_SEGUIR_ = true;
     var r;
     try { r = TGP_analizar_(ss, job.adjs, { canal: 'tg', destino: job.chat, clave: job.chat }); }
@@ -974,9 +1015,7 @@ function TGP_wa_(q) {
     var r;
     try {
       r = TGP_analizar_(ss, q.archivos || [], { canal: 'wa', destino: String(q.numero), clave: clave, nombre: q.nombre || '', fecha: q.fecha || '', pestana: q.pestana || '' }); r.ok = true;
-      if (TGP_seg_() < 280) {   // revisar la retención solo si queda tiempo (si no, se ofrece al tocar ✅ o escribiendo «emite la retención…»)
-        try { r.siguientes = TGP_ofrecerCre_(ss, 'wa', String(q.numero), r.paresListo) || []; } catch (e2) { console.warn('CRE tras revisar: ' + e2.message); }
-      }
+      // la retención la pide la app DESPUÉS de mostrar el resumen (modo 'cre'): el resumen no la espera
     }
     catch (e) {
       if (/TGP_SIGUE/.test(e.message)) { TGP_encolarAnalisis_(clave, { canal: 'wa', q: q }); r = { ok: false, pendiente: true }; }
@@ -997,6 +1036,12 @@ function TGP_wa_(q) {
   if (q.modo === 'cancelar') return { ok: true, texto: TGP_cancelar_(ss, q.k) };
   if (q.modo === 'nombre') { var n = TGP_cambiarNombre_(q.k, q.texto || ''); n.ok = !n.error; return n; }
   if (q.modo === 'trabajar') { TGP_trabajarYa_(); return { ok: true }; }
+  if (q.modo === 'cre') {   // 🧾 después de mostrar el resumen: ¿alguno ya registrado lleva retención sin CRE?
+    var pc = TG_leerBoton_(q.k);
+    if (!pc || !(pc.paresListo || []).length) return { ok: true, siguientes: [] };
+    try { return { ok: true, siguientes: TGP_ofrecerCre_(ss, 'wa', String(q.numero), pc.paresListo) || [] }; }
+    catch (e) { return { ok: true, siguientes: [] }; }
+  }
   if (q.modo === 'decidir') { var dd = TGP_decidir_(ss, q.k, q.op); dd.ok = !dd.error; return dd; }
   if (q.modo === 'pestana') { var d = TGP_cambiarPestana_(q.k, q.pestana); d.ok = !d.error; return d; }
   if (q.modo === 'mensajes') {

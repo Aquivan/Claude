@@ -99,6 +99,11 @@ function WA_desdeCobranzas_(e, p) {
   if (!clave || p.token !== clave) return WA_ok_('Forbidden');
   try {
     var q = JSON.parse((e.postData && e.postData.contents) || '{}'), media = '';
+    // ⚡ «El resumen de 🧾 Revisar con IA ya está listo»: se recoge y se manda YA (sin esperar la revisión de cada minuto)
+    if (q.tipo === 'procesar_listo') {
+      try { WA_seguirProcesar_(WA_props_().getProperties()); } catch (ep) { console.error('Procesar listo: ' + ep.message); }
+      return WA_ok_('OK');
+    }
     // Mientras haya un captcha esperando, las respuestas cortas ("1 6 9", "0") van directo a Cobranzas.
     if (q.tipo === 'foto') WA_props_().setProperty('WA_CAPTCHA_HASTA', String(Date.now() + 10 * 60000));
     else if (!q.numero) WA_props_().deleteProperty('WA_CAPTCHA_HASTA');   // un aviso a un solo número no corta un captcha

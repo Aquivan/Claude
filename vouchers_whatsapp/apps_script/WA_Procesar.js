@@ -42,8 +42,11 @@ function WA_mostrarPlan_(de, r) {
   if (r && r.ok && r.k) WA_marcarRevisando_(de, 'Revisando', '🧾 resumen ' + r.k, '');   // estas filas son de ESTE resumen
   if (!r || !r.ok) { WA_enviarTexto_(de, '⚠️ ' + ((r && r.error) || 'No pude revisarlo.') + '\nMándemelo de nuevo o elija otra opción.'); return; }
   WA_trozos_(WA_md_(r.texto)).forEach(function (t) { WA_enviarTexto_(de, t); });
-  (r.siguientes || []).forEach(function (t) { WA_mandarMensajeCob_(de, t); });   // 🧾 ya estaba registrado: ¿emito el CRE?
   WA_botonesPlan_(de, r, '¿Lo hago?');
+  // 🧾 La retención se revisa DESPUÉS de mostrar el resumen (así el resumen no espera): ¿emito el CRE?
+  var sig = r.siguientes || [];
+  if (!sig.length && r.k) { try { var c = WA_cobranzas_('procesar', { modo: 'cre', numero: de, k: r.k }); sig = (c && c.siguientes) || []; } catch (e) {} }
+  sig.forEach(function (t) { WA_mandarMensajeCob_(de, t); });
 }
 
 // WhatsApp deja solo 3 botones: ✅ · 📸/📄 pestaña · ✖. El nombre se cambia escribiendo "nombre Edit 15/10".
