@@ -190,6 +190,7 @@ function RPN_lanzar_(ss, consultas, extra) {
 
 /** doPost ?canal=gh de una ejecución de ruc-por-nombre.yml (validada en TG_Captcha.js). */
 function RPN_gh_(q) {
+  if (q.accion === 'rpn_diag') return TGQ_diagInternet_();   // 🩺 prueba de la búsqueda con IA en internet (sin datos de nadie)
   var p = PropertiesService.getScriptProperties(), k = RPN_PROP_ + String(q.lote || '').replace(/\W/g, '');
   var lote = JSON.parse(p.getProperty(k) || 'null');
   if (!lote) return { ok: false, error: 'lote desconocido o ya respondido' };

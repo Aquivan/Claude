@@ -608,6 +608,52 @@ function TGQ_internetVarios_(nombres) {
   return out;
 }
 
+/**
+ * 🩺 Diagnóstico de la búsqueda con IA en internet: prueba cada modelo con «Ministerio de Salud» (entidad pública) y
+ * devuelve el código y el mensaje de error de Google. Nunca devuelve la clave.
+ */
+function TGQ_diagInternet_() {
+  var out = { ok: true, pruebas: [] }, clave = '';
+  var sp = PropertiesService.getScriptProperties();
+  out.claveGuias = !!sp.getProperty('CIA_KEY_GEMINIGOOGLE');
+  out.claveGeminiIA = !!IA_clave_('Gemini (Google)');
+  try { clave = TGG_clave_(); } catch (e) { out.error = e.message; return out; }
+  try {
+    var ia = TGP_ctx_(TG_ss_()).ia;
+    out.iaPrincipal = { proveedor: ia.proveedor, modelo: ia.modelo || (IA_PROVEEDORES_[ia.proveedor] || {}).modelo };
+  } catch (e) { out.iaPrincipal = { error: e.message }; }
+  try {
+    var lm = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': clave }, muteHttpExceptions: true });
+    out.modelosCodigo = lm.getResponseCode();
+    if (lm.getResponseCode() === 200) out.modelos = (JSON.parse(lm.getContentText()).models || []).map(function (m) { return String(m.name).replace('models/', ''); })
+      .filter(function (n) { return /gemini/.test(n); });
+    else out.modelosError = lm.getContentText().slice(0, 300);
+  } catch (e) { out.modelosError = e.message; }
+  var modelos = TGG_MODELOS_.slice();
+  [IA_PROVEEDORES_['Gemini (Google)'].modelo].concat(out.modelos || []).forEach(function (m) {
+    if (modelos.indexOf(m) < 0 && /flash/.test(m) && !/image|tts|audio|live|embedding/.test(m) && modelos.length < 8) modelos.push(m);
+  });
+  modelos.forEach(function (m) {
+    var r, t0 = Date.now(), x = { modelo: m };
+    try {
+      r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent', {
+        method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': clave },
+        payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'RUC (Perú, 11 dígitos) del Ministerio de Salud. Responde solo el número.' }] }],
+          tools: [{ google_search: {} }], generationConfig: { temperature: 0 } }) });
+      x.codigo = r.getResponseCode();
+      var j = JSON.parse(r.getContentText());
+      if (x.codigo === 200) {
+        var c = (j.candidates || [])[0] || {};
+        x.texto = c.content && c.content.parts ? c.content.parts.map(function (p) { return p.text || ''; }).join('').slice(0, 120) : '(sin texto: ' + (c.finishReason || '') + ')';
+        x.conBusqueda = !!c.groundingMetadata;
+      } else x.error = String((j.error || {}).message || r.getContentText()).slice(0, 300);
+    } catch (e) { x.error = e.message; }
+    x.seg = Math.round((Date.now() - t0) / 100) / 10;
+    out.pruebas.push(x);
+  });
+  return out;
+}
+
 /** RUC peruano válido: 11 dígitos, empieza en 10/15/16/17/20 y dígito verificador correcto. */
 function TGQ_rucValido_(r) {
   if (!/^(10|15|16|17|20)\d{9}$/.test(r)) return false;
