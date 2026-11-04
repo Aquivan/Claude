@@ -24,9 +24,13 @@ function WA_carpetaEspera_() { return WA_carpetaFija_('WA_ESPERA_ID', 'Vouchers 
 function WA_leerJson_(k) { try { return JSON.parse(WA_prop_(k) || 'null'); } catch (e) { return null; } }
 
 /** ¿Este texto contesta "¿de quién son?"? Corto y sin cara de pregunta. */
+// Pedidos y órdenes que NO son un nombre aunque lleguen mientras se pregunta «¿De quién son?»
+// («emite la retención de F001-301», «completa la factura», «deshacer», «ayuda»…): van a la IA / a los comandos.
+var WA_NO_NOMBRE_RX_ = /\b(em[ií]t\w*|retenci\w*|retien\w*|cre|complet\w*|revis\w*|registr\w*|factura\w*|boleta\w*|voucher\w*|deshac\w*|ayuda|help|gu[ií]a\w*|constancia\w*|liquidaci\w*|descarg\w*|sunat|sire|igv|pdf|xml|pag[oa]\w*|cobr\w*|saldo\w*|vista|previa|hola|gracias|ok|listo|cancel\w*)\b|\b[FEB][A-Z0-9]{3}\s*-\s*\d+|\d{5,}/i;
+
 function WA_pareceNombre_(t) {
   t = String(t || '').trim();
-  return !!t && t.split(/\s+/).length <= 8 && !WA_PREGUNTA_RX_.test(t) && !/^\//.test(t);
+  return !!t && t.split(/\s+/).length <= 5 && !WA_PREGUNTA_RX_.test(t) && !WA_NO_NOMBRE_RX_.test(t) && !/^\//.test(t);
 }
 
 /** "de Edit", "son de Edit 15/10" escrito antes de reenviar. */

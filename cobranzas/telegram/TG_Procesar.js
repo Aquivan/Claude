@@ -23,7 +23,9 @@ var TGP_ESPERA_MAX_MIN_ = 45;
 var TGP_SISTEMA_ = ANX_SISTEMA_ADJ_ + '\n' +
   'Agrega a cada documento: "pagina" = número de página del PDF donde está (1, 2…; en una foto, 1); ' +
   '"retencion" = monto de retención que figure en el documento (0 si no); "detraccion" = monto de detracción que figure (0 si no). ' +
-  'Una orden de compra es tipo "orden de compra". El ticket o constancia de un depósito o transferencia es "voucher".';
+  'Una orden de compra es tipo "orden de compra". El ticket o constancia de un depósito o transferencia es "voucher". ' +
+  'MONEDA del voucher: "PEN" si el importe lleva S/ o el texto dice MN, MNA, M.N., «moneda nacional» o SOLES (p. ej. «DEPOSITO CUENTA ' +
+  'CORRIENTE MNA … S/*****80,000.00» es PEN); "USD" solo si dice US$, $, USD, ME, M.E. o DOLARES. Los asteriscos antes del monto no cuentan.';
 var TGP_NOMBRES_TIPO_ = { voucher: 'voucher', factura: 'factura', boleta: 'boleta', 'orden de compra': 'orden de compra', guia: 'guía', 'guía': 'guía' };
 
 function TGP_ctx_(ss) {
@@ -39,7 +41,7 @@ function TGP_leer_(c, adj) {
   if (!/^image\/|pdf/i.test(mime)) return { error: 'solo fotos o PDF' };
   var bytes = blob.getBytes();
   // 'tgp2': lecturas con el modelo lector (las de antes, con el modelo liviano, no se reutilizan)
-  var clave = hashTexto_('tgp2|' + bytes.length + '|' + Utilities.base64Encode(bytes.slice(0, 3000)));
+  var clave = hashTexto_('tgp3|' + bytes.length + '|' + Utilities.base64Encode(bytes.slice(0, 3000)));
   var cache = AUV_cache_(c.ss), r = AUV_cacheGet_(cache, 'tgp', clave);
   if (!r) {
     r = TGP_iaLectora_(c, { sistema: TGP_SISTEMA_, maxTokens: 8000,
