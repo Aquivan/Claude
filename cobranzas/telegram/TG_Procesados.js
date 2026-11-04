@@ -494,12 +494,14 @@ function TGQ_internet_(nombre) {
     'Responde SOLO JSON: {"ruc":"11 dígitos o vacío","nombre":"razón social tal como figura","fuente":"página donde lo viste (dominio)","seguro":true|false}. ' +
     'Si es una sigla o nombre comercial (ej. SUNAT, DSM), busca la razón social que le corresponde. ' +
     'Si hay varias personas o empresas con nombre parecido y no puedes distinguir, seguro=false. No inventes.';
-  for (var i = 0; i < TGG_MODELOS_.length; i++) {
+  var mw = TGQ_modelosWeb_();
+  for (var i = 0; i < mw.length; i++) {
     try {
-      var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + TGG_MODELOS_[i] + ':generateContent', {
+      var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + mw[i] + ':generateContent', {
         method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': clave },
         payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: pedido }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0 } }) });
-      if (r.getResponseCode() !== 200) continue;
+      if (r.getResponseCode() !== 200) { if (r.getResponseCode() === 429 || r.getResponseCode() === 404) TGQ_modeloWebMal_(mw[i], r.getResponseCode()); continue; }
+      PropertiesService.getScriptProperties().setProperty('TGQ_WEB_OK', mw[i]);
       var cand = (JSON.parse(r.getContentText()).candidates || [])[0];
       var t = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
       var j = t ? IA_extraerJson_(t) : null, ruc = j ? String(j.ruc || '').replace(/\D/g, '') : '';
@@ -540,6 +542,22 @@ function TGQ_iaElige_(ss, elecciones) {
   } catch (e) { Logger.log('IA elige RUC: ' + e.message); }
 }
 
+/**
+ * Modelos para la búsqueda con IA en internet, en orden: el último que funcionó, luego los que probó el diagnóstico
+ * (gemini-2.5-flash sí tiene cuota de búsqueda) y después el resto. Los que dijeron «sin cuota» (429) se saltan 1 hora y
+ * los que ya no existen (404), 1 día.
+ */
+var TGQ_WEB_MODELOS_ = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite'];
+function TGQ_modelosWeb_() {
+  var cache = CacheService.getScriptCache(), bueno = PropertiesService.getScriptProperties().getProperty('TGQ_WEB_OK') || '';
+  var lista = (bueno ? [bueno] : []).concat(TGQ_WEB_MODELOS_, TGG_MODELOS_);
+  var vistos = {};
+  return lista.filter(function (m) { if (vistos[m]) return false; vistos[m] = 1; return !cache.get('tgq_web_no_' + m); });
+}
+function TGQ_modeloWebMal_(m, codigo) {
+  CacheService.getScriptCache().put('tgq_web_no_' + m, String(codigo), codigo === 404 ? 21600 : 3600);
+}
+
 /** TGQ_internet_ para varios nombres en paralelo → {nombre: {ruc, nombre, fuente} | null}. Si una falla, se reintenta sola. */
 function TGQ_internetVarios_(nombres) {
   var out = {}, clave = '';
@@ -558,9 +576,10 @@ function TGQ_internetVarios_(nombres) {
   // Cada modelo de la lista: los que no respondieron con uno se reintentan con el siguiente (todos en paralelo).
   var pend = nombres.slice(), ok = 0, err = '';
   Object.defineProperty(out, '_intentos', { value: nombres.length });
-  for (var m = 0; m < TGG_MODELOS_.length && pend.length; m++) {
+  var modelosWeb = TGQ_modelosWeb_();
+  for (var m = 0; m < modelosWeb.length && pend.length; m++) {
     var reqs = pend.map(function (n) {
-      return { url: 'https://generativelanguage.googleapis.com/v1beta/models/' + TGG_MODELOS_[m] + ':generateContent', method: 'post',
+      return { url: 'https://generativelanguage.googleapis.com/v1beta/models/' + modelosWeb[m] + ':generateContent', method: 'post',
         contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': clave },
         payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: pedido(n) }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0 } }) };
     });
@@ -571,12 +590,14 @@ function TGQ_internetVarios_(nombres) {
       if (r.getResponseCode() !== 200) {
         var msg = '';
         try { msg = (JSON.parse(r.getContentText()).error || {}).message || ''; } catch (e) {}
-        err = TGG_MODELOS_[m] + ' HTTP ' + r.getResponseCode() + (msg ? ': ' + String(msg).slice(0, 120) : '');
+        err = modelosWeb[m] + ' HTTP ' + r.getResponseCode() + (msg ? ': ' + String(msg).slice(0, 120) : '');
         Logger.log('Internet: ' + err);
+        if (r.getResponseCode() === 429 || r.getResponseCode() === 404) TGQ_modeloWebMal_(modelosWeb[m], r.getResponseCode());
         siguen.push(pend[i]);
         return;
       }
       ok++;
+      PropertiesService.getScriptProperties().setProperty('TGQ_WEB_OK', modelosWeb[m]);
       try {
         var cand = (JSON.parse(r.getContentText()).candidates || [])[0];
         var t = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
@@ -651,6 +672,12 @@ function TGQ_diagInternet_() {
     x.seg = Math.round((Date.now() - t0) / 100) / 10;
     out.pruebas.push(x);
   });
+  // La función real que usa «Buscar los que faltan», con nombres de entidades públicas
+  try {
+    var t1 = Date.now(), w = TGQ_internetVarios_(['MINSA ADM.CENTRAL RDR-DS-195-2001-E', 'BANCO DE CREDITO DEL PERU']);
+    out.busquedaReal = { resultado: w, respondio: w._respondio, error: w._error || '', seg: Math.round((Date.now() - t1) / 100) / 10,
+      modeloQueFunciona: PropertiesService.getScriptProperties().getProperty('TGQ_WEB_OK') || '' };
+  } catch (e) { out.busquedaReal = { error: e.message }; }
   return out;
 }
 
