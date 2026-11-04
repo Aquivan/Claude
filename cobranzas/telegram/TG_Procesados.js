@@ -586,7 +586,23 @@ function TGQ_internetVarios_(nombres) {
     });
     pend = siguen;
   }
-  pend.forEach(function (n) { out[n] = null; });   // ya se probó con todos los modelos: no se repite uno por uno
+  // Sin búsqueda en internet (falló la llamada): la IA de siempre responde con lo que sabe (entidades del Estado,
+  // empresas conocidas: «MINSA ADM.CENTRAL» → Ministerio de Salud). Se marca para verificar y nunca se escribe sin confirmar.
+  if (pend.length) {
+    try {
+      var c = TGP_ctx_(TG_ss_());
+      var r2 = IA_llamarSeguro_(c.ia, { maxTokens: 1500,
+        sistema: 'Eres un contador peruano. Para cada nombre (tal como sale en un voucher bancario) di el RUC de SUNAT de esa empresa, entidad ' +
+          'del Estado o persona SOLO si lo conoces con seguridad (ej. «MINSA ADM.CENTRAL …» = Ministerio de Salud). Siglas y códigos de cuenta ' +
+          'no son parte del nombre. Si no lo sabes, ruc "". Responde SOLO JSON: {"res":[{"n":1,"ruc":"","nombre":"razón social","seguro":true}]}',
+        texto: pend.map(function (n, i) { return (i + 1) + '. ' + n; }).join('\n') });
+      (r2 && r2.res || []).forEach(function (x) {
+        var n = pend[Number(x.n) - 1], ruc = String(x.ruc || '').replace(/\D/g, '');
+        if (n && ruc && TGQ_rucValido_(ruc) && x.seguro !== false) out[n] = { ruc: ruc, nombre: String(x.nombre || ''), fuente: 'conocimiento de la IA, sin internet: verifíquelo' };
+      });
+    } catch (e) { Logger.log('IA sin internet: ' + e.message); }
+  }
+  pend.forEach(function (n) { if (!out.hasOwnProperty(n)) out[n] = null; });   // ya se probó con todos los modelos
   Object.defineProperty(out, '_respondio', { value: ok });
   Object.defineProperty(out, '_error', { value: err });
   return out;
