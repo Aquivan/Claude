@@ -300,15 +300,21 @@ function TGQ_trasPadron_(ex, res, error) {
       return;
     }
     // Dudoso: opciones del padrón (las 3 mejores) y la de internet, para que la persona elija con un botón.
-    var opciones = cands.slice(0, 3).map(function (x) { return { ruc: x.ruc, nombre: x.nombre, det: '🏛 padrón ' + x.puntaje + ' pts' + est(x) }; });
+    var opciones = cands.slice(0, 4).map(function (x) { return { ruc: x.ruc, nombre: x.nombre, det: '🏛 padrón ' + x.puntaje + ' pts' + est(x) }; });
     var web = webDe.hasOwnProperty(prov) ? webDe[prov] : TGQ_internet_(prov);
     if (web && !opciones.some(function (o) { return o.ruc === web.ruc; })) {
-      if (opciones.length >= 3) opciones.pop();
+      if (opciones.length >= 4) opciones.pop();
       opciones.unshift({ ruc: web.ruc, nombre: web.nombre, det: '🌐 internet' + (web.fuente ? ' (' + web.fuente + ')' : '') });
     } else if (web) opciones.forEach(function (o) { if (o.ruc === web.ruc) o.det += ' · 🌐 también en internet'; });
     if (!opciones.length) { lineas.push('❓ ' + prov + ': no lo encontré en el padrón ni en internet · filas ' + filasTxt); return; }
-    lineas.push('🤔 ' + prov + ': hay ' + opciones.length + ' opción(es) · filas ' + filasTxt + ' (elija abajo)');
-    elecciones.push({ prov: prov, filas: lista, opciones: opciones });
+    elecciones.push({ prov: prov, filas: lista, opciones: opciones, filasTxt: filasTxt });
+  });
+  // 🤖 La IA cruza todo (nombre del voucher, padrón, internet, abreviaturas) y dice cuál le parece: usted confirma.
+  TGQ_iaElige_(ss, elecciones);
+  elecciones.forEach(function (el) {
+    var ia = el.ia;
+    lineas.push('🤔 ' + el.prov + ': ' + (ia ? '🤖 parece ' + ia.ruc + ' ' + ia.nombre + ' (' + ia.confianza + ': ' + ia.razon + ')' : 'hay ' + el.opciones.length + ' opción(es)') +
+      ' · filas ' + el.filasTxt + ' (confirme abajo)');
   });
   var avisoErr = !error ? '' : /zip|descarg|timed out/i.test(error) ? ' · ⚠️ la página de SUNAT estaba muy lenta y el padrón no bajó a tiempo: se buscó solo en internet' : ' · ⚠️ ' + error;
   var texto = '🔎 Búsqueda externa (padrón de SUNAT + IA en internet)' + avisoErr + ':\n' + (lineas.join('\n') || 'nada nuevo.') +
@@ -492,6 +498,37 @@ function TGQ_internet_(nombre) {
     } catch (e) { Logger.log('Procesados — internet: ' + e.message); }
   }
   return null;
+}
+
+/**
+ * 🤖 Para cada proveedor dudoso la IA mira el nombre del voucher y TODAS las opciones (padrón, internet, sus datos) y dice
+ * cuál es la misma empresa o persona (abreviaturas: EIRL = EMPRESA INDIVIDUAL DE RESPONSABILIDAD LIMITADA, SAC, «ME», CIA =
+ * COMPAÑÍA, apellidos en otro orden, letras mal leídas). La elegida va PRIMERA con su razón; nunca se escribe sin confirmar.
+ */
+function TGQ_iaElige_(ss, elecciones) {
+  if (!elecciones.length) return;
+  try {
+    var c = TGP_ctx_(ss);
+    var lista = elecciones.map(function (el, i) {
+      return (i + 1) + '. En el voucher dice: «' + el.prov + '»\n' + el.opciones.map(function (o, j) {
+        return '   ' + String.fromCharCode(97 + j) + ') RUC ' + o.ruc + ' · ' + o.nombre + ' · ' + o.det; }).join('\n');
+    }).join('\n');
+    var r = IA_llamarSeguro_(c.ia, { maxTokens: 2000,
+      sistema: 'Eres un contador peruano experto en el RUC. Para cada nombre de voucher decide cuál de las opciones es la MISMA empresa o persona. ' +
+        'Considera abreviaturas y formas societarias (EIRL = EMPRESA INDIVIDUAL DE RESPONSABILIDAD LIMITADA; SAC = SOCIEDAD ANONIMA CERRADA; ' +
+        'CIA = COMPAÑIA; «ME» o «MYPE» al final no es parte del nombre), palabras omitidas («BERFRANZ ME» puede ser «COMPAÑIA BERFRANZ S.A.C.»), ' +
+        'personas con apellidos y nombres en otro orden o iniciales, letras mal leídas, y que el RUC esté ACTIVO. Si ninguna calza, elige "". ' +
+        'Responde SOLO JSON: {"res":[{"n":1,"opcion":"a","confianza":"alta|media|baja","razon":"máx. 20 palabras"}]}',
+      texto: lista });
+    (r && r.res || []).forEach(function (x) {
+      var el = elecciones[Number(x.n) - 1], j = String(x.opcion || '').toLowerCase().charCodeAt(0) - 97;
+      if (!el || !(j >= 0) || !el.opciones[j] || /baja/i.test(x.confianza)) return;
+      var o = el.opciones.splice(j, 1)[0];
+      o.det = '🤖 IA (' + x.confianza + '): ' + String(x.razon || '').slice(0, 120) + ' · ' + o.det;
+      el.opciones.unshift(o);
+      el.ia = { ruc: o.ruc, nombre: o.nombre, confianza: String(x.confianza || ''), razon: String(x.razon || '').slice(0, 120) };
+    });
+  } catch (e) { Logger.log('IA elige RUC: ' + e.message); }
 }
 
 /** TGQ_internet_ para varios nombres en paralelo → {nombre: {ruc, nombre, fuente} | null}. Si una falla, se reintenta sola. */

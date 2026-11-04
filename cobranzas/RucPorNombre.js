@@ -194,6 +194,11 @@ function RPN_gh_(q) {
   var lote = JSON.parse(p.getProperty(k) || 'null');
   if (!lote) return { ok: false, error: 'lote desconocido o ya respondido' };
   if (q.accion === 'rpn_pendientes') return { ok: true, consultas: lote.consultas };
+  if (q.accion === 'rpn_estado') {   // ⏳ en qué va el robot (la ventana de la hoja de Vouchers lo muestra)
+    var ex0 = lote.extra || {};
+    if (ex0.origen === 'vch' && ex0.chat) CacheService.getScriptCache().put('vchruc_' + ex0.chat, JSON.stringify({ listo: false, etapa: String(q.estado || '').slice(0, 200) }), 21600);
+    return { ok: true };
+  }
   if (q.accion !== 'rpn_resultados') return { ok: false, error: 'accion desconocida' };
   p.deleteProperty(k);
   var res = q.resultados || [], ex = lote.extra || {};

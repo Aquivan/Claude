@@ -132,8 +132,8 @@ var VIA_RUC_HTML_ = '<!doctype html><html><head><meta charset="utf-8"><style>' +
   'function escribir(){$("w").disabled=true;msg("Escribiendo…");google.script.run.withSuccessHandler(function(r){msg((r&&(r.mensaje||r.error))||"Listo.")}).VIA_rucEscribir(D.ids)}' +
   'function externos(){$("x").disabled=true;msg("Lanzando la búsqueda…");google.script.run.withSuccessHandler(function(r){r=r||{};msg(r.error||r.texto||"");if(r.id)esperar(r.id,0)}).VIA_rucExternos(D.filas)}' +
   'function esperar(id,n){setTimeout(function(){google.script.run.withSuccessHandler(function(r){r=r||{};if(r.error){msg(r.error);return}' +
-  'if(!r.listo&&n>=60){msg("⚠️ La búsqueda tardó más de 15 min (la página de SUNAT estaba muy lenta). Cierre y vuelva a intentarlo en un rato.");return}' +
-  'if(!r.listo){msg("⏳ Buscando en el padrón de SUNAT e internet… ("+Math.round((n+1)*15/60*10)/10+" min) — deje esta ventana abierta");esperar(id,n+1);return}mostrar(r)}).VIA_rucEstado(id)},15000)}' +
+  'if(!r.listo&&n>=120){msg("⚠️ La búsqueda tardó más de 30 min (la página de SUNAT estaba muy lenta). Cierre y vuelva a intentarlo en un rato.");return}' +
+  'if(!r.listo){msg((r.etapa||"⏳ Buscando en el padrón de SUNAT e internet…")+" ("+Math.round((n+1)*15/60*10)/10+" min) — deje esta ventana abierta");esperar(id,n+1);return}mostrar(r)}).VIA_rucEstado(id)},15000)}' +
   'function mostrar(r){msg("");var h="<pre>"+esc(r.texto)+"</pre>";if(r.ids&&r.ids.length)h+="<button id=\\"w2\\" onclick=\\"escribir2()\\">✍️ Escribir "+r.ids.length+" RUC encontrados</button>";' +
   '(r.elecciones||[]).forEach(function(el,i){h+="<div class=\\"el\\">🤔 <b>"+esc(el.prov)+"</b> ("+el.filas.map(function(f){return f.hoja+"!"+f.fila}).join(", ")+")<br><select id=\\"s"+i+"\\">"+' +
   'el.opciones.map(function(o,j){return "<option value=\\""+j+"\\">"+esc(o.ruc+" "+o.nombre+" — "+o.det)+"</option>"}).join("")+"</select> <button onclick=\\"elegir("+i+")\\">✅ Es este</button></div>"});' +
