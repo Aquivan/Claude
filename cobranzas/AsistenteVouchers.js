@@ -43,6 +43,7 @@ function VCH_doPost_(e) {
         return TGW_json_(TGQ_rucDeFilas_(ss, (q.filas || []).slice(0, 2000)));
       case 'rucexternos': return TGW_json_(TGQ_rucExternos_(ss, (q.filas || []).slice(0, 2000)));   // 🏛 padrón + internet
       case 'rucestado': return TGW_json_(TGQ_rucEstado_(String(q.id || '')));
+      case 'rucotro': return TGW_json_(TGQ_rucOtroNombre_(ss, q.nombre, q.filas));   // 🔎 buscar con otro nombre
       case 'rucelegir': return TGW_json_(TGQ_rucElegirFilas_(ss, q.prov, q.filas, q.ruc, q.det));
       case 'hoja':   // enlace a la hoja de Cobranzas (y a una pestaña) para lo que se trabaja allá
         var sh = q.pestana ? ss.getSheetByName(q.pestana) : null;
