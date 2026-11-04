@@ -385,7 +385,10 @@ JS_ELEGIR_DIA = r"""([d, m, y]) => {
 JS_FECHA_API = r"""([sel, full]) => {
   const $ = window.jQuery; if (!$) return {r: 'sin jquery'};
   const inp = $(sel);
-  const dp = inp.data('DateTimePicker') || inp.parent().data('DateTimePicker') || inp.closest('.input-group, .date').data('DateTimePicker');
+  // el calendario puede estar en la casilla o en cualquiera de sus contenedores
+  let dp = null;
+  inp.parents().addBack().get().reverse().some(e => (dp = $(e).data('DateTimePicker')));
+  if (!dp) $('*').get().some(e => { const x = $(e).data('DateTimePicker'); if (x && $(e).find(sel).addBack(sel).length) dp = x; return dp; });
   if (!dp) return {r: 'sin api'};
   const fmt = x => x && x.format ? x.format('DD/MM/YYYY') : (x === false || x == null ? '' : String(x));
   const info = {};
