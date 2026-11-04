@@ -370,11 +370,42 @@ JS_ELEGIR_DIA = r"""([d, m, y]) => {
     c = [...pop.querySelectorAll('td, td a, td span, td button')].find(x => vis(x) && x.innerText.trim() === String(d) &&
       !/\bold\b|\bnew\b|other-month|othermonth/i.test(x.className + ' ' + ((x.parentElement || {}).className || '')));
   }
-  if (!c) return Object.assign({r: 'no encontré el día'}, info);
+  if (!c) {   // para revisar: cómo son las celdas de días (sin datos de nadie)
+    info.dia = [...pop.querySelectorAll('td')].filter(vis).slice(0, 4).map(x => x.className + ':' + x.innerText.trim() + ':' + (x.getAttribute('data-day') || '')).join(' ; ');
+    return Object.assign({r: 'no encontré el día'}, info);
+  }
   info.dia = c.tagName + '.' + c.className.slice(0, 40) + ' ' + ['data-day', 'data-date', 'data-value'].map(a => c.getAttribute(a) ? a + '=' + c.getAttribute(a) : '').join(' ');
   if (bloqueada(c)) return Object.assign({r: 'día bloqueado'}, info);
   c.click();
   return Object.assign({r: 'ok'}, info); }"""
+
+
+# El calendario de SUNAT es «bootstrap-datetimepicker» (jQuery.fn.datetimepicker): se le pide la fecha por su propia
+# función, que es lo mismo que hace al tocar el día (respeta la fecha mínima/máxima que SUNAT le puso).
+JS_FECHA_API = r"""([sel, full]) => {
+  const $ = window.jQuery; if (!$) return {r: 'sin jquery'};
+  const inp = $(sel);
+  const dp = inp.data('DateTimePicker') || inp.parent().data('DateTimePicker') || inp.closest('.input-group, .date').data('DateTimePicker');
+  if (!dp) return {r: 'sin api'};
+  const fmt = x => x && x.format ? x.format('DD/MM/YYYY') : (x === false || x == null ? '' : String(x));
+  const info = {};
+  try { info.min = fmt(dp.minDate()); info.max = fmt(dp.maxDate()); } catch (e) {}
+  try { dp.date(window.moment ? moment(full, 'DD/MM/YYYY') : full); } catch (e) { return Object.assign({r: 'error ' + e.message}, info); }
+  try { dp.hide(); } catch (e) {}
+  inp.trigger('change'); inp.trigger('blur');
+  return Object.assign({r: 'ok', val: inp.val()}, info); }"""
+
+
+def a_fecha(t):
+    try:
+        d, m, y = [int(x) for x in t.split("/")]
+        return datetime(y, m, d)
+    except Exception:
+        return None
+
+
+RANGO_CAL = [("", "")]
+FUERA_RANGO = [False]
 
 
 def poner_fecha_calendario(fr, sel, f):
@@ -382,6 +413,21 @@ def poner_fecha_calendario(fr, sel, f):
     hacía que SUNAT la borrara. Deja en el registro cómo es el calendario (sin datos de nadie) para revisar si falla."""
     d, m, y = [int(x) for x in f.split("/")]
     antes = valor(fr, sel)
+    try:   # 1) por la función del calendario
+        api = fr.evaluate(JS_FECHA_API, [sel, f]) or {}
+        fr.wait_for_timeout(700)
+        ahora = valor(fr, sel)
+        print(f"    calendario {f} (función): {api.get('r')} · casilla {antes or '—'} → {ahora or '—'}"
+              + (f" · SUNAT permite del {api.get('min') or '?'} al {api.get('max') or '?'}" if api.get('min') or api.get('max') else ""))
+        RANGO_CAL[0] = (api.get("min") or "", api.get("max") or "")
+        if ahora == f:
+            return True
+        mn, mx, fe = a_fecha(api.get("min") or ""), a_fecha(api.get("max") or ""), a_fecha(f)
+        if fe and ((mn and fe < mn) or (mx and fe > mx)):
+            FUERA_RANGO[0] = True
+            return False   # el calendario de SUNAT no deja esa fecha: no hace falta tocar días
+    except Exception as e:
+        print(f"    calendario {f} (función): error {type(e).__name__}")
     try:   # cerrar un calendario que haya quedado abierto del intento anterior (si no, el clic lo cerraba en vez de abrirlo)
         fr.page.keyboard.press("Escape")
         fr.evaluate("() => { if (window.jQuery) try { jQuery('.datepicker, .bootstrap-datetimepicker-widget').hide(); } catch (e) {} if (document.activeElement) document.activeElement.blur(); }")
@@ -413,6 +459,8 @@ def poner_fecha_calendario(fr, sel, f):
         ahora = valor(fr, sel)
         print(f"    calendario {f}: {res.get('r')} · casilla {antes or '—'} → {ahora or '—'} · "
               f"[{', '.join(res.get('libs') or [])}] {res.get('pop', '')} | {res.get('enc', '')} | {res.get('dia', '')}")
+        if res.get("r") == "día bloqueado":
+            FUERA_RANGO[0] = True
         if ahora != f:   # cerrar el calendario si quedó abierto
             try:
                 fr.page.keyboard.press("Escape")
@@ -429,13 +477,18 @@ def elegir_fecha(fr, s, hoy):
     atrás hasta hoy; las arma el bot en "fechas_emision") y se queda con la primera que SUNAT acepta.
     Si ninguna lo deja, se queda con hoy (lo que SUNAT pone solo)."""
     fechas = [f for f in (s.get("fechas_emision") or [s.get("fecha_emision") or hoy]) if f]
+    no_pude = []   # fechas que el robot NO logró poner (no es que SUNAT las rechace): no se pasa a hoy sin avisar
     for f in fechas:
         if f == hoy:
+            if no_pude:   # las anteriores no se pudieron poner (falla del robot, no de SUNAT): no pasar a hoy callado
+                fallar(fr, f"No pude poner la fecha de emisión en el calendario de SUNAT ({', '.join(no_pude)}). "
+                           "No uso la fecha de hoy sin su permiso; revise el registro del robot")
             poner(fr, "#txtFecEmision", hoy)
             print("Fecha de emisión:", f)
             print(f"::notice title=Fecha de emisión::{f}")
             FECHA_ELEGIDA[0] = f
             return f
+        FUERA_RANGO[0] = False
         poner_fecha_calendario(fr, "#txtFecEmision", f)
         fr.wait_for_timeout(1500)
         aviso = ""
@@ -449,11 +502,17 @@ def elegir_fecha(fr, s, hoy):
             print(f"::notice title=Fecha de emisión::{f}")
             FECHA_ELEGIDA[0] = f
             return f
-        print(f"  SUNAT no aceptó la fecha {f}" + (f": {sin_datos(aviso)[:150]}" if aviso else ""))
+        rechazo = FUERA_RANGO[0] or re.search(r"(?i)fecha|rango|d[ií]as", aviso or "")
+        if not rechazo:
+            no_pude.append(f)
+        print(f"  {'SUNAT no aceptó' if rechazo else 'No pude poner'} la fecha {f}" + (f": {sin_datos(aviso)[:150]}" if aviso else ""))
         try:   # cerrar el aviso de SUNAT antes de probar la siguiente
             fr.click("#idModalMensaje button:visible", timeout=2000)
         except Exception:
             pass
+    if no_pude:   # el robot falló al elegir la fecha: se detiene en vez de emitir con la de hoy
+        fallar(fr, f"No pude poner la fecha de emisión en el calendario de SUNAT ({', '.join(no_pude)}). "
+                   "No uso la fecha de hoy sin su permiso; revise el registro del robot")
     poner(fr, "#txtFecEmision", hoy)
     print("Fecha de emisión: hoy (ninguna de las anteriores fue aceptada)")
     print(f"::notice title=Fecha de emisión::{hoy} (SUNAT no aceptó las fechas anteriores)")
