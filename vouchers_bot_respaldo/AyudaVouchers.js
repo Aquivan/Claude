@@ -64,6 +64,7 @@ const AYV_SECCIONES_ = [
   { id: 'problemas', e: '🛠', t: 'Si algo no sale bien', p: [
     '• **La imagen dice «Ver PDF» o está vacía**: 🔧 Reparar imágenes faltantes.',
     '• **Un dato está mal leído**: corríjalo en la celda o en el 🪟 Visor.',
+    '• **La IA leyó mal una página, o volvió a subir el archivo con una página cambiada** (el sistema solo lee las páginas nuevas del final): póngase en la fila y use **🔁 Volver a leer con IA la página de la fila seleccionada**. Muestra ANTES y AHORA y pide confirmar; no toca lo que usted agregó (columnas O en adelante). **↩️ Deshacer la última relectura** lo devuelve. También desde Telegram o WhatsApp: «volver a leer Originales 2666».',
     '• **No se procesó un archivo**: ⚙️ Verificar Configuración, y revise que esté en la carpeta de entrada; ▶ Procesar.',
     '• **Se registró algo por error** (por WhatsApp): escriba **deshacer**.',
     '• **Dudas**: pregunte al asistente de Telegram o WhatsApp («¿ya está registrado el voucher 4079 de BCP?»).'
