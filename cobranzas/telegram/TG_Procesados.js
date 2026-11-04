@@ -187,7 +187,12 @@ function TGQ_fuentes_(ss, cfg) {
   }).filter(Boolean);
   var docs = [], porDoc = {}, mapa = {};
   try { docs = leerDocumentosSire_(cfg, buscarLiquidaciones_(cfg)); } catch (e) { Logger.log('RUC — SIRE: ' + e.message); }
+  // 🏢 Empresas del grupo (pagos entre empresas: «DSM CORPORACION EIRL»): sus nombres de ⚙️ Config y su razón social del SIRE
+  var grupo = {};
+  Object.keys(cfg.aliasEmpresa || {}).forEach(function (n) { var r = cfg.aliasEmpresa[n]; (grupo[r] = grupo[r] || {})[n] = 1; });
+  Object.keys(cfg.nombreEmpresa || {}).forEach(function (r) { (grupo[r] = grupo[r] || {})[cfg.nombreEmpresa[r]] = 1; });
   docs.forEach(function (d) {
+    if (d.emisorRuc && cfg.nombreEmpresa[d.emisorRuc] && d.emisorNombre) grupo[d.emisorRuc][d.emisorNombre] = 1;
     if (!d.emisorRuc) return;
     porDoc[String(d.serie).toUpperCase() + '-' + Number(d.numero)] = d.emisorRuc;
     if (d.emisorNombre && !mapa[d.emisorRuc] && !cfg.nombreEmpresa[d.emisorRuc]) mapa[d.emisorRuc] = d.emisorNombre;
@@ -195,6 +200,9 @@ function TGQ_fuentes_(ss, cfg) {
   var c = ANA_ctx_(ss);
   return { cfg: cfg, porDoc: porDoc, fuentes: [
     { pool: poolVouchers, como: function (x) { return '🧾 otros vouchers de ' + x.nombre + ' ya tienen este RUC (' + x.n + ')'; } },
+    { pool: [].concat.apply([], Object.keys(grupo).map(function (r) { return Object.keys(grupo[r]).filter(function (n) { return String(n).length > 2; })
+        .map(function (n) { return { ruc: r, nombre: n, pal: RPN_palabras_(n) }; }); })),
+      como: function (x) { return '🏢 empresa del grupo: ' + x.nombre; } },
     { pool: Object.keys(mapa).map(function (r) { return { ruc: r, nombre: mapa[r], pal: RPN_palabras_(mapa[r]) }; }), como: function (x) { return '📑 tus facturas del SIRE: ' + x.nombre; } },
     { pool: TGQ_pool_(c, 'honorarios', 'Recibos', 'RUC emisor', /^Emisor/), como: function (x) { return '🧑‍💼 recibos por honorarios: ' + x.nombre; } },
     { pool: TGQ_pool_(c, 'retenciones', 'Emitidas', 'RUC proveedor', /^Proveedor/), como: function (x) { return '🧾 retenciones (CRE): ' + x.nombre; } },
@@ -302,7 +310,9 @@ function TGQ_trasPadron_(ex, res, error) {
     lineas.push('🤔 ' + prov + ': hay ' + opciones.length + ' opción(es) · filas ' + filasTxt + ' (elija abajo)');
     elecciones.push({ prov: prov, filas: lista, opciones: opciones });
   });
-  var texto = '🔎 Búsqueda externa (padrón de SUNAT + IA en internet)' + (error ? ' · ⚠️ ' + error : '') + ':\n' + (lineas.join('\n') || 'nada nuevo.');
+  var avisoErr = !error ? '' : /zip|descarg|timed out/i.test(error) ? ' · ⚠️ la página de SUNAT estaba muy lenta y el padrón no bajó a tiempo: se buscó solo en internet' : ' · ⚠️ ' + error;
+  var texto = '🔎 Búsqueda externa (padrón de SUNAT + IA en internet)' + avisoErr + ':\n' + (lineas.join('\n') || 'nada nuevo.') +
+    (webDe._intentos && !webDe._respondio ? '\n⚠️ La búsqueda con IA en internet no respondió (¿clave de IA de guías?). Vuelva a intentarlo más tarde.' : '');
   var vis = [];
   if (cambios.length) {
     ANX_guardarPropuestos_(ss, cambios);
@@ -488,7 +498,7 @@ function TGQ_internet_(nombre) {
 function TGQ_internetVarios_(nombres) {
   var out = {}, clave = '';
   if (!nombres.length) return out;
-  try { clave = TGG_clave_(); } catch (e) { return out; }
+  try { clave = TGG_clave_(); } catch (e) { Object.defineProperty(out, '_intentos', { value: nombres.length }); return out; }
   var pedido = function (n) {
     return 'Busca en internet el RUC (Perú, SUNAT, 11 dígitos) de: "' + n + '". Puede ser una empresa o una persona con negocio. ' +
       'Responde SOLO JSON: {"ruc":"11 dígitos o vacío","nombre":"razón social tal como figura","fuente":"página donde lo viste (dominio)","seguro":true|false}. ' +
@@ -501,7 +511,11 @@ function TGQ_internetVarios_(nombres) {
       payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: pedido(n) }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0 } }) };
   });
   var resp = [];
+  Object.defineProperty(out, '_intentos', { value: nombres.length });
   try { resp = UrlFetchApp.fetchAll(reqs); } catch (e) { Logger.log('Internet en paralelo: ' + e.message); return out; }
+  var ok = 0;
+  resp.forEach(function (r) { if (r.getResponseCode() === 200) ok++; else Logger.log('Internet: HTTP ' + r.getResponseCode() + ' ' + r.getContentText().slice(0, 200)); });
+  Object.defineProperty(out, '_respondio', { value: ok });
   resp.forEach(function (r, i) {
     if (r.getResponseCode() !== 200) return;   // sin respuesta: TGQ_internet_ lo intenta solo (con los otros modelos)
     try {
