@@ -278,7 +278,9 @@ def preparar_seguro(p, nav_args, s, docs, avisos_ok, ruc, usuario, clave, al_dia
     Devuelve (nav, pag, vp, total_ret)."""
     for intento in range(2):
         nav = lanzar() if lanzar else p.chromium.launch(args=nav_args)
-        ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
+        # Hora de PERÚ en el navegador (el servidor de GitHub está en UTC: de noche ya era «mañana» y el calendario
+        # de SUNAT calculaba mal los días permitidos)
+        ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA, timezone_id="America/Lima")
         pag = ctx.new_page()
         pag.on("dialog", al_dialogo_fn)
         if intento == 0:
@@ -346,6 +348,12 @@ def poner_fecha_calendario(fr, sel, f):
     hacía que SUNAT la borrara. Deja en el registro cómo es el calendario (sin datos de nadie) para revisar si falla."""
     d, m, y = [int(x) for x in f.split("/")]
     antes = valor(fr, sel)
+    try:   # cerrar un calendario que haya quedado abierto del intento anterior (si no, el clic lo cerraba en vez de abrirlo)
+        fr.page.keyboard.press("Escape")
+        fr.evaluate("() => { if (window.jQuery) try { jQuery('.datepicker, .bootstrap-datetimepicker-widget').hide(); } catch (e) {} if (document.activeElement) document.activeElement.blur(); }")
+        fr.wait_for_timeout(300)
+    except Exception:
+        pass
     try:
         abre = None
         for q in [f"{sel} ~ .input-group-addon", f"{sel} ~ span.input-group-addon", f"{sel} ~ .input-group-btn button",
