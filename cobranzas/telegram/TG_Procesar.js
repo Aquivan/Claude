@@ -60,8 +60,9 @@ function TGP_leer_(c, adj) {
  * Si la cuenta no lo tiene o está saturado, sigue con el modelo de siempre (nunca se queda sin leer).
  */
 var TGP_MODELO_LECTOR_ = 'gemini-3.8-flash';
-var TGP_T0_ = 0;   // inicio de la revisión (para no pasar el límite de 6 min de Google)
-function TGP_seg_() { return TGP_T0_ ? (Date.now() - TGP_T0_) / 1000 : 0; }
+var TGP_T0_ = Date.now();   // inicio de ESTA ejecución (el código global corre al empezar cada una): límite de 6 min de Google
+function TGP_seg_() { return (Date.now() - TGP_T0_) / 1000; }
+var TGP_PUEDE_SEGUIR_ = false;   // true = si no alcanza el tiempo, la revisión sigue sola en segundo plano (TGP_seguirAnalisis)
 
 function TGP_iaLectora_(c, opts) {
   var prov = IA_PROVEEDORES_[c.ia.proveedor] || {}, sp = PropertiesService.getScriptProperties();
@@ -146,10 +147,11 @@ function TGP_datosFactura_(c, f) {
  * op = {canal:'tg'|'wa', destino, clave}. Devuelve {texto (HTML), k, hayAcciones, hayNuevos}.
  */
 function TGP_analizar_(ss, adjs, op) {
-  TGP_T0_ = Date.now();
   var c = TGP_ctx_(ss);
   var items = [], resumenArch = [], facturasTodas = [];
   var leidos = adjs.map(function (a) {
+    // Sin tiempo para leer otro archivo: se corta aquí y sigue en segundo plano (lo ya leído quedó guardado: no se repite)
+    if (TGP_PUEDE_SEGUIR_ && TGP_seg_() > 200) throw new Error('TGP_SIGUE');
     var r;
     try { r = TGP_leer_(c, a); } catch (e) { r = { error: e.message }; }
     return { a: a, r: r };
@@ -818,14 +820,56 @@ function TGP_iniciarTG_(ctx, adjs) {
   TG_accion_(ctx.chatId, 'typing');
   TG_enviar_(ctx.chatId, '🧾 Leyendo ' + (adjs.length > 1 ? 'los ' + adjs.length + ' archivos' : 'el archivo') + ' página por página…', null, { silencioso: true });
   var r;
+  TGP_PUEDE_SEGUIR_ = true;
   try { r = TGP_analizar_(ctx.ss, adjs, { canal: 'tg', destino: ctx.chatId, clave: ctx.chatId }); }
-  catch (e) { return TG_enviar_(ctx.chatId, '❌ No pude revisarlo: ' + TG_esc_(e.message)); }
-  var msg = TG_enviar_(ctx.chatId, r.texto, TGP_tecladoTG_(r));
-  try { TGP_ofrecerCre_(ctx.ss, 'tg', ctx.chatId, r.paresListo); } catch (e) { console.warn('CRE tras revisar: ' + e.message); }
+  catch (e) {
+    if (/TGP_SIGUE/.test(e.message)) {
+      TGP_encolarAnalisis_(String(ctx.chatId), { canal: 'tg', chat: ctx.chatId, adjs: adjs });
+      return TG_enviar_(ctx.chatId, '⏳ Son varios archivos: sigo leyéndolos en segundo plano y le mando el resumen aquí en unos minutos.');
+    }
+    return TG_enviar_(ctx.chatId, '❌ No pude revisarlo: ' + TG_esc_(e.message));
+  }
+  TGP_mostrarTG_(ctx.ss, ctx.chatId, r);
+}
+
+/** Manda el resumen de 🧾 Procesar a Telegram (con sus botones) y ofrece el CRE si corresponde. */
+function TGP_mostrarTG_(ss, chatId, r) {
+  var msg = TG_enviar_(chatId, r.texto, TGP_tecladoTG_(r));
+  if (TGP_seg_() < 280) { try { TGP_ofrecerCre_(ss, 'tg', chatId, r.paresListo); } catch (e) { console.warn('CRE tras revisar: ' + e.message); } }
   var p = TG_leerBoton_(r.k);
   if (p && msg) { p.msg = msg; CacheService.getScriptCache().put('tg_b_' + r.k, JSON.stringify(p), 21600); }
   // Mientras espera ✅, "21-10-26 Edit" escrito directo cambia el nombre (TGP_nombreDirectoTG_).
-  if (r.hayNuevos) { var ses = TG_sesion_(ctx.chatId); ses.procPend = r.k; TG_guardarSesion_(ctx.chatId, ses); }
+  if (r.hayNuevos) { var ses = TG_sesion_(chatId); ses.procPend = r.k; TG_guardarSesion_(chatId, ses); }
+}
+
+/* ---------- revisión que no alcanzó el tiempo: sigue sola en segundo plano ---------- */
+
+function TGP_encolarAnalisis_(clave, job) {
+  job.t = job.t || Date.now();
+  PropertiesService.getScriptProperties().setProperty('TGP_ANJ_' + clave, JSON.stringify(job));
+  var ya = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'TGP_seguirAnalisis'; });
+  if (!ya) ScriptApp.newTrigger('TGP_seguirAnalisis').timeBased().after(20 * 1000).create();
+}
+
+/** Activador: continúa las revisiones pendientes (los archivos ya leídos están guardados: solo se leen los que faltan). */
+function TGP_seguirAnalisis() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGP_seguirAnalisis') ScriptApp.deleteTrigger(t); });
+  var props = PropertiesService.getScriptProperties(), todas = props.getProperties(), ss = TG_ss_();
+  Object.keys(todas).filter(function (k) { return k.indexOf('TGP_ANJ_') === 0; }).forEach(function (k) {
+    if (TGP_seg_() > 200) { TGP_encolarAnalisis_(k.slice(8), JSON.parse(todas[k])); return; }   // la próxima vuelta
+    var job = JSON.parse(todas[k]), clave = k.slice(8);
+    props.deleteProperty(k);
+    if (Date.now() - job.t > 40 * 60000) return;   // muy viejo: se descarta
+    if (job.canal === 'wa') { TGP_wa_(job.q); return; }   // deja el resultado donde la app de WhatsApp lo recoge
+    TGP_PUEDE_SEGUIR_ = true;
+    var r;
+    try { r = TGP_analizar_(ss, job.adjs, { canal: 'tg', destino: job.chat, clave: job.chat }); }
+    catch (e) {
+      if (/TGP_SIGUE/.test(e.message)) { job.vueltas = (job.vueltas || 0) + 1; if (job.vueltas < 6) TGP_encolarAnalisis_(clave, job); return; }
+      TG_enviar_(job.chat, '❌ No pude revisarlo: ' + TG_esc_(e.message)); return;
+    }
+    TGP_mostrarTG_(ss, job.chat, r);
+  });
 }
 
 /** "21-10-26 Edit" / "nombre Edit" (o la respuesta al resumen) con un resumen pendiente → cambia el nombre. */
@@ -924,6 +968,9 @@ function TGP_wa_(q) {
   var ss = TG_ss_(), clave = 'wa' + String(q.numero || '').replace(/\D/g, '');
   if (q.procesarUrl) PropertiesService.getScriptProperties().setProperty('TGP_PROCESAR_URL', q.procesarUrl);
   if (q.modo === 'analizar') {
+    TGP_PUEDE_SEGUIR_ = true;
+    // que la app no recoja el resultado de una revisión ANTERIOR mientras esta trabaja
+    CacheService.getScriptCache().put('tgp_r_' + clave, JSON.stringify({ ok: false, pendiente: true }), 3600);
     var r;
     try {
       r = TGP_analizar_(ss, q.archivos || [], { canal: 'wa', destino: String(q.numero), clave: clave, nombre: q.nombre || '', fecha: q.fecha || '', pestana: q.pestana || '' }); r.ok = true;
@@ -931,7 +978,10 @@ function TGP_wa_(q) {
         try { r.siguientes = TGP_ofrecerCre_(ss, 'wa', String(q.numero), r.paresListo) || []; } catch (e2) { console.warn('CRE tras revisar: ' + e2.message); }
       }
     }
-    catch (e) { r = { ok: false, error: 'No pude revisarlo: ' + e.message }; }
+    catch (e) {
+      if (/TGP_SIGUE/.test(e.message)) { TGP_encolarAnalisis_(clave, { canal: 'wa', q: q }); r = { ok: false, pendiente: true }; }
+      else r = { ok: false, error: 'No pude revisarlo: ' + e.message };
+    }
     CacheService.getScriptCache().put('tgp_r_' + clave, JSON.stringify(r), 3600);
     return r;
   }
