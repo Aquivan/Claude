@@ -31,7 +31,8 @@ function WA_cadaMinuto() {
   var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues(), enCola = 0;
   tandas.forEach(function (k) {
     var de = k.slice('WA_TANDA_'.length);
-    WA_props_().deleteProperty(k);
+    // Solo se borra si no llegó otro archivo mientras tanto (si no, ese archivo quedaba fuera de la cuenta).
+    if (WA_props_().getProperty(k) === props[k]) WA_props_().deleteProperty(k);
     var espera = false;
     try { espera = WA_tandaEnEspera_(hoja, datos, de); } catch (e) { console.error('¿De quién son? ' + e.message); }
     if (espera) datos = hoja.getDataRange().getValues();
