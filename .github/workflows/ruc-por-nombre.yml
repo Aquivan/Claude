@@ -73,12 +73,20 @@ jobs:
           key: padron-ruc-${{ steps.semana.outputs.s }}
           restore-keys: padron-ruc-
 
+      - name: Avisar que se descarga el padrón
+        if: steps.cache.outputs.cache-matched-key == '' && env.BOT_URL != ''
+        continue-on-error: true
+        env:
+          LOTE: ${{ inputs.lote }}
+        run: |
+          curl -sSL --max-time 60 -H 'Content-Type: application/json' "$BOT_URL?canal=gh" \
+            -d "{\"accion\":\"rpn_estado\",\"lote\":\"$LOTE\",\"run\":\"$GITHUB_RUN_ID\",\"estado\":\"📥 Descargando el padrón de SUNAT (395 MB, la página de SUNAT es lenta: 8–15 min). Después busco ahí.\"}" >/dev/null || true
+
       - name: Descargar el padrón de SUNAT
         id: bajar
         if: steps.cache.outputs.cache-matched-key == ''
-        # Al buscar no se espera más de 8 min (la página de SUNAT a veces está lentísima): sin padrón, el bot igual
-        # busca esos nombres con IA en internet. La actualización de los lunes sí espera lo que haga falta.
-        timeout-minutes: ${{ (inputs.lote == 'actualizar' || github.event_name == 'schedule') && 25 || 8 }}
+        # Se espera la descarga (sin padrón la búsqueda queda incompleta). Si aun así no baja, el bot busca con IA en internet.
+        timeout-minutes: 25
         run: |
           for url in https://www.sunat.gob.pe/descargaPRR/padron_reducido_ruc.zip https://www2.sunat.gob.pe/padron_reducido_ruc.zip; do
             for i in 1 2 3; do
@@ -101,4 +109,7 @@ jobs:
         if: always() && inputs.lote != 'actualizar' && github.event_name != 'schedule'
         env:
           LOTE: ${{ inputs.lote }}
-        run: python3 scripts/ruc_por_nombre.py --padron padron_reducido_ruc.zip --lote "$LOTE"
+        run: |
+          curl -sSL --max-time 60 -H 'Content-Type: application/json' "$BOT_URL?canal=gh" \
+            -d "{\"accion\":\"rpn_estado\",\"lote\":\"$LOTE\",\"run\":\"$GITHUB_RUN_ID\",\"estado\":\"🏛 Buscando en el padrón de SUNAT (18 millones de RUC, 1–2 min)…\"}" >/dev/null || true
+          python3 scripts/ruc_por_nombre.py --padron padron_reducido_ruc.zip --lote "$LOTE"
