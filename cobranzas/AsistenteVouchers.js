@@ -41,6 +41,9 @@ function VCH_doPost_(e) {
         return TGW_json_({ pedido: TGQ_promptAnalisis_(t.tandas.map(function (x) { return x.nombre; }), TGQ_filasIA_(t.tandas)) });
       case 'rucfilas':   // 🔎 Identificar RUC de las filas seleccionadas en la hoja de Vouchers
         return TGW_json_(TGQ_rucDeFilas_(ss, (q.filas || []).slice(0, 2000)));
+      case 'rucexternos': return TGW_json_(TGQ_rucExternos_(ss, (q.filas || []).slice(0, 2000)));   // 🏛 padrón + internet
+      case 'rucestado': return TGW_json_(TGQ_rucEstado_(String(q.id || '')));
+      case 'rucelegir': return TGW_json_(TGQ_rucElegirFilas_(ss, q.prov, q.filas, q.ruc, q.det));
       case 'hoja':   // enlace a la hoja de Cobranzas (y a una pestaña) para lo que se trabaja allá
         var sh = q.pestana ? ss.getSheetByName(q.pestana) : null;
         return TGW_json_({ url: ss.getUrl() + (sh ? '#gid=' + sh.getSheetId() : '') });

@@ -311,6 +311,9 @@ function TGQ_trasPadron_(ex, res, error) {
       texto: '✏️ ¿Escribo ' + vis.length + ' RUC del padrón de SUNAT en la columna ID Beneficiario de Vouchers? (solo celdas vacías, se puede deshacer)',
       opciones: [{ op: 'si', titulo: '✅ Escribir RUC' }, { op: 'no', titulo: '✖ No' }] } : null;
     try { TGC_wa_({ tipo: 'texto', numero: numero, texto: texto, botones: botones }); } catch (e) {}
+  } else if (ex.origen === 'vch') {   // 🔎 hoja de Vouchers: la ventana pregunta cada 15 s (TGQ_rucEstado_)
+    CacheService.getScriptCache().put('vchruc_' + ex.chat, JSON.stringify({ listo: true, texto: texto, ids: vis.map(function (x) { return x.id; }),
+      elecciones: elecciones.map(function (el) { return { prov: el.prov, filas: el.filas, opciones: el.opciones }; }) }), 21600);
   }
   elecciones.forEach(function (el) { TGQ_preguntarEleccion_(ex, el); });
 }
@@ -817,6 +820,32 @@ function TGQ_rucDeFilas_(ss, filas) {
   var faltan = 0;
   t.tandas.forEach(function (x) { x.filas.forEach(function (f) { if (!f.ruc && !f.sug) faltan++; }); });
   return { texto: TGQ_texto_(t, false).replace(/\*/g, ''), cambios: TGQ_cambios_(ss, t.tandas), faltan: faltan };
+}
+
+/** 🏛 Los que siguieron sin RUC: padrón de SUNAT (robot, 3–5 min) y, si no queda claro, IA en internet. → {id, texto} */
+function TGQ_rucExternos_(ss, filas) {
+  var t = TGQ_buscar_(ss, 'procesados', filas), id = Utilities.getUuid().slice(0, 8);
+  var msg = TGQ_externos_(ss, t.tandas, 'vch', id);
+  if (!msg) return { texto: 'No queda ningún proveedor sin RUC (o sin nombre) en esas filas.' };
+  if (/^⏳/.test(msg)) CacheService.getScriptCache().put('vchruc_' + id, JSON.stringify({ listo: false }), 21600);
+  return { id: /^⏳/.test(msg) ? id : '', texto: msg.replace(/Le aviso aquí en 3–5 minutos\./, 'Deje esta ventana abierta: el resultado aparece aquí en 3–5 minutos.') };
+}
+
+function TGQ_rucEstado_(id) {
+  var s = CacheService.getScriptCache().get('vchruc_' + id);
+  return s ? JSON.parse(s) : { listo: true, texto: 'La búsqueda ya venció (dura 6 horas). Vuelva a pedirla.', ids: [], elecciones: [] };
+}
+
+/** Escribe el RUC elegido en las filas de ese proveedor y lo guarda como alias. */
+function TGQ_rucElegirFilas_(ss, prov, filas, ruc, det) {
+  if (!TGQ_rucValido_(String(ruc))) return { mensaje: 'RUC no válido: ' + ruc };
+  var n = 0, cambios = (filas || []).map(function (f) {
+    return { id: String(++n), hoja: f.hoja, fila: f.fila, col: f.col, encabezado: 'ID Beneficiario', actual: '', nuevo: String(ruc), motivo: prov + ' · elegido por la persona (' + (det || '') + ')' };
+  });
+  ANX_guardarPropuestos_(ss, cambios);
+  var r = ANX_aplicarDet_(ss, cambios.map(function (x) { return x.id; }), false);
+  var alias = TGQ_alias_(ss, prov, ruc);
+  return { mensaje: r.mensaje + (alias ? ' · 💾 ' + prov + ' → ' + ruc + ' quedó como alias.' : '') };
 }
 
 /** «Originales 2656-2666, Fotos 382» → ["Originales!2656", …, "Fotos!382"] */
