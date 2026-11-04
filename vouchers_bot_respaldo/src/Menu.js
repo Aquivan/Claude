@@ -10,6 +10,8 @@ function onOpen() {
     .addItem('▶ Procesar Nuevos Archivos (carpeta Drive)', 'procesarVouchers')
     .addItem('🪟 Visor de voucher: ventana flotante (voucher original en grande + 🔎 buscar y filtrar)', 'VV_abrirGrande')
     .addItem('👁 Visor de voucher: panel lateral', 'VV_abrir')
+    .addItem('🔁 Volver a leer con IA la página de la fila seleccionada', 'RP_releerFilaActiva')
+    .addItem('↩️ Deshacer la última relectura', 'RP_deshacer')
     .addSubMenu(SpreadsheetApp.getUi().createMenu('📂 Abrir carpetas en Drive')
       .addItem('📸 Fotos — procesadas (las que ya están en la hoja)', 'CV_fotosProcesadas')
       .addItem('📄 Originales — procesados (los que ya están en la hoja)', 'CV_originalesProcesados')
