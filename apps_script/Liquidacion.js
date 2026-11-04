@@ -336,10 +336,64 @@ function textoSeguro_(filas) {
     return r.map(function (v) {
       if (typeof v !== 'string') return v;
       var t = v.replace(/^\s+/, '');
+      if (/^=\s*HYPERLINK\s*\(/i.test(t)) return t;   // los enlaces PDF/XML SÍ son fórmula
       if (/^[=+\-@]/.test(t) && !/^[+\-]?[\d.,]+$/.test(t)) return "'" + v;
       return v;
     });
   });
+}
+
+/**
+ * 🔧 Enlaces PDF/XML que quedaron como TEXTO «=HYPERLINK(…» (entre el 3 y 4/11/2026 la protección de textos
+ * también los tomó): los vuelve a convertir en enlace. Solo hojas de cálculo dentro de la carpeta de descargas
+ * del SIRE y solo celdas que empiezan con «=HYPERLINK(». Por tiempo: si no alcanza, sigue en la próxima vez.
+ */
+function repararEnlacesTexto_(limiteMs) {
+  var t0 = Date.now(), props = PropertiesService.getScriptProperties();
+  var hechos = JSON.parse(props.getProperty('ENLACES_REPARADOS') || '{}'), arreglados = 0, revisados = 0, pendientes = false;
+  var pila = [obtenerCarpetaRaiz_()];
+  while (pila.length) {
+    var carpeta = pila.pop();
+    var subs = carpeta.getFolders();
+    while (subs.hasNext()) pila.push(subs.next());
+    var it = carpeta.getFilesByType(MimeType.GOOGLE_SHEETS);
+    while (it.hasNext()) {
+      var f = it.next();
+      if (hechos[f.getId()] || f.getLastUpdated() < new Date(2026, 10, 2)) continue;
+      if (Date.now() - t0 > (limiteMs || 240000)) { pendientes = true; break; }
+      revisados++;
+      try {
+        SpreadsheetApp.openById(f.getId()).getSheets().forEach(function (sh) {
+          var r = sh.getDataRange(), v = r.getValues(), fo = r.getFormulas();
+          for (var i = 0; i < v.length; i++) for (var j = 0; j < v[i].length; j++) {
+            if (!fo[i][j] && typeof v[i][j] === 'string' && /^=\s*HYPERLINK\s*\(/i.test(v[i][j])) {
+              sh.getRange(i + 1, j + 1).setFormula(v[i][j].trim()); arreglados++;
+            }
+          }
+        });
+        hechos[f.getId()] = 1;
+      } catch (e) { console.warn('Reparar enlaces ' + f.getName() + ': ' + e.message); }
+    }
+    if (pendientes) break;
+  }
+  props.setProperty('ENLACES_REPARADOS', JSON.stringify(hechos));
+  if (!pendientes) props.setProperty('ENLACES_REPARADOS_FIN', '1');
+  return { arreglados: arreglados, revisados: revisados, pendientes: pendientes };
+}
+
+function menuRepararEnlaces() {
+  PropertiesService.getScriptProperties().deleteProperty('ENLACES_REPARADOS_FIN');
+  var r = repararEnlacesTexto_(300000);
+  SpreadsheetApp.getUi().alert('🔗 Enlaces PDF/XML', 'Revisé ' + r.revisados + ' archivo(s) y arreglé ' + r.arreglados + ' enlace(s).' +
+    (r.pendientes ? '\n\nFaltan archivos: se siguen solos en segundo plano.' : ''), SpreadsheetApp.getUi().ButtonSet.OK);
+  if (r.pendientes) ScriptApp.newTrigger('repararEnlacesSegundoPlano').timeBased().after(60 * 1000).create();
+}
+
+function repararEnlacesSegundoPlano() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'repararEnlacesSegundoPlano') ScriptApp.deleteTrigger(t); });
+  var r = repararEnlacesTexto_(300000);
+  if (r.pendientes) ScriptApp.newTrigger('repararEnlacesSegundoPlano').timeBased().after(60 * 1000).create();
+  registrarEnBitacora_('🔗 Enlaces PDF/XML reparados: ' + r.arreglados + ' en ' + r.revisados + ' archivo(s)' + (r.pendientes ? ' (sigue)' : ''));
 }
 
 function normalizarEncabezado_(s) {

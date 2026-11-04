@@ -424,6 +424,11 @@ function actualizarPanelSegundoPlano() {
   });
   try { generarPanelDeControl_(); }
   catch (e) { registrarEnBitacora_('Panel de Control (segundo plano): ' + e.message); }
+  // 🔗 una sola vez: enlaces PDF/XML que quedaron como texto (Liquidacion.js)
+  if (!PropertiesService.getScriptProperties().getProperty('ENLACES_REPARADOS_FIN')) {
+    var ya = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'repararEnlacesSegundoPlano'; });
+    if (!ya) ScriptApp.newTrigger('repararEnlacesSegundoPlano').timeBased().after(60 * 1000).create();   // aparte: su propio tiempo
+  }
 }
 
 /** 'AAAAMM' del mes actual. */
