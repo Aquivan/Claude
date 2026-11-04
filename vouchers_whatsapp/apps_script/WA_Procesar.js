@@ -20,14 +20,21 @@ function WA_revisarConIA_(de, it) {
   filas.forEach(function (i) { hoja.getRange(i + 1, 7, 1, 2).setValues([['Revisando', '🧾 revisando…']]); hoja.getRange(i + 1, 11).setValue('resultado'); });
   WA_props_().deleteProperty('WA_PREG_' + de);
   var archivos = filas.map(function (i) { return { id: datos[i][9], nombre: datos[i][4], mime: /\.pdf$/i.test(datos[i][4]) ? 'application/pdf' : 'image/jpeg' }; });
+  // Se anota ANTES de llamar: si Google corta esta ejecución mientras Cobranzas lee, WA_cadaMinuto igual pregunta
+  // por el resultado (y avisa «sigo leyendo» o el error). Antes, si se cortaba, no llegaba ningún mensaje.
+  WA_props_().setProperty('WA_PRA_' + de, String(Date.now()));
+  WA_props_().setProperty('WA_HAY_PROC', '1');
+  WA_props_().deleteProperty('WA_PRAV_' + de);
   var r;
   try { r = WA_cobranzas_('procesar', { modo: 'analizar', numero: de, archivos: archivos, procesarUrl: WA_prop_('WA_PROCESAR_URL'),
     nombre: (it && it.nombre) || '', fecha: (it && it.fecha) || '', pestana: WA_pestanaEspera_(datos, filas) }); }   // 📂 la pestaña elegida en la lista
-  catch (e) {   // tardó más de 60 s: Cobranzas sigue y WA_cadaMinuto recoge el resultado
-    WA_props_().setProperty('WA_PRA_' + de, String(Date.now()));
-    WA_props_().setProperty('WA_HAY_PROC', '1');
+  catch (e) { return; }   // tardó demasiado: Cobranzas sigue y WA_cadaMinuto recoge el resultado
+  if (r && r.pendiente) {   // son varios archivos: Cobranzas sigue leyendo en segundo plano
+    WA_enviarTexto_(de, '⏳ Son varios archivos: sigo leyéndolos y le mando el resumen aquí en unos minutos.');
+    WA_props_().setProperty('WA_PRAV_' + de, '1');
     return;
   }
+  WA_props_().deleteProperty('WA_PRA_' + de);
   WA_mostrarPlan_(de, r);
 }
 
@@ -170,7 +177,7 @@ function WA_seguirProcesar_(props) {
     if (k.indexOf('WA_PRA_') === 0) {
       var de = k.slice(7), r = WA_cobranzas_('procesar', { modo: 'resultado', numero: de });
       var espera = Date.now() - Number(props[k]);
-      if (r && r.pendiente && espera < 8 * 60000) {
+      if (r && r.pendiente && espera < 20 * 60000) {
         if (espera > 3 * 60000 && !props['WA_PRAV_' + de]) {   // que la persona sepa que sigue trabajando
           WA_props_().setProperty('WA_PRAV_' + de, '1');
           WA_enviarTexto_(de, '⏳ Sigo leyendo los archivos (con varios archivos puede tardar unos minutos). Le aviso aquí apenas termine.');
