@@ -52,7 +52,15 @@ function WA_tandaEnEspera_(hoja, datos, de) {
     WA_finalizar_(de, { nombre: etq.nombre, fecha: etq.fecha });
     return true;
   }
-  if (WA_leerJson_('WA_PREG_' + de)) return true;   // ya se preguntó: lo nuevo se suma a la misma tanda
+  var ya = WA_leerJson_('WA_PREG_' + de);
+  if (ya) {   // ya se preguntó: lo nuevo se suma a la misma tanda y se vuelve a mostrar la lista con la cuenta correcta
+    if (filas.length > (ya.n || 0)) {
+      ya.n = filas.length;
+      WA_props_().setProperty('WA_PREG_' + de, JSON.stringify(ya));
+      WA_listaNombre_(de, ya, filas.length, WA_pestanaEspera_(datos, filas), datos, filas);
+    }
+    return true;
+  }
   WA_preguntarDeQuien_(de, datos, filas);
   return true;
 }
@@ -78,9 +86,12 @@ function WA_preguntarDeQuien_(de, datos, filas) {
   var nombres = (sug ? [sug.nombre] : []).concat((r.nombres || []).filter(function (n) { return !sug || n.toLowerCase() !== sug.nombre.toLowerCase(); }))
     .filter(String).slice(0, 5);
   var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
-  var preg = { t: Date.now(), nombres: nombres, sug: !!sug, ordenante: sug ? sug.ordenante : '', fecha: hoy };
+  // Mientras la IA sugería el nombre pudo llegar otro archivo de la misma tanda: se vuelve a contar.
+  datos = WA_hoja_().getDataRange().getValues();
+  filas = WA_filasEspera_(datos, de);
+  var preg = { t: Date.now(), nombres: nombres, sug: !!sug, ordenante: sug ? sug.ordenante : '', fecha: hoy, n: filas.length };
   WA_props_().setProperty('WA_PREG_' + de, JSON.stringify(preg));
-  WA_listaNombre_(de, preg, filas.length, WA_pestanaEspera_(datos, filas));
+  WA_listaNombre_(de, preg, filas.length, WA_pestanaEspera_(datos, filas), datos, filas);
 }
 
 /** 📂 Pestaña de la tanda en espera (columna D): 'foto', 'original' o '' (mezcla: cada uno según su tipo). */
@@ -90,10 +101,17 @@ function WA_pestanaEspera_(datos, filas) {
 }
 
 /** La lista "¿De quién son?" (también se vuelve a mandar al cambiar de pestaña, sin leer de nuevo con IA). */
-function WA_listaNombre_(de, preg, n, pestana) {
+function WA_listaNombre_(de, preg, n, pestana, datos, filas) {
   var nombres = preg.nombres, sug = preg.sug;
   var corta = Utilities.formatDate(new Date(), 'America/Lima', 'dd-MM-yy');
-  var cuerpo = '🏷 *¿De quién son ' + (n > 1 ? 'estos ' + n + ' vouchers' : 'este voucher') + '?*\n' +
+  // Cuenta real de lo recibido: fotos y PDF (un PDF puede ser factura, no voucher).
+  var detalle = '';
+  if (datos && filas && filas.length) {
+    var pdf = filas.filter(function (i) { return /\.pdf$/i.test(String(datos[i][4])); }).length;
+    detalle = ' (' + (filas.length - pdf ? (filas.length - pdf) + ' foto' + (filas.length - pdf > 1 ? 's' : '') : '') +
+      (filas.length - pdf && pdf ? ' y ' : '') + (pdf ? pdf + ' PDF' : '') + ')';
+  }
+  var cuerpo = '🏷 *¿De quién son ' + (n > 1 ? 'estos ' + n + ' archivos' : 'este archivo') + '?*' + detalle + '\n' +
     'Quedarán como _' + corta + ' Nombre_' + (n > 1 ? ', _… Nombre 2_…' : '') + '\n' +
     (sug ? '⭐ Según el voucher paga: _' + preg.ordenante + '_\n' : '') +
     '📂 Pestaña: *' + (pestana === 'original' ? 'Originales' : pestana === 'foto' ? 'Fotos' : 'Fotos y Originales (según el archivo)') + '* (puede cambiarla en la lista)\n' +
@@ -124,7 +142,7 @@ function WA_cambiarPestanaEspera_(de, preg, pestana) {
   var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues(), filas = WA_filasEspera_(datos, de);
   if (!filas.length) { WA_enviarTexto_(de, 'Esos vouchers ya se registraron 👍'); return; }
   filas.forEach(function (i) { hoja.getRange(i + 1, 4).setValue(pestana); });
-  WA_listaNombre_(de, preg, filas.length, pestana);
+  WA_listaNombre_(de, preg, filas.length, pestana, datos, filas);
 }
 
 /** Opción tocada en la lista (id "en:n0", "en:otro", "en:fecha", "en:sin"). */
