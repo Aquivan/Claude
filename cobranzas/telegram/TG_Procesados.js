@@ -100,7 +100,7 @@ function TGQ_buscar_(ss, texto, soloFilas) {
     var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0], col = indiceColumnas_(enc);
     var c = { archivo: col('Archivo Original'), fecha: col('Fecha de depos', 'Fecha de deposito'), monto: col('Monto'), moneda: col('Moneda'),
       prov: col('Proveedor (Beneficiario)'), ruc: col('ID Beneficiario'), refs: col('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc'), op: col('Numero de oper', 'Numero de operacion'),
-      empresa: col('Empresa'), idUsuario: col('ID Usuario') };
+      empresa: col('Empresa'), idUsuario: col('ID Usuario'), idCli: col('idCliente') };
     if (c.archivo < 0 || c.monto < 0) return;
     var desde = Math.max(2, h.getLastRow() - 5000), n = h.getLastRow() - desde + 1;
     var leer = function (j) { return j >= 0 ? h.getRange(desde, j + 1, n, 1).getValues() : null; };
@@ -112,7 +112,7 @@ function TGQ_buscar_(ss, texto, soloFilas) {
         fecha: v.fecha ? aFecha_(v.fecha[i][0]) : null, monto: aNumero_(v.monto[i][0]), moneda: v.moneda ? String(v.moneda[i][0] || 'PEN') : 'PEN',
         prov: v.prov ? String(v.prov[i][0] || '').trim() : '', ruc: v.ruc ? aRuc_(v.ruc[i][0]) : '', refs: v.refs ? String(v.refs[i][0] || '') : '',
         op: v.op ? String(v.op[i][0] || '') : '', empresa: v.empresa ? String(v.empresa[i][0] || '').trim() : '',
-        idUsuario: v.idUsuario ? aRuc_(v.idUsuario[i][0]) : '' });
+        idUsuario: v.idUsuario ? aRuc_(v.idUsuario[i][0]) : '', idCli: v.idCli ? aRuc_(v.idCli[i][0]) : '' });
     }
   });
   // 🔎 Vouchers puntuales (botón del aviso «voucher(s) nuevo(s)»): pestaña | N° de operación | monto
@@ -240,6 +240,9 @@ function TGQ_sugerir_(ss, cfg, tandas) {
   faltan.forEach(function (f) {
     var r = TGQ_candidatos_(fx, f.prov, f.refs);
     if (r.sug) { f.sug = r.sug; f.como = r.como; return; }
+    // 📄 La IA que leyó el voucher a veces ya anotó el RUC del destinatario en «idCliente» (ej. depósito a MINSA en el BN):
+    // si es un RUC válido y NO es de una empresa del grupo (esas son las que pagan), se sugiere.
+    if (f.idCli && TGQ_rucValido_(f.idCli) && !cfg.nombreEmpresa[f.idCli]) { f.sug = f.idCli; f.como = '📄 el mismo voucher trae este RUC (columna idCliente)'; return; }
     if (r.opciones[0]) f.posible = r.opciones[0].ruc + ' ' + r.opciones[0].nombre + ' — ' + r.opciones[0].fuente;
     f.opciones = r.opciones;
   });
