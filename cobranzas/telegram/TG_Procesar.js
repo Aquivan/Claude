@@ -158,8 +158,42 @@ function TGP_emparejar_(v, facturas) {
       if (!mejor && o[0] > 0 && Math.abs(o[0] - m) <= 0.05) mejor = { f: f, como: o[1] + ' (' + o[0].toFixed(2) + ')' };
     });
   });
+  // Sin monto exacto: la factura cuyo EMISOR es el beneficiario del voucher (pago parcial o a cuenta).
+  if (!mejor && v.beneficiario) {
+    var deEl = facturas.filter(function (f) { return f.emisor && TGP_benefConDatos_(v.beneficiario, f.emisor); });
+    if (deEl.length === 1) mejor = { f: deEl[0], como: 'pago parcial o a cuenta (el voucher es a ' + deEl[0].emisor + '; el monto no es el total)', noCuadra: true, porBenef: true };
+  }
   if (!mejor && facturas.length === 1) mejor = { f: facturas[0], como: '⚠️ el monto no cuadra con la factura: revíselo', noCuadra: true };
   return mejor;
+}
+
+/** Como TGP_mismoBenef_, pero exige que los dos nombres tengan datos (si falta uno, NO se da por igual). */
+function TGP_benefConDatos_(a, b) {
+  // TGP_mismoBenef_(x, 'QQQQZ') es false solo si x tiene alguna palabra que sirve para comparar
+  var tiene = function (t) { return !TGP_mismoBenef_(t, 'QQQQZ'); };
+  return tiene(a) && tiene(b) && TGP_mismoBenef_(a, b);
+}
+
+/** «01_E001-1912, 01_F001-0070» → ['E001-1912', 'F001-70'] (para comparar facturas escritas distinto). */
+function TGP_clavesFac_(t) {
+  return (String(t || '').toUpperCase().match(/[A-Z]{1,2}\d{2,3}\s*-\s*\d+/g) || []).map(function (x) {
+    var p = x.replace(/\s/g, '').split('-'); return p[0] + '-' + Number(p[1]);
+  });
+}
+
+/**
+ * Voucher ya registrado: 'listo', 'completar' (sin factura) o 'corregir' (la factura de la hoja NO es la que paga:
+ * el voucher es a otro proveedor y entre los documentos está la factura de ese proveedor).
+ */
+function TGP_estadoRegistrado_(it) {
+  if (!it.facturaActual) return it.fac && it.fac.serie ? 'completar' : 'listo';
+  if (!it.fac || !it.fac.serie) return 'listo';
+  var hoja = TGP_clavesFac_(it.facturaActual), nueva = TGP_clavesFac_(it.fac.serie)[0];
+  if (!nueva || hoja.indexOf(nueva) >= 0) return 'listo';
+  // Solo se propone corregir si el voucher dice a quién se pagó y ese es el emisor de la factura nueva
+  if (!TGP_benefConDatos_(it.v.beneficiario, it.fac.emisor)) return 'listo';
+  it.motivoCorregir = 'el voucher es a ' + it.v.beneficiario + ' y la factura ' + it.fac.serie + ' es de ' + it.fac.emisor;
+  return 'corregir';
 }
 
 /** Datos de la factura para la hoja: empresa del grupo, RUC del otro y "01_E001-4054". */
@@ -238,7 +272,7 @@ function TGP_analizar_(ss, adjs, op) {
     else {
       it.fuente = fuente;
       it.facturaActual = TGP_celda_(libro, fuente, ['Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc']);
-      it.tipo = !it.facturaActual && fac && fac.serie ? 'completar' : 'listo';
+      it.tipo = TGP_estadoRegistrado_(it);
     }
     if (it.tipo === 'nuevo' || it.tipo === 'dudoso') {   // al dudoso también: por si la persona dice «es nuevo»
       var sug = TGE_nombreDeOrdenante_(TGE_ordenanteReal_(it.v.ordenante, it.v.beneficiario));
@@ -466,6 +500,10 @@ function TGP_texto_(k, p) {
     } else if (it.tipo === 'completar') {
       acciones++;
       L.push(cab + '\n   🟡 Ya está en <b>' + TG_esc_(it.fuente) + '</b> sin factura' + fac + ' → la completo');
+    } else if (it.tipo === 'corregir') {
+      acciones++;
+      L.push(cab + '\n   🔴 Ya está en <b>' + TG_esc_(it.fuente) + '</b> pero con la factura <b>' + TG_esc_(it.facturaActual) + '</b>, y no cuadra: ' +
+        TG_esc_(it.motivoCorregir) + '.' + fac + '\n   → la corrijo: pongo <b>' + TG_esc_(it.fac.serie) + '</b> en lugar de ' + TG_esc_(it.facturaActual) + ' (se puede deshacer)');
     } else if (it.tipo === 'listo') {
       L.push(cab + '\n   ✅ Ya está en <b>' + TG_esc_(it.fuente) + '</b>' + (it.facturaActual ? ' con factura ' + TG_esc_(it.facturaActual) : '') + ' → no hay nada que hacer');
     } else if (it.tipo === 'omitido') {
@@ -554,7 +592,7 @@ function TGP_decidir_(ss, k, op) {
     if (!o) return { error: 'Esa opción ya no existe.' };
     it.fuente = o.fuente;
     try { it.facturaActual = TGP_celda_(SpreadsheetApp.openById(TGP_ctx_(ss).cfg.idVouchers), o.fuente, ['Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc']); } catch (e) { it.facturaActual = ''; }
-    it.tipo = !it.facturaActual && it.fac && it.fac.serie ? 'completar' : 'listo';
+    it.tipo = TGP_estadoRegistrado_(it);
     anotado = 'Voucher ' + it.n + ' = ' + o.fuente;
   } else if (m[2] === 'nv') {
     it.tipo = 'nuevo';
@@ -591,6 +629,22 @@ function TGP_ejecutar_(ss, k) {
       lineas.push(r.mensaje.split(' · ')[0] + ': ' + completar.map(function (it) { return it.fuente + ' ← ' + it.fac.serie; }).join(', '));
     }
   }
+  // 🔴 Factura mal asignada: se REEMPLAZA (empresa, proveedor y factura); queda la nota «Antes: …» y se puede deshacer
+  var corregir = p.items.filter(function (x) { return x.tipo === 'corregir'; });
+  if (corregir.length) {
+    c.cambios = [];
+    corregir.forEach(function (it) {
+      try { ANX_HERR_.asignar_voucher(c, { fila: it.fuente, empresa: it.fac.empresa, proveedor_ruc: it.fac.proveedor, facturas: it.fac.serie,
+        motivo: '🧾 Procesar documento: corregido (' + it.motivoCorregir + ')' }); }
+      catch (e) { lineas.push('⚠️ ' + it.fuente + ': ' + e.message); }
+    });
+    if (c.cambios.length) {
+      ANX_guardarPropuestos_(ss, c.cambios);
+      var rc = ANX_aplicarDet_(ss, c.cambios.map(function (x) { return x.id; }), true, { sinRecalcular: true });
+      if (rc.lote) { TGP_recalcularLuego_(); lotes.push(rc.lote); }
+      lineas.push('🔴→✅ Corregido: ' + corregir.map(function (it) { return it.fuente + ' ' + it.facturaActual + ' → ' + it.fac.serie; }).join(', '));
+    }
+  }
   var accId = TGU_anotar_(p.clave, { id: k, desc: '🧾 Procesar ' + p.adjs.map(function (a) { return a.nombre; }).join(', '), lotes: lotes, archivos: [] });
   TGP_aTemporal_(ss, p.adjs);
   var nuevos = p.items.filter(function (x) { return x.tipo === 'nuevo'; });
@@ -603,7 +657,7 @@ function TGP_ejecutar_(ss, k) {
   }
   if (!lineas.length) lineas.push('No había nada que hacer.');
   // 🧾 vouchers que ya estaban (completados o listos) con su factura: ¿llevan retención sin CRE? (los nuevos, al registrarse)
-  var paresCre = p.items.filter(function (x) { return (x.tipo === 'completar' || x.tipo === 'listo') && x.fuente && x.fac && x.fac.serie; })
+  var paresCre = p.items.filter(function (x) { return (x.tipo === 'completar' || x.tipo === 'listo' || x.tipo === 'corregir') && x.fuente && x.fac && x.fac.serie; })
     .map(function (x) { return { doc: x.fac.serie, fila: x.fuente, cuadra: x.cuadra || '' }; });
   return { texto: '✅ ' + lineas.join('\n'), pendiente: nuevos.length > 0, paresCre: paresCre, canal: p.canal, destino: p.destino };
 }
