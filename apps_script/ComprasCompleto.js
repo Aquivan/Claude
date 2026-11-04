@@ -185,7 +185,7 @@ function escribirComprasCompleto_(ss, versiones, compras, ruc) {
   sheet.getRange(1, nc - 3, 1, 4).setBackground('#7C2D12');
   sheet.setFrozenRows(1);
   sheet.getRange(2, nc - 1, n, 2).setNumberFormat('@');  // "Propuestas en que aparecio" y "Anotar hasta" quedan como texto
-  sheet.getRange(2, 1, n, nc).setValues(filas);
+  sheet.getRange(2, 1, n, nc).setValues(textoSeguro_(filas));
   base.forEach(function (h, i) {
     if (esNum[i]) sheet.getRange(2, i + 1, n, 1).setNumberFormat('#,##0.00');
     if (esFecha[i]) sheet.getRange(2, i + 1, n, 1).setNumberFormat('dd/mm/yyyy');
