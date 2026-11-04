@@ -89,6 +89,7 @@ var AYU_SECCIONES_ = [
     '2. El asistente muestra lo pendiente con la regla **¿Retener?** (revisa padrones, montos y si el proveedor es buen contribuyente).',
     '3. Toque ✅ y **confirme**: recién ahí el robot lo emite en SUNAT y le manda el PDF.',
     '• «envíame la constancia de retención de …» le reenvía el PDF de una ya emitida.',
+    '• **Pagos parciales:** si la factura ya tiene comprobantes de retención de pagos anteriores, el robot revisa en SUNAT si ESTE pago ya tiene el suyo. Si es otro pago (y no pasa el total de la factura) sigue y pone el **número correlativo de pago** (2, 3…); si ya está cubierto, se detiene y lo dice.',
     '🔒 Nunca se emite nada sin su confirmación de ESE comprobante.'
   ] },
   { id: 'guias', e: '🚚', t: 'Guías de remisión (traslado de mercadería)', p: [
