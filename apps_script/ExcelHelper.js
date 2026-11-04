@@ -350,7 +350,7 @@ function escribirDatosEnHoja_(sheet, contenidoTexto, tipoRegistro) {
   matriz = ordenarPorFechaEmision_(matriz, indiceColumnaFechaEmision_(encabezado));
 
   if (matriz.length > 0) {
-    sheet.getRange(2, 1, matriz.length, nCols).setValues(matriz);
+    sheet.getRange(2, 1, matriz.length, nCols).setValues(textoSeguro_(matriz));
   }
 
   // Garantizar altura de fila normal (sin wrap) para todas las filas de datos

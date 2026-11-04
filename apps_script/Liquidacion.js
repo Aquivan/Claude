@@ -323,6 +323,22 @@ function periodoDeEmision_(valor) {
  * Normaliza nombres de encabezado para comparar sin importar mayúsculas, minúsculas,
  * tildes, BOM o espacios múltiples.
  */
+/**
+ * Textos que Google tomaría como FÓRMULA al escribirlos («- SERV.TRANSP…», «=x», «+51…», «@…»): se guardan como texto
+ * (con ' delante, que no se ve). Si no, la celda queda en error (#ERROR!/#NAME?) y ese error rompe las sumas de la
+ * liquidación (#VALUE! en todas las compras). Los números («-12.50») no se tocan.
+ */
+function textoSeguro_(filas) {
+  return filas.map(function (r) {
+    return r.map(function (v) {
+      if (typeof v !== 'string') return v;
+      var t = v.replace(/^\s+/, '');
+      if (/^[=+\-@]/.test(t) && !/^[+\-]?[\d.,]+$/.test(t)) return "'" + v;
+      return v;
+    });
+  });
+}
+
 function normalizarEncabezado_(s) {
   if (!s) return '';
   return String(s)
@@ -595,7 +611,7 @@ function escribirDetalle_(ss, nombreHoja, filas, encabezado) {
   sheet.getRange(1, 1, 1, nCols).setValues([encabezado])
     .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#305496');
   sheet.setFrozenRows(1);
-  sheet.getRange(2, 1, filas.length, nCols).setValues(filas);
+  sheet.getRange(2, 1, filas.length, nCols).setValues(textoSeguro_(filas));
 
   // --- Eliminar columnas CLU / de relleno completamente vacias ---
   for (var c = nCols; c >= 1; c--) {
