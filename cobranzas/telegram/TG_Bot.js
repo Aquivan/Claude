@@ -453,6 +453,7 @@ function TG_alBoton_(ss, q) {
       }
       return TG_preguntar_(ctx, '', adjs);
     case 'sug': return TG_preguntar_(ctx, datos.texto, []);
+    case 'tgqruc': return TGQ_tg_(ctx, 'procesados', datos.filas || []);   // 🔎 RUC de los vouchers del aviso (TG_Procesados.js)
     case 'cambios': return TG_aplicarCambios_(ctx, datos, op);
     case 'rucelige': return TGQ_eligeTG_(ctx, datos, op);
     case 'tgrcomp': return TGR_compBotonTG_(ctx, datos, op);   // ✏️ completar vouchers: todo / solo RUC / otra factura (TG_Retener.js)

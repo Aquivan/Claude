@@ -215,7 +215,10 @@ function TG_avisoVouchers_(c, V) {
       return '• ' + TG_fecha_(aFecha_(g(f, jF)) || g(f, jF)) + ' · ' + TG_esc_(g(f, jB)) + ' ' + (/USD|\$/.test(g(f, jMo)) ? 'US$ ' : 'S/ ') + TG_num_(aNumero_(g(f, jM))) +
         ' → ' + TG_esc_(String(g(f, jP)).slice(0, 30)) + (g(f, jEm) ? ' <i>(' + TG_esc_(g(f, jEm)) + ')</i>' : '');
     }).join('\n') + (nuevas.length > 10 ? '\n<i>… y ' + (nuevas.length - 10) + ' más</i>' : ''),
-      teclado: [[{ text: '💬 ¿A qué facturas corresponden?', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: 'Los vouchers registrados hoy: ¿a qué facturas corresponden y cuáles todavía no se usan en ninguna?' }, 86400) }]] });
+      teclado: [[{ text: '💬 ¿A qué facturas corresponden?', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: 'Los vouchers registrados hoy: ¿a qué facturas corresponden y cuáles todavía no se usan en ninguna?' }, 86400) }],
+        // 🔎 RUC de cada proveedor (📋 Procesados: alias, SIRE, otros vouchers, padrón SUNAT, IA): solo ESTOS vouchers
+        [{ text: '🔎 Identificar RUC de los proveedores', callback_data: 'k:' + TG_guardarBoton_({ t: 'tgqruc', filas: nuevas.slice(0, 60).map(function (f) {
+          return [p, String(g(f, jO) || '').replace(/\D/g, ''), aNumero_(g(f, jM))].join('|'); }) }, 86400) }]] });
   });
   return res;
 }
