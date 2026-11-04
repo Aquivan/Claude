@@ -278,7 +278,7 @@ function TGQ_externos_(ss, tandas, origen, chat) {
 
 /** Vuelta del padrón (desde RPN_gh_): propuesta con lo del padrón + internet, al mismo chat; si hay dudas, botones para elegir. */
 function TGQ_trasPadron_(ex, res, error) {
-  var ss = TG_ss_(), cambios = [], lineas = [], elecciones = [], n = 0, porNombre = {};
+  var ss = TG_ss_(), cambios = [], lineas = [], elecciones = [], n = 0, porNombre = {}, claros = [];
   var est = function (x) { return x.estado && !/^ACTIVO$/i.test(x.estado) ? ' [' + x.estado + (x.condicion ? ' · ' + x.condicion : '') + ']' : ''; };
   (res || []).forEach(function (r) { porNombre[normNombre_(r.q)] = r.candidatos || []; });
   // ⚡ Los que el padrón no dejó claros se buscan en internet TODOS A LA VEZ (antes era uno por uno).
@@ -297,6 +297,7 @@ function TGQ_trasPadron_(ex, res, error) {
         cambios.push({ id: String(++n), hoja: f.hoja, fila: f.fila, col: f.col, encabezado: 'ID Beneficiario', actual: '', nuevo: cands[0].ruc, motivo: prov + ' · ' + como });
       });
       lineas.push('✅ ' + prov + ' → ' + cands[0].ruc + '\n   ' + como + ' · filas ' + filasTxt);
+      claros.push({ prov: prov, ruc: cands[0].ruc, nombre: cands[0].nombre, como: como, filas: lista, filasTxt: filasTxt });
       return;
     }
     // Dudoso: opciones del padrón (las 3 mejores) y la de internet, para que la persona elija con un botón.
@@ -306,7 +307,11 @@ function TGQ_trasPadron_(ex, res, error) {
       if (opciones.length >= 4) opciones.pop();
       opciones.unshift({ ruc: web.ruc, nombre: web.nombre, det: '🌐 internet' + (web.fuente ? ' (' + web.fuente + ')' : '') });
     } else if (web) opciones.forEach(function (o) { if (o.ruc === web.ruc) o.det += ' · 🌐 también en internet'; });
-    if (!opciones.length) { lineas.push('❓ ' + prov + ': no lo encontré en el padrón ni en internet · filas ' + filasTxt); return; }
+    if (!opciones.length) {
+      lineas.push('❓ ' + prov + ': no lo encontré en el padrón ni en internet · filas ' + filasTxt);
+      if (ex.origen === 'vch') elecciones.push({ prov: prov, filas: lista, opciones: [], filasTxt: filasTxt });   // la ventana deja escribir el RUC u otro nombre
+      return;
+    }
     elecciones.push({ prov: prov, filas: lista, opciones: opciones, filasTxt: filasTxt });
   });
   // 🤖 La IA cruza todo (nombre del voucher, padrón, internet, abreviaturas) y dice cuál le parece: usted confirma.
@@ -318,7 +323,7 @@ function TGQ_trasPadron_(ex, res, error) {
   });
   var avisoErr = !error ? '' : /zip|descarg|timed out/i.test(error) ? ' · ⚠️ la página de SUNAT estaba muy lenta y el padrón no bajó a tiempo: se buscó solo en internet' : ' · ⚠️ ' + error;
   var texto = '🔎 Búsqueda externa (padrón de SUNAT + IA en internet)' + avisoErr + ':\n' + (lineas.join('\n') || 'nada nuevo.') +
-    (webDe._intentos && !webDe._respondio ? '\n⚠️ La búsqueda con IA en internet no respondió (¿clave de IA de guías?). Vuelva a intentarlo más tarde.' : '');
+    (webDe._intentos && !webDe._respondio ? '\n⚠️ La búsqueda con IA en internet no respondió' + (webDe._error ? ' (' + webDe._error + ')' : '') + '. Vuelva a intentarlo más tarde.' : '');
   var vis = [];
   if (cambios.length) {
     ANX_guardarPropuestos_(ss, cambios);
@@ -335,9 +340,10 @@ function TGQ_trasPadron_(ex, res, error) {
     try { TGC_wa_({ tipo: 'texto', numero: numero, texto: texto, botones: botones }); } catch (e) {}
   } else if (ex.origen === 'vch') {   // 🔎 hoja de Vouchers: la ventana pregunta cada 15 s (TGQ_rucEstado_)
     CacheService.getScriptCache().put('vchruc_' + ex.chat, JSON.stringify({ listo: true, texto: texto, ids: vis.map(function (x) { return x.id; }),
-      elecciones: elecciones.map(function (el) { return { prov: el.prov, filas: el.filas, opciones: el.opciones }; }) }), 21600);
+      claros: claros.map(function (x) { return { prov: x.prov, ruc: x.ruc, nombre: x.nombre, como: x.como, filas: x.filas, filasTxt: x.filasTxt }; }),
+      elecciones: elecciones.map(function (el) { return { prov: el.prov, filas: el.filas, opciones: el.opciones, filasTxt: el.filasTxt }; }) }), 21600);
   }
-  elecciones.forEach(function (el) { TGQ_preguntarEleccion_(ex, el); });
+  elecciones.forEach(function (el) { if (el.opciones.length || ex.origen !== 'vch') TGQ_preguntarEleccion_(ex, el); });
 }
 
 /** "¿Cuál es el RUC de …?" con un botón por opción (Telegram: todas + Ninguno; WhatsApp: hasta 3). */
@@ -535,33 +541,51 @@ function TGQ_iaElige_(ss, elecciones) {
 function TGQ_internetVarios_(nombres) {
   var out = {}, clave = '';
   if (!nombres.length) return out;
-  try { clave = TGG_clave_(); } catch (e) { Object.defineProperty(out, '_intentos', { value: nombres.length }); return out; }
+  try { clave = TGG_clave_(); } catch (e) {
+    Object.defineProperty(out, '_intentos', { value: nombres.length });
+    Object.defineProperty(out, '_error', { value: 'no hay clave de Gemini guardada' });
+    return out;
+  }
   var pedido = function (n) {
     return 'Busca en internet el RUC (Perú, SUNAT, 11 dígitos) de: "' + n + '". Puede ser una empresa o una persona con negocio. ' +
       'Responde SOLO JSON: {"ruc":"11 dígitos o vacío","nombre":"razón social tal como figura","fuente":"página donde lo viste (dominio)","seguro":true|false}. ' +
       'Si es una sigla o nombre comercial (ej. SUNAT, DSM), busca la razón social que le corresponde. ' +
       'Si hay varias personas o empresas con nombre parecido y no puedes distinguir, seguro=false. No inventes.';
   };
-  var reqs = nombres.map(function (n) {
-    return { url: 'https://generativelanguage.googleapis.com/v1beta/models/' + TGG_MODELOS_[0] + ':generateContent', method: 'post',
-      contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': clave },
-      payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: pedido(n) }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0 } }) };
-  });
-  var resp = [];
+  // Cada modelo de la lista: los que no respondieron con uno se reintentan con el siguiente (todos en paralelo).
+  var pend = nombres.slice(), ok = 0, err = '';
   Object.defineProperty(out, '_intentos', { value: nombres.length });
-  try { resp = UrlFetchApp.fetchAll(reqs); } catch (e) { Logger.log('Internet en paralelo: ' + e.message); return out; }
-  var ok = 0;
-  resp.forEach(function (r) { if (r.getResponseCode() === 200) ok++; else Logger.log('Internet: HTTP ' + r.getResponseCode() + ' ' + r.getContentText().slice(0, 200)); });
+  for (var m = 0; m < TGG_MODELOS_.length && pend.length; m++) {
+    var reqs = pend.map(function (n) {
+      return { url: 'https://generativelanguage.googleapis.com/v1beta/models/' + TGG_MODELOS_[m] + ':generateContent', method: 'post',
+        contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': clave },
+        payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: pedido(n) }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0 } }) };
+    });
+    var resp = [];
+    try { resp = UrlFetchApp.fetchAll(reqs); } catch (e) { err = e.message; Logger.log('Internet en paralelo: ' + e.message); break; }
+    var siguen = [];
+    resp.forEach(function (r, i) {
+      if (r.getResponseCode() !== 200) {
+        var msg = '';
+        try { msg = (JSON.parse(r.getContentText()).error || {}).message || ''; } catch (e) {}
+        err = TGG_MODELOS_[m] + ' HTTP ' + r.getResponseCode() + (msg ? ': ' + String(msg).slice(0, 120) : '');
+        Logger.log('Internet: ' + err);
+        siguen.push(pend[i]);
+        return;
+      }
+      ok++;
+      try {
+        var cand = (JSON.parse(r.getContentText()).candidates || [])[0];
+        var t = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
+        var j = t ? IA_extraerJson_(t) : null, ruc = j ? String(j.ruc || '').replace(/\D/g, '') : '';
+        out[pend[i]] = ruc && TGQ_rucValido_(ruc) && j.seguro !== false ? { ruc: ruc, nombre: String(j.nombre || ''), fuente: String(j.fuente || '').slice(0, 80) } : null;
+      } catch (e) { out[pend[i]] = null; }
+    });
+    pend = siguen;
+  }
+  pend.forEach(function (n) { out[n] = null; });   // ya se probó con todos los modelos: no se repite uno por uno
   Object.defineProperty(out, '_respondio', { value: ok });
-  resp.forEach(function (r, i) {
-    if (r.getResponseCode() !== 200) return;   // sin respuesta: TGQ_internet_ lo intenta solo (con los otros modelos)
-    try {
-      var cand = (JSON.parse(r.getContentText()).candidates || [])[0];
-      var t = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
-      var j = t ? IA_extraerJson_(t) : null, ruc = j ? String(j.ruc || '').replace(/\D/g, '') : '';
-      out[nombres[i]] = ruc && TGQ_rucValido_(ruc) && j.seguro !== false ? { ruc: ruc, nombre: String(j.nombre || ''), fuente: String(j.fuente || '').slice(0, 80) } : null;
-    } catch (e) {}
-  });
+  Object.defineProperty(out, '_error', { value: err });
   return out;
 }
 
@@ -916,6 +940,18 @@ function TGQ_rucExternos_(ss, filas) {
   if (!msg) return { texto: 'No queda ningún proveedor sin RUC (o sin nombre) en esas filas.' };
   if (/^⏳/.test(msg)) CacheService.getScriptCache().put('vchruc_' + id, JSON.stringify({ listo: false }), 21600);
   return { id: /^⏳/.test(msg) ? id : '', texto: msg.replace(/Le aviso aquí en 3–5 minutos\./, 'Deje esta ventana abierta: el resultado aparece aquí en 3–5 minutos.') };
+}
+
+/** 🔎 Buscar con OTRO nombre (escrito por la persona) para esas filas: padrón + internet + IA, igual que antes. → {id, texto} */
+function TGQ_rucOtroNombre_(ss, nombre, filas) {
+  nombre = String(nombre || '').trim();
+  if (nombre.length < 3) return { texto: 'Escriba el nombre a buscar (al menos 3 letras) o el RUC de 11 dígitos.' };
+  var id = Utilities.getUuid().slice(0, 8), procesados = {};
+  procesados[normNombre_(nombre)] = (filas || []).map(function (f) { return { hoja: f.hoja, fila: f.fila, col: f.col, prov: nombre }; });
+  var err = RPN_lanzar_(ss, [{ q: nombre }], { origen: 'vch', chat: id, procesados: procesados });
+  if (err) return { texto: err };
+  CacheService.getScriptCache().put('vchruc_' + id, JSON.stringify({ listo: false }), 21600);
+  return { id: id, texto: '⏳ Busco «' + nombre + '» en el padrón de SUNAT e internet…' };
 }
 
 function TGQ_rucEstado_(id) {
