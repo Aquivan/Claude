@@ -10,10 +10,13 @@ on:
   workflow_dispatch:
     inputs:
       lote:
-        description: "Lote que dejó el bot de Cobranzas (o \"prueba\" para revisar el padrón con empresas conocidas)"
+        description: "Lote que dejó el bot de Cobranzas (o \"prueba\" para revisar el padrón con empresas conocidas, o \"actualizar\" para bajar el padrón nuevo)"
         required: true
+  # El padrón nuevo se baja solo cada lunes de madrugada (Lima): así una búsqueda nunca espera la descarga (~10 min).
+  schedule:
+    - cron: '17 8 * * 1'
 
-run-name: "RUC por nombre · lote ${{ inputs.lote }}"
+run-name: "RUC por nombre · lote ${{ inputs.lote || 'actualizar' }}"
 
 permissions:
   contents: read
@@ -35,7 +38,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Dirección del bot
-        if: inputs.lote != 'prueba'
+        if: inputs.lote != 'prueba' && inputs.lote != 'actualizar' && github.event_name != 'schedule'
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
         run: |
@@ -59,15 +62,20 @@ jobs:
         id: semana
         run: echo "s=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
+      # Búsqueda: usa el ÚLTIMO padrón guardado (aunque sea de la semana pasada) → empieza al instante.
+      # Solo si no hay ninguno guardado se descarga aquí. Actualizar (lunes o a mano): siempre baja el nuevo.
       - name: Padrón en caché
         id: cache
-        uses: actions/cache@v4
+        if: inputs.lote != 'actualizar' && github.event_name != 'schedule'
+        uses: actions/cache/restore@v4
         with:
           path: padron_reducido_ruc.zip
           key: padron-ruc-${{ steps.semana.outputs.s }}
+          restore-keys: padron-ruc-
 
       - name: Descargar el padrón de SUNAT
-        if: steps.cache.outputs.cache-hit != 'true'
+        id: bajar
+        if: steps.cache.outputs.cache-matched-key == ''
         run: |
           for url in https://www.sunat.gob.pe/descargaPRR/padron_reducido_ruc.zip https://www2.sunat.gob.pe/padron_reducido_ruc.zip; do
             for i in 1 2 3; do
@@ -79,8 +87,15 @@ jobs:
           done
           echo "::error::No se pudo descargar el padrón de SUNAT"; exit 1
 
+      - name: Guardar el padrón descargado
+        if: steps.bajar.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: padron_reducido_ruc.zip
+          key: padron-ruc-${{ steps.semana.outputs.s }}-${{ github.run_id }}
+
       - name: Buscar los nombres
-        if: always()
+        if: always() && inputs.lote != 'actualizar' && github.event_name != 'schedule'
         env:
           LOTE: ${{ inputs.lote }}
         run: python3 scripts/ruc_por_nombre.py --padron padron_reducido_ruc.zip --lote "$LOTE"

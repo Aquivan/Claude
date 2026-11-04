@@ -273,6 +273,12 @@ function TGQ_trasPadron_(ex, res, error) {
   var ss = TG_ss_(), cambios = [], lineas = [], elecciones = [], n = 0, porNombre = {};
   var est = function (x) { return x.estado && !/^ACTIVO$/i.test(x.estado) ? ' [' + x.estado + (x.condicion ? ' · ' + x.condicion : '') + ']' : ''; };
   (res || []).forEach(function (r) { porNombre[normNombre_(r.q)] = r.candidatos || []; });
+  // ⚡ Los que el padrón no dejó claros se buscan en internet TODOS A LA VEZ (antes era uno por uno).
+  var dudosos = Object.keys(ex.procesados || {}).filter(function (k) {
+    var c = (porNombre[k] || []).slice().sort(function (a, b) { return b.puntaje - a.puntaje; });
+    return !(c.length && RPN_claro_(c) && (!c[0].estado || /^ACTIVO$/i.test(c[0].estado)));
+  });
+  var webDe = TGQ_internetVarios_(dudosos.map(function (k) { return ex.procesados[k][0].prov; }));
   Object.keys(ex.procesados || {}).forEach(function (k) {
     var lista = ex.procesados[k], prov = lista[0].prov, filasTxt = lista.map(function (f) { return f.hoja + '!' + f.fila; }).join(', ');
     var cands = (porNombre[k] || []).slice().sort(function (a, b) { return b.puntaje - a.puntaje; });
@@ -287,7 +293,7 @@ function TGQ_trasPadron_(ex, res, error) {
     }
     // Dudoso: opciones del padrón (las 3 mejores) y la de internet, para que la persona elija con un botón.
     var opciones = cands.slice(0, 3).map(function (x) { return { ruc: x.ruc, nombre: x.nombre, det: '🏛 padrón ' + x.puntaje + ' pts' + est(x) }; });
-    var web = TGQ_internet_(prov);
+    var web = webDe.hasOwnProperty(prov) ? webDe[prov] : TGQ_internet_(prov);
     if (web && !opciones.some(function (o) { return o.ruc === web.ruc; })) {
       if (opciones.length >= 3) opciones.pop();
       opciones.unshift({ ruc: web.ruc, nombre: web.nombre, det: '🌐 internet' + (web.fuente ? ' (' + web.fuente + ')' : '') });
@@ -476,6 +482,36 @@ function TGQ_internet_(nombre) {
     } catch (e) { Logger.log('Procesados — internet: ' + e.message); }
   }
   return null;
+}
+
+/** TGQ_internet_ para varios nombres en paralelo → {nombre: {ruc, nombre, fuente} | null}. Si una falla, se reintenta sola. */
+function TGQ_internetVarios_(nombres) {
+  var out = {}, clave = '';
+  if (!nombres.length) return out;
+  try { clave = TGG_clave_(); } catch (e) { return out; }
+  var pedido = function (n) {
+    return 'Busca en internet el RUC (Perú, SUNAT, 11 dígitos) de: "' + n + '". Puede ser una empresa o una persona con negocio. ' +
+      'Responde SOLO JSON: {"ruc":"11 dígitos o vacío","nombre":"razón social tal como figura","fuente":"página donde lo viste (dominio)","seguro":true|false}. ' +
+      'Si es una sigla o nombre comercial (ej. SUNAT, DSM), busca la razón social que le corresponde. ' +
+      'Si hay varias personas o empresas con nombre parecido y no puedes distinguir, seguro=false. No inventes.';
+  };
+  var reqs = nombres.map(function (n) {
+    return { url: 'https://generativelanguage.googleapis.com/v1beta/models/' + TGG_MODELOS_[0] + ':generateContent', method: 'post',
+      contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': clave },
+      payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: pedido(n) }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0 } }) };
+  });
+  var resp = [];
+  try { resp = UrlFetchApp.fetchAll(reqs); } catch (e) { Logger.log('Internet en paralelo: ' + e.message); return out; }
+  resp.forEach(function (r, i) {
+    if (r.getResponseCode() !== 200) return;   // sin respuesta: TGQ_internet_ lo intenta solo (con los otros modelos)
+    try {
+      var cand = (JSON.parse(r.getContentText()).candidates || [])[0];
+      var t = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
+      var j = t ? IA_extraerJson_(t) : null, ruc = j ? String(j.ruc || '').replace(/\D/g, '') : '';
+      out[nombres[i]] = ruc && TGQ_rucValido_(ruc) && j.seguro !== false ? { ruc: ruc, nombre: String(j.nombre || ''), fuente: String(j.fuente || '').slice(0, 80) } : null;
+    } catch (e) {}
+  });
+  return out;
 }
 
 /** RUC peruano válido: 11 dígitos, empieza en 10/15/16/17/20 y dígito verificador correcto. */
