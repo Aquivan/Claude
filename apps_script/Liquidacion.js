@@ -288,7 +288,10 @@ function leerDetallePeriodo_(ruc, tipo, anio, mes) {
       var formulas = rango.getFormulas();
       for (var f = 0; f < valores.length; f++) {
         for (var c = 0; c < valores[f].length; c++) {
-          if (formulas[f][c]) valores[f][c] = formulas[f][c];
+          if (!formulas[f][c]) continue;
+          // Solo los enlaces (HYPERLINK) se copian como fórmula. Un texto que Google tomó por fórmula al importarlo
+          // («- SERV.TRANSP…» → =-SERV…, en error) vuelve a ser texto: si no, el error rompía las sumas de compras.
+          valores[f][c] = /^=\s*HYPERLINK\s*\(/i.test(formulas[f][c]) ? formulas[f][c] : "'" + formulas[f][c].replace(/^=/, '');
         }
       }
       // Detectar encabezado revisando si ALGUNA celda de la primera fila
