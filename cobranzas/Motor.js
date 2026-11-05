@@ -556,10 +556,18 @@ function ejecutarCruce_(entrada) {
       var fuentes = fuentesSaldo(o.emp, o.prov);
       // Primero lo que indica la marca (N° de operación del depósito, o la N/C / factura), luego lo más antiguo.
       var pistas = digitos(p.refs), refsDoc = parsearReferencias_(String(p.refs || '').replace(RX_DEVOLUCION_, ' ')).refs;
+      // Si la marca nombra una N/C (la que creó el saldo a favor), también vale la factura que esa N/C modifica:
+      // así se descuenta primero de los vouchers que pagaron ESA factura.
+      refsDoc.slice().forEach(function (r) {
+        (porTSN['07|' + r.serie + '|' + r.numero] || []).forEach(function (nc) {
+          if (nc.emisorRuc === o.prov && nc.modSerie) refsDoc.push({ tipo: normTipo_(nc.modTipo || '01'), serie: String(nc.modSerie).toUpperCase(), numero: parseInt(nc.modNumero, 10) });
+        });
+      });
       function prioridad(f) {
         if (f.tipo === 'voucher' && f.pago.operacion && pistas.indexOf(String(f.pago.operacion).replace(/\D/g, '').replace(/^0+/, '')) >= 0) return 0;
         if (f.tipo === 'doc' && refsDoc.some(function (r) { return r.serie === f.obj.serie && r.numero === f.obj.numero; })) return 0;
-        if (refsDoc.length && f.tipo === 'voucher' && refsDoc.some(function (r) { return String(f.pago.refs || '').toUpperCase().indexOf(r.serie + '-' + r.numero) >= 0; })) return 1;
+        if (refsDoc.length && f.tipo === 'voucher' && refsDoc.some(function (r) {
+          return parsearReferencias_(f.pago.refs).refs.some(function (x) { return x.serie === r.serie && x.numero === r.numero; }); })) return 1;
         return 2;
       }
       fuentes.sort(function (a, b) {
