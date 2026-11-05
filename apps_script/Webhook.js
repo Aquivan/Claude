@@ -49,7 +49,7 @@ function doPost(e) {
     } else if (body.pendiente) {
       // ⏳ SUNAT aún no entregó el reporte (lento): no es un error. Se vuelve a pedir solo más tarde.
       anotarSirePendiente_(String(body.ruc), String(body.periodo), String(body.tipo || 'ambos'));
-      respuesta = 'ok, ' + body.ruc + ' ' + body.periodo + ' pendiente en SUNAT: se vuelve a pedir en ' + SIRE_PEND_MIN_ + ' min';
+      respuesta = 'ok, ' + body.ruc + ' ' + body.periodo + ' pendiente en SUNAT: se vuelve a pedir solo';
     } else {
       quitarSirePendiente_(String(body.ruc), String(body.periodo));   // llegó: ya no está pendiente
       // Se responde AL TOQUE y la importacion va a una cola que se procesa en
@@ -137,13 +137,23 @@ function sacarDeColaWebhook_() {
 // ---------------------------------------------------------------------------
 // ⏳ SIRE pendiente en SUNAT. Cuando SUNAT está lenta, el robot no espera de más (no gasta GitHub): avisa
 // «pendiente» y termina. Aquí se anota y, cada 30 min, se vuelve a pedir SOLO lo pendiente con la descarga
-// rápida (sire-solo-reporte.yml). SUNAT entrega el MISMO pedido que quedó en curso. Hasta 8 intentos (4 h);
-// después queda en el Registro como «no llegó». Los PDF/XML de esas facturas los trae la descarga diaria.
+// rápida (sire-solo-reporte.yml). SUNAT entrega el MISMO pedido que quedó en curso. Reintentos espaciados
+// (a los 20, 40 y 60 min: 3 intentos en 2 h, cada uno de pocos minutos); si SUNAT sigue caída, se deja de
+// insistir y queda en el Registro: lo toma la siguiente descarga diaria. Los PDF/XML los trae la diaria.
 // ---------------------------------------------------------------------------
 
 var SIRE_PEND_PROP_ = 'SIRE_PENDIENTES';
-var SIRE_PEND_MIN_ = 30;
-var SIRE_PEND_MAX_ = 8;
+var SIRE_PEND_ESPERAS_MIN_ = [20, 40, 60];   // espera antes de cada reintento (crece: no se martilla a SUNAT)
+var SIRE_PEND_MIN_ = SIRE_PEND_ESPERAS_MIN_[0];
+
+function programarSirePendientes_() {
+  var p = leerSirePendientes_(), ks = Object.keys(p);
+  if (!ks.length) return;
+  var menor = Math.min.apply(null, ks.map(function (k) { return p[k].intentos || 0; }));
+  var min = SIRE_PEND_ESPERAS_MIN_[Math.min(menor, SIRE_PEND_ESPERAS_MIN_.length - 1)];
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'reintentarSirePendientes') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('reintentarSirePendientes').timeBased().after(min * 60 * 1000).create();
+}
 
 function leerSirePendientes_() { return JSON.parse(PropertiesService.getScriptProperties().getProperty(SIRE_PEND_PROP_) || '{}'); }
 function guardarSirePendientes_(p) { PropertiesService.getScriptProperties().setProperty(SIRE_PEND_PROP_, JSON.stringify(p)); }
@@ -153,12 +163,12 @@ function anotarSirePendiente_(ruc, periodo, tipo) {
   candado.waitLock(20000);
   try {
     var p = leerSirePendientes_(), k = ruc + '|' + periodo;
-    if (!p[k]) { p[k] = { ruc: ruc, periodo: periodo, tipo: tipo, desde: Date.now(), intentos: 0 }; registrarEnBitacora_('⏳ SIRE ' + ruc + ' ' + periodo + ': SUNAT aún no lo entrega (lento). Se vuelve a pedir solo cada ' + SIRE_PEND_MIN_ + ' min.'); }
+    if (!p[k]) { p[k] = { ruc: ruc, periodo: periodo, tipo: tipo, desde: Date.now(), intentos: 0 }; registrarEnBitacora_('⏳ SIRE ' + ruc + ' ' + periodo + ': SUNAT aún no lo entrega (lento). Se vuelve a pedir solo (a los 20, 40 y 60 min).'); }
     p[k].avisado = Date.now();
     guardarSirePendientes_(p);
   } finally { candado.releaseLock(); }
   var ya = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'reintentarSirePendientes'; });
-  if (!ya) ScriptApp.newTrigger('reintentarSirePendientes').timeBased().after(SIRE_PEND_MIN_ * 60 * 1000).create();
+  if (!ya) programarSirePendientes_();
 }
 
 function quitarSirePendiente_(ruc, periodo) {
@@ -176,14 +186,14 @@ function reintentarSirePendientes() {
   var p = leerSirePendientes_(), porPeriodo = {}, rendidos = [];
   Object.keys(p).forEach(function (k) {
     var x = p[k];
-    if (x.intentos >= SIRE_PEND_MAX_) { rendidos.push(x); delete p[k]; return; }
+    if (x.intentos >= SIRE_PEND_ESPERAS_MIN_.length) { rendidos.push(x); delete p[k]; return; }
     x.intentos++;
     (porPeriodo[x.periodo] = porPeriodo[x.periodo] || []).push(x.ruc);
   });
   guardarSirePendientes_(p);
   rendidos.forEach(function (x) {
-    registrarEnBitacora_('❌ SIRE ' + x.ruc + ' ' + x.periodo + ': SUNAT no lo entregó en ' + SIRE_PEND_MAX_ + ' intentos (' +
-      Math.round(SIRE_PEND_MAX_ * SIRE_PEND_MIN_ / 60) + ' h). Pídalo de nuevo más tarde (⚡ descarga rápida).');
+    registrarEnBitacora_('⚠️ SIRE ' + x.ruc + ' ' + x.periodo + ': SUNAT sigue sin entregarlo tras ' + SIRE_PEND_ESPERAS_MIN_.length +
+      ' reintentos (2 h). Dejo de insistir: lo toma la siguiente descarga diaria, o pídalo con ⚡ descarga rápida.');
   });
   var periodos = Object.keys(porPeriodo);
   if (!periodos.length) return;
@@ -196,5 +206,7 @@ function reintentarSirePendientes() {
       registrarEnBitacora_('🔁 SIRE pendiente: vuelvo a pedir ' + per + ' de ' + porPeriodo[per].join(', ') + '.');
     } catch (e) { registrarEnBitacora_('SIRE pendientes: no se pudo pedir a GitHub ' + per + ': ' + e.message); }
   });
-  // Si siguen pendientes, el robot avisará otra vez y se programa la siguiente vuelta.
+  // La siguiente vuelta queda programada aquí mismo (si la corrida no llegara a avisar, no se pierde el reintento);
+  // si lo pendiente llega antes, la vuelta no encuentra nada y termina sin pedir nada.
+  programarSirePendientes_();
 }

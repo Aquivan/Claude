@@ -47,8 +47,8 @@ DEFAULT_TIMEOUT = 25  # Segundos por peticion para evitar cuelgues prolongados d
 #   - A veces el archivo de un ticket terminado da HTTP 500 una y otra vez.
 # Por eso: espera CORTA por ticket y, si no sale, se pide otro (hasta
 # MAX_PEDIDOS). Peor caso ~10 min por libro, no 45.
-ESPERA_TICKET_SEG = 180          # tope de espera por ticket (despues queda PENDIENTE)
-ESPERAS_DESCARGA_SEG = (10, 20, 40)  # reintentos del archivo de un ticket terminado
+ESPERA_TICKET_SEG = 120          # tope de espera por ticket (despues queda PENDIENTE: no se gasta GitHub esperando)
+ESPERAS_DESCARGA_SEG = (10, 30)  # reintentos del archivo de un ticket terminado
 MAX_PEDIDOS = 2                  # solo si el archivo de un ticket terminado no se entrega
 
 
