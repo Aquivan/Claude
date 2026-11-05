@@ -15,6 +15,7 @@ var HOJA = {
   CONFIG: '⚙️ Config',
   DECISIONES: '_Decisiones',
   NO_APLICADOS: '_PagosNoAplicados',
+  DEVOLUCIONES: '_Devoluciones',
 };
 
 var COLOR = {

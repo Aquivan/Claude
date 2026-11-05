@@ -27,7 +27,22 @@ var ORIGEN = {
   CONFIRMADO: '🟡 Confirmado',
   EXACTO: '🔵 Exacto',
   MANUAL: '✍️ Manual',
+  DEVOLUCION: '↩️ Devolución',
+  DEVOLUCION_AUTO: '↩️ Devolución (detectada)',
 };
+
+/**
+ * ↩️ DEVOLUCIÓN DE PROVEEDOR (como en los sistemas contables: «supplier refund» / Debe 104 – Haber 42 o 1622):
+ * dinero que un PROVEEDOR le devuelve a una empresa del grupo. No es un cobro ni un ingreso: cancela el SALDO A
+ * FAVOR que la empresa tenía con ese proveedor (lo pagado de más, un anticipo o lo que dejó sin factura una N/C).
+ *   - Marcada: en el voucher, «Tipo y Nº Doc.» dice DEVOLUCIÓN (la IA o la persona). Puede indicar a qué se liga:
+ *     «DEVOLUCIÓN op 5344», «DEVOLUCIÓN FFF1-155» (la N/C que creó el saldo a favor).
+ *   - Detectada: entra dinero a una empresa del grupo desde alguien que es SU PROVEEDOR, sin factura de venta
+ *     pendiente con él y con saldo a favor suficiente → se toma como devolución y se marca en el voucher.
+ * Se aplica primero a lo que indica la marca, luego a lo más antiguo: vouchers sobrantes o sin aplicar a ese
+ * proveedor y, al final, facturas sobrepagadas (su saldo vuelve hacia 0).
+ */
+var RX_DEVOLUCION_ = /DEVOLUCI|\bDEVOL\b|REEMBOLSO DE PROVEEDOR/i;
 
 var MODALIDAD = {
   PAGO: 'Pago',
@@ -36,6 +51,7 @@ var MODALIDAD = {
   NC: 'N/C',
   ND: 'N/D',
   OTRO: 'Otro descuento',
+  DEVOLUCION: 'Devolución',
 };
 
 // Tasas para reconocer pagos netos (el cliente deposita el total menos la
@@ -181,6 +197,7 @@ function ejecutarCruce_(entrada) {
       case MODALIDAD.RETENCION: doc.retencion += monto; break;
       case MODALIDAD.DETRACCION: doc.detraccion += monto; break;
       case MODALIDAD.OTRO: doc.otros += monto; break;
+      case MODALIDAD.DEVOLUCION: doc.pagado += monto; break;   // llega en negativo: lo devuelto deja de contar como pagado
       default: doc.pagado += monto;
     }
     var mov = {
@@ -258,8 +275,11 @@ function ejecutarCruce_(entrada) {
     q.pagadorRuc = p.pagadorRuc ? String(p.pagadorRuc).trim() : '';
     q.beneficiarioRuc = p.beneficiarioRuc ? String(p.beneficiarioRuc).trim() : resolverRucPorNombre(p.beneficiarioNombre);
     q.modalidad = p.modalidad || MODALIDAD.PAGO;
-    q.parse = parsearReferencias_(p.refs);
     q.aplicado = false;
+    if ((q.modalidad === MODALIDAD.PAGO || q.modalidad === MODALIDAD.DEVOLUCION) && RX_DEVOLUCION_.test(String(p.refs || ''))) {
+      q.modalidad = MODALIDAD.DEVOLUCION; q.devMarcada = true;
+      q.parse = { refs: [], noEntendido: [] };   // «DEVOLUCIÓN op 5344» no son facturas a pagar
+    } else q.parse = parsearReferencias_(p.refs);
     return q;
   }).filter(function (p) { return p.monto > 0; });
 
@@ -293,6 +313,7 @@ function ejecutarCruce_(entrada) {
     p.aplicado = true;
   }
   pagos.forEach(function (p) {
+    if (p.modalidad === MODALIDAD.DEVOLUCION) return;   // ↩️ se aplica en el paso de devoluciones
     if (!p.parse.refs.length && categoriaPorTexto_(p.refs, categorias)) return; // ej. "PLANILLA" escrito en Tipo y Nº Doc.
     p.parse.noEntendido.forEach(function (t) {
       errores.push({ tipo: 'Referencia no entendida', pagoId: p.id, detalle: '"' + t + '" en "' + p.refs + '"', fuente: p.fuente });
@@ -471,10 +492,111 @@ function ejecutarCruce_(entrada) {
     }
   });
 
+  // ---------------- 7b. ↩️ Devoluciones de proveedores ----------------
+  var devoluciones = [], marcarDevolucion = [];
+  aplicarDevoluciones_();
+
+  function aplicarDevoluciones_() {
+    var esGrupo = function (r) { return !!(r && grupo[r]); };
+    // Empresa del grupo que RECIBE y proveedor que DEVUELVE, sin importar en qué columna los puso cada quien.
+    function orientar(p) {
+      var emp = '', prov = '';
+      [p.beneficiarioRuc, p.pagadorRuc].forEach(function (r) { if (!emp && esGrupo(r)) emp = r; });
+      [p.pagadorRuc, p.beneficiarioRuc].forEach(function (r) { if (!prov && r && !esGrupo(r)) prov = r; });
+      if (!emp) { var e1 = resolverRucPorNombre(p.beneficiarioNombre); if (esGrupo(e1)) emp = e1; }
+      if (!prov) [p.usuario, p.beneficiarioNombre].forEach(function (n) { var r = resolverRucPorNombre(n); if (!prov && r && !esGrupo(r)) prov = r; });
+      return { emp: emp, prov: prov };
+    }
+    // Saldo a favor de «emp» con «prov»: vouchers que sobraron o no se aplicaron, y facturas sobrepagadas.
+    function fuentesSaldo(emp, prov) {
+      var lista = [];
+      remanentes.forEach(function (r) {
+        if (r.pago.pagadorRuc === emp && r.pago.beneficiarioRuc === prov) lista.push({ tipo: 'voucher', obj: r, pago: r.pago, disp: function () { return redondear2_(r.monto - (r.devuelto || 0)); } });
+      });
+      pagos.forEach(function (q) {
+        if (q.aplicado || q.sugerido || q.modalidad !== MODALIDAD.PAGO || q.pagadorRuc !== emp || q.beneficiarioRuc !== prov) return;
+        lista.push({ tipo: 'voucher', obj: q, pago: q, disp: function () { return redondear2_(q.monto - (q.devuelto || 0)); } });
+      });
+      (porEmisor[prov] || []).forEach(function (d) {
+        if (d.receptorRuc !== emp || d.esNota || pendiente(d) >= -0.05) return;
+        lista.push({ tipo: 'doc', obj: d, disp: function () { return redondear2_(-pendiente(d)); } });
+      });
+      return lista;
+    }
+    function saldoAFavor(emp, prov) { return redondear2_(fuentesSaldo(emp, prov).reduce(function (t, f) { return t + Math.max(0, f.disp()); }, 0)); }
+    function digitos(t) { return (String(t || '').match(/\d{3,}/g) || []).map(function (x) { return x.replace(/^0+/, ''); }); }
+
+    // Detectadas: dinero que entra a una empresa del grupo desde SU proveedor, sin venta pendiente y con saldo a favor.
+    pagos.forEach(function (p) {
+      if (p.aplicado || p.sugerido || p.modalidad !== MODALIDAD.PAGO || p.devMarcada) return;
+      if (!esGrupo(p.beneficiarioRuc) || !p.pagadorRuc || esGrupo(p.pagadorRuc)) return;
+      var emp = p.beneficiarioRuc, prov = p.pagadorRuc;
+      var esProveedor = (porEmisor[prov] || []).some(function (d) { return d.receptorRuc === emp; });
+      var ventaPend = (porEmisor[emp] || []).some(function (d) { return d.receptorRuc === prov && !d.esNota && pendiente(d) > 0.05; });
+      if (!esProveedor || ventaPend) return;
+      if (saldoAFavor(emp, prov) + 0.05 < p.monto) {
+        errores.push({ tipo: '¿Devolución?', pagoId: p.id, detalle: 'Op. ' + (p.operacion || '') + ' (' + p.monto.toFixed(2) + ') entra desde un proveedor de la empresa, pero el saldo a favor con él es solo ' +
+          saldoAFavor(emp, prov).toFixed(2) + '. Si es una devolución, escriba DEVOLUCIÓN en «Tipo y Nº Doc.».', fuente: p.fuente });
+        return;
+      }
+      p.modalidad = MODALIDAD.DEVOLUCION; p.devDetectada = true;
+    });
+
+    pagos.forEach(function (p) {
+      if (p.modalidad !== MODALIDAD.DEVOLUCION) return;
+      var o = orientar(p);
+      p.aplicado = true;
+      var dev = { pago: p, empresaRuc: o.emp, proveedorRuc: o.prov, aplicado: [], sinSaldo: 0, origen: p.devDetectada ? ORIGEN.DEVOLUCION_AUTO : ORIGEN.DEVOLUCION };
+      devoluciones.push(dev);
+      if (!o.emp || !o.prov) {
+        dev.sinSaldo = p.monto;
+        errores.push({ tipo: 'Devolución sin datos', pagoId: p.id, detalle: 'Op. ' + (p.operacion || '') + ': falta saber qué empresa del grupo recibió y qué proveedor devolvió (RUC en «ID Usuario» / «ID Beneficiario»)', fuente: p.fuente });
+        return;
+      }
+      var fuentes = fuentesSaldo(o.emp, o.prov);
+      // Primero lo que indica la marca (N° de operación del depósito, o la N/C / factura), luego lo más antiguo.
+      var pistas = digitos(p.refs), refsDoc = parsearReferencias_(String(p.refs || '').replace(RX_DEVOLUCION_, ' ')).refs;
+      function prioridad(f) {
+        if (f.tipo === 'voucher' && f.pago.operacion && pistas.indexOf(String(f.pago.operacion).replace(/\D/g, '').replace(/^0+/, '')) >= 0) return 0;
+        if (f.tipo === 'doc' && refsDoc.some(function (r) { return r.serie === f.obj.serie && r.numero === f.obj.numero; })) return 0;
+        if (refsDoc.length && f.tipo === 'voucher' && refsDoc.some(function (r) { return String(f.pago.refs || '').toUpperCase().indexOf(r.serie + '-' + r.numero) >= 0; })) return 1;
+        return 2;
+      }
+      fuentes.sort(function (a, b) {
+        return prioridad(a) - prioridad(b) || ((a.tipo === 'doc' ? 1 : 0) - (b.tipo === 'doc' ? 1 : 0)) ||
+          (((a.pago || a.obj).fecha || 0) - ((b.pago || b.obj).fecha || 0));
+      });
+      var resto = p.monto;
+      fuentes.forEach(function (f) {
+        if (resto <= 0.005) return;
+        var x = redondear2_(Math.min(resto, f.disp()));
+        if (x <= 0.005) return;
+        if (f.tipo === 'voucher') {
+          f.obj.devuelto = redondear2_((f.obj.devuelto || 0) + x);
+          (f.obj.devoluciones = f.obj.devoluciones || []).push({ monto: x, fecha: p.fecha, operacion: p.operacion, fuente: p.fuente });
+          dev.aplicado.push({ tipo: 'voucher', monto: x, op: f.pago.operacion || '?', texto: 'op ' + (f.pago.operacion || '?') + (f.pago.fecha ? ' del ' + Utilities_fecha_(f.pago.fecha) : ''), fuente: f.pago.fuente });
+        } else {
+          registrarMov(f.obj, -x, p, MODALIDAD.DEVOLUCION, dev.origen, 'devolución del proveedor de lo pagado de más');
+          dev.aplicado.push({ tipo: 'doc', monto: x, texto: etiquetaDoc_(f.obj), docClave: f.obj.clave });
+        }
+        resto = redondear2_(resto - x);
+      });
+      dev.sinSaldo = resto > 0.05 ? resto : 0;
+      if (dev.sinSaldo) {
+        errores.push({ tipo: 'Devolución mayor al saldo a favor', pagoId: p.id, detalle: 'Op. ' + (p.operacion || '') + ': se devolvieron ' + p.monto.toFixed(2) +
+          ' y el saldo a favor con el proveedor era ' + redondear2_(p.monto - dev.sinSaldo).toFixed(2) + '; sobran ' + dev.sinSaldo.toFixed(2) + ' (¿falta registrar un pago?)', fuente: p.fuente });
+      }
+      // La marca lleva solo los N° de operación / documentos (sin fechas: sus dígitos se confundirían con un N° de operación)
+      if (p.devDetectada) marcarDevolucion.push({ fuente: p.fuente, texto: '↩️ DEVOLUCIÓN' + (dev.aplicado.length ? ' · ' + dev.aplicado.map(function (a) {
+        return a.tipo === 'voucher' ? 'op ' + (a.op || '') : a.texto; }).join(', ') : '') });
+    });
+  }
+
   // ---------------- 8. Pagos sin factura (planilla, AFP, SUNAT…) y sin cruzar ----------------
   var sinFactura = [];
   pagos.forEach(function (p) {
     if (p.aplicado || p.sugerido || p.modalidad !== MODALIDAD.PAGO) return;
+    if ((p.devuelto || 0) >= p.monto - 0.05) return;   // ↩️ el proveedor ya devolvió todo este pago
     var texto = [p.refs, p.beneficiarioNombre, p.descripcion].join(' ');
     var cat = categoriaPorTexto_(texto, categorias);
     if (!cat && !p.beneficiarioRuc && esPersonaNatural_(p.beneficiarioNombre)) {
@@ -500,7 +622,14 @@ function ejecutarCruce_(entrada) {
   return {
     docs: lista, movimientos: movimientos, sugerencias: sugerencias, sinCruzar: sinCruzar,
     sinFactura: sinFactura, remanentes: remanentes, errores: errores, pagos: pagos,
+    devoluciones: devoluciones, marcarDevolucion: marcarDevolucion,
   };
+}
+
+/** dd/mm/aaaa sin depender de Utilities (el motor se prueba fuera de Apps Script). */
+function Utilities_fecha_(d) {
+  if (!(d instanceof Date) || isNaN(d)) return '';
+  return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
 }
 
 function normTexto_(s) {

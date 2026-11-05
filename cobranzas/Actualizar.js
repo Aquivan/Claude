@@ -131,6 +131,11 @@ function actualizarTodoInterno_(forzar) {
     escribirConciliar_(ss, res, cfg); bitacora_(ss, 'Conciliar', t1, res.sugerencias.length + ' sugerencias, ' + res.errores.length + ' avisos, ' + res.sinCruzar.length + ' sin cruzar'); t1 = Date.now();
     escribirOtrosPagos_(ss, res, cfg); bitacora_(ss, 'Otros pagos', t1, res.sinFactura.length + ' pagos sin factura'); t1 = Date.now();
     escribirNoAplicados_(ss, res, cfg); t1 = Date.now();
+    try {   // ↩️ devoluciones de proveedores detectadas: se marcan en su voucher (solo si «Tipo y Nº Doc.» está vacío)
+      var nDev = marcarDevolucionesEnVouchers_(cfg, res);
+      bitacora_(ss, 'Devoluciones', t1, (res.devoluciones || []).length + ' devoluciones de proveedores' + (nDev ? ', ' + nDev + ' marcada(s) en Vouchers' : ''));
+    } catch (e) { bitacora_(ss, 'Devoluciones ERROR', t1, e.message); }
+    t1 = Date.now();
     try { var rr = RTN_escribirHoja_(ss, res, cfg, padron, infoPadron); bitacora_(ss, 'Retenciones', t1, rr.proveedores + ' proveedores, ' + rr.facturas + ' facturas sujetas (' + rr.porAtender + ' por atender), ' + rr.vouchers + ' vouchers'); }
     catch (e) { bitacora_(ss, 'Retenciones ERROR', t1, e.message); }
     t1 = Date.now();

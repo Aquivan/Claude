@@ -199,13 +199,13 @@ function escribirPanel_(ss, filasDocs, res, cfg, liqs) {
   var aging = { 'Por cobrar': [0, 0, 0, 0, 0], 'Por pagar': [0, 0, 0, 0, 0] };
   var docsPorClave = {}; res.docs.forEach(function (d) { docsPorClave[d.clave] = d; });
   cfg.grupo.forEach(function (r) {
-    porEmp[nombreEmpresa_(cfg, r)] = { cob: 0, cobV: 0, pag: 0, pagV: 0, sobre: 0, falta: 0, sinCruzar: 0 };
+    porEmp[nombreEmpresa_(cfg, r)] = { cob: 0, cobV: 0, pag: 0, pagV: 0, sobre: 0, falta: 0, sinCruzar: 0, dev: 0 };
   });
   filasDocs.forEach(function (f) {
     var d = docsPorClave[f[I['Clave']]];
     var tc = String(f[I['Moneda']]) === 'USD' ? (Number(d && d.tc) > 1 ? Number(d.tc) : 3.75) : 1;
     var saldo = Number(f[I['Saldo']]) * tc;
-    var e = porEmp[f[0]] || (porEmp[f[0]] = { cob: 0, cobV: 0, pag: 0, pagV: 0, sobre: 0, falta: 0, sinCruzar: 0 });
+    var e = porEmp[f[0]] || (porEmp[f[0]] = { cob: 0, cobV: 0, pag: 0, pagV: 0, sobre: 0, falta: 0, sinCruzar: 0, dev: 0 });
     var estado = String(f[I['Estado']]);
     var dias = Number(f[I['Días vencido']]) || 0;
     if (estado.indexOf('Sobrepagado') !== -1) e.sobre++;
@@ -222,6 +222,11 @@ function escribirPanel_(ss, filasDocs, res, cfg, liqs) {
   res.sinCruzar.forEach(function (s) {
     var r = s.pago.pagadorRuc && cfg.grupo.indexOf(s.pago.pagadorRuc) !== -1 ? s.pago.pagadorRuc : s.pago.beneficiarioRuc;
     if (r && cfg.grupo.indexOf(r) !== -1) porEmp[nombreEmpresa_(cfg, r)].sinCruzar++;
+  });
+  (res.devoluciones || []).forEach(function (d) {   // ↩️ devuelto por proveedores (en S/; USD al TC de 3.75 si no hay otro)
+    if (!d.empresaRuc || cfg.grupo.indexOf(d.empresaRuc) === -1) return;
+    var e = porEmp[nombreEmpresa_(cfg, d.empresaRuc)];
+    if (e) e.dev += d.pago.monto * (String(d.pago.moneda).toUpperCase() === 'USD' ? 3.75 : 1);
   });
   var tot = { cob: 0, cobV: 0, pag: 0, pagV: 0 };
   Object.keys(porEmp).forEach(function (k) { ['cob', 'cobV', 'pag', 'pagV'].forEach(function (c) { tot[c] += porEmp[k][c]; }); });
@@ -256,14 +261,17 @@ function escribirPanel_(ss, filasDocs, res, cfg, liqs) {
   // ---- Por empresa ----
   var fila = 8;
   sh.getRange(fila, 2, 1, 9).merge().setValue('🏢 POR EMPRESA').setFontWeight('bold').setFontColor(COLOR.AZUL); fila++;
-  var encE = ['Empresa', 'Por cobrar', 'Cobrar vencido', 'Por pagar', 'Pagar vencido', 'Neto (cobrar − pagar)', 'Sobrepagados', 'Falta detr./ret.', 'Vouchers sin cruzar'];
+  var encE = ['Empresa', 'Por cobrar', 'Cobrar vencido', 'Por pagar', 'Pagar vencido', 'Neto (cobrar − pagar)', 'Sobrepagados', 'Falta detr./ret.', 'Vouchers sin cruzar', '↩️ Devuelto por proveedores'];
+  var totDev = 0;
   var filasE = Object.keys(porEmp).map(function (k) {
     var e = porEmp[k];
-    return [k, e.cob, e.cobV, e.pag, e.pagV, e.cob - e.pag, e.sobre, e.falta, e.sinCruzar];
+    totDev += e.dev || 0;
+    return [k, e.cob, e.cobV, e.pag, e.pagV, e.cob - e.pag, e.sobre, e.falta, e.sinCruzar, e.dev || 0];
   });
-  filasE.push(['TOTAL GRUPO', tot.cob, tot.cobV, tot.pag, tot.pagV, tot.cob - tot.pag, '', '', '']);
+  filasE.push(['TOTAL GRUPO', tot.cob, tot.cobV, tot.pag, tot.pagV, tot.cob - tot.pag, '', '', '', totDev]);
   escribirTabla_(sh, fila, 2, encE, filasE);
   sh.getRange(fila + 1, 3, filasE.length, 5).setNumberFormat('#,##0.00;-#,##0.00;"-"');
+  sh.getRange(fila + 1, 11, filasE.length, 1).setNumberFormat('#,##0.00;-#,##0.00;"-"');
   sh.getRange(fila + filasE.length, 2, 1, encE.length).setFontWeight('bold').setBackground(COLOR.CABECERA);
   sh.getRange(fila + 1, 4, filasE.length, 1).setFontColor('#991B1B');
   sh.getRange(fila + 1, 6, filasE.length, 1).setFontColor('#991B1B');
@@ -379,14 +387,81 @@ function escribirNoAplicados_(ss, res, cfg) {
         p.operacion || '', p.banco || '', p.monto, sinAplicar, moneda, p.refs || '', situacion, p.fuente]);
     }
   }
+  // ↩️ Lo que el proveedor ya devolvió se descuenta (deja de ser «saldo a favor»).
+  var textoDev = function (o) {
+    return (o.devoluciones || []).length ? ' · ↩️ devuelto ' + o.devoluciones.map(function (d) {
+      return r2_(d.monto).toFixed(2) + (d.operacion ? ' (op ' + d.operacion + ')' : '');
+    }).join(', ') : '';
+  };
   (res.pagos || []).forEach(function (p) {
     if (p.aplicado || p.sinFactura || p.modalidad !== MODALIDAD.PAGO) return;
-    agregar(p, p.monto, p.moneda, p.sugerido ? '🟡 Hay sugerencia por confirmar en ✅ Conciliar' : (motivo[p.id] || 'Sin aplicar'));
+    var queda = r2_(p.monto - (p.devuelto || 0));
+    if (queda <= 0.05) return;
+    agregar(p, queda, p.moneda, (p.sugerido ? '🟡 Hay sugerencia por confirmar en ✅ Conciliar' : (motivo[p.id] || 'Sin aplicar')) + textoDev(p));
   });
   (res.remanentes || []).forEach(function (r) {
-    agregar(r.pago, r.monto, r.moneda, '⚠️ Sobra después de cancelar ' + r.docs);
+    var queda = r2_(r.monto - (r.devuelto || 0));
+    if (queda <= 0.05) return;
+    agregar(r.pago, queda, r.moneda, '⚠️ Sobra después de cancelar ' + r.docs + textoDev(r));
+  });
+  (res.devoluciones || []).forEach(function (d) {   // devolución que no tenía saldo a favor que descontar: queda a la vista
+    if (d.sinSaldo > 0.05) {
+      var p = d.pago, emp = d.empresaRuc;
+      filas.push([nombreEmpresa_(cfg, emp, ''), 'Por pagar', d.proveedorRuc || '', '', p.fecha || '', p.operacion || '', p.banco || '', p.monto,
+        -d.sinSaldo, p.moneda, p.refs || '', '↩️ Devolución mayor al saldo a favor: revisar si falta registrar un pago', p.fuente]);
+    }
   });
   sh.getRange(1, 1, 1, ENC_NO_APLICADOS_.length).setValues([ENC_NO_APLICADOS_]);
   if (filas.length) sh.getRange(2, 1, filas.length, ENC_NO_APLICADOS_.length).setValues(filas);
   sh.hideSheet();
+  escribirDevoluciones_(ss, res, cfg);
+}
+
+/**
+ * ↩️ Hoja oculta _Devoluciones: cada devolución de proveedor, a qué se descontó (vouchers sobrantes o facturas
+ * sobrepagadas) y lo que no tenía saldo a favor. La usan 🔎 Consulta y el 🎯 Panel.
+ */
+var ENC_DEVOLUCIONES_ = ['Empresa', 'RUC empresa', 'RUC proveedor', 'Proveedor', 'Fecha', 'Operación', 'Banco', 'Monto devuelto',
+  'Moneda', 'Descontado de', 'Sin saldo a favor', 'Origen', 'Fuente'];
+
+function escribirDevoluciones_(ss, res, cfg) {
+  var sh = obtenerOCrearHoja_(ss, HOJA.DEVOLUCIONES);
+  sh.clear();
+  var nombres = {};
+  (res.docs || []).forEach(function (d) { if (d.emisorRuc && d.emisorNombre) nombres[d.emisorRuc] = d.emisorNombre; });
+  var filas = (res.devoluciones || []).map(function (d) {
+    var p = d.pago;
+    return [nombreEmpresa_(cfg, d.empresaRuc, ''), d.empresaRuc, d.proveedorRuc, nombres[d.proveedorRuc] || p.usuario || '', p.fecha || '',
+      p.operacion || '', p.banco || '', p.monto, p.moneda, d.aplicado.map(function (a) { return a.texto + ': ' + r2_(a.monto).toFixed(2); }).join(' · '),
+      d.sinSaldo || 0, d.origen, p.fuente];
+  });
+  sh.getRange(1, 1, 1, ENC_DEVOLUCIONES_.length).setValues([ENC_DEVOLUCIONES_]);
+  if (filas.length) sh.getRange(2, 1, filas.length, ENC_DEVOLUCIONES_.length).setValues(filas);
+  sh.hideSheet();
+}
+
+/**
+ * ↩️ Las devoluciones DETECTADAS se marcan en su voucher (hoja de Vouchers, «Tipo y Nº Doc.»), solo si esa celda
+ * está vacía, con una nota que explica de dónde salió. Así queda a la vista y la persona puede borrarla si no lo es.
+ */
+function marcarDevolucionesEnVouchers_(cfg, res) {
+  var lista = res.marcarDevolucion || [];
+  if (!lista.length || !cfg.idVouchers) return 0;
+  var libro = SpreadsheetApp.openById(cfg.idVouchers), n = 0, cols = {};
+  var cuando = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy');
+  lista.forEach(function (m) {
+    var p = String(m.fuente || '').match(/^(.+)!(\d+)$/);
+    if (!p) return;
+    var sh = libro.getSheetByName(p[1]);
+    if (!sh) return;
+    if (cols[p[1]] == null) cols[p[1]] = indiceColumnas_(sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0])('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc');
+    if (cols[p[1]] < 0) return;
+    var celda = sh.getRange(Number(p[2]), cols[p[1]] + 1);
+    if (String(celda.getDisplayValue()).trim()) return;   // nunca se pisa lo que ya escribió alguien
+    celda.setValue(m.texto);
+    celda.setNote('↩️ Marcado como DEVOLUCIÓN DE PROVEEDOR por Cuentas por Cobrar y Pagar el ' + cuando + ': entra dinero desde un proveedor de la ' +
+      'empresa, sin venta pendiente con él y con saldo a favor suficiente. Se descontó del saldo a favor. Si no es una devolución, borre esta celda.');
+    n++;
+  });
+  return n;
 }
