@@ -47,13 +47,29 @@ DEFAULT_TIMEOUT = 25  # Segundos por peticion para evitar cuelgues prolongados d
 #   - A veces el archivo de un ticket terminado da HTTP 500 una y otra vez.
 # Por eso: espera CORTA por ticket y, si no sale, se pide otro (hasta
 # MAX_PEDIDOS). Peor caso ~10 min por libro, no 45.
-ESPERA_TICKET_SEG = 150          # tope de espera por ticket
+ESPERA_TICKET_SEG = 180          # tope de espera por ticket (despues queda PENDIENTE)
 ESPERAS_DESCARGA_SEG = (10, 20, 40)  # reintentos del archivo de un ticket terminado
-MAX_PEDIDOS = 3                  # tickets nuevos como maximo por libro y corrida
+MAX_PEDIDOS = 2                  # solo si el archivo de un ticket terminado no se entrega
 
 
 class SunatNoEntrega(RuntimeError):
-    """Ticket atascado o archivo que SUNAT no entrega: se arregla pidiendo otro ticket."""
+    """Ticket atascado (atascado=True) o archivo que SUNAT no entrega (atascado=False)."""
+    def __init__(self, texto, atascado=False, ticket=""):
+        super().__init__(texto)
+        self.atascado = atascado
+        self.ticket = ticket
+
+
+class SunatPendiente(RuntimeError):
+    """SUNAT no entrego todavia: NO es un error nuestro ni de los datos. Se sale con el codigo
+    PENDIENTE (75) y el workflow lo anota como «⏳ pendiente en SUNAT»; la hoja lo vuelve a pedir
+    mas tarde y SUNAT entrega el MISMO pedido (si sigue en curso responde 42209 con su numero)."""
+    def __init__(self, texto, ticket=""):
+        super().__init__(texto)
+        self.ticket = ticket
+
+
+EXIT_PENDIENTE = 75
 
 
 def autenticar(cfg, reintentos=4):
@@ -247,7 +263,7 @@ def esperar_ticket(token, num_ticket, periodo, max_seg=None):
             print(f"SUNAT ticket {num_ticket} a los {int(time.time() - inicio)} s: {estado}")
             ultimo_estado = estado
         if time.time() - inicio + pausa > max_seg:
-            raise SunatNoEntrega(f"el ticket {num_ticket} no termino en {max_seg} s "
+            raise SunatNoEntrega(atascado=True, ticket=num_ticket, texto=f"el ticket {num_ticket} no termino en {max_seg} s "
                                  f"({consultas} consultas; ultimo estado: {estado})")
         time.sleep(pausa)
         pausa = min(30, pausa * 2 if pausa < 12 else pausa + 8)
@@ -280,23 +296,24 @@ def descargar_archivo(token, archivo, cod_libro, esperas_seg=None):
             print(f"AVISO: SUNAT no entrego '{archivo['nombre']}' (intento {n}/{intentos}): "
                   f"{ultimo_error[-200:]}. Nuevo intento en {esperas_seg[n - 1]} s...")
             time.sleep(esperas_seg[n - 1])
-    raise SunatNoEntrega(f"SUNAT no entrego el archivo '{archivo['nombre']}' "
+    raise SunatNoEntrega(ticket=archivo["numTicket"], texto=f"SUNAT no entrego el archivo '{archivo['nombre']}' "
                          f"del ticket {archivo['numTicket']} tras {intentos} intentos. Ultimo error: {ultimo_error}")
 
 
 def descargar_periodo(token, periodo, tipo, formato="txt"):
     """tipo: 'venta' | 'compra'. Devuelve (lista de (nombre, bytes), modo).
 
-    Si un ticket se atasca o su archivo no se entrega, se pide un ticket
-    NUEVO (hasta MAX_PEDIDOS), con una pausa corta entre pedidos."""
+    - Ticket que no termina a tiempo: NO se pide otro (SUNAT solo admite uno en curso por libro y
+      respondera 42209 con ese mismo numero). Se deja PENDIENTE y se retoma en la siguiente corrida.
+    - Ticket terminado cuyo archivo no se entrega (HTTP 500): se pide UN ticket nuevo; si tampoco,
+      PENDIENTE. Asi no se gastan 10+ minutos de GitHub esperando a un SUNAT lento."""
     for pedido in range(1, MAX_PEDIDOS + 1):
         try:
             return _descargar_periodo_una_vez(token, periodo, tipo, formato)
         except SunatNoEntrega as e:
-            if pedido == MAX_PEDIDOS:
-                raise RuntimeError(f"SUNAT no entrego el {tipo} {periodo} tras {MAX_PEDIDOS} pedidos. Ultimo: {e}")
-            print(f"AVISO: {e}. Se vuelve a pedir a SUNAT ({pedido + 1}/{MAX_PEDIDOS}) en 20 s "
-                  "(si el pedido sigue en curso, SUNAT lo indica y se sigue esperando ese)...")
+            if e.atascado or pedido == MAX_PEDIDOS:
+                raise SunatPendiente(f"SUNAT todavia no entrega el {tipo} {periodo}: {e}", ticket=e.ticket)
+            print(f"AVISO: {e}. Se pide un ticket nuevo a SUNAT ({pedido + 1}/{MAX_PEDIDOS}) en 20 s...")
             time.sleep(20)
 
 
@@ -431,7 +448,13 @@ def main():
     })
     print("Token OK. Solicitando descarga...")
 
-    archivos, modo = descargar_periodo(token, args.periodo, args.tipo, args.formato)
+    try:
+        archivos, modo = descargar_periodo(token, args.periodo, args.tipo, args.formato)
+    except SunatPendiente as e:
+        # Linea FIJA para el workflow: no es un error, es «⏳ pendiente en SUNAT».
+        print(f"AVISO: {e}")
+        print(f"PENDIENTE_SUNAT={e.ticket or '-'}")
+        sys.exit(EXIT_PENDIENTE)
     if not archivos:
         # SUNAT confirmo que no hay comprobantes de este tipo en este periodo
         # (0 comprobantes es un resultado valido, no un error) -- se sale sin

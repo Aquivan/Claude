@@ -118,6 +118,11 @@ jobs:
       matrix:
         empresa: ${{ fromJson(needs.preparar.outputs.matriz) }}
     # Mismo Environment (= RUC) y mismos secretos que la descarga completa.
+    # Una sola descarga SIRE a la vez POR EMPRESA (también entre la completa y la rápida): SUNAT solo
+    # admite un pedido en curso por libro y dos corridas se estorbaban. La segunda espera su turno.
+    concurrency:
+      group: sire-empresa-${{ matrix.empresa.ruc }}
+      cancel-in-progress: false
     environment: ${{ matrix.empresa.ruc }}
     env:
       RUC: ${{ matrix.empresa.ruc }}
@@ -145,10 +150,10 @@ jobs:
           RAIZ="$GITHUB_WORKSPACE"
           W="$RUNNER_TEMP/sire"
           if [ "$TIPO" = "ambos" ]; then TIPOS=(compra venta); else TIPOS=("$TIPO"); fi
-          OK=""; FALLO=""; RESUMEN=""; ERRORES=""
+          OK=""; FALLO=""; PEND=""; RESUMEN=""; ERRORES=""
           for P in $PERIODOS; do
             HIST="$RAIZ/sire/$RUC/historico/$P"
-            BIEN=1; LINEA=""
+            BIEN=1; ESPERA=0; LISTO=0; LINEA=""
             for T in "${TIPOS[@]}"; do
               echo "########## $RUC · $T · $P ##########"
               ETQ=$([ "$T" = "compra" ] && echo compras || echo ventas)
@@ -164,6 +169,10 @@ jobs:
                 [ "$EXIT_SIRE" -eq 0 ] && break
                 [ "$intento" -lt 2 ] && { echo "Fallo temporal; reintento en 5 s..."; sleep 5; }
               done
+              if [ "$EXIT_SIRE" -eq 75 ]; then   # SUNAT aun no lo entrega: no es falla, se retoma luego
+                ESPERA=1; LINEA="$LINEA${LINEA:+ · }$ETQ ⏳ pendiente en SUNAT"
+                continue
+              fi
               if [ "$EXIT_SIRE" -ne 0 ]; then
                 BIEN=0; ERRORES="$ERRORES $P $T: SUNAT no entrego el reporte;" LINEA="$LINEA${LINEA:+ · }$ETQ ❌"
                 continue
@@ -203,18 +212,23 @@ jobs:
                 cp "$W/salida.csv" "$HIST/$CSV"
                 N=$(python3 -c "import csv,sys; print(max(0, sum(1 for _ in csv.reader(open(sys.argv[1], encoding='utf-8'))) - 1))" "$W/salida.csv")
               fi
-              LINEA="$LINEA${LINEA:+ · }$ETQ $N${MODO:+ ($MODO)}"
+              LINEA="$LINEA${LINEA:+ · }$ETQ $N${MODO:+ ($MODO)}"; LISTO=1
             done
             MES="${P:4:2}/${P:0:4}"
-            if [ "$BIEN" -eq 1 ]; then OK="$OK $P"; else FALLO="$FALLO $P"; fi
+            [ "$BIEN" -eq 0 ] && FALLO="$FALLO $P"
+            [ "$ESPERA" -eq 1 ] && PEND="$PEND $P"
+            [ "$BIEN" -eq 1 ] && [ "$LISTO" -eq 1 ] && OK="$OK $P"   # lo que sí llegó se importa aunque otro tipo siga pendiente
+            [ "$BIEN" -eq 1 ] && [ "$ESPERA" -eq 0 ] && [ "$LISTO" -eq 0 ] && OK="$OK $P"   # mes vacío: igual se avisa
             RESUMEN="$RESUMEN${RESUMEN:+; }$MES ${LINEA:-sin datos}"
           done
           echo "ok=$(echo $OK)" >> "$GITHUB_OUTPUT"
           echo "fallo=$(echo $FALLO)" >> "$GITHUB_OUTPUT"
+          echo "pendiente=$(echo $PEND)" >> "$GITHUB_OUTPUT"
           echo "- **$RUC**: $RESUMEN" >> "$GITHUB_STEP_SUMMARY"
           # El bot (Telegram/WhatsApp) lee estas anotaciones para contar el resultado.
           echo "::notice title=SIRE reporte $RUC::$RESUMEN"
           [ -n "$ERRORES" ] && echo "::error title=SIRE sin reporte $RUC::$ERRORES"
+          [ -n "$PEND" ] && echo "::warning title=SIRE pendiente en SUNAT $RUC::$(echo $PEND) (SUNAT lento; la hoja lo vuelve a pedir sola)"
           exit 0
 
       - name: Guardar en el repositorio
@@ -253,6 +267,20 @@ jobs:
             curl -sS -L "$SHEET_WEBHOOK_URL" -H "Content-Type: application/json" \
               -d "{\"secreto\":\"$SHEET_WEBHOOK_SECRET\",\"ruc\":\"$RUC\",\"periodo\":\"$P\"}" \
               --max-time 60 -o /dev/null -w "Aviso $P: HTTP %{http_code}\n" || echo "AVISO: la hoja no respondio ($P)."
+          done
+
+      - name: Avisar a la hoja SIRE lo pendiente (la hoja lo vuelve a pedir sola)
+        if: steps.bajar.outputs.pendiente != ''
+        env:
+          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL || secrets.SHEETS_WEBHOOK_URL }}
+          SHEET_WEBHOOK_SECRET: ${{ secrets.SHEET_WEBHOOK_SECRET || secrets.SHEETS_WEBHOOK_SECRET }}
+          PEND: ${{ steps.bajar.outputs.pendiente }}
+        run: |
+          [ -z "$SHEET_WEBHOOK_URL" ] && { echo "Sin webhook: no se programa el reintento."; exit 0; }
+          for P in $PEND; do
+            curl -sS -L "$SHEET_WEBHOOK_URL" -H "Content-Type: application/json" \
+              -d "{\"secreto\":\"$SHEET_WEBHOOK_SECRET\",\"ruc\":\"$RUC\",\"periodo\":\"$P\",\"pendiente\":true,\"tipo\":\"$TIPO\"}" \
+              --max-time 60 -o /dev/null -w "Pendiente $P: HTTP %{http_code}\n" || echo "AVISO: la hoja no respondio ($P)."
           done
 
       - name: Resultado

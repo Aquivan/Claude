@@ -399,6 +399,11 @@ jobs:
     # (Settings > Environments > New environment, con ese nombre) y ahi
     # adentro van sus 5 secrets: SUNAT_RUC, SUNAT_USUARIO, SUNAT_CLAVE,
     # SIRE_CLIENT_ID, SIRE_CLIENT_SECRET.
+    # Una sola descarga SIRE a la vez POR EMPRESA (también entre la completa y la rápida): SUNAT solo
+    # admite un pedido en curso por libro y dos corridas se estorbaban. La segunda espera su turno.
+    concurrency:
+      group: sire-empresa-${{ matrix.empresa.ruc }}
+      cancel-in-progress: false
     environment: ${{ matrix.empresa.ruc }}
     env:
       RUC: ${{ matrix.empresa.ruc }}
@@ -538,6 +543,8 @@ jobs:
 
       - name: Descargar de la API SIRE (compra y/o venta) y armar facturas.csv
         env:
+          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL || secrets.SHEETS_WEBHOOK_URL }}
+          SHEET_WEBHOOK_SECRET: ${{ secrets.SHEET_WEBHOOK_SECRET || secrets.SHEETS_WEBHOOK_SECRET }}
           SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
           SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
           SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
@@ -862,6 +869,18 @@ jobs:
                   break
                 fi
               done
+              if [ "$EXIT_SIRE" -eq 75 ]; then
+                # ⏳ SUNAT aún no entrega (lento): NO es falla. No se toca nada de lo guardado; los pasos
+                # siguientes se saltan (SIRE_PENDIENTE) y la hoja vuelve a pedir esta empresa más tarde.
+                echo "::warning title=SIRE pendiente en SUNAT $RUC::$T ${{ steps.periodo.outputs.valor }}: SUNAT aun no lo entrega; la hoja lo vuelve a pedir sola."
+                echo "SIRE_PENDIENTE=1" >> "$GITHUB_ENV"
+                if [ -n "${SHEET_WEBHOOK_URL:-}" ]; then
+                  curl -sS -L "$SHEET_WEBHOOK_URL" -H "Content-Type: application/json" \
+                    -d "{\"secreto\":\"$SHEET_WEBHOOK_SECRET\",\"ruc\":\"$RUC\",\"periodo\":\"${{ steps.periodo.outputs.valor }}\",\"pendiente\":true,\"completa\":true}" \
+                    --max-time 60 -o /dev/null -w "Aviso pendiente: HTTP %{http_code}\n" || echo "AVISO: la hoja no respondio."
+                fi
+                exit 0
+              fi
               if [ "$EXIT_SIRE" -ne 0 ]; then
                 echo "ERROR: sire_client.py fallo (exit $EXIT_SIRE) para $RUC / $T tras los reintentos. Ver el detalle arriba."
                 exit "$EXIT_SIRE"
@@ -922,6 +941,7 @@ jobs:
           cat "$FACTURAS_CSV" 2>/dev/null || echo "(vacio)"
 
       - name: Crear script de decodificacion (PDF/XML de la API moderna)
+        if: env.SIRE_PENDIENTE != '1'
         run: |
           cat > /tmp/decode_api.py << 'PYEOF'
           import sys, json, base64, zipfile, io, os, re
@@ -1015,7 +1035,7 @@ jobs:
           PYEOF
 
       - name: Login + procesar lista de facturas (generadas del SIRE)
-        if: matrix.empresa.modalidad_descarga != 'sire'
+        if: env.SIRE_PENDIENTE != '1' && (matrix.empresa.modalidad_descarga != 'sire')
         env:
           SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
           SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
@@ -1293,7 +1313,7 @@ jobs:
           # (ya se escribe directo en $DIR_DESCARGAS/resumen.txt, no hace falta copiar)
 
       - name: Extraer descripcion y cantidad de items desde los XML (opcional)
-        if: matrix.empresa.extraer_items_xml == true
+        if: env.SIRE_PENDIENTE != '1' && (matrix.empresa.extraer_items_xml == true)
         run: |
           cat > /tmp/extraer_items.py << 'PYEOF'
           import csv, glob, os, re, sys, zipfile
@@ -1628,7 +1648,7 @@ jobs:
         # publico sin tener que preguntarle nada a este workflow -- solo
         # necesita saber la URL base del bucket (se configura una sola vez en
         # la hoja, ver GitHubSync.gs / Config.gs).
-        if: always() && matrix.empresa.subir_pdf_r2 == true
+        if: always() && env.SIRE_PENDIENTE != '1' && matrix.empresa.subir_pdf_r2 == true
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -1696,7 +1716,7 @@ jobs:
           python3 /tmp/subir_r2.py "$RUC" "$DIR_DESCARGAS"
 
       - name: Generar tablas completas (markdown) de compras y ventas
-        if: always() && matrix.empresa.generar_markdown == true
+        if: always() && env.SIRE_PENDIENTE != '1' && matrix.empresa.generar_markdown == true
         run: |
           cat > /tmp/generar_md.py << 'PYEOF'
           import csv, os, sys, textwrap
@@ -1887,6 +1907,7 @@ jobs:
           python3 /tmp/generar_md.py "$RUC" "$RUTA_COMPRAS_CSV" "$DOC_COMPRAS_MD" "$RUTA_VENTAS_CSV" "$DOC_VENTAS_MD"
 
       - name: Guardar copia historica del periodo (no se pisa entre corridas)
+        if: env.SIRE_PENDIENTE != '1'
         # RUTA_COMPRAS_CSV/RUTA_VENTAS_CSV se SOBREESCRIBEN en cada corrida (son
         # "el ultimo periodo procesado"), asi que un rango de varios periodos, o
         # simplemente correr el workflow mes a mes, va perdiendo los meses
@@ -1909,6 +1930,7 @@ jobs:
           true
 
       - name: Guardar todo en el repositorio
+        if: env.SIRE_PENDIENTE != '1'
         env:
           ES_RANGO: ${{ matrix.empresa.es_rango }}
         run: |
@@ -1998,6 +2020,7 @@ jobs:
           fi
 
       - name: Avisar a la Sheet (webhook instantaneo, opcional)
+        if: env.SIRE_PENDIENTE != '1'
         # 100% opcional -- si no configuraste SHEET_WEBHOOK_URL/SHEET_WEBHOOK_SECRET
         # como Repository secrets, este paso se omite solo con un aviso, sin
         # romper nada. Reemplaza la ESPERA de la importacion periodica/el

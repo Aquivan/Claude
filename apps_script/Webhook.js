@@ -46,7 +46,12 @@ function doPost(e) {
       respuesta = 'ERROR: secreto incorrecto.';
     } else if (!body.ruc || !body.periodo) {
       respuesta = 'ERROR: falta ruc o periodo en el aviso.';
+    } else if (body.pendiente) {
+      // ⏳ SUNAT aún no entregó el reporte (lento): no es un error. Se vuelve a pedir solo más tarde.
+      anotarSirePendiente_(String(body.ruc), String(body.periodo), String(body.tipo || 'ambos'));
+      respuesta = 'ok, ' + body.ruc + ' ' + body.periodo + ' pendiente en SUNAT: se vuelve a pedir en ' + SIRE_PEND_MIN_ + ' min';
     } else {
+      quitarSirePendiente_(String(body.ruc), String(body.periodo));   // llegó: ya no está pendiente
       // Se responde AL TOQUE y la importacion va a una cola que se procesa en
       // segundo plano, una empresa a la vez. Asi GitHub no se queda ~5 min por
       // empresa esperando (minutos que se cobran) y dos importaciones nunca se pisan.
@@ -126,4 +131,70 @@ function sacarDeColaWebhook_() {
   } finally {
     candado.releaseLock();
   }
+}
+
+
+// ---------------------------------------------------------------------------
+// ⏳ SIRE pendiente en SUNAT. Cuando SUNAT está lenta, el robot no espera de más (no gasta GitHub): avisa
+// «pendiente» y termina. Aquí se anota y, cada 30 min, se vuelve a pedir SOLO lo pendiente con la descarga
+// rápida (sire-solo-reporte.yml). SUNAT entrega el MISMO pedido que quedó en curso. Hasta 8 intentos (4 h);
+// después queda en el Registro como «no llegó». Los PDF/XML de esas facturas los trae la descarga diaria.
+// ---------------------------------------------------------------------------
+
+var SIRE_PEND_PROP_ = 'SIRE_PENDIENTES';
+var SIRE_PEND_MIN_ = 30;
+var SIRE_PEND_MAX_ = 8;
+
+function leerSirePendientes_() { return JSON.parse(PropertiesService.getScriptProperties().getProperty(SIRE_PEND_PROP_) || '{}'); }
+function guardarSirePendientes_(p) { PropertiesService.getScriptProperties().setProperty(SIRE_PEND_PROP_, JSON.stringify(p)); }
+
+function anotarSirePendiente_(ruc, periodo, tipo) {
+  var candado = LockService.getScriptLock();
+  candado.waitLock(20000);
+  try {
+    var p = leerSirePendientes_(), k = ruc + '|' + periodo;
+    if (!p[k]) { p[k] = { ruc: ruc, periodo: periodo, tipo: tipo, desde: Date.now(), intentos: 0 }; registrarEnBitacora_('⏳ SIRE ' + ruc + ' ' + periodo + ': SUNAT aún no lo entrega (lento). Se vuelve a pedir solo cada ' + SIRE_PEND_MIN_ + ' min.'); }
+    p[k].avisado = Date.now();
+    guardarSirePendientes_(p);
+  } finally { candado.releaseLock(); }
+  var ya = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'reintentarSirePendientes'; });
+  if (!ya) ScriptApp.newTrigger('reintentarSirePendientes').timeBased().after(SIRE_PEND_MIN_ * 60 * 1000).create();
+}
+
+function quitarSirePendiente_(ruc, periodo) {
+  var p = leerSirePendientes_(), k = ruc + '|' + periodo;
+  if (!p[k]) return;
+  registrarEnBitacora_('✅ SIRE ' + ruc + ' ' + periodo + ': llegó (estaba pendiente en SUNAT desde ' +
+    Utilities.formatDate(new Date(p[k].desde), 'America/Lima', 'dd/MM HH:mm') + ').');
+  delete p[k];
+  guardarSirePendientes_(p);
+}
+
+/** Activador: vuelve a pedir lo pendiente (una sola corrida rápida por mes, todas esas empresas juntas). */
+function reintentarSirePendientes() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'reintentarSirePendientes') ScriptApp.deleteTrigger(t); });
+  var p = leerSirePendientes_(), porPeriodo = {}, rendidos = [];
+  Object.keys(p).forEach(function (k) {
+    var x = p[k];
+    if (x.intentos >= SIRE_PEND_MAX_) { rendidos.push(x); delete p[k]; return; }
+    x.intentos++;
+    (porPeriodo[x.periodo] = porPeriodo[x.periodo] || []).push(x.ruc);
+  });
+  guardarSirePendientes_(p);
+  rendidos.forEach(function (x) {
+    registrarEnBitacora_('❌ SIRE ' + x.ruc + ' ' + x.periodo + ': SUNAT no lo entregó en ' + SIRE_PEND_MAX_ + ' intentos (' +
+      Math.round(SIRE_PEND_MAX_ * SIRE_PEND_MIN_ / 60) + ' h). Pídalo de nuevo más tarde (⚡ descarga rápida).');
+  });
+  var periodos = Object.keys(porPeriodo);
+  if (!periodos.length) return;
+  var cfg;
+  try { cfg = cargarConfigGitHub_(); } catch (e) { registrarEnBitacora_('SIRE pendientes: ' + e.message); return; }
+  periodos.forEach(function (per) {
+    try {
+      githubFetch_(cfg, '/repos/' + cfg.GITHUB_OWNER + '/' + cfg.GITHUB_REPO + '/actions/workflows/' + WORKFLOW_SOLO_REPORTE_ + '/dispatches', {
+        method: 'post', payload: { ref: cfg.GITHUB_BRANCH, inputs: { ruc: porPeriodo[per].join(','), periodo: per, tipo: 'ambos' } } });
+      registrarEnBitacora_('🔁 SIRE pendiente: vuelvo a pedir ' + per + ' de ' + porPeriodo[per].join(', ') + '.');
+    } catch (e) { registrarEnBitacora_('SIRE pendientes: no se pudo pedir a GitHub ' + per + ': ' + e.message); }
+  });
+  // Si siguen pendientes, el robot avisará otra vez y se programa la siguiente vuelta.
 }
