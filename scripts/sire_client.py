@@ -122,13 +122,16 @@ def sire_get(url, params, token, accept="application/json", intentos=4):
                     cuerpo = e.read()[:300].decode("utf-8", "replace").strip()
                 except Exception:
                     cuerpo = ""
+                if cuerpo.lower().startswith("<"):
+                    t = re.search(r"<title>(.*?)</title>", cuerpo, re.S | re.I)
+                    cuerpo = f"pagina de error del servidor ({t.group(1).strip() if t else 'html'})"
                 ultimo_error = f"HTTP {e.code} de SUNAT" + (f": {cuerpo}" if cuerpo else " (sin detalle)")
                 espera = intento * 3  # 3s, 6s, 9s
                 print(f"AVISO: SUNAT devolvio {ultimo_error[:200]}. Reintentando en {espera}s (intento {intento}/{intentos})...")
                 time.sleep(espera)
                 continue
             else:
-                detalle = e.read()[:300]
+                detalle = e.read()[:800].decode("utf-8", "replace")
                 raise RuntimeError(f"Error SUNAT {e.code} en {url_completa}: {detalle}")
         except (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionResetError, http.client.RemoteDisconnected) as e:
             ultimo_error = f"Error de red / Timeout ({e})"
@@ -292,8 +295,33 @@ def descargar_periodo(token, periodo, tipo, formato="txt"):
         except SunatNoEntrega as e:
             if pedido == MAX_PEDIDOS:
                 raise RuntimeError(f"SUNAT no entrego el {tipo} {periodo} tras {MAX_PEDIDOS} pedidos. Ultimo: {e}")
-            print(f"AVISO: {e}. Se pide un ticket nuevo a SUNAT ({pedido + 1}/{MAX_PEDIDOS}) en 20 s...")
+            print(f"AVISO: {e}. Se vuelve a pedir a SUNAT ({pedido + 1}/{MAX_PEDIDOS}) en 20 s "
+                  "(si el pedido sigue en curso, SUNAT lo indica y se sigue esperando ese)...")
             time.sleep(20)
+
+
+def _ticket_en_curso(error):
+    """SUNAT solo deja UN pedido de exportacion en curso por libro. Si ya hay
+    uno, responde 422 / 42209 ("aun tiene un proceso ... en curso con Ticket:
+    N"). Ese N es el pedido que hay que esperar: pedir otro no sirve."""
+    texto = str(error)
+    if "42209" not in texto:
+        return None
+    m = re.search(r"Ticket:\s*(\d{8,})", texto)
+    return m.group(1) if m else None
+
+
+def _pedir_o_retomar(pedir):
+    """Pide un ticket; si SUNAT ya tiene uno en curso (de esta corrida o de
+    una anterior), devuelve ESE para seguir esperandolo."""
+    try:
+        return pedir()
+    except RuntimeError as e:
+        num = _ticket_en_curso(e)
+        if not num:
+            raise
+        print(f"SUNAT ya tiene el pedido {num} en curso (de un intento anterior): se espera ese.")
+        return num
 
 
 def _descargar_periodo_una_vez(token, periodo, tipo, formato="txt"):
@@ -339,7 +367,7 @@ def _descargar_periodo_una_vez(token, periodo, tipo, formato="txt"):
     # termino sin archivos (periodo vacio, no hay nada que rotular).
     modo_efectivo = "oficial" if usar_oficial else "propuesta"
     try:
-        num_ticket = pedir_oficial() if usar_oficial else pedir_propuesta()
+        num_ticket = _pedir_o_retomar(pedir_oficial if usar_oficial else pedir_propuesta)
         archivos = esperar_ticket(token, num_ticket, periodo)
     except RuntimeError as e:
         if not es_error_sin_comprobantes(e):
@@ -354,7 +382,7 @@ def _descargar_periodo_una_vez(token, periodo, tipo, formato="txt"):
                   f"oficial de {tipo} no tiene comprobantes; se usa la propuesta como respaldo.")
             modo_efectivo = "propuesta"
             try:
-                num_ticket = pedir_propuesta()
+                num_ticket = _pedir_o_retomar(pedir_propuesta)
                 archivos = esperar_ticket(token, num_ticket, periodo)
             except RuntimeError as e2:
                 if not es_error_sin_comprobantes(e2):
