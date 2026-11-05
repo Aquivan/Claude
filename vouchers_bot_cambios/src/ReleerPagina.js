@@ -180,3 +180,57 @@ function RP_linea_(v) {
   return [f, v.banco, v.nOperacion ? 'op ' + v.nOperacion : 'sin op', (String(v.moneda || '').toUpperCase().indexOf('USD') >= 0 ? 'US$ ' : 'S/ ') + m,
     String(v.proveedor || '').slice(0, 40)].filter(String).join(' · ');
 }
+
+// ------------------------------------------------------------
+// 🔁 Desde el 👁 Visor de voucher (botón «Releer con IA»). La lectura con IA usa pdf-lib (asíncrona): se lanza y el
+// visor pregunta cada 3 s por el resultado (CacheService), así nunca se corta por esperar.
+// ------------------------------------------------------------
+
+function RP_visorIniciar(hoja, fila) {
+  const id = Utilities.getUuid().slice(0, 12), cache = CacheService.getUserCache();
+  cache.put('rp_' + id, JSON.stringify({ listo: false }), 1800);
+  RP_leer_(hoja, Number(fila)).then(function (r) {
+    cache.put('rp_' + id, JSON.stringify({ listo: true, hoja: hoja, fila: Number(fila), archivo: r.archivo, pagina: r.pagina, version: r.version,
+      antes: RP_linea_(r.antes), leidos: r.leidos, lineas: r.leidos.map(RP_linea_), dup: r.dup, agregado: r.agregado }), 1800);
+  }).catch(function (e) {
+    cache.put('rp_' + id, JSON.stringify({ listo: true, error: String(e && e.message || e) }), 1800);
+  });
+  return id;
+}
+
+function RP_visorEstado(id) {
+  const s = CacheService.getUserCache().get('rp_' + id);
+  return s ? JSON.parse(s) : { listo: true, error: 'La lectura venció. Vuelva a tocar «Releer con IA».' };
+}
+
+/** ✅ Reemplazar con el voucher elegido (n° en la lista). Escribe A..I y L; la imagen de la página se pone enseguida. */
+function RP_visorAplicar(id, i) {
+  const r = RP_visorEstado(id);
+  if (!r || r.error || !r.leidos) return { error: (r && r.error) || 'La lectura venció. Vuelva a leer.' };
+  const v = r.leidos[Number(i) || 0];
+  if (!v) return { error: 'Esa opción ya no existe.' };
+  RP_escribir_(r.hoja, r.fila, v, r.dup, 'visor de voucher');
+  CacheService.getUserCache().remove('rp_' + id);
+  RP_imagenFila_(r.hoja, r.fila).catch(function (e) { Logger.log('Releer (visor): imagen ' + e.message); });
+  return { ok: true, mensaje: '✅ Fila ' + r.fila + ' actualizada' + (r.dup ? ' (como [DUPLICADO]: ese N° ya está en la fila ' + r.dup + ')' : '') +
+    '. La imagen de la página se pone en unos segundos. Para volver atrás: menú 🤖 Vouchers → ↩️ Deshacer la última relectura.' };
+}
+
+/** Vuelve a poner en la columna J la imagen de la página de la fila (versión más nueva del archivo). */
+async function RP_imagenFila_(nombreHoja, fila) {
+  const hoja = obtenerHoja(nombreHoja), v = hoja.getRange(fila, 1, 1, 14).getValues()[0];
+  const archivo = String(v[10] || '').trim(), pagina = parseInt(v[12], 10) || 1, f = RP_archivoMasNuevo_(archivo);
+  if (!f) return;
+  if (/pdf/i.test(f.getMimeType())) {
+    cargarPdfLib();
+    const doc = await PDFLib.PDFDocument.load(new Uint8Array(f.getBlob().getBytes()));
+    if (pagina > doc.getPageCount()) return;
+    const uno = await PDFLib.PDFDocument.create();
+    const [p] = await uno.copyPages(doc, [pagina - 1]);
+    uno.addPage(p);
+    insertarImagenDesdeBlob(hoja, fila, 10, Utilities.newBlob([...new Int8Array(await uno.save())], MimeType.PDF, 'pag_' + pagina + '.pdf'), 'Voucher ' + pagina);
+  } else {
+    insertarImagenBase64(hoja, fila, 10, Utilities.base64Encode(f.getBlob().getBytes()), f.getMimeType(), archivo);
+  }
+  flushSeguro_();
+}
