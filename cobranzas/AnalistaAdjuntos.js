@@ -40,6 +40,8 @@ var ANX_SISTEMA_ADJ_ = [
   '"cuenta":"","ruc_emisor":"","emisor":"","ruc_receptor":"","receptor":"","serie_numero":"","doc_referencia":"","igv":0,"concepto":""}],',
   '"legible":true,"observaciones":""}',
   'monto = importe pagado (voucher) o total del comprobante. serie_numero ej. "F001-123". doc_referencia = factura que modifica o que paga, si figura.',
+  'Voucher con comisión/ITF: monto = lo que RECIBE el beneficiario («IMPORTE», «Importe transferido», «Monto abonado»), NO «CANCELACIÓN TOTAL» ni «Importe cargado» ' +
+  '(incluyen comisión e ITF, que son gasto bancario de quien paga). Ej.: IMPORTE 49,993.00 + COMISIÓN 7.00 = CANCELACIÓN TOTAL 50,000.00 → monto 49993.00.',
   'Deja vacío lo que no se ve; no inventes. "observaciones": máx. 40 palabras (ilegible, cortado, señales de edición, operación rechazada…).',
 ].join('\n');
 

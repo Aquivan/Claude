@@ -103,7 +103,7 @@ function TGP_leerVarios_(c, adjs) {
       var f = DriveApp.getFileById(adj.id), blob = f.getBlob(), mime = f.getMimeType();
       if (!/^image\/|pdf/i.test(mime)) { out[i] = { error: 'solo fotos o PDF' }; return; }
       var bytes = blob.getBytes();
-      var clave = hashTexto_('tgp3|' + bytes.length + '|' + Utilities.base64Encode(bytes.slice(0, 3000)));
+      var clave = hashTexto_('tgp4|' + bytes.length + '|' + Utilities.base64Encode(bytes.slice(0, 3000)));
       var r = AUV_cacheGet_(cache, 'tgp', clave);
       if (r) { out[i] = TGP_docsDe_(r, mime); return; }
       pend.push({ i: i, clave: clave, mime: mime, opts: { sistema: TGP_SISTEMA_, maxTokens: 8000,
