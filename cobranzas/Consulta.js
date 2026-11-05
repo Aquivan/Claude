@@ -148,6 +148,17 @@ function renderConsulta_(ss) {
       .setNumberFormat('#,##0.00').setFontColor(fuerte ? '#FFFFFF' : COLOR.AZUL).setBackground(fuerte ? '#B91C1C' : '#E0E7FF');
   });
   sh.setRowHeight(7, 30);
+  // 🏢 Con «(Todas)»: cuánto es de cada empresa del grupo (saldo), para distinguir a quién le compró / vendió
+  var corto = function (e) { return String(e || '').replace(/\s+(S\.?A\.?C\.?|E\.?I\.?R\.?L\.?|S\.?R\.?L\.?|S\.?A\.?)$/i, '').slice(0, 22); };
+  sh.getRange(5, 2, 1, 12).breakApart().clearContent().setBackground(null);
+  if (emp === '(Todas)' && todos.length) {
+    var porEmp = {};
+    todos.forEach(function (f) { var e = corto(f[0]); porEmp[e] = porEmp[e] || { n: 0, saldo: 0 }; porEmp[e].n++; porEmp[e].saldo += Number(f[iSaldo]) || 0; });
+    var ks = Object.keys(porEmp).sort(function (a, b) { return porEmp[b].saldo - porEmp[a].saldo; });
+    sh.getRange(5, 2, 1, 12).merge().setValue('🏢 Por empresa del grupo: ' + ks.map(function (e) {
+      return e + ' (' + porEmp[e].n + ' doc · saldo ' + porEmp[e].saldo.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ')';
+    }).join('  ·  ')).setFontSize(9).setFontWeight('bold').setFontColor('#1E3A8A').setBackground('#EEF2FF').setWrap(true);
+  }
   var ocultos = todos.length - docs.length;
   if (ocultos > 0) {
     var ocultosNc = todos.filter(function (f) { return !seMuestra(f) && conNc(f); }).length;
@@ -172,6 +183,8 @@ function renderConsulta_(ss) {
     var tipoNom = TIPO_DOC_[doc.slice(0, 2)] || 'Documento';
     var regSire = iReg >= 0 ? String(f[iReg] || '') : '';
     if (regSire) tipoNom += ' · ' + regSire;
+    // 🏢 Con «(Todas)» las empresas: a qué empresa del grupo es la factura (compró / vendió)
+    if (emp === '(Todas)') tipoNom = '🏢 ' + corto(f[0]) + ' · ' + tipoNom;
     filas.push([doc, f[cd('Emisión')], f[iCp], tipoNom, '', '', f[cd('Total')], f[iSaldo], f[iEstado], f[cd('Vence')], String(f[cd('Producto')] || '').slice(0, 80), '']);
     fondos.push(COLOR_ESTADO[f[iEstado]] || COLOR.BLANCO); negritas.push(true);
     (movsPorClave[f[cd('Clave')]] || []).sort(function (a, b) { return (a[0] || 0) - (b[0] || 0); }).forEach(function (m) {
