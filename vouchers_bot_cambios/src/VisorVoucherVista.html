@@ -121,7 +121,8 @@
   <div id="izq">
     <div class="herr"><button onclick="zoom(-1)" title="Achicar">−</button><span id="pz">100%</span><button onclick="zoom(1)" title="Agrandar (también Ctrl + rueda del mouse)">+</button>
       <button onclick="ajuste('ancho')" title="Ajustar al ancho">↔ Ancho</button><button onclick="ajuste('alto')" title="Ver la página completa">↕ Página</button>
-      <button onclick="girar()" title="Girar 90° (fotos de lado)">⟳</button><span style="flex:1"></span><span style="font-size:10px">arrastre la imagen para moverla</span></div>
+      <button onclick="girar()" title="Girar 90° (fotos de lado)">⟳</button>
+      <button onclick="recargarImagen()" title="Recargar la imagen y los datos de esta fila (si no se actualizó o se volvió a subir el archivo)">🔄 Recargar</button><span style="flex:1"></span><span style="font-size:10px">arrastre la imagen para moverla</span></div>
     <div id="marco"><div class="vacio">Haga clic en cualquier celda de una fila de vouchers y aquí aparece el voucher original.</div><span id="carga">cargando…</span></div>
     <div class="origen" id="origen"></div>
     <div id="divh" title="Arrastre hacia abajo para agrandar la imagen, hacia arriba para ver más datos"></div>
@@ -218,6 +219,25 @@ function releerAplicar() {
     google.script.run.withSuccessHandler(function (d) { if (d) pintar(d); }).VV_datos(h, f);
   }).withFailureHandler(function (e) { releerCaja(null); aviso('⚠️ ' + (e.message || e)); }).RP_visorAplicar(RL.id, i);
 }
+var VERSIONES = [];
+function verVersion(i) {
+  var x = VERSIONES[i];
+  if (!x || !D) return;
+  var d = {}; for (var k in D) d[k] = D[k];
+  d.verOriginal = x;
+  DOC.getElementById('marco').innerHTML = '<span id="carga">cargando…</span>';
+  mostrarImagen(d, ++turno);
+}
+/** 🔄 Recargar la imagen y los datos de la fila actual (olvida lo recordado: archivo, imagen bajada). */
+function recargarImagen() {
+  if (!actual || !actual.fila) return aviso('⚠️ Elija una fila.');
+  if (nCambios()) return aviso('⚠️ Guarde o descarte los cambios antes de recargar.');
+  if (D && D.original) { delete ARCH[D.original.id]; (D.original.otros || []).forEach(function (x) { delete ARCH[x.id]; }); }
+  aviso('🔄 Recargando…');
+  var h = actual.hoja, f = actual.fila;
+  google.script.run.withSuccessHandler(function (d) { if (d) { pintar(d); aviso('🔄 Recargado.', true); } })
+    .withFailureHandler(function (e) { aviso('⚠️ ' + (e.message || e)); }).VV_refrescar(h, f);
+}
 function aviso(t, ok) { var m = DOC.getElementById('msg'); m.textContent = t || ''; m.style.color = ok ? '#2e7d32' : (t && /⚠️/.test(t) ? '#c62828' : '#546e7a'); }
 
 /* ---------- el original desde Drive ---------- */
@@ -251,9 +271,20 @@ function mostrarImagen(d, t) {
     };
   }
   if (!d.original || !d.original.id) { o.textContent = (d.img ? 'imagen de la celda · ' : '') + 'no encontré el original «' + (d.archivo || '?') + '» en Drive (¿lo movieron, renombraron o borraron?)'; return; }
+  // Varios archivos con el mismo nombre: no se sabe cuál es el de esta fila. Se queda la IMAGEN DE LA CELDA (la que se
+  // guardó al procesar ESTA fila) y se ofrecen los originales para verlos uno por uno.
+  var otros = d.original.otros || [];
+  if (otros.length && !d.verOriginal) {
+    var lista = [{ id: d.original.id, mime: d.original.mime, fecha: d.original.fecha || 'más nuevo' }].concat(otros);
+    VERSIONES = lista;
+    o.innerHTML = '⚠️ Hay ' + lista.length + ' archivos llamados «' + esc(d.archivo) + '»: ' + (d.img ? 'se muestra la imagen de la celda (la de esta fila).' : 'no sé cuál es el de esta fila.') +
+      ' Ver original: ' + lista.map(function (x, i) { return '<a href="#" onclick="verVersion(' + i + ');return false">' + (i + 1) + ' (' + esc(x.fecha) + ')</a>'; }).join(' · ');
+    if (d.img) return;
+  }
   carga(true);
-  var mime = String(d.original.mime || '');
-  bajar(d.original.id, mime).then(function (a) {
+  var orig = d.verOriginal || d.original;
+  var mime = String(orig.mime || '');
+  bajar(orig.id, mime).then(function (a) {
     if (t !== turno) return;
     if (a.pdf) {
       var n = Math.min(Math.max(parseInt(d.pagina, 10) || 1, 1), a.pdf.numPages);
@@ -272,7 +303,7 @@ function mostrarImagen(d, t) {
     return urlDe(new Blob([a.buf], { type: mime || 'image/jpeg' })).then(function (url) {
     if (t !== turno) return;
     m.innerHTML = '<img src="' + url + '"><span id="carga">cargando…</span>'; zoomable(m.querySelector('img'));
-    o.textContent = 'original (foto)';
+    o.textContent = 'original (foto)' + (otros.length ? ' · ⚠️ hay ' + (otros.length + 1) + ' archivos con este nombre' + (d.verOriginal ? ' (este es el del ' + (d.verOriginal.fecha || '') + ')' : '') : '');
     });
   }).catch(function (e) {
     if (t === turno) o.textContent = (d.img ? 'imagen de la celda' : '') + ' · no pude bajar el original (' + e.message + ')';
