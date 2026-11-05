@@ -249,12 +249,58 @@ function renderConsulta_(ss) {
     sh.getRange(fila, 2).setValue('Ninguno: todos los vouchers de esta selección están aplicados a facturas.').setFontColor(COLOR.TEXTO_SUAVE).setFontSize(9);
     fila++;
   }
+  // ---- ↩️ Devoluciones de proveedores (solo «Por pagar»): lo que devolvieron y el saldo a favor que queda ----
+  if (ver === 'Por pagar') fila = escribirDevolucionesConsulta_(ss, sh, fila + 1, emp, rucSel, nombreSel, noAp, cn, todos, iSaldo) - 1;
   // ---- Todos los vouchers de esta selección (aplicados o no), para compararlos con el Sistema de Vouchers ----
   fila = escribirTodosLosVouchers_(sh, fila + 1, todos, movsPorClave, cd, cm, noAp, cn);
   sh.getRange(fila + 1, 2, 1, 12).merge().setValue('Origen de cada pago: 🟢 Referenciado en voucher = la factura está escrita en "Tipo y Nº Doc." · ' +
     '🔵 Exacto · sin ref. = el sistema lo cruzó solo por monto (no está escrita en el voucher) · 🟡 Confirmado con ✔ = sugerencia que aprobaste · ' +
     '✍️ Manual = Registro manual · 📄 N/C SIRE = nota de crédito').setFontSize(8).setFontColor(COLOR.TEXTO_SUAVE).setWrap(true);
   sh.setRowHeight(fila + 1, 28);
+}
+
+/**
+ * ↩️ Devoluciones del proveedor elegido (o de todos) y el SALDO A FAVOR que queda: lo pagado de más que el proveedor
+ * todavía no devuelve ni se compensó (vouchers sobrantes / sin aplicar, ya descontado lo devuelto, y facturas
+ * sobrepagadas). Devuelve la fila siguiente libre.
+ */
+function escribirDevolucionesConsulta_(ss, sh, fila, emp, rucSel, nombreSel, noAp, cn, todos, iSaldo) {
+  var DV = leerTablaHoja_(ss, HOJA.DEVOLUCIONES), cv = indiceColumnas_(DV.enc);
+  var devs = (DV.filas || []).filter(function (r) {
+    if (emp !== '(Todas)' && r[cv('Empresa')] !== emp) return false;
+    if (!rucSel) return true;
+    var ruc = String(r[cv('RUC proveedor')] || '');
+    return ruc ? ruc === rucSel : (!!nombreSel && nombreParecido_(r[cv('Proveedor')], nombreSel));
+  });
+  var fmt = function (n) { return Number(n || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  var devuelto = devs.reduce(function (t, r) { return t + (Number(r[cv('Monto devuelto')]) || 0); }, 0);
+  var aFavorVouchers = noAp.reduce(function (t, r) { return t + Math.max(0, Number(r[cn('Sin aplicar')]) || 0); }, 0);
+  var aFavorDocs = (todos || []).reduce(function (t, f) { return t + Math.max(0, -(Number(f[iSaldo]) || 0)); }, 0);
+  var aFavor = aFavorVouchers + aFavorDocs;
+  if (!devs.length && aFavor < 0.05) return fila;
+  sh.getRange(fila, 2, 1, 12).merge().setValue('↩️ DEVOLUCIONES DEL PROVEEDOR (' + devs.length + ')' + (devs.length ? ' · devuelto: ' + fmt(devuelto) : '') +
+    ' · 💰 saldo a favor que queda (por devolver o compensar): ' + fmt(aFavor))
+    .setFontWeight('bold').setFontSize(10).setFontColor('#065F46').setBackground('#D1FAE5');
+  fila++;
+  if (devs.length) {
+    var filas = devs.slice(0, 200).map(function (r) {
+      return [r[cv('Fecha')], String(r[cv('Operación')] || ''), r[cv('Banco')], r[cv('Proveedor')] || r[cv('RUC proveedor')], r[cv('Monto devuelto')],
+        r[cv('Moneda')], r[cv('Descontado de')], r[cv('Sin saldo a favor')] || '', r[cv('Origen')], r[cv('Fuente')]];
+    });
+    escribirTabla_(sh, fila, 2, ['Fecha', 'Operación', 'Banco', 'Proveedor', 'Devuelto', 'Moneda', 'Descontado del saldo a favor de', 'Sin saldo a favor', 'Origen', 'Fuente'], filas);
+    var n = filas.length;
+    sh.getRange(fila + 1, 2, n, 10).setFontSize(9).setVerticalAlignment('middle');
+    sh.getRange(fila + 1, 2, n, 1).setNumberFormat('dd/mm/yyyy');
+    sh.getRange(fila + 1, 3, n, 1).setNumberFormat('@');
+    sh.getRange(fila + 1, 6, n, 1).setNumberFormat('#,##0.00');
+    sh.getRange(fila + 1, 9, n, 1).setNumberFormat('#,##0.00;-#,##0.00;"-"');
+    fila += n + 1;
+  }
+  sh.getRange(fila, 2, 1, 12).merge().setValue('El saldo a favor es lo pagado de más (vouchers que sobraron o no se aplicaron, ya descontado lo devuelto) y lo que quedó a favor en ' +
+    'facturas sobrepagadas. Se cierra con una ↩️ devolución del proveedor (voucher con «DEVOLUCIÓN» en «Tipo y Nº Doc.») o compensándolo con otra factura ' +
+    '(✍️ Registro manual → Compensación).').setFontSize(8).setFontColor(COLOR.TEXTO_SUAVE).setWrap(true);
+  sh.setRowHeight(fila, 26);
+  return fila + 2;
 }
 
 // Como se muestra el origen de cada pago en la Consulta (mas claro que en Movimientos).
