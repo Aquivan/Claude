@@ -24,6 +24,7 @@ Manual de referencia (usar siempre la version vigente): https://cpe.sunat.gob.pe
 import argparse
 import http.client
 import json
+import os
 import socket
 import sys
 import time
@@ -36,6 +37,13 @@ SIRE_BASE = "https://api-sire.sunat.gob.pe/v1/contribuyente/migeigv/libros"
 COD_LIBRO_RVIE = "140000"
 COD_LIBRO_RCE = "080000"
 DEFAULT_TIMEOUT = 25  # Segundos por peticion para evitar cuelgues prolongados de socket
+
+# Paciencia con SUNAT cuando esta lenta (ver esperar_ticket / descargar_archivo).
+# "larga" (por defecto): la descarga diaria, que puede esperar. "corta": el
+# reporte rapido (sire-solo-reporte.yml, varios meses en un job de 45 min).
+_CORTA = os.environ.get("SIRE_PACIENCIA", "").strip().lower() == "corta"
+ESPERA_TICKET_MIN = 6 if _CORTA else 20
+ESPERAS_DESCARGA_SEG = (8, 15, 30) if _CORTA else (15, 30, 60, 90, 120, 180)
 
 
 def autenticar(cfg, reintentos=4):
@@ -100,6 +108,7 @@ def sire_get(url, params, token, accept="application/json", intentos=4):
                 time.sleep(espera)
                 continue
             elif e.code in (500, 502, 503, 504):
+                ultimo_error = f"HTTP {e.code} (error temporal del servidor SUNAT)"
                 espera = intento * 3  # 3s, 6s, 9s
                 print(f"AVISO: Servidor SUNAT devolvio error temporal {e.code}. Reintentando en {espera}s (intento {intento}/{intentos})...")
                 time.sleep(espera)
@@ -181,31 +190,69 @@ def consultar_estado_ticket(token, num_ticket, periodo):
     return None
 
 
-def esperar_ticket(token, num_ticket, periodo, intervalo_seg=8, max_intentos=40):
-    for _ in range(max_intentos):
-        registro = consultar_estado_ticket(token, num_ticket, periodo)
-        if registro is None:
-            time.sleep(intervalo_seg)
-            continue
-        detalle = registro.get("detalleTicket", {}) or {}
-        desc = f"{detalle.get('desEstadoEnvio', '')} {registro.get('desEstadoProceso', '')}".lower()
+def esperar_ticket(token, num_ticket, periodo, max_minutos=None):
+    """Espera a que SUNAT termine de armar el reporte del ticket.
 
-        if "error" in desc:
-            raise RuntimeError(f"SUNAT reporto error procesando el ticket {num_ticket}: {registro}")
-        if "terminado" in desc:
-            archivos = registro.get("archivoReporte") or detalle.get("archivoReporte") or []
-            return [{
-                "nombre": a["nomArchivoReporte"],
-                "codTipoArchivo": a.get("codTipoAchivoReporte") or a.get("codTipoArchivoReporte"),
-                "perTributario": registro.get("perTributario", periodo),
-                "codProceso": registro.get("codProceso"),
-                "numTicket": registro.get("numTicket", num_ticket),
-            } for a in archivos if a.get("nomArchivoReporte")]
-        time.sleep(intervalo_seg)
-    raise RuntimeError(f"Timeout esperando el ticket {num_ticket} (sigue en proceso en SUNAT)")
+    De madrugada (1-3 a. m. de Lima) SUNAT tarda mucho mas en procesar los
+    tickets: el 2026-11-05 seis de siete empresas se cortaron porque el
+    limite viejo (40 x 8 s = 5 min 20 s) se agotaba con el ticket todavia
+    "en proceso", y el reintento pedia OTRO ticket que volvia a la cola.
+    Ahora se espera el MISMO ticket hasta max_minutos, con pausas que crecen
+    (8 s -> 60 s) para no saturar a SUNAT, y un error 500/red al consultar el
+    estado no corta la espera (se vuelve a consultar en la siguiente vuelta).
+    """
+    max_minutos = max_minutos or ESPERA_TICKET_MIN
+    limite = time.time() + max_minutos * 60
+    intervalo = 8
+    consultas = 0
+    ultimo_error = None
+    while True:
+        consultas += 1
+        try:
+            registro = consultar_estado_ticket(token, num_ticket, periodo)
+            ultimo_error = None
+        except RuntimeError as e:
+            # Error SUNAT 4xx real (credenciales, parametros): no se arregla esperando.
+            if str(e).startswith("Error SUNAT 4"):
+                raise
+            registro = None
+            ultimo_error = e
+            print(f"AVISO: no se pudo consultar el ticket {num_ticket} ({e}). Se vuelve a consultar...")
+        if registro is not None:
+            detalle = registro.get("detalleTicket", {}) or {}
+            desc = f"{detalle.get('desEstadoEnvio', '')} {registro.get('desEstadoProceso', '')}".lower()
+
+            if "error" in desc:
+                raise RuntimeError(f"SUNAT reporto error procesando el ticket {num_ticket}: {registro}")
+            if "terminado" in desc:
+                archivos = registro.get("archivoReporte") or detalle.get("archivoReporte") or []
+                return [{
+                    "nombre": a["nomArchivoReporte"],
+                    "codTipoArchivo": a.get("codTipoAchivoReporte") or a.get("codTipoArchivoReporte"),
+                    "perTributario": registro.get("perTributario", periodo),
+                    "codProceso": registro.get("codProceso"),
+                    "numTicket": registro.get("numTicket", num_ticket),
+                } for a in archivos if a.get("nomArchivoReporte")]
+        if time.time() + intervalo > limite:
+            break
+        if consultas % 10 == 0:
+            print(f"Ticket {num_ticket}: SUNAT sigue procesando ({consultas} consultas). Se sigue esperando...")
+        time.sleep(intervalo)
+        intervalo = min(60, intervalo + 4)
+    extra = f" Ultimo error al consultar: {ultimo_error}" if ultimo_error else ""
+    raise RuntimeError(f"Timeout esperando el ticket {num_ticket} (sigue en proceso en SUNAT "
+                       f"tras {max_minutos} min y {consultas} consultas).{extra}")
 
 
-def descargar_archivo(token, archivo, cod_libro, reintentos=3, espera_seg=8):
+def descargar_archivo(token, archivo, cod_libro, esperas_seg=None):
+    """Baja el archivo de un ticket ya terminado.
+
+    El 2026-11-05 (1-2 a. m. de Lima) SUNAT respondio HTTP 500 a la descarga
+    de archivos de tickets YA terminados durante ~1-2 min seguidos; el limite
+    viejo (3 intentos con 8 s de pausa) se rendia antes de que SUNAT se
+    recuperara. Ahora se insiste sobre el MISMO archivo ~8 min en total, con
+    pausas crecientes, antes de rendirse.
+    """
     url = f"{SIRE_BASE}/rvierce/gestionprocesosmasivos/web/masivo/archivoreporte"
     params = {
         "nomArchivoReporte": archivo["nombre"],
@@ -215,8 +262,10 @@ def descargar_archivo(token, archivo, cod_libro, reintentos=3, espera_seg=8):
         "codProceso": archivo["codProceso"],
         "numTicket": archivo["numTicket"],
     }
+    esperas_seg = esperas_seg or ESPERAS_DESCARGA_SEG
     ultimo_error = None
-    for _ in range(reintentos):
+    intentos = len(esperas_seg) + 1
+    for n in range(1, intentos + 1):
         try:
             resp = sire_get(url, params, token, accept="*/*")
             contenido = resp.read()
@@ -225,8 +274,12 @@ def descargar_archivo(token, archivo, cod_libro, reintentos=3, espera_seg=8):
             ultimo_error = RuntimeError("SUNAT devolvio el archivo vacio (0 bytes)")
         except Exception as e:
             ultimo_error = e
-        time.sleep(espera_seg)
-    raise RuntimeError(f"No se pudo descargar '{archivo['nombre']}' tras {reintentos} intentos. "
+        if n < intentos:
+            espera = esperas_seg[n - 1]
+            print(f"AVISO: no se pudo bajar '{archivo['nombre']}' (intento {n}/{intentos}). "
+                  f"Se reintenta en {espera}s...")
+            time.sleep(espera)
+    raise RuntimeError(f"No se pudo descargar '{archivo['nombre']}' tras {intentos} intentos. "
                         f"Ultimo error: {ultimo_error}")
 
 

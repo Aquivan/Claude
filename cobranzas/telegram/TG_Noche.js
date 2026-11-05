@@ -50,11 +50,13 @@ function TGN_revisar_(cfg) {
     var t = TGN_TAREAS_[k], pk = 'TGN_' + k, est = {};
     try { est = JSON.parse(props.getProperty(pk) || '{}'); } catch (e) {}
     if (est.d !== hoy) est = { d: hoy, n: 0, t: 0 };
-    if (est.listo || est.n >= 2) return;                    // ya corrió, o ya se intentó 2 veces hoy
+    if (est.listo || est.n >= 3) return;                    // ya corrió, o ya se intentó 3 veces hoy (SUNAT de madrugada a veces falla 2 horas seguidas: 2026-11-05)
     if (est.t && Date.now() - est.t < 45 * 60000) return;   // recién pedida: GitHub aún no la muestra
     try {
       var hoyRuns = TG_ghRuns_(cfg, 30, t.wf).filter(function (r) { return new Date(r.created_at).getTime() >= desde && t.titulo.test(r.display_title || r.name || ''); });
-      if (hoyRuns.some(function (r) { return r.status !== 'completed' || r.conclusion === 'success'; })) { est.listo = true; props.setProperty(pk, JSON.stringify(est)); return; }
+      if (hoyRuns.some(function (r) { return r.conclusion === 'success'; })) { est.listo = true; props.setProperty(pk, JSON.stringify(est)); return; }
+      // Una que sigue corriendo todavía puede fallar: se espera a que termine (antes se daba por lista y no se reintentaba).
+      if (hoyRuns.some(function (r) { return r.status !== 'completed'; })) return;
       TG_gh_(cfg, '/actions/workflows/' + t.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: t.inputs() });
       est.n++; est.t = Date.now();
       props.setProperty(pk, JSON.stringify(est));

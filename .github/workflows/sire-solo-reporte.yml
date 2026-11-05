@@ -139,6 +139,8 @@ jobs:
           SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
           SIRE_CLIENT_ID: ${{ secrets.SIRE_CLIENT_ID }}
           SIRE_CLIENT_SECRET: ${{ secrets.SIRE_CLIENT_SECRET }}
+          # Varios meses en un job de 45 min: espera corta a SUNAT (ver scripts/sire_client.py).
+          SIRE_PACIENCIA: corta
         run: |
           # Sin "-e": si un mes o un tipo falla se anota y se sigue con el resto.
           set +e -u

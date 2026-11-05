@@ -860,8 +860,10 @@ jobs:
                   break
                 fi
                 if [ "$intento_sire" -lt 2 ]; then
-                  echo "AVISO: Fallo temporal en descarga SIRE ($RUC / $T). Reintentando en 5s..."
-                  sleep 5
+                  # 90 s y no 5 s: cuando SUNAT esta lento (madrugada del 2026-11-05)
+                  # pedir otro ticket al instante solo lo pone en la misma cola.
+                  echo "AVISO: Fallo temporal en descarga SIRE ($RUC / $T). Reintentando en 90s..."
+                  sleep 90
                 fi
               done
               if [ "$EXIT_SIRE" -ne 0 ]; then
