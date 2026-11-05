@@ -139,8 +139,6 @@ jobs:
           SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
           SIRE_CLIENT_ID: ${{ secrets.SIRE_CLIENT_ID }}
           SIRE_CLIENT_SECRET: ${{ secrets.SIRE_CLIENT_SECRET }}
-          # Varios meses en un job de 45 min: espera corta a SUNAT (ver scripts/sire_client.py).
-          SIRE_PACIENCIA: corta
         run: |
           # Sin "-e": si un mes o un tipo falla se anota y se sigue con el resto.
           set +e -u
@@ -156,7 +154,7 @@ jobs:
               ETQ=$([ "$T" = "compra" ] && echo compras || echo ventas)
               rm -rf "$W"; mkdir -p "$W/sire/$RUC/$T" "$W/sire/$RUC/extraido_$T"
               EXIT_SIRE=1
-              for intento in 1 2; do
+              for intento in 1; do   # sire_client.py ya pide otro ticket si SUNAT atasca uno
                 python3 "$RAIZ/scripts/sire_client.py" \
                   --ruc "$SUNAT_RUC" --usuario-sol "$SUNAT_USUARIO" --clave-sol "$SUNAT_CLAVE" \
                   --client-id "$SIRE_CLIENT_ID" --client-secret "$SIRE_CLIENT_SECRET" \

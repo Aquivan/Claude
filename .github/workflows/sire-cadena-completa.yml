@@ -841,7 +841,9 @@ jobs:
               # real (paso de verdad, corrida del 2026-08-19 23:11 con la
               # empresa BKF, RUC 20609309793).
               EXIT_SIRE=1
-              for intento_sire in 1 2; do
+              # Un solo intento aqui: sire_client.py ya pide hasta 3 tickets
+              # nuevos si SUNAT atasca uno o no entrega su archivo.
+              for intento_sire in 1; do
                 set +e
                 python3 scripts/sire_client.py \
                   --ruc "$SUNAT_RUC" \
@@ -858,12 +860,6 @@ jobs:
                 cat "/tmp/salida_sire_$T.log"
                 if [ "$EXIT_SIRE" -eq 0 ]; then
                   break
-                fi
-                if [ "$intento_sire" -lt 2 ]; then
-                  # 90 s y no 5 s: cuando SUNAT esta lento (madrugada del 2026-11-05)
-                  # pedir otro ticket al instante solo lo pone en la misma cola.
-                  echo "AVISO: Fallo temporal en descarga SIRE ($RUC / $T). Reintentando en 90s..."
-                  sleep 90
                 fi
               done
               if [ "$EXIT_SIRE" -ne 0 ]; then

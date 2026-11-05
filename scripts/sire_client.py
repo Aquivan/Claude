@@ -25,6 +25,7 @@ import argparse
 import http.client
 import json
 import os
+import re
 import socket
 import sys
 import time
@@ -38,12 +39,21 @@ COD_LIBRO_RVIE = "140000"
 COD_LIBRO_RCE = "080000"
 DEFAULT_TIMEOUT = 25  # Segundos por peticion para evitar cuelgues prolongados de socket
 
-# Paciencia con SUNAT cuando esta lenta (ver esperar_ticket / descargar_archivo).
-# "larga" (por defecto): la descarga diaria, que puede esperar. "corta": el
-# reporte rapido (sire-solo-reporte.yml, varios meses en un job de 45 min).
-_CORTA = os.environ.get("SIRE_PACIENCIA", "").strip().lower() == "corta"
-ESPERA_TICKET_MIN = 6 if _CORTA else 20
-ESPERAS_DESCARGA_SEG = (8, 15, 30) if _CORTA else (15, 30, 60, 90, 120, 180)
+# Como se comporta SUNAT (medido en las corridas del 2026-11-05):
+#   - Un pedido (ticket) sano termina en SEGUNDOS. Uno "atascado" puede quedar
+#     "en proceso" 20+ minutos y no se destraba esperando; un pedido NUEVO
+#     para la misma empresa sale en segundos (DSM: ticket ...747 atascado
+#     20 min, el ...748 listo al instante).
+#   - A veces el archivo de un ticket terminado da HTTP 500 una y otra vez.
+# Por eso: espera CORTA por ticket y, si no sale, se pide otro (hasta
+# MAX_PEDIDOS). Peor caso ~10 min por libro, no 45.
+ESPERA_TICKET_SEG = 150          # tope de espera por ticket
+ESPERAS_DESCARGA_SEG = (10, 20, 40)  # reintentos del archivo de un ticket terminado
+MAX_PEDIDOS = 3                  # tickets nuevos como maximo por libro y corrida
+
+
+class SunatNoEntrega(RuntimeError):
+    """Ticket atascado o archivo que SUNAT no entrega: se arregla pidiendo otro ticket."""
 
 
 def autenticar(cfg, reintentos=4):
@@ -108,9 +118,13 @@ def sire_get(url, params, token, accept="application/json", intentos=4):
                 time.sleep(espera)
                 continue
             elif e.code in (500, 502, 503, 504):
-                ultimo_error = f"HTTP {e.code} (error temporal del servidor SUNAT)"
+                try:
+                    cuerpo = e.read()[:300].decode("utf-8", "replace").strip()
+                except Exception:
+                    cuerpo = ""
+                ultimo_error = f"HTTP {e.code} de SUNAT" + (f": {cuerpo}" if cuerpo else " (sin detalle)")
                 espera = intento * 3  # 3s, 6s, 9s
-                print(f"AVISO: Servidor SUNAT devolvio error temporal {e.code}. Reintentando en {espera}s (intento {intento}/{intentos})...")
+                print(f"AVISO: SUNAT devolvio {ultimo_error[:200]}. Reintentando en {espera}s (intento {intento}/{intentos})...")
                 time.sleep(espera)
                 continue
             else:
@@ -190,69 +204,56 @@ def consultar_estado_ticket(token, num_ticket, periodo):
     return None
 
 
-def esperar_ticket(token, num_ticket, periodo, max_minutos=None):
-    """Espera a que SUNAT termine de armar el reporte del ticket.
-
-    De madrugada (1-3 a. m. de Lima) SUNAT tarda mucho mas en procesar los
-    tickets: el 2026-11-05 seis de siete empresas se cortaron porque el
-    limite viejo (40 x 8 s = 5 min 20 s) se agotaba con el ticket todavia
-    "en proceso", y el reintento pedia OTRO ticket que volvia a la cola.
-    Ahora se espera el MISMO ticket hasta max_minutos, con pausas que crecen
-    (8 s -> 60 s) para no saturar a SUNAT, y un error 500/red al consultar el
-    estado no corta la espera (se vuelve a consultar en la siguiente vuelta).
-    """
-    max_minutos = max_minutos or ESPERA_TICKET_MIN
-    limite = time.time() + max_minutos * 60
-    intervalo = 8
-    consultas = 0
-    ultimo_error = None
+def esperar_ticket(token, num_ticket, periodo, max_seg=None):
+    """Consulta el ticket con pausas que crecen (3, 6, 12, 20, 30, 30... s)
+    hasta max_seg. Registra en el log cada cambio de estado que da SUNAT.
+    Si no termina, lanza SunatNoEntrega para que se pida OTRO ticket."""
+    max_seg = max_seg or ESPERA_TICKET_SEG
+    inicio = time.time()
+    pausa, consultas, ultimo_estado = 3, 0, None
     while True:
         consultas += 1
         try:
             registro = consultar_estado_ticket(token, num_ticket, periodo)
-            ultimo_error = None
         except RuntimeError as e:
-            # Error SUNAT 4xx real (credenciales, parametros): no se arregla esperando.
             if str(e).startswith("Error SUNAT 4"):
-                raise
+                raise   # credenciales/parametros: esperar no lo arregla
             registro = None
-            ultimo_error = e
-            print(f"AVISO: no se pudo consultar el ticket {num_ticket} ({e}). Se vuelve a consultar...")
-        if registro is not None:
-            detalle = registro.get("detalleTicket", {}) or {}
-            desc = f"{detalle.get('desEstadoEnvio', '')} {registro.get('desEstadoProceso', '')}".lower()
-
-            if "error" in desc:
-                raise RuntimeError(f"SUNAT reporto error procesando el ticket {num_ticket}: {registro}")
-            if "terminado" in desc:
-                archivos = registro.get("archivoReporte") or detalle.get("archivoReporte") or []
-                return [{
-                    "nombre": a["nomArchivoReporte"],
-                    "codTipoArchivo": a.get("codTipoAchivoReporte") or a.get("codTipoArchivoReporte"),
-                    "perTributario": registro.get("perTributario", periodo),
-                    "codProceso": registro.get("codProceso"),
-                    "numTicket": registro.get("numTicket", num_ticket),
-                } for a in archivos if a.get("nomArchivoReporte")]
-        if time.time() + intervalo > limite:
-            break
-        if consultas % 10 == 0:
-            print(f"Ticket {num_ticket}: SUNAT sigue procesando ({consultas} consultas). Se sigue esperando...")
-        time.sleep(intervalo)
-        intervalo = min(60, intervalo + 4)
-    extra = f" Ultimo error al consultar: {ultimo_error}" if ultimo_error else ""
-    raise RuntimeError(f"Timeout esperando el ticket {num_ticket} (sigue en proceso en SUNAT "
-                       f"tras {max_minutos} min y {consultas} consultas).{extra}")
+            estado = f"error al consultar ({str(e)[:150]})"
+        else:
+            if registro is None:
+                estado = "no aparece en la lista de SUNAT"
+            else:
+                detalle = registro.get("detalleTicket", {}) or {}
+                estado = (f"{registro.get('desEstadoProceso', '')} / {detalle.get('desEstadoEnvio', '')}"
+                          f" (cod {registro.get('codEstadoProceso', '?')})").strip()
+                desc = f"{detalle.get('desEstadoEnvio', '')} {registro.get('desEstadoProceso', '')}".lower()
+                if "error" in desc:
+                    raise RuntimeError(f"SUNAT reporto error procesando el ticket {num_ticket}: {registro}")
+                if "terminado" in desc:
+                    print(f"SUNAT ticket {num_ticket}: terminado en {int(time.time() - inicio)} s.")
+                    archivos = registro.get("archivoReporte") or detalle.get("archivoReporte") or []
+                    return [{
+                        "nombre": a["nomArchivoReporte"],
+                        "codTipoArchivo": a.get("codTipoAchivoReporte") or a.get("codTipoArchivoReporte"),
+                        "perTributario": registro.get("perTributario", periodo),
+                        "codProceso": registro.get("codProceso"),
+                        "numTicket": registro.get("numTicket", num_ticket),
+                    } for a in archivos if a.get("nomArchivoReporte")]
+        if estado != ultimo_estado:
+            print(f"SUNAT ticket {num_ticket} a los {int(time.time() - inicio)} s: {estado}")
+            ultimo_estado = estado
+        if time.time() - inicio + pausa > max_seg:
+            raise SunatNoEntrega(f"el ticket {num_ticket} no termino en {max_seg} s "
+                                 f"({consultas} consultas; ultimo estado: {estado})")
+        time.sleep(pausa)
+        pausa = min(30, pausa * 2 if pausa < 12 else pausa + 8)
 
 
 def descargar_archivo(token, archivo, cod_libro, esperas_seg=None):
-    """Baja el archivo de un ticket ya terminado.
-
-    El 2026-11-05 (1-2 a. m. de Lima) SUNAT respondio HTTP 500 a la descarga
-    de archivos de tickets YA terminados durante ~1-2 min seguidos; el limite
-    viejo (3 intentos con 8 s de pausa) se rendia antes de que SUNAT se
-    recuperara. Ahora se insiste sobre el MISMO archivo ~8 min en total, con
-    pausas crecientes, antes de rendirse.
-    """
+    """Baja el archivo de un ticket terminado; si SUNAT no lo entrega tras unos
+    reintentos cortos lanza SunatNoEntrega (se pide otro ticket)."""
+    esperas_seg = esperas_seg or ESPERAS_DESCARGA_SEG
     url = f"{SIRE_BASE}/rvierce/gestionprocesosmasivos/web/masivo/archivoreporte"
     params = {
         "nomArchivoReporte": archivo["nombre"],
@@ -262,29 +263,40 @@ def descargar_archivo(token, archivo, cod_libro, esperas_seg=None):
         "codProceso": archivo["codProceso"],
         "numTicket": archivo["numTicket"],
     }
-    esperas_seg = esperas_seg or ESPERAS_DESCARGA_SEG
     ultimo_error = None
     intentos = len(esperas_seg) + 1
     for n in range(1, intentos + 1):
         try:
-            resp = sire_get(url, params, token, accept="*/*")
-            contenido = resp.read()
+            contenido = sire_get(url, params, token, accept="*/*", intentos=2).read()
             if len(contenido) > 0:
                 return contenido
-            ultimo_error = RuntimeError("SUNAT devolvio el archivo vacio (0 bytes)")
+            ultimo_error = "archivo vacio (0 bytes)"
         except Exception as e:
-            ultimo_error = e
+            ultimo_error = str(e)[-300:]
         if n < intentos:
-            espera = esperas_seg[n - 1]
-            print(f"AVISO: no se pudo bajar '{archivo['nombre']}' (intento {n}/{intentos}). "
-                  f"Se reintenta en {espera}s...")
-            time.sleep(espera)
-    raise RuntimeError(f"No se pudo descargar '{archivo['nombre']}' tras {intentos} intentos. "
-                        f"Ultimo error: {ultimo_error}")
+            print(f"AVISO: SUNAT no entrego '{archivo['nombre']}' (intento {n}/{intentos}): "
+                  f"{ultimo_error[-200:]}. Nuevo intento en {esperas_seg[n - 1]} s...")
+            time.sleep(esperas_seg[n - 1])
+    raise SunatNoEntrega(f"SUNAT no entrego el archivo '{archivo['nombre']}' "
+                         f"del ticket {archivo['numTicket']} tras {intentos} intentos. Ultimo error: {ultimo_error}")
 
 
 def descargar_periodo(token, periodo, tipo, formato="txt"):
-    """tipo: 'venta' | 'compra'. Devuelve lista de (nombre_limpio, bytes)."""
+    """tipo: 'venta' | 'compra'. Devuelve (lista de (nombre, bytes), modo).
+
+    Si un ticket se atasca o su archivo no se entrega, se pide un ticket
+    NUEVO (hasta MAX_PEDIDOS), con una pausa corta entre pedidos."""
+    for pedido in range(1, MAX_PEDIDOS + 1):
+        try:
+            return _descargar_periodo_una_vez(token, periodo, tipo, formato)
+        except SunatNoEntrega as e:
+            if pedido == MAX_PEDIDOS:
+                raise RuntimeError(f"SUNAT no entrego el {tipo} {periodo} tras {MAX_PEDIDOS} pedidos. Ultimo: {e}")
+            print(f"AVISO: {e}. Se pide un ticket nuevo a SUNAT ({pedido + 1}/{MAX_PEDIDOS}) en 20 s...")
+            time.sleep(20)
+
+
+def _descargar_periodo_una_vez(token, periodo, tipo, formato="txt"):
     cod_tipo_archivo = "1" if formato == "csv" else "0"
     cod_libro = COD_LIBRO_RVIE if tipo == "venta" else COD_LIBRO_RCE
 
@@ -307,10 +319,18 @@ def descargar_periodo(token, periodo, tipo, formato="txt"):
         #   - 1815 "No existen documentos para exportar." (confirmado real:
         #     BKF 20609309793 y GRANIX 20447969531, periodo 202601, venta,
         #     corrida del 2026-08-21 -- tumbaba el job entero por esto).
+        # Nuestros propios errores (ticket atascado, archivo no entregado)
+        # NUNCA son "sin comprobantes": su texto trae el numero de ticket, y
+        # un ticket como 20260300001815 contiene "1815" y antes se tomaba el
+        # periodo como VACIO (se perdian los datos sin aviso).
+        if isinstance(e, SunatNoEntrega):
+            return False
         texto = str(e)
+        # Codigos como numero suelto (no dentro de un numero de ticket).
+        if re.search(r"(?<!\d)(1070|1815)(?!\d)", texto):
+            return True
         return any(marca in texto for marca in (
-            "1070", "No se ha encontrado",
-            "1815", "No existen documentos para exportar",
+            "No se ha encontrado", "No existen documentos para exportar",
         ))
 
     usar_oficial = periodo_presentado(token, periodo, cod_libro)
