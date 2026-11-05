@@ -118,10 +118,11 @@ jobs:
       matrix:
         empresa: ${{ fromJson(needs.preparar.outputs.matriz) }}
     # Mismo Environment (= RUC) y mismos secretos que la descarga completa.
-    # Una sola descarga SIRE a la vez POR EMPRESA (también entre la completa y la rápida): SUNAT solo
-    # admite un pedido en curso por libro y dos corridas se estorbaban. La segunda espera su turno.
+    # Una sola descarga SIRE a la vez por EMPRESA Y MES (también entre la completa y la rápida): SUNAT solo
+    # admite un pedido en curso por libro y dos corridas se estorbaban. La segunda espera su turno. Con el mes
+    # en el grupo, octubre y noviembre de la misma empresa (días del «mes anterior») no se cancelan entre sí.
     concurrency:
-      group: sire-empresa-${{ matrix.empresa.ruc }}
+      group: sire-empresa-${{ matrix.empresa.ruc }}-${{ matrix.empresa.periodos }}
       cancel-in-progress: false
     environment: ${{ matrix.empresa.ruc }}
     env:
