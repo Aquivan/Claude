@@ -33,6 +33,10 @@ PASO 2: EXTRAE CON PRECISION INFLEXIBLE (EVITA TRAMPAS Y ADIVINANZAS CIEGAS):
           Si es imposible deducirlo, dejalo ESTRICTAMENTE VACIO "". Bajo ningun motivo adivines.
    - "moneda": "PEN" o "USD". Extrae en base a simbolos, iniciales o glosas ("DIV: SOLES", "DOLAR", "S/", "MNA" = Moneda Nacional = PEN).
    - "monto": Importe neto SOLO en numero. En Peru el PUNTO es separador de miles y la COMA es decimal: "445.000,00" entonces 445000.00. "1.824,50" entonces 1824.50. Si aparece "S/*****1,665.00" entonces 1665.00. Si aparece "MONTO RECIBIDO: S/ 1,000.00" entonces 1000.00.
+ MUY IMPORTANTE - QUE MONTO TOMAR cuando el voucher trae comision, ITF, mora u otros cargos: "monto" es lo que RECIBE el beneficiario (lo que paga la factura), NO lo que se le cobro en total a quien paga. Las comisiones del banco y el ITF son gasto bancario de quien paga, no pago al proveedor.
+     * Servicio de recaudacion (BBVA/BCP "SERVIC. RECAUDACION", "EMISORA: <empresa>"): monto = "IMPORTE" (o "SUB TOTAL" si hay mora que si se le paga a la emisora). NUNCA "CANCELACION TOTAL" / "TOTAL PAGADO" (incluye la comision). Ej.: IMPORTE 49,993.00 + COMISION BANCO 7.00 = CANCELACION TOTAL 50,000.00 entonces monto = 49993.00.
+     * Transferencias: monto = "Importe transferido" / "Monto abonado" / "Monto a abonar". NUNCA "Importe cargado" / "Total cargado" / "Monto debitado" (incluyen comision e ITF). Ej.: Importe transferido 25,000.00, comision 120.00, ITF 1.25, Importe cargado 25,121.25 entonces monto = 25000.00.
+     * Si solo aparece un total y una comision aparte, monto = total - comision - ITF. En "descripcion" anota la comision si existe, ej. "SERVIC. RECAUDACION (comision S/ 7.00)".
 
    ================================================================
    REGLA SUPREMA PARA "proveedor" Y "cliente"
@@ -253,6 +257,10 @@ PASO 2: EXTRAE CON PRECISION INFLEXIBLE ESTA PAGINA:
           * Si no puedes deducirlo con certeza, ESTRICTAMENTE VACIO "". NUNCA adivines.
    - "moneda": "PEN" o "USD". "MNA" = Moneda Nacional = PEN.
    - "monto": SOLO numero. En Peru PUNTO=miles, COMA=decimal. "445.000,00" entonces 445000.00. "S/*****1,665.00" entonces 1665.00.
+ MUY IMPORTANTE - QUE MONTO TOMAR cuando el voucher trae comision, ITF, mora u otros cargos: "monto" es lo que RECIBE el beneficiario (lo que paga la factura), NO lo que se le cobro en total a quien paga. Las comisiones del banco y el ITF son gasto bancario de quien paga, no pago al proveedor.
+     * Servicio de recaudacion (BBVA/BCP "SERVIC. RECAUDACION", "EMISORA: <empresa>"): monto = "IMPORTE" (o "SUB TOTAL" si hay mora que si se le paga a la emisora). NUNCA "CANCELACION TOTAL" / "TOTAL PAGADO" (incluye la comision). Ej.: IMPORTE 49,993.00 + COMISION BANCO 7.00 = CANCELACION TOTAL 50,000.00 entonces monto = 49993.00.
+     * Transferencias: monto = "Importe transferido" / "Monto abonado" / "Monto a abonar". NUNCA "Importe cargado" / "Total cargado" / "Monto debitado" (incluyen comision e ITF). Ej.: Importe transferido 25,000.00, comision 120.00, ITF 1.25, Importe cargado 25,121.25 entonces monto = 25000.00.
+     * Si solo aparece un total y una comision aparte, monto = total - comision - ITF. En "descripcion" anota la comision si existe, ej. "SERVIC. RECAUDACION (comision S/ 7.00)".
 
    ================================================================
    REGLA SUPREMA PARA "proveedor" Y "cliente"
