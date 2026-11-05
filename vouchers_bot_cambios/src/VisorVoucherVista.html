@@ -90,6 +90,7 @@
   <button id="b-datos" onclick="modo('datos')" title="Solo los datos">📋</button>
   <button onclick="copiar()" title="Copiar la imagen del voucher (para pegar en WhatsApp, Telegram o un correo)">📋 Copiar</button>
   <button onclick="abrirOriginal()" title="Abrir el archivo original en Drive">📄</button>
+  <button id="b-releer" onclick="releer()" title="Volver a leer con IA la página de esta fila (si la IA leyó mal o se volvió a subir el archivo con la página cambiada). Muestra ANTES y AHORA y pide confirmar.">🔁 Releer con IA</button>
   <button onclick="ventanaAparte()" title="Abrir el voucher en una ventana aparte del navegador: se agranda o achica arrastrando el borde, se maximiza o se lleva a otro monitor">🗗 Ventana aparte</button>
   <button onclick="maximizar()" title="Agrandar esta ventana al máximo que permite Google Sheets (otro clic: tamaño normal)">⤢</button>
 </div>
@@ -165,6 +166,57 @@ function mirar() {
     }
     setTimeout(mirar, 500);
   }).withFailureHandler(function () { setTimeout(mirar, 2500); }).VV_estado(SEL.hoja, SEL.fila);
+}
+/* ---------- 🔁 Releer con IA la página de la fila (ReleerPagina.js) ---------- */
+var RL = null;
+function releerCaja(html) {
+  var c = DOC.getElementById('releerCaja');
+  if (!c) {
+    c = DOC.createElement('div'); c.id = 'releerCaja';
+    c.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9999;display:flex;align-items:center;justify-content:center';
+    DOC.body.appendChild(c);
+  }
+  if (html == null) { c.remove(); return; }
+  c.innerHTML = '<div style="background:#fff;border-radius:10px;max-width:640px;width:92%;padding:16px;font:13px Arial;box-shadow:0 10px 30px rgba(0,0,0,.3)">' + html + '</div>';
+}
+function esc2(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function releer() {
+  if (!actual || !actual.fila || actual.fila < 2) { aviso('⚠️ Primero elija una fila de voucher.'); return; }
+  if (nCambios()) { aviso('⚠️ Guarde o descarte los cambios de esta fila antes de volver a leerla.'); return; }
+  var h = actual.hoja, f = actual.fila;
+  releerCaja('<b>🔁 Leyendo otra vez con IA ' + esc2(h) + ' fila ' + f + '…</b><div style="color:#546e7a;margin-top:6px">Saca la página del archivo original (la versión más nueva) y la lee. Tarda unos 10–40 segundos.</div>');
+  google.script.run.withSuccessHandler(function (id) { RL = { id: id, n: 0 }; releerEsperar(); })
+    .withFailureHandler(function (e) { releerCaja('<b>❌ ' + esc2(e.message || e) + '</b><div style="margin-top:10px"><button onclick="releerCaja(null)">Cerrar</button></div>'); })
+    .RP_visorIniciar(h, f);
+}
+function releerEsperar() {
+  setTimeout(function () {
+    google.script.run.withSuccessHandler(function (r) {
+      if (!r || !r.listo) { if (++RL.n < 60) return releerEsperar(); return releerCaja('<b>⚠️ Tardó demasiado.</b> Inténtelo de nuevo.<div style="margin-top:10px"><button onclick="releerCaja(null)">Cerrar</button></div>'); }
+      if (r.error) return releerCaja('<b>❌ ' + esc2(r.error) + '</b><div style="margin-top:10px"><button onclick="releerCaja(null)">Cerrar</button></div>');
+      var ops = r.lineas.map(function (l, i) {
+        return '<label style="display:block;margin:4px 0"><input type="radio" name="rlop" value="' + i + '"' + (i === 0 ? ' checked' : '') + '> ' + esc2(l) + '</label>';
+      }).join('');
+      releerCaja('<b>🔁 ' + esc2(r.hoja) + ' fila ' + r.fila + '</b> · ' + esc2(r.archivo) + ' · página ' + r.pagina + ' <span style="color:#546e7a">(versión del ' + esc2(r.version) + ')</span>' +
+        '<div style="margin-top:10px"><b>ANTES:</b> ' + esc2(r.antes) + '</div>' +
+        '<div style="margin-top:6px"><b>AHORA' + (r.lineas.length > 1 ? ' (elija cuál va en esta fila)' : '') + ':</b>' + ops + '</div>' +
+        (r.dup ? '<div style="color:#b45309;margin-top:6px">⚠️ Ese N° de operación ya está en la fila ' + r.dup + ': se anotará como [DUPLICADO].</div>' : '') +
+        (r.agregado ? '<div style="color:#546e7a;margin-top:6px">ℹ️ Lo que usted agregó (revisado, empresa, factura, RUC…) no se toca. Revíselo después.</div>' : '') +
+        '<div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"><button onclick="releerCaja(null)">✖ No cambiar</button>' +
+        '<button class="pri" onclick="releerAplicar()">✅ Reemplazar</button></div>');
+    }).withFailureHandler(function () { if (++RL.n < 60) releerEsperar(); }).RP_visorEstado(RL.id);
+  }, 3000);
+}
+function releerAplicar() {
+  var sel = DOC.querySelector('input[name=rlop]:checked'), i = sel ? Number(sel.value) : 0;
+  releerCaja('<b>Escribiendo…</b>');
+  google.script.run.withSuccessHandler(function (r) {
+    releerCaja(null);
+    if (r && r.error) return aviso('⚠️ ' + r.error);
+    aviso(r.mensaje, true);
+    var h = actual.hoja, f = actual.fila;
+    google.script.run.withSuccessHandler(function (d) { if (d) pintar(d); }).VV_datos(h, f);
+  }).withFailureHandler(function (e) { releerCaja(null); aviso('⚠️ ' + (e.message || e)); }).RP_visorAplicar(RL.id, i);
 }
 function aviso(t, ok) { var m = DOC.getElementById('msg'); m.textContent = t || ''; m.style.color = ok ? '#2e7d32' : (t && /⚠️/.test(t) ? '#c62828' : '#546e7a'); }
 
