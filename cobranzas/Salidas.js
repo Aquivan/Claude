@@ -6,7 +6,7 @@
 
 var ENC_DOCS_ = ['Empresa', 'Tipo', 'RUC contraparte', 'Contraparte', 'Documento', 'Emisión', 'Vence', 'Moneda',
   'Total', 'N/C', 'Retención', 'Detracción', 'Otros desc.', 'Pagado', 'Saldo', 'Estado', 'Días vencido',
-  'Último pago', 'Producto', '¿Retener? (IGV 3%)', 'Retención esperada S/', 'Registro SIRE', 'PDF', 'Clave'];
+  'Último pago', 'Producto', '¿Retener? (IGV 3%)', 'Retención esperada S/', 'Registro SIRE', 'PDF', 'Clave', 'T.C.'];
 var ENC_MOVS_ = ['Fecha', 'Empresa que paga', 'RUC beneficiario', 'Beneficiario', 'Documento', 'Modalidad',
   'Monto aplicado', 'Moneda', 'N° operación', 'Banco', 'Monto del voucher', 'Origen', 'Nota', 'Fuente', 'Clave', 'ID pago'];
 
@@ -29,10 +29,10 @@ function construirFilasDocumentos_(res, cfg, hoy) {
     var comun = [etiquetaDoc_(d), d.fecha || '', d.vence || '', d.moneda, d.total, d.nc - d.nd, d.retencion, d.detraccion,
       d.otros, d.pagado, d.saldo, est.estado, est.diasVencido || '', ultimo || '', (d.producto || '').slice(0, 200),
       RTN_textoColumna_(d), d.rtn && d.rtn.aplica ? d.rtn.esperada : '', d.estadoSire || '',
-      d.linkPdf ? '=HYPERLINK("' + d.linkPdf + '";"📄")' : '', d.clave];
+      d.linkPdf ? '=HYPERLINK("' + d.linkPdf + '";"📄")' : '', d.clave, Number(d.tc) > 1 ? Number(d.tc) : ''];
     if (cfg.grupo.indexOf(d.emisorRuc) !== -1) {
       // "Registro SIRE" es del registro de compras del comprador: solo aplica en "Por pagar".
-      var comunCobrar = comun.slice(); comunCobrar[comun.length - 3] = '';
+      var comunCobrar = comun.slice(); comunCobrar[ENC_DOCS_.indexOf('Registro SIRE') - 4] = '';
       filas.push([nombreEmpresa_(cfg, d.emisorRuc, d.emisorNombre), 'Por cobrar', d.receptorRuc, d.receptorNombre].concat(comunCobrar));
     }
     if (cfg.grupo.indexOf(d.receptorRuc) !== -1) {

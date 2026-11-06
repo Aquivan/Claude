@@ -119,7 +119,7 @@ function MESA_datos_(tk, lado) {
     var iPdf = c('PDF'), fPdf = iPdf >= 0 ? shD.getRange(2, iPdf + 1, n, 1).getFormulas() : null;
     var I = { emp: c('Empresa'), tipo: c('Tipo'), cr: c('RUC contraparte'), cn: c('Contraparte'), doc: c('Documento'), f: c('Emisión'), ve: c('Vence'),
       mon: c('Moneda'), tot: c('Total'), nc: c('N/C'), ret: c('Retención'), det: c('Detracción'), otr: c('Otros desc.'), pag: c('Pagado'),
-      sal: c('Saldo'), est: c('Estado'), sire: c('Registro SIRE'), prod: c('Producto'), k: c('Clave') };
+      sal: c('Saldo'), est: c('Estado'), sire: c('Registro SIRE'), prod: c('Producto'), k: c('Clave'), tc: c('T.C.', 'TC') };
     v.forEach(function (r, i) {
       if (r[I.tipo] !== lado || !r[I.k]) return;
       var er = rucDeNombre[r[I.emp]] || '';
@@ -132,6 +132,7 @@ function MESA_datos_(tk, lado) {
         tot: Number(r[I.tot]) || 0, nc: Number(r[I.nc]) || 0, ret: Number(r[I.ret]) || 0, det: Number(r[I.det]) || 0,
         otr: Number(r[I.otr]) || 0, pag: Number(r[I.pag]) || 0, sal: Number(r[I.sal]) || 0, est: String(r[I.est] || ''),
         sire: I.sire >= 0 ? String(r[I.sire] || '') : '', prod: I.prod >= 0 ? String(r[I.prod] || '').slice(0, 120) : '', pdf: pdf,
+        tc: I.tc >= 0 ? Number(r[I.tc]) || 0 : 0,
       };
       // Quién emite y quién recibe (para escribir ID Beneficiario / ID Usuario del voucher)
       if (lado === 'Por pagar') { d.emi = cr; d.rec = er; } else { d.emi = er; d.rec = cr; }
