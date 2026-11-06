@@ -212,6 +212,31 @@ function MESA_datos_(tk, lado) {
     });
   }
 
+  // ---- ↩️ Devoluciones ya aplicadas (para no mostrar como «sin aplicar» un depósito que el proveedor ya devolvió)
+  var devs = [];
+  var shDv = ss.getSheetByName(HOJA.DEVOLUCIONES);
+  if (shDv && shDv.getLastRow() > 1) {
+    var vd = shDv.getRange(1, 1, shDv.getLastRow(), shDv.getLastColumn()).getValues(), cd = indiceColumnas_(vd[0]);
+    var iFu = cd('Fuente'), iJs = cd('Detalle (para la Mesa)'), iTx = cd('Descontado de'), iPr = cd('RUC proveedor');
+    var porOp = {};   // para leer el texto «op 5344 del …» cuando aún no está la columna nueva
+    vouchers.forEach(function (x) { var dg = String(x.op).replace(/\D/g, '').replace(/^0+/, ''); if (dg) (porOp[dg] = porOp[dg] || []).push(x); });
+    vd.slice(1).forEach(function (r) {
+      var de = String(r[iFu] || ''); if (!de) return;
+      var lista = [];
+      try { lista = iJs >= 0 && r[iJs] ? JSON.parse(r[iJs]) : null; } catch (e) { lista = null; }
+      if (!lista) {
+        lista = [];
+        String(r[iTx] || '').split(' · ').forEach(function (t) {
+          var m = t.match(/op\s+(\S+).*?:\s*([\d.]+)\s*$/);
+          if (!m) return;
+          var cands = (porOp[String(m[1]).replace(/\D/g, '').replace(/^0+/, '')] || []).filter(function (x) { return !iPr || x.br === String(r[iPr]) || x.pr === String(r[iPr]); });
+          if (cands.length === 1) lista.push({ fu: cands[0].fu, m: Number(m[2]) });
+        });
+      }
+      lista.forEach(function (a) { if (a.fu) devs.push({ de: de, a: a.fu, m: Number(a.m) || 0 }); else if (a.k) devs.push({ de: de, k: a.k, m: Number(a.m) || 0 }); });
+    });
+  }
+
   // ---- 🔁 Reasignar retenciones: filas que ya existen (para quitarlas desde la Mesa)
   var reas = [];
   var shR = ss.getSheetByName(HOJA_REASIGNAR_);
@@ -224,7 +249,7 @@ function MESA_datos_(tk, lado) {
   var ultima = '';
   try { ultima = PropertiesService.getScriptProperties().getProperty('MESA_ULTIMA') || ''; } catch (e) {}
   try { ultima = PropertiesService.getDocumentProperties().getProperty('ultimaActualizacion') || ultima; } catch (e) {}
-  return { lado: lado, empresas: empresas, docs: docs, vouchers: vouchers, links: links, sug: sug, ultima: ultima, rets: rets, reas: reas, copias: copias, movs: movs,
+  return { lado: lado, empresas: empresas, docs: docs, vouchers: vouchers, links: links, sug: sug, ultima: ultima, rets: rets, reas: reas, copias: copias, movs: movs, devs: devs,
     modalidades: MODALIDADES_MANUAL_,
     recalculando: !!PropertiesService.getScriptProperties().getProperty('MESA_PEDIDO') };
 }
@@ -328,16 +353,21 @@ function MESA_guardar_(tk, cambios) {
  * 🔁 Reasignar retenciones desde la Mesa: escribe (o borra) filas en la pestaña 🔁 Reasignar retenciones, igual
  * que a mano. nuevos: [{cre, agente, origen, destino, monto}] · quitar: [{fila, antes:[A..E]}]
  */
-function MESA_reasignar(tk, nuevos, quitar) { var a = arguments; return MESA_reintentar_(function () { return MESA_reasignar_.apply(null, a); }); }
-function MESA_reasignar_(tk, nuevos, quitar) {
+function MESA_reasignar(tk, nuevos, quitar, token) { var a = arguments; return MESA_reintentar_(function () { return MESA_reasignar_.apply(null, a); }); }
+function MESA_reasignar_(tk, nuevos, quitar, token) {
   var quien = MESA_ok_(tk);
   var ss = ssPrincipal_(), sh = hojaReasignar_(ss);
   var lote = Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd-HHmmss') + '-' + Utilities.getUuid().slice(0, 4);
   var ahora = new Date(), log = [], hechos = 0, avisos = [];
+  // Si este mismo guardado ya se escribió (un reintento después de que Google tardó), no se repite
+  var marca = token ? ' · L:' + String(token).replace(/[^a-z0-9]/gi, '') : '';
+  if (marca && sh.getLastRow() >= 4 && sh.getRange(4, 6, sh.getLastRow() - 3, 1).getValues().some(function (r) { return String(r[0]).indexOf(marca) >= 0; }))
+    return { mensaje: '🔁 Ya estaba guardado (no se duplicó).', lote: '', avisos: [] };
   (quitar || []).forEach(function (q) {
     var fila = Number(q.fila);
     if (!(fila >= 4)) return;
     var rg = sh.getRange(fila, 1, 1, 5), actual = rg.getDisplayValues()[0];
+    if (actual.every(function (c) { return !String(c).trim(); })) return;   // ya estaba borrada
     if (JSON.stringify(actual.map(String)) !== JSON.stringify((q.antes || []).map(String))) { avisos.push('Fila ' + fila + ' cambió desde que abrió la Mesa: no la borré.'); return; }
     var crudo = rg.getValues()[0];
     sh.getRange(fila, 1, 1, 7).clearContent();
@@ -348,7 +378,7 @@ function MESA_reasignar_(tk, nuevos, quitar) {
     if (!x.cre || !x.origen || !x.destino) return;
     var fila = Math.max(4, sh.getLastRow() + 1);
     var valores = [String(x.cre), String(x.agente || ''), String(x.origen), String(x.destino), Number(x.monto) > 0 ? redondear2_(Number(x.monto)) : '',
-      '🧩 Mesa · ' + (quien || '') + ' · ' + Utilities.formatDate(ahora, 'America/Lima', 'dd/MM/yyyy HH:mm')];
+      '🧩 Mesa · ' + (quien || '') + ' · ' + Utilities.formatDate(ahora, 'America/Lima', 'dd/MM/yyyy HH:mm') + marca];
     sh.getRange(fila, 1, 1, 4).setNumberFormat('@');
     sh.getRange(fila, 1, 1, 6).setValues([valores]);
     log.push([ahora, quien, lote, HOJA_REASIGNAR_ + '!' + fila, 'Fila nueva', '', JSON.stringify(valores), '']);
@@ -362,8 +392,8 @@ function MESA_reasignar_(tk, nuevos, quitar) {
  * ✍️ Pago sin voucher (efectivo, compensación, retención o detracción manual…): una fila en ✍️ Registro manual,
  * igual que a mano. x = {fecha:'yyyy-mm-dd', modalidad, pagador, benef, doc, monto, moneda, op, banco, obs}
  */
-function MESA_manual(tk, x) { var a = arguments; return MESA_reintentar_(function () { return MESA_manual_.apply(null, a); }); }
-function MESA_manual_(tk, x) {
+function MESA_manual(tk, x, token) { var a = arguments; return MESA_reintentar_(function () { return MESA_manual_.apply(null, a); }); }
+function MESA_manual_(tk, x, token) {
   var quien = MESA_ok_(tk);
   x = x || {};
   var monto = Number(x.monto);
@@ -374,13 +404,16 @@ function MESA_manual_(tk, x) {
   var fecha = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date();
   var ss = ssPrincipal_(), sh = ss.getSheetByName(HOJA.MANUAL);
   if (!sh) return { error: 'Falta la hoja ' + HOJA.MANUAL + ' (⚙️ Instalar / reparar).' };
+  var marca = token ? ' · L:' + String(token).replace(/[^a-z0-9]/gi, '') : '';
+  if (marca && sh.getLastRow() >= 2 && sh.getRange(2, 10, sh.getLastRow() - 1, 1).getValues().some(function (r) { return String(r[0]).indexOf(marca) >= 0; }))
+    return { mensaje: '✍️ Ya estaba registrado (no se duplicó).', fila: 0, lote: '' };
   // primera fila libre (columna Documento y Monto vacías)
   var n = Math.max(sh.getLastRow(), 1), v = n > 1 ? sh.getRange(2, 1, n - 1, 6).getValues() : [], fila = n + 1;
   for (var i = 0; i < v.length; i++) { if (!v[i][4] && !v[i][5] && !v[i][0]) { fila = i + 2; break; } }
   var ahora = new Date();
   var valores = [fecha, x.modalidad, String(x.pagador || ''), String(x.benef || ''), String(x.doc), redondear2_(monto), String(x.moneda || 'PEN'),
     String(x.op || ''), String(x.banco || (/efectivo/i.test(x.modalidad) ? 'EFECTIVO' : '')),
-    (String(x.obs || '').trim() ? String(x.obs).trim() + ' · ' : '') + '🧩 Mesa · ' + (quien || '') + ' · ' + Utilities.formatDate(ahora, 'America/Lima', 'dd/MM/yyyy HH:mm')];
+    (String(x.obs || '').trim() ? String(x.obs).trim() + ' · ' : '') + '🧩 Mesa · ' + (quien || '') + ' · ' + Utilities.formatDate(ahora, 'America/Lima', 'dd/MM/yyyy HH:mm') + marca];
   sh.getRange(fila, 3, 1, 2).setNumberFormat('@');
   sh.getRange(fila, 1, 1, 10).setValues([valores]);
   var shL = MESA_hojaLog_(ss), lote = Utilities.formatDate(ahora, 'America/Lima', 'yyyyMMdd-HHmmss') + '-' + Utilities.getUuid().slice(0, 4);
