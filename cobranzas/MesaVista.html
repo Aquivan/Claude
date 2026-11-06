@@ -144,6 +144,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <select id="fMon" onchange="pintar()" title="Moneda"><option value="">PEN y USD</option><option>PEN</option><option>USD</option></select>
   <span style="flex:1"></span>
   <button onclick="calc()" title="Calculadora (también con la tecla F2) · Alt+clic en cualquier monto de la pantalla lo pasa a la calculadora">🧮 Calculadora</button>
+  <button id="bRecalc" onclick="recalcularAhora()" title="Recalcular Cobranzas en este momento (saldos, Consulta, Panel) sin esperar">⚡ Recalcular ahora</button>
   <button onclick="cargar(true)" title="Volver a leer facturas, vouchers y cruces">🔄 Recargar</button>
   <button id="bAparte" onclick="aparte()" title="Abrir en una pestaña del navegador (pantalla completa, otro monitor o celular)">↗ Ventana aparte</button>
   <button onclick="ayudaCompleta()">❓</button>
@@ -198,7 +199,9 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <button id="bDes" onclick="deshacerLocal()" title="Deshacer el último cruce (sin guardar) · Ctrl+Z" disabled>↶</button>
   <button id="bDescartar" onclick="descartar()" disabled>✖ Descartar cambios</button>
   <button id="bGuardar" class="p" onclick="guardar()" disabled>💾 Guardar</button>
+  <button onclick="historial()" title="Qué se escribió en la hoja, cuándo y si sigue así">📜 Historial</button>
   <button onclick="deshacerGuardado()" title="Vuelve atrás su último guardado (si nadie cambió esas celdas después)">↩️ Deshacer último guardado</button>
+  <span id="ultG" style="font-size:11.5px"></span>
   <div id="estado"></div>
 </div>
 <div id="visor"><div class="vb"><b id="vTit" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></b>
@@ -228,7 +231,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 <script>
 var TK = '<?= TK ?>', MODO = '<?= MODO ?>', URLM = '<?= URL ?>';
 var R = google.script.run;
-var S = { devT: {}, devMarca: {}, lado: 'Por pagar', modo: 'v', data: null, D: {}, V: {}, links: {}, orig: {}, origTxt: {}, montos: {}, origMontos: {}, R: {}, rl: {}, rlOrig: {}, rDelta: {}, extraC: {}, motor: {}, origen: {}, fijo: {}, sug: [], act: '', selV: {}, selF: {}, reempl: {}, hist: [], sim: null, verF: 300, verV: 300 };
+var S = { guardados: {}, devT: {}, devMarca: {}, lado: 'Por pagar', modo: 'v', data: null, D: {}, V: {}, links: {}, orig: {}, origTxt: {}, montos: {}, origMontos: {}, R: {}, rl: {}, rlOrig: {}, rDelta: {}, extraC: {}, motor: {}, origen: {}, fijo: {}, sug: [], act: '', selV: {}, selF: {}, reempl: {}, hist: [], sim: null, verF: 300, verV: 300 };
 var $ = function (i) { return document.getElementById(i); };
 function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function fm(n) { return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -457,7 +460,7 @@ function pintar() {
     var chips = (v.dev ? '<span class="chip c-a">↩️ devolución</span>' : '') + (v.esp ? '<span class="chip c-a" title="' + esc(v.refs) + '">✍️ ' + esc(v.refs.slice(0, 18)) + '</span>' : '') +
       (ruc ? '<span class="chip c-v" title="RUC ' + esc(ruc) + '">✓ RUC</span>' : (lk.length && dirty ? '<span class="chip c-a" title="Se escribe el RUC del emisor de la factura">RUC al guardar</span>' : '<span class="chip c-r">❔ sin RUC</span>')) +
       (S.lado === 'Por pagar' && !v.pr ? '<span class="chip c-a">⚠️ sin empresa</span>' : (conGrupo && v.pr ? '<span class="chip c-z">🏢 ' + esc(nomEmp(S.lado === 'Por pagar' ? v.pr : v.br)) + '</span>' : ''));
-    var est = v.dev ? '' : (!lk.length ? '<span class="chip">sin aplicar</span>' : sob > 0.05 ? '<span class="chip c-a">sobra ' + fm(sob) + '</span>' : '<span class="chip c-v">✓ aplicado</span>');
+    var est = (S.guardados[v.id] ? '<span class="chip c-v" title="Escrito en la hoja de Vouchers a las ' + S.guardados[v.id] + '">💾 guardado ' + S.guardados[v.id] + '</span> ' : '') + (v.dev ? '' : (!lk.length ? '<span class="chip">sin aplicar</span>' : sob > 0.05 ? '<span class="chip c-a">sobra ' + fm(sob) + '</span>' : '<span class="chip c-v">✓ aplicado</span>'));
     var lks = lk.map(function (k) { return S.D[k].doc + ' ' + fm(S.sim.amt[v.id + '|' + k] || 0) + (S.montos[v.id + '|' + k] != null ? '💲' : ''); }).join(', ');
     var actDev = S.act && S.V[S.act] && S.V[S.act].dev, esCand = actDev && v.id !== S.act && !v.dev && devCandidato(S.act, v);
     if (v.dev) lks = (S.devT[v.id] || []).map(devEtiqueta).join(', ');
@@ -900,6 +903,9 @@ function guardar() {
       S.links[id].forEach(function (k) { S.motor[id + '|' + k] = S.sim.amt[id + '|' + k] || 0; if (!S.origen[id + '|' + k]) S.origen[id + '|' + k] = '🧩 Guardado desde la Mesa (se confirma al recalcular)'; });
     });
     Object.keys(S.sim.docsC).forEach(function (k) { if (S.D[k]) S.D[k].sal = S.sim.saldo[k]; });
+    var hora = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+    (r.ok || []).forEach(function (id) { S.guardados[id] = hora; });
+    if ((r.ok || []).length) $('ultG').innerHTML = '<span class="chip c-v">💾 Guardado ' + hora + ': ' + r.ok.length + ' voucher(s) escritos en la hoja</span>';
     (r.ok || []).forEach(function (id) {
       var v = S.V[id]; var c = cambios.filter(function (x) { return x.id === id; })[0];
       v.refs = c.refs; v.antes = c.refs; v.esp = 0; S.orig[id] = S.links[id].slice(); S.origTxt[id] = c.refs; delete S.reempl[id];
@@ -917,6 +923,7 @@ function guardar() {
 }
 function guardarR(rc, previo) {
   R.withFailureHandler(function (e) { falla(e); simular(); }).withSuccessHandler(function (r) {
+    if (r.lote) $('ultG').innerHTML = '<span class="chip c-v">💾 Guardado ' + new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) + ': retenciones escritas en «🔁 Reasignar retenciones»</span>';
     // lo guardado pasa a ser lo «original» (las filas nuevas se conocerán al recargar)
     Object.keys(S.rl).forEach(function (u) { S.rlOrig[u] = JSON.parse(JSON.stringify(S.rl[u])); });
     Object.keys(S.rDelta).forEach(function (k) { if (S.D[k]) { S.D[k].sal = r2(S.D[k].sal - S.rDelta[k]); S.D[k].ret = r2(S.D[k].ret + S.rDelta[k]); } });
@@ -938,7 +945,7 @@ function esperarRecalculo() {
       if (e.cortado) { esperaDesde = 0; $('estado').textContent = base + ' · ⚠️ El recálculo tardó más que el límite de Google y se cortó: lo completa la actualización automática (máx. 10 min). Lo guardado ya está escrito; use 🔄 Recargar en unos minutos.'; return; }
       if (e.recalculando) {
         var et = e.etapa === 'calc' ? 'calculando ' + mmss(e.seg) : e.etapa === 'espera' ? 'esperando que termine la actualización automática de cada 10 min' : 'en cola (Google lo inicia en ~30–60 s)';
-        $('estado').textContent = base + ' · ⏳ Cobranzas recalculando: ' + et + ' · total ' + mmss(e.total) + ' (con muchas facturas puede tardar varios minutos; puede seguir trabajando)';
+        $('estado').innerHTML = esc(base + ' · ⏳ Cobranzas recalculando: ' + et + ' · total ' + mmss(e.total) + ' (puede seguir trabajando)') + (e.etapa !== 'calc' ? ' <button onclick="recalcularAhora()">⚡ Recalcular ahora</button>' : '');
         if (Date.now() - esperaDesde < 20 * 60000) esperarRecalculo(); else esperaDesde = 0;
         return;
       }
@@ -946,6 +953,37 @@ function esperarRecalculo() {
       estado('✅ Cobranzas ya recalculó' + (e.resultado ? ' (' + e.resultado.replace(/^Listo en /, 'en ') + ')' : '') + ': recargo con los saldos reales…'); cargar(true);
     }).MESA_estado(TK);
   }, 10000);
+}
+function historial() {
+  modal('<h3 style="margin-top:0">📜 Historial de guardados</h3><p>⏳ Leyendo y comprobando en la hoja…</p>');
+  R.withFailureHandler(function (e) { modal('<p>❌ ' + esc(e.message) + '</p><button onclick="cerrarModal()">Cerrar</button>'); }).withSuccessHandler(function (r) {
+    var rc = r.recalc ? '<div style="background:#FFFBEB;padding:6px;border-radius:6px">⏳ Cobranzas se está recalculando (' + (r.recalc === 'calc' ? 'calculando' : 'en cola') + '): lo guardado YA está escrito en la hoja; falta actualizar los saldos. <button onclick="cerrarModal();recalcularAhora()">⚡ Recalcular ahora</button></div>'
+      : '<div style="background:#F0FDF4;padding:6px;border-radius:6px">✅ Cobranzas al día' + (r.ultima ? ' (último recálculo ' + new Date(r.ultima).toLocaleString('es-PE') + ')' : '') + '.</div>';
+    var h = '<h3 style="margin-top:0">📜 Historial de guardados</h3>' + rc +
+      '<p style="color:var(--gr);font-size:11.5px">Lo último que se escribió desde la Mesa (y lo copiado de Fotos a Originales). «En la hoja ahora»: ✅ sigue tal cual · ⚠️ alguien lo cambió después.</p>' +
+      '<div style="max-height:60vh;overflow:auto"><table class="tf"><tr><th style="width:90px">Cuándo</th><th style="width:120px">Quién</th><th style="width:110px">Dónde</th><th style="width:110px">Columna</th><th>Antes → Después</th><th style="width:90px">En la hoja ahora</th></tr>' +
+      (r.filas.length ? r.filas.map(function (f) {
+        return '<tr' + (f.mio ? '' : ' style="color:#64748B"') + '><td>' + esc(f.fecha) + '</td><td>' + esc(f.quien) + '</td><td>' + esc(f.fuente) + '</td><td>' + esc(f.col) + '</td><td>' +
+          (/^↩️/.test(f.lote) ? '↩️ deshecho · ' : '') + '<span style="color:var(--gr)">' + esc(f.antes || '(vacío)') + '</span> → <b>' + esc(f.despues || '(vacío)') + '</b></td><td>' +
+          (f.sigue === 'si' ? '✅ sigue así' : f.sigue === 'no' ? '<span title="Ahora dice: ' + esc(f.ahora) + '">⚠️ cambió</span>' : '—') + '</td></tr>';
+      }).join('') : '<tr><td colspan="6" style="color:var(--gr)">Todavía no se guardó nada desde la Mesa.</td></tr>') + '</table></div><p><button onclick="cerrarModal()">Cerrar</button></p>';
+    modal(h);
+    $('mCaja').style.width = 'min(1000px,96vw)';
+  }).MESA_historial(TK);
+}
+function recalcularAhora() {
+  if (sucios().length || rSucios().length) { if (!confirm('Tiene cambios sin guardar: el recálculo usa solo lo guardado. ¿Recalcular igual? (sus cambios siguen en la Mesa)')) return; }
+  var b = $('bRecalc'); b.disabled = true; b.textContent = '⏳ Recalculando…';
+  clearTimeout(espera); var t0 = Date.now();
+  var reloj = setInterval(function () { estado('⚡ Recalculando Cobranzas ahora… ' + mmss((Date.now() - t0) / 1000) + ' (con muchas facturas tarda unos minutos; puede seguir trabajando)'); }, 1000);
+  var fin = function () { clearInterval(reloj); b.disabled = false; b.textContent = '⚡ Recalcular ahora'; };
+  R.withFailureHandler(function (e) { fin(); estado('⚠️ ' + e.message + ' · Si Google cortó por tiempo, la actualización automática lo completa; use 🔄 Recargar en unos minutos.', true); esperarRecalculo(); })
+   .withSuccessHandler(function (r) {
+     fin();
+     if (r.error) { estado(r.error, true); esperarRecalculo(); return; }
+     if (r.enCurso) { estado(r.mensaje); esperarRecalculo(); return; }
+     estado(r.mensaje + ' · recargando con los saldos reales…'); cargar(true);
+   }).MESA_recalcularAhora(TK);
 }
 function deshacerGuardado() {
   if (!confirm('¿Deshacer su último guardado desde la Mesa? (solo las celdas que nadie cambió después)')) return;
@@ -1038,7 +1076,7 @@ function cerrarVisor() { $('visor').className = ''; }
 /* ------------------------------------------------ 🔎 RUC del beneficiario (padrón, grupo, internet con IA) */
 var KR = 0, DATR = {};
 function modal(h) { $('mCaja').innerHTML = h; $('modal').className = 'on'; }
-function cerrarModal() { $('modal').className = ''; }
+function cerrarModal() { $('modal').className = ''; $('mCaja').style.width = ''; }
 function rucPanel(fuentes) {
   modal('<h3>🔎 RUC del beneficiario</h3><div id="rMsg">⏳ Buscando en lo ya conocido (alias, facturas del grupo)…</div><div id="rBot"></div><div id="rExt"></div><p><button onclick="cerrarModal();cargar(true)">Cerrar y recargar</button></p>');
   window._rucF = fuentes;
