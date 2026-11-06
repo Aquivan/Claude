@@ -124,7 +124,8 @@ def buscar(pag, periodo):
           const y = sel[sel.indexOf(m) + 1]; if (y) fija(y, 'number:' + anio);
         } }""", [mes, anio])
     print("  ng-models:", [tapar(x) for x in fr.evaluate("""() => [...document.querySelectorAll('select,input')].map(e => (e.getAttribute('ng-model') || e.id || '') + '=' + e.value)""")])
-    fr.locator("button[type=submit]:has-text('Buscar')").first.click()
+    print("  botones Buscar:", fr.evaluate("() => [...document.querySelectorAll('button')].filter(b => /Buscar/.test(b.innerText)).map(b => (b.offsetParent !== null) + ' ' + b.outerHTML.slice(0, 200))"))
+    fr.evaluate("() => { const b = [...document.querySelectorAll('button')].find(b => /Buscar/.test(b.innerText) && b.offsetParent !== null); if (b) b.click(); }")
     pag.wait_for_timeout(12000)
     print("  mensajes:", tapar(fr.evaluate("() => [...document.querySelectorAll('.alert,.modal-body,.text-danger,.error,.mensaje')].filter(e => e.offsetParent !== null).map(e => e.innerText).join(' / ')"))[:600])
     filas = fr.evaluate("""() => [...document.querySelectorAll('table tr')].filter(r => r.offsetParent !== null).map(r => [...r.cells].map(c => c.innerText.trim()).join(' | '))""")
