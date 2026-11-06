@@ -752,6 +752,24 @@ function montoLinea(id, k, auto) {
   var x = S.sim.amt[id + '|' + k] || 0;
   estado('💲 ' + S.V[id].fu + ' → ' + S.D[k].doc + ': ' + (S.montos[id + '|' + k] != null ? 'monto fijo ' + fm(S.montos[id + '|' + k]) + (x < S.montos[id + '|' + k] - 0.005 ? ' (⚠️ solo alcanza ' + fm(x) + ')' : '') : 'automático (' + fm(x) + ')') + ' · sin guardar.', S.montos[id + '|' + k] != null && x < S.montos[id + '|' + k] - 0.005);
 }
+/** 💯 Este voucher paga esta factura todo lo que pueda (primero en su lista); los otros vouchers de la factura solo
+ *  ponen lo que falte (se les fija el monto en la línea). Se deshace con ↶. */
+function usarCompleto(id, k) {
+  var v = S.V[id], d = S.D[k]; if (!v || !d) return;
+  var otros = Object.keys(S.links).filter(function (j) { return j !== id && S.links[j].indexOf(k) >= 0; })
+    .sort(function (a, b) { return S.V[a].f < S.V[b].f ? -1 : S.V[a].f > S.V[b].f ? 1 : 0; });
+  var b = { links: {}, montos: {}, rl: {}, devT: {} };
+  [id].concat(otros).forEach(function (j) { b.links[j] = S.links[j].slice(); b.montos[j + '|' + k] = S.montos[j + '|' + k] != null ? S.montos[j + '|' + k] : null; });
+  S.hist.push({ bulk: b });
+  var necesita = r2(Math.max(0, base(d) - (S.fijo[k] || 0)));
+  var x = r2(Math.min(v.m, necesita));
+  S.links[id] = [k].concat(S.links[id].filter(function (q) { return q !== k; }));
+  S.montos[id + '|' + k] = x;
+  var resto = r2(necesita - x);
+  otros.forEach(function (j) { var y = r2(Math.min(resto, S.V[j].m)); S.montos[j + '|' + k] = y; resto = r2(resto - y); });
+  cerrarPop(); simular(); pintar(); detalle();
+  estado('💯 ' + v.fu + ' paga ' + fm(S.sim.amt[id + '|' + k] || 0) + ' a ' + d.doc + (otros.length ? '; ' + otros.map(function (j) { return S.V[j].fu + ' pone ' + fm(S.sim.amt[j + '|' + k] || 0); }).join(', ') + ' (lo que les sobre sigue a sus otras facturas)' : '') + ' · sin guardar (↶ deshace).');
+}
 function primero(id, k) { guardarHist(id); S.links[id] = [k].concat(S.links[id].filter(function (x) { return x !== k; })); simular(); pintar(); detalle(); }
 function deshacerLocal() {
   var h = S.hist.pop(); if (!h) return;
@@ -796,6 +814,7 @@ function clicLinea(ev, el) {
       '<button onclick="montoLinea(\'' + esc(L.id) + '\',\'' + esc(L.k) + '\')">✔ Usar</button> <button onclick="montoLinea(\'' + esc(L.id) + '\',\'' + esc(L.k) + '\',1)" title="El voucher llena la factura con lo que le quede (en orden)">Automático</button>' +
       '<div style="color:var(--gr);font-size:11px">Vacío = automático (llena la factura con lo que quede del voucher, en orden).</div></div>' +
       ((S.sim.saldo[L.k] || 0) > 0.05 && S.links[L.id].length > 1 ? '<div style="margin-top:6px"><button onclick="cerrarPop();opcionesFalta(\'' + esc(L.id) + '\',\'' + esc(L.k) + '\')">💡 Cubrir su saldo (' + fm(S.sim.saldo[L.k]) + ') descontando de las otras facturas del voucher</button></div>' : '') +
+      (Object.keys(S.links).some(function (j) { return j !== L.id && S.links[j].indexOf(L.k) >= 0; }) ? '<div style="margin-top:6px"><button class="v" onclick="usarCompleto(\'' + esc(L.id) + '\',\'' + esc(L.k) + '\')" title="Este voucher paga esta factura todo lo que pueda; los otros vouchers de la factura solo ponen lo que falte">💯 Que este voucher pague completo esta factura</button></div>' : '') +
       '<div style="margin-top:6px"><button onclick="quitar(\'' + esc(L.id) + '\',\'' + esc(L.k) + '\');cerrarPop()">✂️ Quitar este cruce</button> ' +
       (S.links[L.id].length > 1 && S.links[L.id][0] !== L.k ? '<button onclick="primero(\'' + esc(L.id) + '\',\'' + esc(L.k) + '\');cerrarPop()" title="El voucher llena primero esta factura">⬆ Pagar esta primero</button>' : '') + '</div>';
   }
@@ -1978,7 +1997,7 @@ function ayudaCompleta() {
     '<li><b>Cruzar</b>: toque un voucher y luego la(s) factura(s) que paga, o arrastre uno sobre otro. Ctrl+clic marca varios vouchers (varios pagos para una factura) o varias facturas (☑) para cruzarlas juntas.</li>' +
     '<li><b>Colores</b>: 🟢 cuadra · 🟠 al voucher le sobra dinero · 🔴 la factura ya no tiene saldo, otra moneda o el RUC del voucher no es el emisor · punteado: sugerencia (🟠 del sistema, 🟣 de la IA). Toque una línea para quitarla o aceptarla.</li>' +
     '<li>El voucher llena sus facturas <b>en orden</b> (igual que el sistema): «⬆ Pagar esta primero» cambia el orden. Lo que sobra queda como saldo a favor.</li>' +
-    '<li><b>Dos vouchers en la misma factura</b>: el <b>más antiguo</b> paga primero todo lo que puede y el siguiente solo lo que falta (lo demás de ese voucher sigue a sus otras facturas). Para decidir usted cuánto pone cada uno, toque la línea y escriba el monto (por ejemplo, el voucher nuevo paga solo 39,598.90).</li>' +
+    '<li><b>Dos vouchers en la misma factura</b>: el <b>más antiguo</b> paga primero (o toque la línea → <b>💯 Que este voucher pague completo esta factura</b>) todo lo que puede y el siguiente solo lo que falta (lo demás de ese voucher sigue a sus otras facturas). Para decidir usted cuánto pone cada uno, toque la línea y escriba el monto (por ejemplo, el voucher nuevo paga solo 39,598.90).</li>' +
     '<li><b>🧮</b> busca qué facturas suman exacto el voucher (también neto de retención 3%) · <b>🤖</b> le pide la propuesta a la IA · <b>🔎 RUC</b> busca el RUC del beneficiario (padrón SUNAT e internet).</li>' +
     '<li><b>💾 Guardar</b> escribe en la hoja de Vouchers lo mismo que usted escribiría a mano: «Tipo y Nº Doc.» y, si están vacíos, «ID Beneficiario» / «ID Usuario» (con nota en la celda). Cobranzas se recalcula solo en ~1 minuto y la Mesa se recarga con los saldos reales.</li>' +
     '<li>Si otra persona cambió el mismo voucher mientras usted trabajaba, ese voucher no se guarda y se le avisa. <b>↩️ Deshacer último guardado</b> vuelve atrás lo suyo.</li>' +
