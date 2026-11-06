@@ -260,7 +260,7 @@ function MESA_datos_(tk, lado) {
  * cambios: [{id, fu, dups, antes, refs, quitar:[claves], benef, usu, reemplazar}]
  * Devuelve {mensaje, ok:[id], conflictos:[{id, fu, motivo}]}
  */
-function MESA_guardar(tk, cambios) { var a = arguments; return MESA_reintentar_(function () { return MESA_guardar_.apply(null, a); }); }
+function MESA_guardar(tk, cambios) { var a = arguments; return MESA_escribiendo_(function () { return MESA_reintentar_(function () { return MESA_guardar_.apply(null, a); }); }); }
 function MESA_guardar_(tk, cambios) {
   var quien = MESA_ok_(tk);
   cambios = (cambios || []).slice(0, 500);
@@ -353,7 +353,7 @@ function MESA_guardar_(tk, cambios) {
  * 🔁 Reasignar retenciones desde la Mesa: escribe (o borra) filas en la pestaña 🔁 Reasignar retenciones, igual
  * que a mano. nuevos: [{cre, agente, origen, destino, monto}] · quitar: [{fila, antes:[A..E]}]
  */
-function MESA_reasignar(tk, nuevos, quitar, token) { var a = arguments; return MESA_reintentar_(function () { return MESA_reasignar_.apply(null, a); }); }
+function MESA_reasignar(tk, nuevos, quitar, token) { var a = arguments; return MESA_escribiendo_(function () { return MESA_reintentar_(function () { return MESA_reasignar_.apply(null, a); }); }); }
 function MESA_reasignar_(tk, nuevos, quitar, token) {
   var quien = MESA_ok_(tk);
   var ss = ssPrincipal_(), sh = hojaReasignar_(ss);
@@ -397,7 +397,7 @@ function MESA_reasignar_(tk, nuevos, quitar, token) {
  * ✍️ Pago sin voucher (efectivo, compensación, retención o detracción manual…): una fila en ✍️ Registro manual,
  * igual que a mano. x = {fecha:'yyyy-mm-dd', modalidad, pagador, benef, doc, monto, moneda, op, banco, obs}
  */
-function MESA_manual(tk, x, token) { var a = arguments; return MESA_reintentar_(function () { return MESA_manual_.apply(null, a); }); }
+function MESA_manual(tk, x, token) { var a = arguments; return MESA_escribiendo_(function () { return MESA_reintentar_(function () { return MESA_manual_.apply(null, a); }); }); }
 function MESA_manual_(tk, x, token) {
   var quien = MESA_ok_(tk);
   x = x || {};
@@ -470,7 +470,28 @@ function MESA_hojaLog_(ss) {
 }
 
 /** ↩️ Deshacer el último guardado de esta persona (solo lo que nadie cambió después). */
-function MESA_deshacer(tk) { var q = MESA_ok_(tk); return MESA_reintentar_(function () { return MESA_deshacerQuien_(q, ''); }); }
+function MESA_deshacer(tk) { var q = MESA_ok_(tk); return MESA_escribiendo_(function () { return MESA_reintentar_(function () { return MESA_deshacerQuien_(q, ''); }); }); }
+
+/**
+ * ✍️ Mientras la Mesa escribe en las hojas (💾 Guardar, retenciones, pago sin voucher, ↩️ Deshacer), queda una
+ * marca con la hora. El recálculo (⚡ Recalcular ahora o el automático) espera a que se borre, para no
+ * calcular con los datos a medio escribir. Si quedara colgada (Google cortó), vale solo 3 minutos.
+ */
+function MESA_escribiendo_(fn) {
+  var p = PropertiesService.getScriptProperties(), marca = String(Date.now()) + Math.random();
+  p.setProperty('MESA_ESCRIBIENDO', marca);
+  try { return fn(); } finally { if (p.getProperty('MESA_ESCRIBIENDO') === marca) p.deleteProperty('MESA_ESCRIBIENDO'); }
+}
+/** Espera (hasta ~90 s) a que termine de escribirse lo que se está guardando. Devuelve los segundos que esperó. */
+function MESA_esperarEscritura_() {
+  var p = PropertiesService.getScriptProperties(), t0 = Date.now();
+  while (Date.now() - t0 < 90000) {
+    var m = p.getProperty('MESA_ESCRIBIENDO');
+    if (!m || Date.now() - parseFloat(m) > 180000) break;
+    Utilities.sleep(2000);
+  }
+  return Math.round((Date.now() - t0) / 1000);
+}
 
 /** Deshace el último lote (sin deshacer) de «quien»; con prefijo, solo lotes que empiezan así (ej. 'VCO-'). */
 function MESA_deshacerQuien_(quien, prefijo) {
@@ -557,6 +578,7 @@ function MESA_etapa_() { try { return JSON.parse(PropertiesService.getScriptProp
 
 function MESA_recalcular() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'MESA_recalcular') ScriptApp.deleteTrigger(t); });
+  MESA_esperarEscritura_();
   var props = PropertiesService.getScriptProperties(), pedido = props.getProperty('MESA_PEDIDO');
   props.setProperty('MESA_ETAPA', JSON.stringify({ e: 'calc', t: Date.now() }));
   var r = '';
@@ -583,6 +605,7 @@ function MESA_recalcularAhora(tk) {
     return { enCurso: true, mensaje: '⏳ Ya se está recalculando' + (et && et.e === 'calc' ? ' (lleva ' + Math.round((Date.now() - et.t) / 1000) + ' s)' : '') + ': espere a que termine, la Mesa se recarga sola.' };
   }
   lock.releaseLock();
+  var esperado = MESA_esperarEscritura_();   // si alguien está guardando, primero termina de escribir
   try { TG_ss_(); } catch (e) {}   // en la ventana aparte no hay «hoja activa»: se fija la de Cobranzas
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'MESA_recalcular') ScriptApp.deleteTrigger(t); });
   var props = PropertiesService.getScriptProperties(), pedido = props.getProperty('MESA_PEDIDO'), t0 = Date.now();
@@ -597,7 +620,7 @@ function MESA_recalcularAhora(tk) {
   if (/en curso/.test(r)) { props.setProperty('MESA_ETAPA', JSON.stringify({ e: 'espera', t: Date.now() })); MESA_programarRecalculo_(); return { enCurso: true, mensaje: '⏳ ' + r }; }
   props.deleteProperty('MESA_PEDIDO'); props.deleteProperty('MESA_ETAPA');
   props.setProperty('MESA_RESULTADO', String(r).slice(0, 300)); props.setProperty('MESA_ULTIMA', new Date().toISOString());
-  return { ok: true, mensaje: '✅ ' + r };
+  return { ok: true, mensaje: (esperado > 2 ? '⏳ Esperó ' + esperado + ' s a que terminara de guardarse · ' : '') + '✅ ' + r };
 }
 
 /**

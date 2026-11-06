@@ -189,6 +189,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
+    ('06/11/2026', 'Mesa: recalcular espera al guardado', '⚡ Recalcular ahora (y el recálculo automático) espera a que termine de escribirse lo que se está guardando —de usted o de otra persona— para no calcular con datos a medias.'),
     ('06/11/2026', 'Mesa: 💯 voucher completo', 'Tocando una línea: «Que este voucher pague completo esta factura»; los otros vouchers de la factura solo ponen lo que falte (montos por línea), y lo que les sobre sigue a sus otras facturas.'),
     ('06/11/2026', 'Mesa: orden por fecha y colores', 'Si dos vouchers pagan la misma factura, el más antiguo paga primero también cuando el otro tiene montos por línea (antes el de montos se adelantaba y la Mesa mostraba otra cosa). Colores más distinguibles (devoluciones en rosado, cambios sin guardar con franja morada) y leyenda fija arriba.'),
     ('06/11/2026', 'Mesa: reasignaciones sin huecos', 'Las filas nuevas de 🔁 Reasignar retenciones van al primer hueco de A–E (antes quedaban filas vacías por el cuadro 💡 SUGERIDAS de la derecha).'),

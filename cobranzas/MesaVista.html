@@ -940,9 +940,9 @@ function guardar() {
     .concat(rc.quitar.map(function (q) { return '• 🔁 borrar fila ' + q.fila + ' de «🔁 Reasignar retenciones» (' + q.antes.join(' · ') + ')'; })).join('\n');
   if (!confirm((cambios.length ? 'En la hoja de Vouchers («Tipo y Nº Doc.» y, si están vacíos, ID Beneficiario / ID Usuario):\n\n' + res + (cambios.length > 12 ? '\n… y ' + (cambios.length - 12) + ' más' : '') + '\n\n' : '') +
     (resR ? 'En «🔁 Reasignar retenciones» (Cobranzas):\n' + resR + '\n\n' : '') + '¿Guardar?')) return;
-  $('bGuardar').disabled = true; estado('💾 Guardando…');
+  $('bGuardar').disabled = true; estado('💾 Guardando…'); S.guardando = true;
   if (!cambios.length) return guardarR(rc, '');
-  R.withFailureHandler(function (e) { falla(e); simular(); }).withSuccessHandler(function (r) {
+  R.withFailureHandler(function (e) { finGuardar(); falla(e); simular(); }).withSuccessHandler(function (r) {
     // Lo guardado pasa a ser «lo calculado» (hasta que Cobranzas recalcule y la Mesa recargue los saldos reales)
     var aun = {}; sucios().forEach(function (id) { aun[id] = 1; }); (r.ok || []).forEach(function (id) { delete aun[id]; });
     Object.keys(S.sim.vouC).forEach(function (id) {
@@ -964,13 +964,21 @@ function guardar() {
     simular(); pintar(); detalle();
     var msg = r.mensaje + ((r.conflictos || []).length ? '\n⚠️ ' + r.conflictos.map(function (c) { return c.fu + ': ' + c.motivo; }).join('\n⚠️ ') : '') + ((r.avisos || []).length ? '\nℹ️ ' + r.avisos.join('\nℹ️ ') : '');
     if (rc.nuevos.length || rc.quitar.length) return guardarR(rc, msg);
+    finGuardar();
     estado(msg.replace(/\n/g, ' · '), (r.conflictos || []).length > 0);
     if ((r.conflictos || []).length || (r.avisos || []).length) alert(msg);
     if (r.lote) esperarRecalculo();
   }).MESA_guardar(TK, cambios);
 }
+/** Terminó de escribirse lo guardado: si mientras tanto tocó ⚡ Recalcular ahora, recién ahora se lanza. */
+function finGuardar() {
+  S.guardando = false;
+  if (S.recalcPend) { S.recalcPend = false; setTimeout(function () { recalcularAhora(true); }, 300); }
+}
 function guardarR(rc, previo) {
-  R.withFailureHandler(function (e) { falla(e); simular(); }).withSuccessHandler(function (r) {
+  S.guardando = true;
+  R.withFailureHandler(function (e) { finGuardar(); falla(e); simular(); }).withSuccessHandler(function (r) {
+    finGuardar();
     if (r.lote) $('ultG').innerHTML = '<span class="chip c-v">💾 Guardado ' + new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) + ': retenciones escritas en «🔁 Reasignar retenciones»</span>';
     // lo guardado pasa a ser lo «original» (las filas nuevas se conocerán al recargar)
     Object.keys(S.rl).forEach(function (u) { S.rlOrig[u] = JSON.parse(JSON.stringify(S.rl[u])); });
@@ -1019,9 +1027,14 @@ function historial() {
     $('mCaja').style.width = 'min(1000px,96vw)';
   }).MESA_historial(TK);
 }
-function recalcularAhora() {
-  if (sucios().length || rSucios().length) { if (!confirm('Tiene cambios sin guardar: el recálculo usa solo lo guardado. ¿Recalcular igual? (sus cambios siguen en la Mesa)')) return; }
+function recalcularAhora(tras) {
+  if (S.guardando) {   // ✍️ aún se está escribiendo lo guardado: se recalcula apenas termine (no a medias)
+    S.recalcPend = true; var bb = $('bRecalc'); bb.textContent = '⏳ Recalcula al terminar de guardar';
+    estado('✍️ Todavía se están escribiendo sus datos en las hojas: en cuanto termine, recalculo solo (no a medias).'); return;
+  }
+  if (!tras && (sucios().length || rSucios().length)) { if (!confirm('Tiene cambios sin guardar: el recálculo usa solo lo guardado. ¿Recalcular igual? (sus cambios siguen en la Mesa)')) return; }
   var b = $('bRecalc'); b.disabled = true; b.textContent = '⏳ Recalculando…';
+  if (tras) estado('✅ Ya se terminó de guardar: ahora recalculo…');
   clearTimeout(espera); var t0 = Date.now();
   var reloj = setInterval(function () { estado('⚡ Recalculando Cobranzas ahora… ' + mmss((Date.now() - t0) / 1000) + ' (con muchas facturas tarda unos minutos; puede seguir trabajando)'); }, 1000);
   var fin = function () { clearInterval(reloj); b.disabled = false; b.textContent = '⚡ Recalcular ahora'; };
@@ -1035,8 +1048,8 @@ function recalcularAhora() {
 }
 function deshacerGuardado() {
   if (!confirm('¿Deshacer su último guardado desde la Mesa? (solo las celdas que nadie cambió después)')) return;
-  estado('↩️ Deshaciendo…');
-  R.withFailureHandler(falla).withSuccessHandler(function (r) { estado(r.mensaje); alert(r.mensaje); esperarRecalculo(); }).MESA_deshacer(TK);
+  estado('↩️ Deshaciendo…'); S.guardando = true;
+  R.withFailureHandler(function (e) { finGuardar(); falla(e); }).withSuccessHandler(function (r) { finGuardar(); estado(r.mensaje); alert(r.mensaje); esperarRecalculo(); }).MESA_deshacer(TK);
 }
 
 /* ------------------------------------------------ 🖼 ver voucher / 📄 factura */
@@ -1346,8 +1359,9 @@ function guardarManual(k) {
   if (!(monto > 0)) { $('mMsg').textContent = 'Escriba el monto.'; return; }
   var x = { fecha: $('mFe').value, modalidad: $('mMo').value, pagador: d.rec, benef: d.emi, doc: d.doc, monto: monto, moneda: d.mon, op: $('mOp').value, banco: $('mBa').value, obs: $('mOb').value };
   if (!confirm('Registrar en «✍️ Registro manual»:\n' + x.modalidad + ' · ' + d.mon + ' ' + fm(monto) + ' · ' + d.doc + ' (' + d.cn + ') · ' + ff(x.fecha) + '\n\n¿Seguro?')) return;
-  $('mGu').disabled = true; $('mMsg').textContent = 'Registrando…';
-  R.withFailureHandler(function (e) { $('mMsg').textContent = '❌ ' + e.message; $('mGu').disabled = false; }).withSuccessHandler(function (r) {
+  $('mGu').disabled = true; $('mMsg').textContent = 'Registrando…'; S.guardando = true;
+  R.withFailureHandler(function (e) { finGuardar(); $('mMsg').textContent = '❌ ' + e.message; $('mGu').disabled = false; }).withSuccessHandler(function (r) {
+    finGuardar();
     if (r.error) { $('mMsg').textContent = '⚠️ ' + r.error; $('mGu').disabled = false; return; }
     S.fijo[k] = r2((S.fijo[k] || 0) + monto); d.sal = r2(d.sal - monto);
     cerrarModal(); simular(); pintar(); detalle(); estado(r.mensaje); esperarRecalculo();
