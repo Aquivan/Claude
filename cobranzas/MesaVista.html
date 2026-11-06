@@ -841,15 +841,25 @@ function guardarR(rc, previo) {
     esperarRecalculo();
   }).MESA_reasignar(TK, rc.nuevos, rc.quitar);
 }
-var espera = 0;
+var espera = 0, esperaDesde = 0;
+function mmss(n) { n = Math.max(0, n | 0); return Math.floor(n / 60) + ':' + ('0' + n % 60).slice(-2); }
 function esperarRecalculo() {
   clearTimeout(espera);
+  if (!esperaDesde) esperaDesde = Date.now();
   espera = setTimeout(function () {
-    R.withFailureHandler(function () {}).withSuccessHandler(function (e) {
-      if (e.recalculando) { $('estado').textContent = $('estado').textContent.replace(/ · ⏳.*$/, '') + ' · ⏳ Cobranzas recalculando…'; esperarRecalculo(); return; }
-      estado('✅ Cobranzas ya recalculó: recargo con los saldos reales…'); cargar(true);
+    R.withFailureHandler(function () { esperarRecalculo(); }).withSuccessHandler(function (e) {
+      var base = $('estado').textContent.replace(/ · ⏳.*$/, '').replace(/ · ⚠️ El recálculo.*$/, '');
+      if (e.cortado) { esperaDesde = 0; $('estado').textContent = base + ' · ⚠️ El recálculo tardó más que el límite de Google y se cortó: lo completa la actualización automática (máx. 10 min). Lo guardado ya está escrito; use 🔄 Recargar en unos minutos.'; return; }
+      if (e.recalculando) {
+        var et = e.etapa === 'calc' ? 'calculando ' + mmss(e.seg) : e.etapa === 'espera' ? 'esperando que termine la actualización automática de cada 10 min' : 'en cola (Google lo inicia en ~30–60 s)';
+        $('estado').textContent = base + ' · ⏳ Cobranzas recalculando: ' + et + ' · total ' + mmss(e.total) + ' (con muchas facturas puede tardar varios minutos; puede seguir trabajando)';
+        if (Date.now() - esperaDesde < 20 * 60000) esperarRecalculo(); else esperaDesde = 0;
+        return;
+      }
+      esperaDesde = 0;
+      estado('✅ Cobranzas ya recalculó' + (e.resultado ? ' (' + e.resultado.replace(/^Listo en /, 'en ') + ')' : '') + ': recargo con los saldos reales…'); cargar(true);
     }).MESA_estado(TK);
-  }, 15000);
+  }, 10000);
 }
 function deshacerGuardado() {
   if (!confirm('¿Deshacer su último guardado desde la Mesa? (solo las celdas que nadie cambió después)')) return;

@@ -479,26 +479,47 @@ function MESA_deshacerQuien_(quien, prefijo) {
 function MESA_programarRecalculo_() {
   var props = PropertiesService.getScriptProperties();
   props.setProperty('MESA_PEDIDO', String(Date.now()));
+  var et = MESA_etapa_();
+  if (!et || et.e !== 'calc') props.setProperty('MESA_ETAPA', JSON.stringify({ e: 'cola', t: Date.now() }));
   var ya = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'MESA_recalcular'; });
   if (!ya) ScriptApp.newTrigger('MESA_recalcular').timeBased().after(30 * 1000).create();
 }
+function MESA_etapa_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('MESA_ETAPA') || 'null'); } catch (e) { return null; } }
 
 function MESA_recalcular() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'MESA_recalcular') ScriptApp.deleteTrigger(t); });
   var props = PropertiesService.getScriptProperties(), pedido = props.getProperty('MESA_PEDIDO');
+  props.setProperty('MESA_ETAPA', JSON.stringify({ e: 'calc', t: Date.now() }));
   var r = '';
   try { r = actualizarTodo_(true); } catch (e) { r = 'ERROR ' + e.message; }
-  if (/en curso/.test(r)) { ScriptApp.newTrigger('MESA_recalcular').timeBased().after(60 * 1000).create(); return; }
-  if (props.getProperty('MESA_PEDIDO') === pedido) props.deleteProperty('MESA_PEDIDO');
-  else ScriptApp.newTrigger('MESA_recalcular').timeBased().after(30 * 1000).create();   // alguien guardó mientras tanto
+  if (/en curso/.test(r)) {   // la actualización automática de cada 10 min está corriendo: se espera a que termine
+    props.setProperty('MESA_ETAPA', JSON.stringify({ e: 'espera', t: Date.now() }));
+    ScriptApp.newTrigger('MESA_recalcular').timeBased().after(60 * 1000).create(); return;
+  }
+  props.setProperty('MESA_RESULTADO', String(r).slice(0, 300));
+  if (props.getProperty('MESA_PEDIDO') === pedido) { props.deleteProperty('MESA_PEDIDO'); props.deleteProperty('MESA_ETAPA'); }
+  else { props.setProperty('MESA_ETAPA', JSON.stringify({ e: 'cola', t: Date.now() })); ScriptApp.newTrigger('MESA_recalcular').timeBased().after(30 * 1000).create(); }   // alguien guardó mientras tanto
   props.setProperty('MESA_ULTIMA', new Date().toISOString());
 }
 
-/** La página pregunta si ya terminó el recálculo. */
+/**
+ * La página pregunta si ya terminó el recálculo: {recalculando, etapa, seg, cortado, resultado}.
+ * Si Google cortó el recálculo (límite de 6 minutos por ejecución), el aviso no se queda pegado: se libera y
+ * la actualización automática de cada 10 minutos lo completa.
+ */
 function MESA_estado(tk) {
   MESA_ok_(tk);
-  var p = PropertiesService.getScriptProperties();
-  return { recalculando: !!p.getProperty('MESA_PEDIDO'), ultima: p.getProperty('MESA_ULTIMA') || '' };
+  var p = PropertiesService.getScriptProperties(), pedido = Number(p.getProperty('MESA_PEDIDO') || 0), et = MESA_etapa_(), ahora = Date.now();
+  var res = { recalculando: !!pedido, ultima: p.getProperty('MESA_ULTIMA') || '', resultado: p.getProperty('MESA_RESULTADO') || '' };
+  if (!pedido) return res;
+  res.etapa = et ? et.e : 'cola'; res.seg = Math.round((ahora - (et ? et.t : pedido)) / 1000); res.total = Math.round((ahora - pedido) / 1000);
+  var hayTrigger = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'MESA_recalcular'; });
+  if (res.etapa === 'calc' && res.seg > 420) {   // pasó el límite de Google: se cortó
+    p.deleteProperty('MESA_PEDIDO'); p.deleteProperty('MESA_ETAPA');
+    return { recalculando: false, cortado: true, ultima: res.ultima, resultado: res.resultado };
+  }
+  if (res.etapa !== 'calc' && !hayTrigger && res.seg > 120) ScriptApp.newTrigger('MESA_recalcular').timeBased().after(10 * 1000).create();   // se perdió el aviso: se vuelve a pedir
+  return res;
 }
 
 /* ============================================================ ver voucher y factura */
