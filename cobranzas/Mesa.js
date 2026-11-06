@@ -137,6 +137,7 @@ function MESA_datos(tk, lado) {
       des: String(p.descripcion || '').slice(0, 120), env: String(p.enviadoPor || '').slice(0, 40), refs: refs,
       antes: refsDeCopia[p.fuente] ? '' : refs,   // lo que dice HOY la celda de la fila principal (para no pisar cambios de otros)
       rl: parse.refs.map(function (q) { return q.tipo + '_' + q.serie + '-' + q.numero; }),
+      rm: parse.refs.map(function (q) { return q.monto != null ? q.monto : null; }),   // monto por línea («=1500»)
     };
     if (RX_DEVOLUCION_.test(refs)) x.dev = 1;                                   // ↩️ devolución: no se cruza con facturas
     else if (refs && (parse.noEntendido.length || (!parse.refs.length && refs !== '?'))) x.esp = 1;   // texto especial (PLANILLA, «adelanto»…)
@@ -144,15 +145,21 @@ function MESA_datos(tk, lado) {
   });
 
   // ---- Cruces actuales (💳 Movimientos)
-  var links = [];
+  var links = [], rets = [];
   var shM = ss.getSheetByName(HOJA.MOVS);
   if (shM && shM.getLastRow() > 1) {
     var encM = shM.getRange(1, 1, 1, shM.getLastColumn()).getValues()[0], cm = indiceColumnas_(encM);
     var vm = shM.getRange(2, 1, shM.getLastRow() - 1, encM.length).getValues();
-    var J = { mod: cm('Modalidad'), m: cm('Monto aplicado'), o: cm('Origen'), k: cm('Clave'), id: cm('ID pago') };
+    var J = { mod: cm('Modalidad'), m: cm('Monto aplicado'), o: cm('Origen'), k: cm('Clave'), id: cm('ID pago'), op: cm('N° operación'), f: cm('Fecha'), fu: cm('Fuente') };
     var junta = {};
     vm.forEach(function (r) {
       var k = String(r[J.k] || ''), id = String(r[J.id] || '');
+      // 🧾 Retenciones de SUNAT (y las ya reasignadas): para el modo «Retenciones»
+      if (porClave[k] && r[J.mod] === MODALIDAD.RETENCION && /^(CRE|REASIG)\|/.test(id)) {
+        var re = id.match(/^REASIG\|(\d+)\|(.*)$/);
+        rets.push({ u: re ? re[2] : id, k: k, m: Number(r[J.m]) || 0, fila: re ? Number(re[1]) : 0, op: String(r[J.op] || ''), f: MESA_fecha_(r[J.f]) });
+        return;
+      }
       if (!porClave[k] || r[J.mod] !== MODALIDAD.PAGO || !porId[id]) return;
       var kk = id + '\u0001' + k;
       if (junta[kk]) { junta[kk].m = redondear2_(junta[kk].m + (Number(r[J.m]) || 0)); return; }
@@ -176,10 +183,20 @@ function MESA_datos(tk, lado) {
     });
   }
 
+  // ---- 🔁 Reasignar retenciones: filas que ya existen (para quitarlas desde la Mesa)
+  var reas = [];
+  var shR = ss.getSheetByName(HOJA_REASIGNAR_);
+  if (shR && shR.getLastRow() > 3) {
+    shR.getRange(4, 1, shR.getLastRow() - 3, 7).getDisplayValues().forEach(function (r, i) {
+      if (r[0] || r[2] || r[3]) reas.push({ fila: i + 4, v: r.slice(0, 5), res: r[6] });
+    });
+  }
+
   var ultima = '';
   try { ultima = PropertiesService.getScriptProperties().getProperty('MESA_ULTIMA') || ''; } catch (e) {}
   try { ultima = PropertiesService.getDocumentProperties().getProperty('ultimaActualizacion') || ultima; } catch (e) {}
-  return { lado: lado, empresas: empresas, docs: docs, vouchers: vouchers, links: links, sug: sug, ultima: ultima,
+  return { lado: lado, empresas: empresas, docs: docs, vouchers: vouchers, links: links, sug: sug, ultima: ultima, rets: rets, reas: reas,
+    modalidades: MODALIDADES_MANUAL_,
     recalculando: !!PropertiesService.getScriptProperties().getProperty('MESA_PEDIDO') };
 }
 
@@ -276,6 +293,69 @@ function MESA_guardar(tk, cambios) {
   return { mensaje: msg, ok: ok, conflictos: conflictos, avisos: avisos, lote: log.length ? lote : '' };
 }
 
+/**
+ * 🔁 Reasignar retenciones desde la Mesa: escribe (o borra) filas en la pestaña 🔁 Reasignar retenciones, igual
+ * que a mano. nuevos: [{cre, agente, origen, destino, monto}] · quitar: [{fila, antes:[A..E]}]
+ */
+function MESA_reasignar(tk, nuevos, quitar) {
+  var quien = MESA_ok_(tk);
+  var ss = ssPrincipal_(), sh = hojaReasignar_(ss);
+  var lote = Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd-HHmmss') + '-' + Utilities.getUuid().slice(0, 4);
+  var ahora = new Date(), log = [], hechos = 0, avisos = [];
+  (quitar || []).forEach(function (q) {
+    var fila = Number(q.fila);
+    if (!(fila >= 4)) return;
+    var rg = sh.getRange(fila, 1, 1, 5), actual = rg.getDisplayValues()[0];
+    if (JSON.stringify(actual.map(String)) !== JSON.stringify((q.antes || []).map(String))) { avisos.push('Fila ' + fila + ' cambió desde que abrió la Mesa: no la borré.'); return; }
+    var crudo = rg.getValues()[0];
+    sh.getRange(fila, 1, 1, 7).clearContent();
+    log.push([ahora, quien, lote, HOJA_REASIGNAR_ + '!' + fila, 'Fila borrada', JSON.stringify(crudo), '', '']);
+    hechos++;
+  });
+  (nuevos || []).forEach(function (x) {
+    if (!x.cre || !x.origen || !x.destino) return;
+    var fila = Math.max(4, sh.getLastRow() + 1);
+    var valores = [String(x.cre), String(x.agente || ''), String(x.origen), String(x.destino), Number(x.monto) > 0 ? redondear2_(Number(x.monto)) : '',
+      '🧩 Mesa · ' + (quien || '') + ' · ' + Utilities.formatDate(ahora, 'America/Lima', 'dd/MM/yyyy HH:mm')];
+    sh.getRange(fila, 1, 1, 4).setNumberFormat('@');
+    sh.getRange(fila, 1, 1, 6).setValues([valores]);
+    log.push([ahora, quien, lote, HOJA_REASIGNAR_ + '!' + fila, 'Fila nueva', '', JSON.stringify(valores), '']);
+    hechos++;
+  });
+  if (log.length) { var shL = MESA_hojaLog_(ss); shL.getRange(shL.getLastRow() + 1, 1, log.length, MESA_ENC_LOG_.length).setValues(log); MESA_programarRecalculo_(); }
+  return { mensaje: '🔁 Retenciones: ' + hechos + ' cambio(s) en «' + HOJA_REASIGNAR_ + '»' + (hechos ? ' · Cobranzas se recalcula en ~1 minuto.' : '') + (avisos.length ? ' · ⚠️ ' + avisos.join(' ') : ''), lote: log.length ? lote : '', avisos: avisos };
+}
+
+/**
+ * ✍️ Pago sin voucher (efectivo, compensación, retención o detracción manual…): una fila en ✍️ Registro manual,
+ * igual que a mano. x = {fecha:'yyyy-mm-dd', modalidad, pagador, benef, doc, monto, moneda, op, banco, obs}
+ */
+function MESA_manual(tk, x) {
+  var quien = MESA_ok_(tk);
+  x = x || {};
+  var monto = Number(x.monto);
+  if (!(monto > 0)) return { error: 'Escriba un monto mayor a cero.' };
+  if (!parsearReferencias_(x.doc).refs.length) return { error: 'Falta la factura (ej. 01_E001-123).' };
+  if (MODALIDADES_MANUAL_.indexOf(x.modalidad) < 0) return { error: 'Elija la modalidad.' };
+  var m = String(x.fecha || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+  var fecha = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date();
+  var ss = ssPrincipal_(), sh = ss.getSheetByName(HOJA.MANUAL);
+  if (!sh) return { error: 'Falta la hoja ' + HOJA.MANUAL + ' (⚙️ Instalar / reparar).' };
+  // primera fila libre (columna Documento y Monto vacías)
+  var n = Math.max(sh.getLastRow(), 1), v = n > 1 ? sh.getRange(2, 1, n - 1, 6).getValues() : [], fila = n + 1;
+  for (var i = 0; i < v.length; i++) { if (!v[i][4] && !v[i][5] && !v[i][0]) { fila = i + 2; break; } }
+  var ahora = new Date();
+  var valores = [fecha, x.modalidad, String(x.pagador || ''), String(x.benef || ''), String(x.doc), redondear2_(monto), String(x.moneda || 'PEN'),
+    String(x.op || ''), String(x.banco || (/efectivo/i.test(x.modalidad) ? 'EFECTIVO' : '')),
+    (String(x.obs || '').trim() ? String(x.obs).trim() + ' · ' : '') + '🧩 Mesa · ' + (quien || '') + ' · ' + Utilities.formatDate(ahora, 'America/Lima', 'dd/MM/yyyy HH:mm')];
+  sh.getRange(fila, 3, 1, 2).setNumberFormat('@');
+  sh.getRange(fila, 1, 1, 10).setValues([valores]);
+  var shL = MESA_hojaLog_(ss), lote = Utilities.formatDate(ahora, 'America/Lima', 'yyyyMMdd-HHmmss') + '-' + Utilities.getUuid().slice(0, 4);
+  shL.getRange(shL.getLastRow() + 1, 1, 1, MESA_ENC_LOG_.length).setValues([[ahora, quien, lote, HOJA.MANUAL + '!' + fila, 'Fila nueva', '', JSON.stringify(valores.map(function (z) { return z instanceof Date ? Utilities.formatDate(z, 'America/Lima', 'dd/MM/yyyy') : z; })), '']]);
+  MESA_programarRecalculo_();
+  return { mensaje: '✍️ Registrado en ' + HOJA.MANUAL + ' (fila ' + fila + '): ' + x.modalidad + ' ' + (x.moneda || 'PEN') + ' ' + redondear2_(monto).toFixed(2) + ' a ' + x.doc + '. Cobranzas se recalcula en ~1 minuto.', fila: fila, lote: lote };
+}
+
 function MESA_hojaLog_(ss) {
   var sh = ss.getSheetByName(MESA_HOJA_LOG_);
   if (!sh) {
@@ -293,18 +373,45 @@ function MESA_deshacer(tk) {
   var ss = ssPrincipal_(), sh = ss.getSheetByName(MESA_HOJA_LOG_);
   if (!sh || sh.getLastRow() < 2) return { mensaje: 'No hay nada guardado desde la Mesa.' };
   var v = sh.getRange(2, 1, sh.getLastRow() - 1, MESA_ENC_LOG_.length).getValues();
-  var lote = '';
+  // El guardado más reciente de esta persona que todavía no se deshizo (se puede deshacer uno tras otro)
+  var deshechos = {}, lote = '';
+  v.forEach(function (r) { if (/^↩️ /.test(String(r[2]))) deshechos[String(r[2]).slice(3)] = 1; });
   for (var i = v.length - 1; i >= 0; i--) {
-    if (String(v[i][1]) === quien && !/^↩️/.test(String(v[i][2]))) { lote = String(v[i][2]); break; }
+    var l = String(v[i][2]);
+    if (String(v[i][1]) === quien && !/^↩️/.test(l) && !deshechos[l]) { lote = l; break; }
   }
-  if (!lote) return { mensaje: 'No encontré cambios suyos para deshacer.' };
-  // ¿ya se deshizo?
-  if (v.some(function (r) { return String(r[2]) === '↩️ ' + lote; })) return { mensaje: 'Su último guardado (' + lote + ') ya se deshizo.' };
+  if (!lote) return { mensaje: 'No encontré cambios suyos (sin deshacer) para deshacer.' };
   var cfg = leerConfig_(ss), ssV = SpreadsheetApp.openById(cfg.idVouchers), cols = {};
   var filas = v.filter(function (r) { return String(r[2]) === lote; }).reverse();
   var hechos = 0, saltados = [], log = [], ahora = new Date();
   filas.forEach(function (r) {
     var fuente = String(r[3]), columna = String(r[4]);
+    if (columna === 'Fila nueva' || columna === 'Fila borrada') {   // ✍️ Registro manual / 🔁 Reasignar (en esta hoja)
+      var q = fuente.split('!'), shX = ss.getSheetByName(q[0]), fx = parseInt(q[1], 10);
+      if (!shX) return;
+      var ncol = q[0] === HOJA.MANUAL ? 10 : 6;
+      var rgx = shX.getRange(fx, 1, 1, ncol), act = rgx.getValues()[0].map(function (c) {
+        return c instanceof Date ? Utilities.formatDate(c, 'America/Lima', 'dd/MM/yyyy') : c;
+      });
+      if (columna === 'Fila nueva') {
+        var esperado = JSON.parse(String(r[6]) || '[]');
+        var igual = act.every(function (c, i) {
+          var e = esperado[i];
+          if (e == null) return true;
+          if (typeof e === 'number') return Math.abs(aNumero_(c) - e) < 0.005;
+          return String(c).trim() === String(e).trim();
+        });
+        if (!igual) { saltados.push(fuente + ' (alguien la cambió)'); return; }
+        shX.getRange(fx, 1, 1, q[0] === HOJA.MANUAL ? 10 : 7).clearContent();
+      } else {
+        if (act.some(function (c) { return String(c == null ? '' : c).trim(); })) { saltados.push(fuente + ' (ya tiene otros datos)'); return; }
+        var vals = JSON.parse(String(r[5]) || '[]');
+        if (vals.length) shX.getRange(fx, 1, 1, vals.length).setValues([vals]);
+      }
+      log.push([ahora, quien, '↩️ ' + lote, fuente, columna, String(r[6]), String(r[5]), '']);
+      hechos++;
+      return;
+    }
     if (fuente === '_Decisiones') {
       var shDec = ss.getSheetByName(HOJA.DECISIONES), clave = String(r[6]).replace(/ = NO$/, '');
       if (!shDec || shDec.getLastRow() < 2) return;
