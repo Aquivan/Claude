@@ -371,8 +371,10 @@ function MESA_hojaLog_(ss) {
 }
 
 /** ↩️ Deshacer el último guardado de esta persona (solo lo que nadie cambió después). */
-function MESA_deshacer(tk) {
-  var quien = MESA_ok_(tk);
+function MESA_deshacer(tk) { return MESA_deshacerQuien_(MESA_ok_(tk), ''); }
+
+/** Deshace el último lote (sin deshacer) de «quien»; con prefijo, solo lotes que empiezan así (ej. 'VCO-'). */
+function MESA_deshacerQuien_(quien, prefijo) {
   var ss = ssPrincipal_(), sh = ss.getSheetByName(MESA_HOJA_LOG_);
   if (!sh || sh.getLastRow() < 2) return { mensaje: 'No hay nada guardado desde la Mesa.' };
   var v = sh.getRange(2, 1, sh.getLastRow() - 1, MESA_ENC_LOG_.length).getValues();
@@ -381,7 +383,7 @@ function MESA_deshacer(tk) {
   v.forEach(function (r) { if (/^↩️ /.test(String(r[2]))) deshechos[String(r[2]).slice(3)] = 1; });
   for (var i = v.length - 1; i >= 0; i--) {
     var l = String(v[i][2]);
-    if (String(v[i][1]) === quien && !/^↩️/.test(l) && !deshechos[l]) { lote = l; break; }
+    if (String(v[i][1]) === quien && !/^↩️/.test(l) && !deshechos[l] && (!prefijo || l.indexOf(prefijo) === 0)) { lote = l; break; }
   }
   if (!lote) return { mensaje: 'No encontré cambios suyos (sin deshacer) para deshacer.' };
   var cfg = leerConfig_(ss), ssV = SpreadsheetApp.openById(cfg.idVouchers), cols = {};
@@ -430,7 +432,7 @@ function MESA_deshacer(tk) {
     var ci = columna === 'Tipo y Nº Doc.' ? cols[p[0]]('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc') : cols[p[0]](columna);
     if (ci < 0) return;
     var rg = shV.getRange(parseInt(p[1], 10), ci + 1), actual = String(rg.getDisplayValue() || '').trim();
-    if (actual !== String(r[6]).trim()) { saltados.push(fuente + ' (' + columna + ' ya dice «' + actual + '»)'); return; }
+    if (actual.toUpperCase() !== String(r[6]).trim().toUpperCase()) { saltados.push(fuente + ' (' + columna + ' ya dice «' + actual + '»)'); return; }
     rg.setValue(r[5]);
     try { rg.setNote('↩️ Deshecho desde la Mesa · ' + quien + ' · ' + Utilities.formatDate(ahora, 'America/Lima', 'dd/MM/yyyy HH:mm')); } catch (e) {}
     log.push([ahora, quien, '↩️ ' + lote, fuente, columna, String(r[6]), String(r[5]), r[7]]);

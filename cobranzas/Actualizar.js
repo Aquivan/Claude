@@ -89,6 +89,9 @@ function actualizarTodoInterno_(forzar) {
       if (cfg.tipos.indexOf(t) === -1) return false;
       return !cfg.desde || !d.fecha || d.fecha >= cfg.desde;
     });
+    // 🔗 Originales que llegaron después de su foto: se completan con lo trabajado en Fotos (solo celdas vacías; VcoCopias.js)
+    var vco = { hechos: 0, avisos: [] };
+    try { vco = VCO_auto_(ss, cfg); if (vco.hechos) bitacora_(ss, 'Fotos → Originales', t0, vco.hechos + ' dato(s) copiados a Originales'); } catch (e) { bitacora_(ss, 'Fotos → Originales ERROR', t0, e.message); }
     var vch = leerVouchers_(cfg);
     var manual = leerRegistroManual_(ss);
     var ret = leerRetencionesSunat_(cfg, manual);
@@ -106,6 +109,7 @@ function actualizarTodoInterno_(forzar) {
     });
 
     ret.avisos.forEach(function (a) { res.errores.push(a); });
+    (vco.avisos || []).forEach(function (a) { res.errores.unshift(a); });
     det.avisos.forEach(function (a) { res.errores.push(a); });
     avisosRespaldo.forEach(function (a) { res.errores.unshift(a); });
     bitacora_(ss, 'Lectura y cruce', t0, docs.length + ' docs SIRE, ' + vch.pagos.length + ' vouchers, ' + manual.length + ' manuales, ' + ret.pagos.length + ' retenciones SUNAT, ' + det.pagos.length + ' detracciones SUNAT');

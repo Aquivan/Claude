@@ -47,6 +47,9 @@ function VCH_doPost_(e) {
       case 'rucelegir': return TGW_json_(TGQ_rucElegirFilas_(ss, q.prov, q.filas, q.ruc, q.det));
       case 'mesa':   // 🧩 Mesa de conciliación abierta desde la hoja de Vouchers (Mesa.js): enlace con llave temporal
         return TGW_json_({ url: MESA_enlace_('Vouchers · ' + String(q.quien || '').slice(0, 60)) });
+      case 'vco_ver': return TGW_json_(VCO_ver_());   // 🔗 Completar Originales con lo trabajado en Fotos (VcoCopias.js)
+      case 'vco_copiar': return TGW_json_(VCO_copiar_(q.id, 'Vouchers · ' + String(q.quien || '').slice(0, 60)));
+      case 'vco_deshacer': return TGW_json_(VCO_deshacer_('Vouchers · ' + String(q.quien || '').slice(0, 60)));
       case 'hoja':   // enlace a la hoja de Cobranzas (y a una pestaña) para lo que se trabaja allá
         var sh = q.pestana ? ss.getSheetByName(q.pestana) : null;
         return TGW_json_({ url: ss.getUrl() + (sh ? '#gid=' + sh.getSheetId() : '') });

@@ -60,6 +60,7 @@ function onOpen() {
       .addItem('🟡 Inteligente (+ sugerencias)', 'menuModoInteligente'))
     .addItem('🧩 Mesa de conciliación (facturas ↔ vouchers)', 'MESA_menuAbrir')
     .addItem('🖼 Abrir visor de vouchers', 'abrirVisorVoucher')
+    .addItem('🔗 Completar Originales con lo trabajado en Fotos', 'VCO_menuAbrir')
     .addItem('✍️ Registrar cobro/pago manual (efectivo, compensación…)', 'menuNuevoRegistroManual')
     .addItem('🔁 Reasignar una retención a otra factura', 'menuReasignarRetencion')
     .addItem('🧾 Actualizar padrones SUNAT (agentes de retención, buenos contribuyentes, SSCO)', 'menuActualizarPadrones')
