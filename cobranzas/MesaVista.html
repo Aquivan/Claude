@@ -110,6 +110,23 @@ table.tf th.num{text-align:right}
 table.mini{border-collapse:collapse;font-size:11.5px;margin-top:4px}table.mini td,table.mini th{padding:2px 8px 2px 0;border-bottom:1px solid #EEF2F7;text-align:left}
 table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weight:bold;border-top:1px solid #334155}
 .ley{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--gr);padding:0 10px 8px}
+/* 📨 estado de cuenta para enviar */
+#ec{position:fixed;inset:0;background:#E5E7EB;z-index:70;display:none;flex-direction:column}#ec.on{display:flex}
+#ecBar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#fff;border-bottom:1px solid var(--bo);font-size:12.5px}
+#ecBar label{color:var(--gr)}#ecBar input,#ecBar select{padding:4px 6px}
+#ecScroll{flex:1;overflow:auto;padding:18px}
+#ecHoja{background:#fff;width:820px;max-width:100%;margin:0 auto;padding:30px 34px;box-shadow:0 4px 18px rgba(0,0,0,.15);font:12px Arial,Helvetica,sans-serif;color:#111827;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+#ecHoja *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+#ecHoja h1{font-size:19px;margin:0;color:#1F3A5F;letter-spacing:.5px}#ecHoja h2{font-size:12.5px;margin:18px 0 6px;color:#1F3A5F;border-bottom:2px solid #1F3A5F;padding-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
+#ecHoja table{width:100%;border-collapse:collapse}#ecHoja th{background:#1F3A5F;color:#fff;font-weight:bold;padding:5px 6px;text-align:left;font-size:11px}
+#ecHoja td{padding:4px 6px;border-bottom:1px solid #E5E7EB;vertical-align:top}#ecHoja .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+#ecHoja .cab{display:flex;justify-content:space-between;gap:20px;border-bottom:3px solid #1F3A5F;padding-bottom:10px}
+#ecHoja .caja{border:1px solid #CBD5E1;border-radius:4px;padding:8px 10px;flex:1}#ecHoja .et{color:#6B7280;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px}
+#ecHoja .tot td{font-weight:bold;border-top:2px solid #1F3A5F;background:#F1F5F9}#ecHoja .sub{color:#6B7280;font-size:10.5px}
+#ecHoja .fin{background:#1F3A5F;color:#fff;font-weight:bold;font-size:13px}#ecHoja .fin td{border:0;padding:7px 8px}
+#ecHoja .ini td{background:#F8FAFC;font-style:italic}#ecHoja .ag th,#ecHoja .ag td{text-align:right}#ecHoja .ag th:first-child,#ecHoja .ag td:first-child{text-align:left}
+#ecHoja .firma{display:flex;gap:30px;margin-top:34px}#ecHoja .firma div{flex:1;border-top:1px solid #111;padding-top:4px;text-align:center;font-size:10.5px;color:#374151}
+@media print{body.ecImp>*:not(#ec){display:none!important}body.ecImp #ecBar{display:none!important}body.ecImp #ec{position:static;display:block;background:#fff}body.ecImp #ecScroll{padding:0;overflow:visible}body.ecImp #ecHoja{box-shadow:none;width:auto;padding:0}@page{size:A4;margin:12mm}}
 @media print{#top,#ayuda,#main,#pie,#repBar button,#repBar select,#repBar input,.seg{display:none!important}body{overflow:visible;height:auto;display:block}#rep{display:block!important;overflow:visible}.grp{break-inside:avoid-page}}
 /* 🧮 calculadora */
 #calc{position:fixed;right:24px;bottom:70px;width:300px;background:#0F172A;color:#E2E8F0;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.35);z-index:60;display:none;user-select:none;font-family:Arial,sans-serif}
@@ -172,7 +189,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
     <select id="eOrd" onchange="pintarE()" title="Orden de los grupos"><option value="s-">Mayor saldo primero</option><option value="n">Nombre (A-Z)</option><option value="v">Más vencido primero</option></select>
     <input id="eQ" placeholder="🔎 factura, voucher (n° op.), proveedor o monto" style="flex:1;min-width:200px" oninput="tarde(pintarE)">
     <button onclick="abrirTodo(true)">⊞ Abrir todo</button><button onclick="abrirTodo(false)">⊟ Cerrar todo</button>
-    <button onclick="copiarE()" title="Copiar el reporte (para pegar en Excel o Sheets)">📋 Copiar</button><button onclick="imprimirE()">🖨 Imprimir / PDF</button>
+    <button onclick="ecDesdeFiltro()" title="Estado de cuenta formal de UN proveedor o cliente para enviarle (PDF, imagen o copiar)">📨 Para enviar</button><button onclick="copiarE()" title="Copiar el reporte (para pegar en Excel o Sheets)">📋 Copiar</button><button onclick="imprimirE()">🖨 Imprimir / PDF</button>
   </div>
   <div id="repTot"></div>
   <div class="ley"><span>Toque una <b>factura</b> para ver cómo se canceló · toque un <b>voucher</b> (💳) para ver a qué facturas se aplicó · el mismo color = el mismo voucher · <b>⧉2</b> = ese voucher paga 2 facturas</span></div>
@@ -239,6 +256,15 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
     <div class="pie"><span>Alt+clic en un monto lo trae aquí</span><span>Enter = · Esc cierra</span></div>
   </div></div>
 <div id="modal"><div class="caja" id="mCaja"></div></div>
+<div id="ec"><div id="ecBar"><b>📨 Estado de cuenta para enviar</b>
+  <label>Desde</label><input type="date" id="ecDe" onchange="ecPintar()"><label>Hasta</label><input type="date" id="ecHa" onchange="ecPintar()">
+  <span class="seg" id="ecNiv"><button data-v="res" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">📋 Resumido</button><button data-v="det" class="on" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">🔎 Detallado</button></span>
+  <select id="ecMon" onchange="ecPintar()"></select>
+  <label><input type="checkbox" id="ecConf" checked onchange="ecPintar()"> con conformidad (firma)</label>
+  <span style="flex:1"></span>
+  <button onclick="ecImprimir()">🖨 Imprimir / PDF</button><button onclick="ecImagen()">🖼 Imagen</button><button onclick="ecCopiar()">📋 Copiar</button><button onclick="ecCerrar()">✖ Cerrar</button>
+  <span id="ecMsg" style="color:var(--gr)"></span></div>
+  <div id="ecScroll"><div id="ecHoja"></div></div></div>
 
 <script>
 var TK = '<?= TK ?>', MODO = '<?= MODO ?>', URLM = '<?= URL ?>';
@@ -1755,6 +1781,7 @@ function grupoE(g, gi, agr, niv) {
   g.subs.forEach(function (sg) {
     if (g.subs.length > 1 || agr === 'ep') x += '<div class="scab"><span></span><div>' + (agr === 'pe' ? '🏢 ' : '') + esc(sg.nombre) + ' <span class="s" style="color:var(--gr)">· ' + sg.t.n + ' factura(s)</span></div>' + nums(sg.t, sg.favT) + '</div>';
     sg.docs.sort(function (a, b) { return a.f < b.f ? -1 : a.f > b.f ? 1 : cmpNum(a, b); });
+    x += '<div style="text-align:right;margin:4px 0 2px"><button style="font-size:11.5px;padding:2px 8px" onclick="ecAbrir(\'' + esc(sg.cr) + '\',\'' + esc(sg.er) + '\')" title="Estado de cuenta formal (como los sistemas contables) para enviar en PDF o imagen">📨 Estado de cuenta para enviar</button></div>';
     x += niv === 'det' ? detalladoE(sg) : porFacturaE(sg);
   });
   return x + '</div>';
@@ -2082,6 +2109,7 @@ function ayudaCompleta() {
     '<li>En el estado de cuenta: <b>💾 Guardado</b> (lo que está hoy), <b>✏️ Con mis cambios</b> (cómo quedará si guarda: saldo antes tachado → después, líneas 🆕) y <b>⚖️ Comparar</b> (solo lo que cambia). Desde ahí mismo puede 💾 Guardar.</li>' +
     '<li><b>🧮 Calculadora</b> (botón arriba o F2): flotante y movible; IGV, retención 3%, detracción, memoria e historial. <b>Alt+clic</b> en cualquier monto de la pantalla lo pasa a la calculadora.</li>' +
     '<li><b>🧹 Quitar cruces</b>: deja en blanco los cruces del proveedor / empresa filtrados (y, si lo marca, las reasignaciones de retención y las devoluciones) para volver a cruzar desde cero. Nada se escribe hasta 💾 Guardar; ↶ lo vuelve todo de una vez.</li>' +
+    '<li><b>📨 Estado de cuenta para enviar</b> (en 📊 Estado de cuenta: botón «📨 Para enviar» arriba o en cada proveedor): el formato de los sistemas contables, listo para mandar al proveedor o cliente. Encabezado (empresa, proveedor, periodo, moneda), <b>resumen del periodo</b> (saldo inicial + facturas − N/C − retenciones − detracciones − pagos + devoluciones = saldo final), <b>antigüedad de saldos</b> (por vencer, 1–30, 31–60, 61–90, +90), <b>facturas pendientes</b> y, en «Detallado», los <b>movimientos</b> con saldo acumulado (cada pago en una línea con las facturas que canceló). Elija desde/hasta (vacío = desde el inicio), resumido o detallado y si lleva conformidad (firma). <b>🖨 Imprimir / PDF</b>, <b>🖼 Imagen</b> (para WhatsApp) o <b>📋 Copiar</b> (Excel o correo).</li>' +
     '<li><b>📄 Comprobantes</b>: en la 🔍 ficha de una factura, cada retención tiene «📄 ver comprobante de retención» y cada detracción «📄 ver constancia de detracción»; se abren en el visor con sus datos (fecha, monto retenido, facturas). También en 🧾 Retenciones al tocar un comprobante o su línea. Salen de las hojas de Retenciones y Detracciones (el PDF tiene que estar copiado a Drive).</li>' +
     '<li><b>↩️ Devoluciones</b>: toque la devolución y luego el <b>depósito</b> que le devuelven (los posibles se marcan en café; también puede arrastrar un voucher sobre el otro), la <b>factura pagada de más</b>, o elija la <b>N/C</b> en la lista. Se dibuja una línea rosada y se guarda como «DEVOLUCION op 5344» / «DEVOLUCION 01_FN01-19» / «DEVOLUCION 07_FC01-12». A cualquier voucher sin facturas se le puede marcar «↩️ Es una devolución del proveedor».</li>' +
     '<li>Los vouchers ↩️ de devolución y los que dicen otra cosa (PLANILLA, etc.) se marcan; una devolución no se cruza con facturas.</li></ol><button onclick="cerrarModal()">Cerrar</button>');
@@ -2091,6 +2119,158 @@ document.addEventListener('keydown', function (e) {
   if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !/INPUT|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); deshacerLocal(); }
   if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if (!$('bGuardar').disabled) guardar(); }
 });
+/* ============================================================ 📨 ESTADO DE CUENTA PARA ENVIAR
+ * Formato de los sistemas contables (QuickBooks/Xero «Statement», SAP «Account statement», carta de confirmación
+ * de saldos de los auditores en Perú): encabezado, cuadro resumen del periodo (saldo inicial + cargos − abonos =
+ * saldo final), antigüedad de saldos, facturas pendientes, movimientos con saldo acumulado y conformidad. */
+var EC = null;
+function ecDesdeFiltro() {
+  var c = contraFiltro(), emp = $('fEmp').value, rucs = {};
+  EVIS.forEach(function (d) { rucs[d.cr] = 1; });
+  var r = c && c.ruc ? c.ruc : (Object.keys(rucs).length === 1 ? Object.keys(rucs)[0] : '');
+  if (!r) { alert('Elija primero UN ' + (S.lado === 'Por pagar' ? 'proveedor' : 'cliente') + ' arriba (casilla «Proveedor») o use el botón «📨 Estado de cuenta para enviar» de su grupo.'); return; }
+  ecAbrir(r, emp);
+}
+function ecAbrir(cr, er) {
+  if (!EV) construirEV('antes');
+  var mons = {}; EV.docs.forEach(function (d) { if (d.cr === cr && (!er || d.er === er)) mons[d.mon] = 1; });
+  var ms = Object.keys(mons); if (!ms.length) ms = ['PEN'];
+  $('ecMon').innerHTML = ms.map(function (m) { return '<option>' + m + '</option>'; }).join(''); $('ecMon').style.display = ms.length > 1 ? '' : 'none';
+  $('ecDe').value = $('fDe').value || ''; $('ecHa').value = $('fHa').value || new Date().toISOString().slice(0, 10);
+  EC = { cr: cr, er: er };
+  $('ec').className = 'on'; ecPintar();
+}
+function ecCerrar() { $('ec').className = ''; }
+function dias(a, b) { return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000); }
+/** Arma los movimientos de ese proveedor/cliente y empresa en una moneda: cargos (facturas, N/D, devoluciones) y abonos (pagos, N/C, retenciones, detracciones…). */
+function ecDatos(cr, er, mon) {
+  var pagar = S.lado === 'Por pagar';
+  var docs = EV.docs.filter(function (d) { return d.cr === cr && (!er || d.er === er) && d.mon === mon; });
+  var L = [], vou = {}, cre = {};
+  docs.forEach(function (d) {
+    var nd = /^08_/.test(d.doc), nc = /^07_/.test(d.doc) || d.tot < 0;
+    L.push({ f: d.f, doc: d.doc, con: (nc ? 'Nota de crédito' : nd ? 'Nota de débito' : 'Factura') + (d.ve ? ' · vence ' + ff(d.ve) : ''), ref: er ? '' : nomEmp(d.er), cargo: nc ? 0 : d.tot, abono: nc ? -d.tot : 0, g: 'fac', k: d.k });
+    (EV.movK[d.k] || []).forEach(function (m) {
+      var c = cat(m);
+      if (m.mod === 'Pago' && S.V[m.id]) { var v = S.V[m.id], x = vou[m.id] || (vou[m.id] = { f: v.f, doc: (v.bco + ' ' + v.op).trim(), apl: [], m: 0, v: v }); x.apl.push(d.doc + ' ' + fm(m.m)); x.m = r2(x.m + m.m); return; }
+      if (m.mod === 'Retención') { var y = cre[m.op] || (cre[m.op] = { f: m.f, doc: String(m.op).replace(/^CRE\s*/, ''), apl: [], m: 0 }); y.apl.push(d.doc + ' ' + fm(m.m)); y.m = r2(y.m + m.m); return; }
+      var cargo = m.mod === 'N/D' || m.mod === 'Devolución';
+      L.push({ f: m.f || d.f, doc: m.op || '', con: c.t.replace(/\s+$/, '') + ' · aplicado a ' + d.doc, ref: m.bco || '', cargo: cargo ? m.m : 0, abono: cargo ? 0 : m.m, g: c.g });
+    });
+  });
+  // vouchers de ese proveedor/cliente y empresa aún sin aplicar del todo (pagos a cuenta)
+  S.data.vouchers.forEach(function (v) {
+    var c = pagar ? v.br : v.pr, e = pagar ? v.pr : v.br;
+    if (c !== cr || (er && e && e !== er) || v.mon !== mon || v.dev) return;
+    if (!vou[v.id]) vou[v.id] = { f: v.f, doc: (v.bco + ' ' + v.op).trim(), apl: [], m: 0, v: v };
+  });
+  Object.keys(vou).forEach(function (id) {
+    var x = vou[id], v = x.v, aplTodo = (EV.movP[id] || []).reduce(function (t, m) { return m.mod === 'Pago' ? t + m.m : t; }, 0);
+    var aCuenta = r2(Math.max(0, v.m - aplTodo)), dev = (S.devuelto || {})[id] || 0;
+    if (x.m + aCuenta <= 0.005) return;
+    L.push({ f: x.f, doc: x.doc, con: (pagar ? 'Pago' : 'Cobro') + (x.apl.length ? ' · aplicado a ' + x.apl.join(', ') : '') + (aCuenta > 0.05 ? (x.apl.length ? ' · ' : ' · ') + 'a cuenta (sin factura) ' + fm(aCuenta) : ''), ref: v.fu, cargo: 0, abono: r2(x.m + aCuenta), g: 'pago' });
+    (S.devDe[id] || []).forEach(function (q) { var w = S.V[q.de]; L.push({ f: w ? w.f : x.f, doc: w ? (w.bco + ' ' + w.op).trim() : '', con: 'Devolución ' + (pagar ? 'recibida del proveedor' : 'hecha al cliente') + ' (de ' + x.doc + ')', ref: w ? w.fu : '', cargo: q.m, abono: 0, g: 'dev' }); });
+  });
+  Object.keys(cre).forEach(function (k) { var y = cre[k]; L.push({ f: y.f, doc: y.doc, con: 'Retención IGV 3% · comprobante ' + y.doc + ' · aplicado a ' + y.apl.join(', '), ref: '', cargo: 0, abono: y.m, g: 'ret' }); });
+  var orden = { fac: 0, dev: 1, ret: 2, det: 3, nc: 4, pago: 5 };
+  L.sort(function (a, b) { return a.f < b.f ? -1 : a.f > b.f ? 1 : (orden[a.g] || 9) - (orden[b.g] || 9); });
+  return { docs: docs, L: L };
+}
+function ecPintar() {
+  if (!EC) return;
+  var cr = EC.cr, er = EC.er, mon = $('ecMon').value || 'PEN', de = $('ecDe').value, ha = $('ecHa').value || new Date().toISOString().slice(0, 10);
+  var det = segV('ecNiv') === 'det', pagar = S.lado === 'Por pagar';
+  var x = ecDatos(cr, er, mon), sim = mon === 'USD' ? 'US$' : 'S/';
+  var d0 = x.docs[0] || {}, nomC = d0.cn || (S.V && Object.keys(S.V).map(function (i) { return S.V[i]; }).filter(function (v) { return (pagar ? v.br : v.pr) === cr; }).map(function (v) { return v.bn; })[0]) || cr;
+  var emp = er ? (S.data.empresas || []).filter(function (e) { return e.ruc === er; })[0] : null;
+  var nomE = emp ? emp.nombre : 'Grupo (todas las empresas)';
+  // saldo inicial y periodo
+  var ini = 0, per = [], fin = 0, R = { fac: 0, nd: 0, dev: 0, nc: 0, ret: 0, det: 0, pago: 0, otr: 0 };
+  x.L.forEach(function (l) {
+    if (l.f > ha) return;
+    var n = r2(l.cargo - l.abono);
+    if (de && l.f < de) { ini = r2(ini + n); return; }
+    per.push(l);
+    var g = l.g === 'fac' ? (l.cargo ? (/débito/.test(l.con) ? 'nd' : 'fac') : 'nc') : l.g === 'man' ? 'pago' : (R[l.g] != null ? l.g : 'otr');
+    R[g] = r2(R[g] + (l.cargo || l.abono));
+  });
+  fin = r2(ini + per.reduce(function (t, l) { return t + l.cargo - l.abono; }, 0));
+  // antigüedad: saldo de cada factura a la fecha de corte
+  var ab = [0, 0, 0, 0, 0], pend = [];
+  x.docs.forEach(function (d) {
+    if (d.f > ha || d.tot <= 0) return;
+    var s = d.tot; (EV.movK[d.k] || []).forEach(function (m) { if ((m.f || d.f) <= ha) s += (m.mod === 'N/D' || m.mod === 'Devolución') ? m.m : -m.m; });
+    s = r2(s); if (s <= 0.05) return;
+    var dd = dias(d.ve || d.f, ha), b = dd <= 0 ? 0 : dd <= 30 ? 1 : dd <= 60 ? 2 : dd <= 90 ? 3 : 4;
+    ab[b] = r2(ab[b] + s); pend.push({ d: d, s: s, dd: dd });
+  });
+  var aCuenta = r2(ab.reduce(function (t, v) { return t + v; }, 0) - fin);
+  var hoy = new Date().toISOString().slice(0, 10);
+  var M = function (n) { return Math.abs(n) < 0.005 ? '–' : (n < 0 ? '(' + fm(-n) + ')' : fm(n)); };
+  var h = '<div class="cab"><div><div class="et">' + (pagar ? 'Emitido por (cliente)' : 'Emitido por (proveedor)') + '</div><div style="font-size:15px;font-weight:bold">' + esc(nomE) + '</div>' + (er ? '<div>RUC ' + esc(er) + '</div>' : '') + '</div>' +
+    '<div style="text-align:right"><h1>ESTADO DE CUENTA</h1><div class="sub">' + (pagar ? 'Cuentas por pagar · Proveedor' : 'Cuentas por cobrar · Cliente') + '</div><div style="margin-top:4px">Fecha de emisión: <b>' + ff(hoy) + '</b></div></div></div>' +
+    '<div style="display:flex;gap:10px;margin-top:12px"><div class="caja"><div class="et">' + (pagar ? 'Proveedor' : 'Cliente') + '</div><div style="font-weight:bold;font-size:13px">' + esc(nomC) + '</div><div>RUC ' + esc(cr) + '</div></div>' +
+    '<div class="caja"><div class="et">Periodo</div><div><b>' + (de ? ff(de) : 'Desde el inicio') + '</b> al <b>' + ff(ha) + '</b></div><div class="et" style="margin-top:4px">Moneda</div><div>' + (mon === 'USD' ? 'Dólares americanos (US$)' : 'Soles (S/)') + '</div></div>' +
+    '<div class="caja" style="background:#F1F5F9"><div class="et">Saldo al ' + ff(ha) + '</div><div style="font-size:17px;font-weight:bold;color:' + (fin > 0.05 ? '#B91C1C' : '#065F46') + '">' + sim + ' ' + fm(Math.abs(fin)) + '</div><div class="sub">' + (fin > 0.05 ? (pagar ? 'pendiente de pago a ' + esc(nomC) : 'pendiente de cobro') : fin < -0.05 ? (pagar ? 'a favor de ' + esc(nomE) + ' (pagos a cuenta / en exceso)' : 'a favor del cliente') : 'cuenta cancelada') + '</div></div></div>';
+  // resumen
+  h += '<h2>Resumen del periodo</h2><table><tr><th>Concepto</th><th class="n">' + sim + '</th></tr>' +
+    '<tr class="ini"><td>Saldo inicial' + (de ? ' al ' + ff(de) : '') + '</td><td class="n">' + M(ini) + '</td></tr>' +
+    [['(+) Facturas emitidas', R.fac], ['(+) Notas de débito', R.nd], ['(−) Notas de crédito', -R.nc], ['(−) Retenciones del IGV (3%)', -R.ret], ['(−) Detracciones (SPOT)', -R.det], ['(−) ' + (pagar ? 'Pagos realizados' : 'Cobros recibidos'), -R.pago], ['(−) Otros descuentos y compensaciones', -R.otr], ['(+) Devoluciones ' + (pagar ? 'recibidas' : 'hechas'), R.dev]]
+      .filter(function (r) { return Math.abs(r[1]) > 0.005; }).map(function (r) { return '<tr><td>' + r[0] + '</td><td class="n">' + M(r[1]) + '</td></tr>'; }).join('') +
+    '<tr class="fin"><td>SALDO FINAL al ' + ff(ha) + (fin < -0.05 ? ' (a favor de ' + esc(pagar ? nomE : nomC) + ')' : '') + '</td><td class="n">' + sim + ' ' + M(fin) + '</td></tr></table>';
+  // antigüedad
+  h += '<h2>Antigüedad de saldos al ' + ff(ha) + '</h2><table class="ag"><tr><th>Facturas pendientes</th><th>Por vencer</th><th>1 – 30 días</th><th>31 – 60 días</th><th>61 – 90 días</th><th>Más de 90</th><th>Total</th></tr>' +
+    '<tr><td>' + pend.length + ' documento(s)</td>' + ab.map(function (v) { return '<td class="n">' + M(v) + '</td>'; }).join('') + '<td class="n"><b>' + M(r2(ab.reduce(function (t, v) { return t + v; }, 0))) + '</b></td></tr>' +
+    (aCuenta > 0.05 ? '<tr><td colspan="6">(−) ' + (pagar ? 'Pagos a cuenta sin aplicar (saldo a favor)' : 'Cobros a cuenta sin aplicar') + '</td><td class="n">(' + fm(aCuenta) + ')</td></tr>' : '') +
+    (aCuenta < -0.05 ? '<tr><td colspan="6">(+) Devoluciones y otros cargos sin factura</td><td class="n">' + fm(-aCuenta) + '</td></tr>' : '') +
+    (Math.abs(aCuenta) > 0.05 ? '<tr class="tot"><td colspan="6">Saldo neto (igual al saldo final)</td><td class="n">' + M(fin) + '</td></tr>' : '') + '</table>';
+  // facturas pendientes
+  if (pend.length) {
+    h += '<h2>Detalle de facturas pendientes</h2><table><tr><th>Documento</th><th>Emisión</th><th>Vencimiento</th><th class="n">Días vencido</th><th class="n">Importe</th><th class="n">Saldo</th></tr>' +
+      pend.sort(function (a, b) { return a.d.f < b.d.f ? -1 : 1; }).map(function (p) { return '<tr><td>' + esc(p.d.doc) + (er ? '' : ' <span class="sub">' + esc(nomEmp(p.d.er)) + '</span>') + '</td><td>' + ff(p.d.f) + '</td><td>' + (p.d.ve ? ff(p.d.ve) : '—') + '</td><td class="n">' + (p.dd > 0 ? p.dd : 'por vencer') + '</td><td class="n">' + fm(p.d.tot) + '</td><td class="n"><b>' + fm(p.s) + '</b></td></tr>'; }).join('') +
+      '<tr class="tot"><td colspan="5">Total pendiente</td><td class="n">' + fm(pend.reduce(function (t, p) { return t + p.s; }, 0)) + '</td></tr></table>';
+  }
+  // movimientos
+  if (det) {
+    var s = ini;
+    h += '<h2>Movimientos del periodo</h2><table><tr><th style="width:72px">Fecha</th><th style="width:118px">Documento</th><th>Concepto</th><th class="n" style="width:82px">Cargos</th><th class="n" style="width:82px">Abonos</th><th class="n" style="width:90px">Saldo</th></tr>' +
+      '<tr class="ini"><td colspan="5">Saldo inicial' + (de ? ' al ' + ff(de) : '') + '</td><td class="n">' + M(ini) + '</td></tr>' +
+      per.map(function (l) { s = r2(s + l.cargo - l.abono); return '<tr><td>' + ff(l.f) + '</td><td>' + esc(l.doc) + '</td><td>' + esc(l.con) + (l.ref && l.g !== 'pago' ? ' <span class="sub">' + esc(l.ref) + '</span>' : '') + '</td><td class="n">' + (l.cargo ? fm(l.cargo) : '') + '</td><td class="n">' + (l.abono ? fm(l.abono) : '') + '</td><td class="n">' + M(s) + '</td></tr>'; }).join('') +
+      '<tr class="tot"><td colspan="3">Totales del periodo</td><td class="n">' + fm(per.reduce(function (t, l) { return t + l.cargo; }, 0)) + '</td><td class="n">' + fm(per.reduce(function (t, l) { return t + l.abono; }, 0)) + '</td><td class="n">' + M(fin) + '</td></tr></table>';
+  }
+  h += '<p class="sub" style="margin-top:14px">Saldos en ' + (mon === 'USD' ? 'dólares' : 'soles') + '; los paréntesis indican saldo a favor de ' + esc(pagar ? nomE : nomC) + '. Las retenciones del IGV se sustentan con los comprobantes de retención electrónicos y las detracciones con sus constancias de depósito. ' +
+    'Le agradeceremos revisar este estado de cuenta y comunicarnos cualquier diferencia dentro de los 10 días de recibido; de no recibir observaciones, se considerará conforme.</p>';
+  if ($('ecConf').checked) h += '<div class="firma"><div>' + esc(nomE) + '<br>Firma y sello</div><div>Conformidad de ' + esc(nomC) + '<br>Nombre, firma, sello y fecha</div></div>';
+  h += '<div class="sub" style="margin-top:16px;text-align:center">Generado el ' + ff(hoy) + ' · Cuentas por Cobrar y Pagar · Grupo</div>';
+  $('ecHoja').innerHTML = h;
+  EC.copiar = { nomE: nomE, er: er, nomC: nomC, cr: cr, de: de, ha: ha, mon: mon, ini: ini, fin: fin, per: per, pend: pend, ab: ab };
+}
+function ecImprimir() { document.body.classList.add('ecImp'); setTimeout(function () { window.print(); setTimeout(function () { document.body.classList.remove('ecImp'); }, 500); }, 100); }
+function ecImagen() {
+  var hacer = function () {
+    $('ecMsg').textContent = '⏳ Generando imagen…';
+    window.html2canvas($('ecHoja'), { scale: 2, backgroundColor: '#ffffff' }).then(function (cv) {
+      var a = document.createElement('a'); a.href = cv.toDataURL('image/png');
+      a.download = 'Estado de cuenta ' + (EC.copiar ? EC.copiar.nomC : '') + ' ' + (EC.copiar ? EC.copiar.ha : '') + '.png';
+      document.body.appendChild(a); a.click(); a.remove(); $('ecMsg').textContent = '🖼 Imagen descargada (puede pegarla en WhatsApp o en un correo).';
+    }).catch(function (e) { $('ecMsg').textContent = '❌ ' + e.message; });
+  };
+  if (window.html2canvas) return hacer();
+  var sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; sc.onload = hacer;
+  sc.onerror = function () { $('ecMsg').textContent = '❌ No se pudo cargar el generador de imágenes: use 🖨 Imprimir / PDF.'; }; document.head.appendChild(sc);
+}
+function ecCopiar() {
+  var c = EC.copiar; if (!c) return;
+  var T = function (a) { return a.join('\t'); }, n = function (x) { return x.toFixed(2); }, L = [];
+  L.push('ESTADO DE CUENTA'); L.push(T([S.lado === 'Por pagar' ? 'Proveedor' : 'Cliente', c.nomC, 'RUC ' + c.cr])); L.push(T(['Empresa', c.nomE, c.er ? 'RUC ' + c.er : '']));
+  L.push(T(['Periodo', c.de ? ff(c.de) : 'Desde el inicio', ff(c.ha), c.mon])); L.push('');
+  L.push(T(['Fecha', 'Documento', 'Concepto', 'Cargos', 'Abonos', 'Saldo'])); L.push(T(['', '', 'Saldo inicial', '', '', n(c.ini)]));
+  var s = c.ini; c.per.forEach(function (l) { s = r2(s + l.cargo - l.abono); L.push(T([ff(l.f), l.doc, l.con, l.cargo ? n(l.cargo) : '', l.abono ? n(l.abono) : '', n(s)])); });
+  L.push(T(['', '', 'SALDO FINAL', '', '', n(c.fin)])); L.push('');
+  L.push(T(['Antigüedad', 'Por vencer', '1-30', '31-60', '61-90', '>90'])); L.push(T([''].concat(c.ab.map(n))));
+  var txt = L.join('\n');
+  (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { $('ecMsg').textContent = '📋 Copiado: péguelo en Excel, Sheets o un correo.'; }, function () { prompt('Copie el texto:', txt); });
+}
 window.addEventListener('beforeunload', function (e) { if (sucios().length || rSucios().length) { e.preventDefault(); e.returnValue = ''; } });
 cargar(false);
 </script>
