@@ -125,6 +125,15 @@ function VIA_menuMesa() {
   SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(460).setHeight(210), '🧩 Mesa de conciliación');
 }
 
+/** 🔗 Completar Originales con lo trabajado en Fotos: la misma ventana de Cobranzas (VcoVista.html, copiada al desplegar). */
+function VIA_menuVco() {
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutputFromFile('asistente_ia/VcoVista').setWidth(820).setHeight(620), '🔗 Completar Originales con lo trabajado en Fotos');
+}
+function VIA_quien_() { try { return Session.getActiveUser().getEmail() || ''; } catch (e) { return ''; } }
+function VIA_vcoVer() { var r = VIA_llamar_('vco_ver', {}); if (r.error) throw new Error(r.error); return r; }
+function VIA_vcoCopiar(id) { return VIA_llamar_('vco_copiar', { id: id, quien: VIA_quien_() }); }
+function VIA_vcoDeshacer() { return VIA_llamar_('vco_deshacer', { quien: VIA_quien_() }); }
+
 function VIA_rucEscribir(ids) { try { return VIA_aplicar(ids, false); } catch (e) { return { error: e.message }; } }
 function VIA_rucExternos(filas) { try { return VIA_llamar_('rucexternos', { filas: filas }); } catch (e) { return { error: e.message }; } }
 function VIA_rucEstado(id) { try { return VIA_llamar_('rucestado', { id: id }); } catch (e) { return { error: e.message }; } }

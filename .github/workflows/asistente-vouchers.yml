@@ -14,7 +14,7 @@ name: Asistente IA en hoja Vouchers
 on:
   push:
     branches: [claude/python-codes-izve18]
-    paths: ['vouchers_ia/**', 'cobranzas/ChatPanel.html', 'cobranzas/ConciliacionIA.js', '.github/workflows/asistente-vouchers.yml']
+    paths: ['vouchers_ia/**', 'cobranzas/ChatPanel.html', 'cobranzas/VcoVista.html', 'cobranzas/ConciliacionIA.js', '.github/workflows/asistente-vouchers.yml']
   workflow_dispatch:
     inputs:
       accion:
@@ -95,7 +95,7 @@ jobs:
               for f in fs:
                   if f.endswith(('.js', '.gs')):
                       codigo.append(os.path.relpath(os.path.join(raiz, f), d))
-          nuevos = ['IACliente', 'AsistenteIA', 'MenuIA', 'ChatPanel']
+          nuevos = ['IACliente', 'AsistenteIA', 'MenuIA', 'ChatPanel', 'VcoVista']
           def base(f): return os.path.splitext(os.path.basename(f))[0]
           def leer(f): return open(os.path.join(d, f), encoding='utf-8').read()
           # 1) El codigo del bot no debe usar nombres IA_ ni VIA_ (son del asistente).
@@ -122,12 +122,18 @@ jobs:
           if re.search(r'\bCHAT_\w+\(', html):
               print('::error::El panel de Cobranzas usa una función nueva: ' + ', '.join(sorted(set(re.findall(r'\bCHAT_\w+', html)))) + ' (agréguela a vouchers_ia).'); sys.exit(1)
           open(os.path.join(d, carpeta, 'ChatPanel.html'), 'w', encoding='utf-8').write(html)
+          # 🔗 La misma ventana de Cobranzas para completar Originales con lo trabajado en Fotos (VCO_x pasa a VIA_vcoX).
+          vco = open('cobranzas/VcoVista.html', encoding='utf-8').read()
+          vco = vco.replace('VCO_ver()', 'VIA_vcoVer()').replace('VCO_copiar(', 'VIA_vcoCopiar(').replace('VCO_deshacer()', 'VIA_vcoDeshacer()')
+          if re.search(r'\bVCO_\w+\(', vco):
+              print('::error::VcoVista.html usa una función VCO_ nueva: agréguela a vouchers_ia.'); sys.exit(1)
+          open(os.path.join(d, carpeta, 'VcoVista.html'), 'w', encoding='utf-8').write(vco)
           # El menu: los mismos items del menu 🧠 Asistente IA de Cobranzas (CIA_agregarMenu_).
           cia = open('cobranzas/ConciliacionIA.js', encoding='utf-8').read()
           bloque = re.search(r'function CIA_agregarMenu_\(\)\s*\{(.*?)\.addToUi\(\)', cia, re.S).group(1)
           aqui = {'CHAT_menuAbrir': 'VIA_menuAbrirChat', 'CIA_menuResumen': 'VIA_menuResumen',
                   'menuAnalizarIAProcesados': 'VIA_menuProcesados', 'IA_menuRetirar': 'VIA_menuRetirar',
-                  'menuIdentificarRucFilas': 'VIA_menuIdentificarRuc', 'MESA_menuAbrir': 'VIA_menuMesa'}
+                  'menuIdentificarRucFilas': 'VIA_menuIdentificarRuc', 'MESA_menuAbrir': 'VIA_menuMesa', 'VCO_menuAbrir': 'VIA_menuVco'}
           pest = {'CIA_': '🤝 Conciliar con IA', 'IMP_': '🤝 Importar'}
           lineas, extra = [], []
           for m in re.finditer(r"\.addItem\('((?:[^'\\]|\\.)*)',\s*'(\w+)'\)|\.addSeparator\(\)", bloque):
