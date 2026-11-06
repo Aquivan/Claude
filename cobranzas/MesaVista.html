@@ -196,6 +196,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 </div>
 <div id="pie">
   <div id="det"><span class="d2">Toque un voucher para ver su detalle, sus facturas y opciones.</span></div>
+  <button onclick="limpiarCruces()" title="Quitar todos los cruces del proveedor / empresa filtrados, para volver a cruzar desde cero (no se escribe nada hasta Guardar)">🧹 Quitar cruces</button>
   <button id="bDes" onclick="deshacerLocal()" title="Deshacer el último cruce (sin guardar) · Ctrl+Z" disabled>↶</button>
   <button id="bDescartar" onclick="descartar()" disabled>✖ Descartar cambios</button>
   <button id="bGuardar" class="p" onclick="guardar()" disabled>💾 Guardar</button>
@@ -743,6 +744,14 @@ function montoLinea(id, k, auto) {
 function primero(id, k) { guardarHist(id); S.links[id] = [k].concat(S.links[id].filter(function (x) { return x !== k; })); simular(); pintar(); detalle(); }
 function deshacerLocal() {
   var h = S.hist.pop(); if (!h) return;
+  if (h.bulk) {   // 🧹 deshacer «Quitar cruces» completo
+    var b = h.bulk;
+    Object.keys(b.links).forEach(function (id) { S.links[id] = b.links[id]; });
+    Object.keys(b.montos).forEach(function (x) { if (b.montos[x] == null) delete S.montos[x]; else S.montos[x] = b.montos[x]; });
+    Object.keys(b.rl).forEach(function (u) { S.rl[u] = b.rl[u]; });
+    Object.keys(b.devT).forEach(function (id) { S.devT[id] = b.devT[id]; });
+    simular(); pintar(); detalle(); estado('↶ Volvieron todos los cruces (sin guardar).'); return;
+  }
   if (h.u) { S.rl[h.u] = h.rl; simular(); pintar(); detalle(); estado('↶ Deshecho (sin guardar).'); return; }
   S.links[h.id] = h.l; if (h.r) S.reempl[h.id] = h.r; else delete S.reempl[h.id];
   if (h.dt != null) { var dt = JSON.parse(h.dt); if (dt) S.devT[h.id] = dt; else delete S.devT[h.id]; if (h.dm) S.devMarca[h.id] = true; else delete S.devMarca[h.id]; if (S.V[h.id]) S.V[h.id].dev = h.dv; }
@@ -1313,6 +1322,46 @@ function guardarManual(k) {
     S.fijo[k] = r2((S.fijo[k] || 0) + monto); d.sal = r2(d.sal - monto);
     cerrarModal(); simular(); pintar(); detalle(); estado(r.mensaje); esperarRecalculo();
   }).MESA_manual(TK, x, Math.random().toString(36).slice(2, 10));
+}
+
+/* ------------------------------------------------ 🧹 quitar todos los cruces (para volver a cruzar desde cero) */
+function alcanceLimpiar() {
+  var c = contraFiltro(), emp = $('fEmp').value;
+  var vs = S.data.vouchers.filter(function (v) { return vouVisible(v, c, emp); });
+  var nL = vs.filter(function (v) { return !v.dev && S.links[v.id].length; });
+  var nD = vs.filter(function (v) { return v.dev && (S.devT[v.id] || []).length; });
+  var us = Object.keys(S.R).filter(function (u) { var U = S.R[u], d = S.D[U.kOrig]; return d && docVisible(d, c, emp) && (S.rl[u] || []).some(function (x) { return x.fila || x.nuevo; }); });
+  return { c: c, emp: emp, nL: nL, nD: nD, us: us };
+}
+function limpiarCruces() {
+  var a = alcanceLimpiar(), quien = (a.c ? (a.c.nombre || a.c.ruc) : 'TODOS los proveedores') + (a.emp ? ' · ' + nomEmp(a.emp) : ' · todo el grupo');
+  if (!a.nL.length && !a.nD.length && !a.us.length) return estado('No hay cruces que quitar con estos filtros.', true);
+  modal('<h3 style="margin-top:0">🧹 Quitar cruces para volver a cruzar</h3>' +
+    '<p>Alcance: <b>' + esc(quien) + '</b>' + (a.c ? '' : ' <span style="color:var(--ro)">(⚠️ sin proveedor elegido: es todo; mejor elija uno arriba)</span>') + '. Las fechas y la moneda de arriba también cuentan.</p>' +
+    '<label style="display:block;margin:6px 0"><input type="checkbox" id="lcV" ' + (a.nL.length ? 'checked' : 'disabled') + '> 💳 Cruces de vouchers con facturas: <b>' + a.nL.length + '</b> voucher(s)</label>' +
+    '<label style="display:block;margin:6px 0"><input type="checkbox" id="lcR" ' + (a.us.length ? '' : 'disabled') + '> 🧾 Reasignaciones de retención (vuelven a su factura original): <b>' + a.us.length + '</b> comprobante(s)</label>' +
+    '<label style="display:block;margin:6px 0"><input type="checkbox" id="lcD" ' + (a.nD.length ? '' : 'disabled') + '> ↩️ A qué depósito o N/C se ligan las devoluciones: <b>' + a.nD.length + '</b> devolución(es)</label>' +
+    '<p style="background:#FFFBEB;padding:6px;border-radius:6px;font-size:12px">Se quitan solo en la Mesa: <b>nada se escribe hasta 💾 Guardar</b>. Vuelva a cruzar y guarde una sola vez al final. Si se arrepiente: <b>↶</b> (vuelve todo de una vez) o ✖ Descartar cambios.<br>' +
+    'Ojo: si guarda sin volver a cruzar un voucher, «Tipo y Nº Doc.» queda vacío y el sistema puede volver a sugerir o cruzar solo los montos exactos.</p>' +
+    '<p><button class="p" onclick="hacerLimpieza()">🧹 Quitar</button> <button onclick="cerrarModal()">Cancelar</button></p>');
+}
+function hacerLimpieza() {
+  var a = alcanceLimpiar(), qV = $('lcV').checked, qR = $('lcR').checked, qD = $('lcD').checked;
+  var b = { links: {}, montos: {}, rl: {}, devT: {} }, n = 0;
+  if (qV) a.nL.forEach(function (v) {
+    b.links[v.id] = S.links[v.id].slice();
+    S.links[v.id].forEach(function (k) { var x = v.id + '|' + k; b.montos[x] = S.montos[x] != null ? S.montos[x] : null; delete S.montos[x]; });
+    S.links[v.id] = []; n++;
+  });
+  if (qR) a.us.forEach(function (u) {
+    b.rl[u] = JSON.parse(JSON.stringify(S.rl[u]));
+    var U = S.R[u], tot = S.rl[u].reduce(function (t, x) { return t + x.m; }, 0);
+    S.rl[u] = [{ k: U.kOrig, m: r2(tot), fila: 0 }]; n++;
+  });
+  if (qD) a.nD.forEach(function (v) { b.devT[v.id] = (S.devT[v.id] || []).slice(); S.devT[v.id] = []; n++; });
+  S.hist.push({ bulk: b });
+  S.act = ''; S.actR = ''; cerrarModal(); simular(); pintar(); detalle();
+  estado('🧹 Quitados los cruces de ' + n + ' elemento(s) (sin guardar). Vuelva a cruzar y luego 💾 Guardar · ↶ para volver atrás.');
 }
 
 /* ------------------------------------------------ ↩️ devoluciones del proveedor */
@@ -1929,6 +1978,7 @@ function ayudaCompleta() {
     '<li><b>📊 Estado de cuenta</b> (arriba), en tres niveles: <b>📋 Resumen</b> (una línea por proveedor y empresa), <b>🧾 Por factura</b> (cada concepto en su columna) y <b>🔎 Detallado</b> (cada movimiento con el saldo que va quedando, cómo se canceló y los vouchers del proveedor).</li><li>Además: el reporte de cuentas por pagar o cobrar por proveedor (o cliente) y, dentro, por empresa del grupo (o al revés), con totales, saldo, vencido y 💰 saldo a favor. En cada factura, «Cancelado con» muestra cada voucher, retención, N/C, detracción o efectivo; el mismo color es el mismo voucher y ⧉2 indica que paga 2 facturas. Toque una factura para ver su ficha (de Total a Saldo, paso a paso) o un voucher para ver a qué facturas se aplicó. 📋 Copiar (Excel) y 🖨 Imprimir / PDF.</li>' +
     '<li>En el estado de cuenta: <b>💾 Guardado</b> (lo que está hoy), <b>✏️ Con mis cambios</b> (cómo quedará si guarda: saldo antes tachado → después, líneas 🆕) y <b>⚖️ Comparar</b> (solo lo que cambia). Desde ahí mismo puede 💾 Guardar.</li>' +
     '<li><b>🧮 Calculadora</b> (botón arriba o F2): flotante y movible; IGV, retención 3%, detracción, memoria e historial. <b>Alt+clic</b> en cualquier monto de la pantalla lo pasa a la calculadora.</li>' +
+    '<li><b>🧹 Quitar cruces</b>: deja en blanco los cruces del proveedor / empresa filtrados (y, si lo marca, las reasignaciones de retención y las devoluciones) para volver a cruzar desde cero. Nada se escribe hasta 💾 Guardar; ↶ lo vuelve todo de una vez.</li>' +
     '<li><b>↩️ Devoluciones</b>: toque la devolución y luego el <b>depósito</b> que le devuelven (los posibles se marcan en café; también puede arrastrar un voucher sobre el otro), la <b>factura pagada de más</b>, o elija la <b>N/C</b> en la lista. Se dibuja una línea café y se guarda como «DEVOLUCION op 5344» / «DEVOLUCION 01_FN01-19» / «DEVOLUCION 07_FC01-12». A cualquier voucher sin facturas se le puede marcar «↩️ Es una devolución del proveedor».</li>' +
     '<li>Los vouchers ↩️ de devolución y los que dicen otra cosa (PLANILLA, etc.) se marcan; una devolución no se cruza con facturas.</li></ol><button onclick="cerrarModal()">Cerrar</button>');
 }
