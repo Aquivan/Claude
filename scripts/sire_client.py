@@ -442,19 +442,29 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
 
     print(f"Autenticando contra SUNAT (RUC {args.ruc})...")
-    token = autenticar({
-        "ruc": args.ruc, "usuario_sol": args.usuario_sol, "clave_sol": args.clave_sol,
-        "client_id": args.client_id, "client_secret": args.client_secret,
-    })
-    print("Token OK. Solicitando descarga...")
-
     try:
+        token = autenticar({
+            "ruc": args.ruc, "usuario_sol": args.usuario_sol, "clave_sol": args.clave_sol,
+            "client_id": args.client_id, "client_secret": args.client_secret,
+        })
+        print("Token OK. Solicitando descarga...")
         archivos, modo = descargar_periodo(token, args.periodo, args.tipo, args.formato)
     except SunatPendiente as e:
         # Linea FIJA para el workflow: no es un error, es «⏳ pendiente en SUNAT».
         print(f"AVISO: {e}")
         print(f"PENDIENTE_SUNAT={e.ticket or '-'}")
         sys.exit(EXIT_PENDIENTE)
+    except RuntimeError as e:
+        # SUNAT no contestó (timeout o error 5xx) ni después de todos los reintentos: es SUNAT caída o lenta,
+        # no un error de los datos ni de las claves. Se trata igual que «pendiente»: se vuelve a pedir más tarde.
+        # Cualquier otro error (clave mala, 4xx, datos) sigue siendo error como siempre.
+        m = str(e)
+        if (m.startswith("Error comunicando con SUNAT") or m.startswith("No se pudo autenticar contra SUNAT tras")) and \
+                ("Error de red / Timeout" in m or "HTTP 5" in m):
+            print(f"AVISO: SUNAT no responde (se reintenta mas tarde): {e}")
+            print("PENDIENTE_SUNAT=-")
+            sys.exit(EXIT_PENDIENTE)
+        raise
     if not archivos:
         # SUNAT confirmo que no hay comprobantes de este tipo en este periodo
         # (0 comprobantes es un resultado valido, no un error) -- se sale sin

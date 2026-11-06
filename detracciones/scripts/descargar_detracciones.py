@@ -96,9 +96,21 @@ class Consulta:
         pag.wait_for_timeout(3000)
         if "MenuInternetPlataforma" not in pag.url:
             raise RuntimeError("No se pudo ingresar a SOL (¿clave o usuario?): " + pag.url.split("?")[0])
-        if not re.search(r'"name":"55\.2\.1\.1\.4"', pag.content()):
-            raise RuntimeError("Este usuario SOL no tiene la opción 'Consulta de Pago de Detracciones' (55.2.1.1.4) "
-                               "en Mis declaraciones y pagos.")
+        # Cuando SUNAT está lenta el menú carga a medias: se espera un poco más (y se recarga una vez) antes de rendirse.
+        opcion = r'"name":"55\.2\.1\.1\.4"'
+        for paso in range(12):
+            if re.search(opcion, pag.content()):
+                break
+            if paso == 6:
+                try:
+                    pag.reload(wait_until="networkidle", timeout=90000)
+                except Exception:
+                    pass
+            pag.wait_for_timeout(5000)
+        if not re.search(opcion, pag.content()):
+            raise RuntimeError("El menú de SUNAT SOL no mostró 'Consulta de Pago de Detracciones' (55.2.1.1.4). "
+                               "Casi siempre es SUNAT lenta o en mantenimiento (se reintenta más tarde); "
+                               "si se repite varios días, revise que el usuario SOL tenga esa opción.")
         self.reabrir()
         self.url_vista = False
 
