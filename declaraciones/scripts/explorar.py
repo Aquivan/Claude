@@ -100,6 +100,64 @@ def volcar(pag):
             print("    (marco ilegible)", str(e)[:100])
 
 
+def marco_consulta(pag):
+    return next((f for f in pag.frames if "consultaDeclaracionInternet" in f.url and f.locator("select#periodo_tributario_1").count()), None)
+
+
+def buscar(pag, periodo):
+    """Consulta un periodo (todos los formularios) y prueba el botón de la primera fila."""
+    fr = marco_consulta(pag)
+    if not fr:
+        print("  (no está el formulario)"); return
+    anio, mes = periodo[:4], periodo[4:6]
+    print(f"\n  ---- Buscar periodo {mes}/{anio} ----")
+    print("  selects:", [tapar(x) for x in fr.evaluate("""() => [...document.querySelectorAll('select')].map((s, i) => i + ':' + (s.id || s.name || s.getAttribute('ng-model') || '') + ':' + s.multiple + ':' + s.value)""")])
+    try:
+        fr.select_option("#numFormulario", ["Todos"])
+    except Exception as e:
+        print("  (formulario)", tapar(str(e))[:120])
+    fr.evaluate("""([mes, anio]) => {
+        const sel = [...document.querySelectorAll('select')];
+        const fija = (s, v) => { s.value = v; s.dispatchEvent(new Event('change', {bubbles: true})); };
+        for (const id of ['periodo_tributario_1', 'periodo_tributario_2']) {
+          const m = document.getElementById(id); fija(m, mes);
+          const y = sel[sel.indexOf(m) + 1]; if (y) fija(y, 'number:' + anio);
+        } }""", [mes, anio])
+    print("  ng-models:", [tapar(x) for x in fr.evaluate("""() => [...document.querySelectorAll('select,input')].map(e => (e.getAttribute('ng-model') || e.id || '') + '=' + e.value)""")])
+    fr.locator("button[type=submit]:has-text('Buscar')").first.click()
+    pag.wait_for_timeout(12000)
+    print("  mensajes:", tapar(fr.evaluate("() => [...document.querySelectorAll('.alert,.modal-body,.text-danger,.error,.mensaje')].filter(e => e.offsetParent !== null).map(e => e.innerText).join(' / ')"))[:600])
+    filas = fr.evaluate("""() => [...document.querySelectorAll('table tr')].filter(r => r.offsetParent !== null).map(r => [...r.cells].map(c => c.innerText.trim()).join(' | '))""")
+    print(f"  filas visibles ({len(filas)}):")
+    for f in filas[:25]:
+        print("    ", tapar(f))
+    acciones = fr.evaluate("""() => { const r = [...document.querySelectorAll('table tbody tr')].find(r => r.offsetParent !== null && r.cells.length > 4);
+        return r ? [...r.querySelectorAll('a,button,input,img,span[ng-click],i')].map(e => e.outerHTML.slice(0, 300)) : []; }""")
+    print("  botones de la 1.ª fila:", [tapar(x) for x in acciones])
+    for i in range(min(len(acciones), 4)):
+        print(f"\n  ---- Clic en el botón {i} de la 1.ª fila ----")
+        try:
+            pag.wait_for_timeout(1500)
+            el = fr.locator("table tbody tr:visible").first.locator("a,button,input,img,span[ng-click],i").nth(i)
+            with pag.expect_download(timeout=20000) as d:
+                el.click(timeout=8000)
+            dd = d.value
+            ruta = "/tmp/_decl_prueba"
+            dd.save_as(ruta)
+            print("    [descarga]", tapar(dd.suggested_filename), os.path.getsize(ruta), "bytes", open(ruta, "rb").read(5))
+            os.remove(ruta)
+        except Exception as e:
+            print("    (sin descarga directa)", tapar(str(e))[:160])
+            print("    ventanas:", [tapar(p.url.split("?")[0]) for p in pag.context.pages])
+            print("    modal:", tapar(fr.evaluate("() => [...document.querySelectorAll('.modal,[role=dialog]')].filter(e => e.offsetParent !== null).map(e => e.innerText).join(' / ')"))[:800])
+            print("    botones ahora:", [tapar(x) for x in fr.evaluate("() => [...document.querySelectorAll('button,a')].filter(e => e.offsetParent !== null && /pdf|descarg|imprim|constancia|detalle|cerrar|volver/i.test(e.innerText + e.title + e.className)).map(e => e.outerHTML.slice(0, 250))")][:15])
+            for p2 in pag.context.pages[1:]:
+                try:
+                    p2.close()
+                except Exception:
+                    pass
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--modo", default="menu", choices=["menu", "opcion"])
@@ -149,6 +207,8 @@ def main():
                     pag.goto(f"{PLATAFORMA}&exe={cod}", wait_until="networkidle", timeout=90000)
                     pag.wait_for_timeout(12000)
                     volcar(pag)
+                    if a.periodo and cod == "55.2.1.1.1":
+                        buscar(pag, a.periodo)
                 except Exception as e:
                     print("  (no se pudo)", tapar(str(e))[:200])
                 registro["activo"] = False
