@@ -422,7 +422,7 @@ function escribirNoAplicados_(ss, res, cfg) {
  * sobrepagadas) y lo que no tenía saldo a favor. La usan 🔎 Consulta y el 🎯 Panel.
  */
 var ENC_DEVOLUCIONES_ = ['Empresa', 'RUC empresa', 'RUC proveedor', 'Proveedor', 'Fecha', 'Operación', 'Banco', 'Monto devuelto',
-  'Moneda', 'Descontado de', 'Sin saldo a favor', 'Origen', 'Fuente'];
+  'Moneda', 'Descontado de', 'Sin saldo a favor', 'Origen', 'Fuente', 'Detalle (para la Mesa)'];
 
 function escribirDevoluciones_(ss, res, cfg) {
   var sh = obtenerOCrearHoja_(ss, HOJA.DEVOLUCIONES);
@@ -433,7 +433,8 @@ function escribirDevoluciones_(ss, res, cfg) {
     var p = d.pago;
     return [nombreEmpresa_(cfg, d.empresaRuc, ''), d.empresaRuc, d.proveedorRuc, nombres[d.proveedorRuc] || p.usuario || '', p.fecha || '',
       p.operacion || '', p.banco || '', p.monto, p.moneda, d.aplicado.map(function (a) { return a.texto + ': ' + r2_(a.monto).toFixed(2); }).join(' · '),
-      d.sinSaldo || 0, d.origen, p.fuente];
+      d.sinSaldo || 0, d.origen, p.fuente,
+      JSON.stringify(d.aplicado.map(function (a) { return a.tipo === 'voucher' ? { fu: a.fuente || '', m: r2_(a.monto) } : { k: a.docClave || '', m: r2_(a.monto) }; }))];
   });
   sh.getRange(1, 1, 1, ENC_DEVOLUCIONES_.length).setValues([ENC_DEVOLUCIONES_]);
   if (filas.length) sh.getRange(2, 1, filas.length, ENC_DEVOLUCIONES_.length).setValues(filas);
