@@ -97,6 +97,7 @@ table.tf td:last-child{white-space:normal}
 .cas td{padding:4px 6px;border-bottom:1px solid #F1F5F9}.cas .tot td{font-weight:bold;border-top:2px solid var(--tx)}
 table.tf .num,table.mini .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 table.tf th.num{text-align:right}
+.tf tr.camb td{background:#FFFBEB}
 .tf tr.pie td{font-weight:bold;border-top:2px solid #334155;background:#F8FAFC}
 .tf.res tr.gr td{background:#fff}.tf.res tr.doc:not(.gr) td{background:#FBFDFF;font-size:11.5px}
 .tf.det tr.fac td{background:#F8FAFC;border-top:1px solid #CBD5E1}
@@ -150,6 +151,8 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 <div id="rep">
   <div id="repBar">
     <b>📊 Estado de cuenta</b>
+    <span class="seg" id="eVis" title="Ver lo guardado o cómo quedará con los cruces que hizo en la Mesa y aún no guardó"><button data-v="antes" class="on" onclick="segE(this)">💾 Guardado</button><button data-v="despues" onclick="segE(this)">✏️ Con mis cambios</button><button data-v="comp" onclick="segE(this)">⚖️ Comparar</button></span>
+    <span id="eCamb"></span>
     <span class="seg" id="eAgr" title="Cómo agrupar"><button data-v="pe" class="on" onclick="segE(this)">Proveedor → Empresa</button><button data-v="ep" onclick="segE(this)">Empresa → Proveedor</button></span>
     <span class="seg" id="eEst"><button data-v="saldo" class="on" onclick="segE(this)">Con saldo</button><button data-v="todas" onclick="segE(this)">Todas</button><button data-v="canc" onclick="segE(this)">Canceladas</button><button data-v="venc" onclick="segE(this)">Vencidas</button></span>
     <span class="seg" id="eDet" title="Cuánto detalle"><button data-v="res" onclick="segE(this)" title="Una línea por proveedor (y empresa) con los totales de cada concepto">📋 Resumen</button><button data-v="fac" class="on" onclick="segE(this)" title="Una línea por factura: total, N/C, retención, detracción, pagado y saldo">🧾 Por factura</button><button data-v="det" onclick="segE(this)" title="Cada factura con sus movimientos y el saldo que va quedando, y los vouchers del proveedor">🔎 Detallado</button></span>
@@ -698,7 +701,7 @@ function cerrarPop() { var p = $('pop'); if (p) p.remove(); }
 /* ------------------------------------------------ detalle del voucher activo */
 function detalle() {
   if (S.modo === 'r') return detalleR();
-  if (S.modo === 'e') { $('det').innerHTML = '<span class="d2">📊 Estado de cuenta con lo guardado' + (sucios().length || rSucios().length ? ' · <b style="color:var(--am)">tiene cambios sin guardar en la Mesa (no se ven aquí hasta guardarlos)</b>' : '') + '. Los filtros de arriba (empresa, proveedor, fechas, moneda) también aplican aquí.</span>'; return; }
+  if (S.modo === 'e') { var vv = segV('eVis'); $('det').innerHTML = '<span class="d2">📊 ' + (vv === 'antes' ? 'Mostrando lo <b>guardado</b>' : vv === 'despues' ? 'Mostrando cómo quedará <b>con sus cambios sin guardar</b> (saldo antes tachado, líneas 🆕)' : 'Comparando: solo las facturas que cambian') + (sucios().length || rSucios().length ? ' · tiene ' + (sucios().length + rSucios().length) + ' cambio(s) sin guardar' : '') + '. Los filtros de arriba (empresa, proveedor, fechas, moneda) también aplican aquí.</span>'; return; }
   var v = S.act ? S.V[S.act] : null;
   if (!v) { $('det').innerHTML = '<span class="d2">Toque un voucher para ver su detalle, sus facturas y opciones. Ctrl+clic marca varios vouchers para cruzarlos con una factura. ' + (Object.keys(S.selF).length ? esc(selResumen()) : '') + '</span>'; return; }
   var lk = S.links[v.id], ruc = S.lado === 'Por pagar' ? v.br : v.pr;
@@ -1174,6 +1177,52 @@ function indexarMovs(d) {
   });
   Object.keys(S.movK).forEach(function (k) { S.movK[k].sort(function (a, b) { return a.f < b.f ? -1 : a.f > b.f ? 1 : 0; }); });
 }
+/** Lo que muestra el estado de cuenta y las fichas: lo guardado (antes) o con los cambios de la Mesa sin guardar (después). */
+var EV = { docs: [], D: {}, movK: {}, movP: {}, vista: 'antes' };
+function construirEV(vista) {
+  if (!S.data) return;
+  if (vista === 'antes') { EV = { docs: S.data.docs, D: S.D, movK: S.movK, movP: S.movP, vista: 'antes' }; return; }
+  var movK = {}, D = {}, docs = [];
+  var esVou = function (m) { return m.mod === 'Pago' && S.V[m.id]; };
+  var esRetU = function (m) { return m.mod === 'Retención' && S.R[m.id.replace(/^REASIG\|\d+\|/, '')]; };
+  // movimientos que no cambian (N/C, detracción, manual, vouchers de otro lado…)
+  Object.keys(S.movK).forEach(function (k) { movK[k] = S.movK[k].filter(function (m) { return !esVou(m) && !esRetU(m); }); });
+  // vouchers: lo que aplicaría cada uno con los cruces de la Mesa
+  Object.keys(S.links).forEach(function (id) {
+    var v = S.V[id], sucio = esSucio(id);
+    S.links[id].forEach(function (k) {
+      var x = r2(S.sim.amt[id + '|' + k] || 0); if (x <= 0.005) return;
+      var nuevo = sucio && ((S.orig[id] || []).indexOf(k) < 0 || Math.abs(x - (S.motor[id + '|' + k] || 0)) > 0.005);
+      (movK[k] = movK[k] || []).push({ k: k, f: v.f, mod: 'Pago', m: x, o: nuevo ? '🧩 cambio sin guardar' : (S.origen[id + '|' + k] || ''), op: v.op, bco: v.bco, mp: v.m, fu: v.fu, id: id, nota: '', nuevo: nuevo });
+    });
+  });
+  // retenciones de SUNAT con las reasignaciones de la Mesa
+  Object.keys(S.rl).forEach(function (u) {
+    var U = S.R[u], antes = S.rlOrig[u] || [];
+    (S.rl[u] || []).forEach(function (x) {
+      if (x.m <= 0.005) return;
+      var igual = antes.some(function (y) { return y.k === x.k && Math.abs(y.m - x.m) < 0.005 && !x.nuevo; });
+      (movK[x.k] = movK[x.k] || []).push({ k: x.k, f: U.f, mod: 'Retención', m: x.m, o: x.fila || x.nuevo ? '🔁 Retención reasignada' + (igual ? '' : ' (sin guardar)') : '🧾 Retención SUNAT', op: 'CRE ' + U.cre, bco: '', mp: x.m, fu: '', id: u, nota: '', nuevo: !igual });
+    });
+  });
+  var movP = {};
+  Object.keys(movK).forEach(function (k) {
+    movK[k].sort(function (a, b) { return a.f < b.f ? -1 : a.f > b.f ? 1 : 0; });
+    movK[k].forEach(function (m) { if (m.id) (movP[m.id] = movP[m.id] || []).push(m); });
+  });
+  S.data.docs.forEach(function (d) {
+    var x = {}; for (var c in d) x[c] = d[c];
+    var pagV0 = (S.movK[d.k] || []).reduce(function (t, m) { return esVou(m) ? t + m.m : t; }, 0);
+    var pagV1 = (movK[d.k] || []).reduce(function (t, m) { return m.mod === 'Pago' && S.V[m.id] ? t + m.m : t; }, 0);
+    x.pag = r2(d.pag - pagV0 + pagV1);
+    x.ret = r2(d.ret + (S.rDelta[d.k] || 0));
+    x.sal = r2(S.sim.saldo[d.k] != null ? S.sim.saldo[d.k] : d.sal);
+    x.salAntes = d.sal; x.cambio = Math.abs(x.sal - d.sal) > 0.005 || Math.abs(x.pag - d.pag) > 0.005 || Math.abs(x.ret - d.ret) > 0.005 ||
+      (movK[d.k] || []).some(function (m) { return m.nuevo; });
+    D[d.k] = x; docs.push(x);
+  });
+  EV = { docs: docs, D: D, movK: movK, movP: movP, vista: vista };
+}
 /** Qué es cada movimiento: ícono, nombre, grupo y si es un voucher. */
 function cat(m) {
   var mod = m.mod, fu = String(m.fu || '');
@@ -1188,21 +1237,21 @@ function cat(m) {
 }
 function hue(t) { var h = 0; t = String(t); for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return h % 360; }
 function colV(id) { var h = hue(id); return { b: 'hsl(' + h + ',62%,42%)', f: 'hsl(' + h + ',80%,96%)' }; }
-function nDocsDe(id) { var s = {}; (S.movP[id] || []).forEach(function (m) { if (m.mod === 'Pago') s[m.k] = 1; }); return Object.keys(s).length; }
+function nDocsDe(id) { var s = {}; (EV.movP[id] || []).forEach(function (m) { if (m.mod === 'Pago') s[m.k] = 1; }); return Object.keys(s).length; }
 function chip(m) {
   var c = cat(m), t;
   if (c.vou) {
     var cv = colV(m.id), n = nDocsDe(m.id);
     t = 'Voucher ' + c.t + (m.f ? ' del ' + ff(m.f) : '') + ' · monto ' + fm(m.mp) + ' · aplicado aquí ' + fm(m.m) + (n > 1 ? ' · paga ' + n + ' facturas' : '');
-    return '<span class="cc" style="border-color:' + cv.b + ';background:' + cv.f + '" title="' + esc(t) + '" onclick="event.stopPropagation();fichaV(\'' + esc(m.id) + '\')">💳 ' + esc(c.t) + ' <b>' + fm(m.m) + '</b>' +
+    return '<span class="cc" style="border-color:' + cv.b + ';background:' + cv.f + (m.nuevo ? ';border-style:dashed;border-width:2px' : '') + '" title="' + esc(t) + (m.nuevo ? ' · sin guardar' : '') + '" onclick="event.stopPropagation();fichaV(\'' + esc(m.id) + '\')">' + (m.nuevo ? '🆕 ' : '') + '💳 ' + esc(c.t) + ' <b>' + fm(m.m) + '</b>' +
       (n > 1 ? ' <span class="x" style="background:' + cv.b + '">⧉' + n + '</span>' : '') + '</span>';
   }
-  return '<span class="cc" style="border-color:' + c.col + '33" title="' + esc(c.t + (m.f ? ' · ' + ff(m.f) : '') + (m.nota ? ' · ' + m.nota : '')) + '" onclick="event.stopPropagation();fichaV(\'' + esc(m.id) + '\')">' + c.ic + ' ' + esc(c.t) + ' <b>' + fm(m.m) + '</b></span>';
+  return '<span class="cc" style="border-color:' + c.col + (m.nuevo ? ';border-style:dashed;border-width:2px' : '33') + '" title="' + esc(c.t + (m.f ? ' · ' + ff(m.f) : '') + (m.nota ? ' · ' + m.nota : '')) + '" onclick="event.stopPropagation();fichaV(\'' + esc(m.id) + '\')">' + c.ic + ' ' + esc(c.t) + ' <b>' + fm(m.m) + '</b></span>';
 }
 function estadoDoc(d) {
   if (d.sal <= 0.05) return d.sal < -0.05 ? ['e-fa', '💰 pagado de más'] : ['e-ok', '✅ cancelada'];
   var hoy = new Date().toISOString().slice(0, 10), venc = d.ve && d.ve < hoy;
-  if (d.sal < base(d) - 0.05 || d.pag > 0.005) return venc ? ['e-ve', '🔴 parcial vencida'] : ['e-pa', '🟡 parcial'];
+  if (d.sal < r2(d.tot - d.nc - d.ret - d.det - d.otr) - 0.05 || d.pag > 0.005) return venc ? ['e-ve', '🔴 parcial vencida'] : ['e-pa', '🟡 parcial'];
   return venc ? ['e-ve', '🔴 vencida'] : ['e-pe', '⚪ pendiente'];
 }
 function segE(b) { segOn(b.parentNode.id, b.dataset.v); S.E.abiertos = {}; S.E.todo = null; pintarE(); }
@@ -1212,7 +1261,7 @@ function sumar(t, d) {
   t.n++; t.tot += d.tot; t.nc += d.nc; t.ret += d.ret; t.det += d.det; t.otr += d.otr; t.des += d.nc + d.ret + d.det + d.otr; t.pag += d.pag; t.sal += Math.max(0, d.sal);
   if (d.sal < -0.05) t.demas += -d.sal;
   if (d.ve && d.sal > 0.05 && d.ve < S.E.hoy) t.venc += d.sal;
-  (S.movK[d.k] || []).forEach(function (m) { if (m.mod === 'Pago' && m.f > t.ult) t.ult = m.f; });
+  (EV.movK[d.k] || []).forEach(function (m) { if (m.mod === 'Pago' && m.f > t.ult) t.ult = m.f; });
   return t;
 }
 function tot0() { return { n: 0, tot: 0, nc: 0, ret: 0, det: 0, otr: 0, des: 0, pag: 0, sal: 0, venc: 0, demas: 0, ult: '' }; }
@@ -1222,14 +1271,14 @@ function favorDe(cr, er) {   // vouchers de ese proveedor y empresa sin aplicar 
 /** Vouchers de ese proveedor (o cliente) y empresa, con lo aplicado y lo que sobra. */
 function vouchersDe(cr, er, docsK) {
   var ids = {};
-  (docsK || []).forEach(function (k) { (S.movK[k] || []).forEach(function (m) { if (m.mod === 'Pago' && S.V[m.id]) ids[m.id] = 1; }); });
+  (docsK || []).forEach(function (k) { (EV.movK[k] || []).forEach(function (m) { if (m.mod === 'Pago' && S.V[m.id]) ids[m.id] = 1; }); });
   S.data.vouchers.forEach(function (v) {
     var c = S.lado === 'Por pagar' ? v.br : v.pr, e = S.lado === 'Por pagar' ? v.pr : v.br;
     if (c === cr && (!e || !er || e === er)) ids[v.id] = 1;
   });
   var de = $('fDe').value, ha = $('fHa').value;
   return Object.keys(ids).map(function (id) {
-    var v = S.V[id], apl = (S.movP[id] || []).reduce(function (t, m) { return m.mod === 'Pago' ? t + m.m : t; }, 0);
+    var v = S.V[id], apl = (EV.movP[id] || []).reduce(function (t, m) { return m.mod === 'Pago' ? t + m.m : t; }, 0);
     v._apl = r2(apl); v._sobra = r2(v.m - apl);
     return v;
   }).filter(function (v) { return (!de || v.f >= de) && (!ha || v.f <= ha); }).sort(function (a, b) { return a.f < b.f ? -1 : a.f > b.f ? 1 : 0; });
@@ -1238,15 +1287,19 @@ var EVIS = [], ENIV = 'fac';
 function pintarE() {
   if (!S.data) return;
   S.E.hoy = new Date().toISOString().slice(0, 10);
+  var vis = segV('eVis'), nCamb = sucios().length + rSucios().length;
+  construirEV(vis === 'antes' ? 'antes' : 'despues');
+  $('eCamb').innerHTML = nCamb ? '<span class="chip c-a">✏️ ' + nCamb + ' cambio(s) sin guardar</span> <button class="p" onclick="guardar()">💾 Guardar</button>' : '<span class="chip">sin cambios pendientes</span>';
   var c = contraFiltro(), emp = $('fEmp').value, est = segV('eEst'), agr = segV('eAgr'), niv = segV('eDet'), q = $('eQ').value.trim();
   ENIV = niv;
-  EVIS = S.data.docs.filter(function (d) {
+  EVIS = EV.docs.filter(function (d) {
+    if (vis === 'comp' && !d.cambio) return false;
     if (!docVisible(d, c, emp)) return false;
-    if (est === 'saldo' && d.sal <= 0.05) return false;
-    if (est === 'canc' && d.sal > 0.05) return false;
-    if (est === 'venc' && !(d.sal > 0.05 && d.ve && d.ve < S.E.hoy)) return false;
+    if (vis !== 'comp' && est === 'saldo' && d.sal <= 0.05) return false;
+    if (vis !== 'comp' && est === 'canc' && d.sal > 0.05) return false;
+    if (vis !== 'comp' && est === 'venc' && !(d.sal > 0.05 && d.ve && d.ve < S.E.hoy)) return false;
     if (!q) return true;
-    var extra = (S.movK[d.k] || []).map(function (m) { return m.op + ' ' + m.bco + ' ' + fm(m.mp); }).join(' ');
+    var extra = (EV.movK[d.k] || []).map(function (m) { return m.op + ' ' + m.bco + ' ' + fm(m.mp); }).join(' ');
     return texto(q, nn([d.doc, d.cn, d.cr, fm(d.tot), fm(d.sal), nomEmp(d.er), extra].join(' ')));
   });
   var G = {}, totG = tot0(), porMon = {};
@@ -1270,16 +1323,18 @@ function pintarE() {
   var favT = lista.reduce(function (t, g) { return t + g.favT; }, 0);
   $('repTot').innerHTML = [[S.lado === 'Por pagar' ? 'Proveedores' : 'Clientes', lista.length], ['Facturas', totG.n], ['Total facturado' + aviso, fm(totG.tot)],
     ['Notas de crédito', fm(totG.nc)], ['Retenciones', fm(totG.ret)], ['Detracciones', fm(totG.det)], ['Pagado', fm(totG.pag + totG.otr)],
-    ['Saldo ' + (S.lado === 'Por pagar' ? 'por pagar' : 'por cobrar'), '<span style="color:var(--ro)">' + fm(totG.sal) + '</span>'], ['…de eso vencido', fm(totG.venc)],
+    ['Saldo ' + (S.lado === 'Por pagar' ? 'por pagar' : 'por cobrar') + (vis !== 'antes' ? ' (después)' : ''), '<span style="color:var(--ro)">' + fm(totG.sal) + '</span>' + (vis !== 'antes' ? '<div style="font-size:11px;color:var(--gr);font-weight:normal">antes ' + fm(EVIS.reduce(function (t, d) { return t + Math.max(0, d.salAntes); }, 0)) + '</div>' : '')], ['…de eso vencido', fm(totG.venc)],
     ['💰 Saldo a favor', '<span style="color:#065F46">' + fm(favT + totG.demas) + '</span>']]
     .map(function (x) { return '<div class="kpi"><div class="t">' + x[0] + '</div><div class="v">' + x[1] + '</div></div>'; }).join('');
   S.E.claves = lista.map(function (g) { return g.k; });
   var h = niv === 'res' ? [resumenE(lista, totG, agr)] : lista.slice(0, 300).map(function (g, gi) { return grupoE(g, gi, agr, niv); });
   if (niv !== 'res' && lista.length > 300) h.push('<div class="mas">Se muestran los primeros 300 grupos de ' + lista.length + ': use los filtros o el 📋 Resumen.</div>');
-  if (!lista.length) h = ['<div class="mas" style="color:var(--gr)">No hay facturas con estos filtros.</div>'];
+  if (!lista.length) h = ['<div class="mas" style="color:var(--gr)">' + (vis === 'comp' ? 'No hay cambios sin guardar: haga cruces en 💳 Vouchers o 🧾 Retenciones y vuelva aquí para ver cómo quedará.' : 'No hay facturas con estos filtros.') + '</div>'];
+  if (vis === 'comp' && lista.length) h.unshift('<div class="ley"><span>⚖️ Solo las facturas que cambian con lo que hizo en la Mesa: <s>saldo antes</s> → saldo después. Las líneas 🆕 son las nuevas.</span></div>');
   $('repCont').innerHTML = h.join('');
   detalle();
 }
+function salCelda(d) { return (EV.vista !== 'antes' && d.cambio && Math.abs(d.salAntes - d.sal) > 0.005 ? '<s style="color:var(--gr);font-weight:normal">' + fm(d.salAntes) + '</s> → ' : '') + rojo(d.sal); }
 function rojo(n) { return '<span style="font-weight:bold;color:' + (n > 0.05 ? 'var(--ro)' : 'var(--ve)') + '">' + fm(n) + '</span>'; }
 function z(n) { return Math.abs(n) > 0.005 ? fm(n) : '<span style="color:#CBD5E1">–</span>'; }
 /** 📋 Resumen: una tabla, una fila por proveedor (y por empresa si hay varias), con los totales de cada concepto. */
@@ -1322,10 +1377,10 @@ function porFacturaE(sg) {
   var x = '<table class="tf"><colgroup><col style="width:11%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:8%"><col style="width:9%"><col></colgroup>' +
     '<tr><th>Documento</th><th>Emisión</th><th>Vence</th><th class="num">Total</th><th class="num">N/C</th><th class="num">Retención</th><th class="num">Detracción</th><th class="num">Pagado</th><th class="num">Saldo</th><th>Estado</th><th>Cancelado con</th></tr>' +
     sg.docs.map(function (d) {
-      var e = estadoDoc(d), ms = (S.movK[d.k] || []).filter(function (m) { return m.mod !== 'N/C' && m.mod !== 'Retención' && m.mod !== 'Detracción'; });
-      return '<tr class="doc" onclick="fichaF(\'' + esc(d.k) + '\')"><td><b>' + esc(d.doc) + '</b>' + (d.mon !== 'PEN' ? ' <span class="chip">' + d.mon + '</span>' : '') + '</td><td>' + ff(d.f) + '</td><td>' + ff(d.ve) + '</td>' +
+      var e = estadoDoc(d), ms = (EV.movK[d.k] || []).filter(function (m) { return m.mod !== 'N/C' && m.mod !== 'Retención' && m.mod !== 'Detracción'; });
+      return '<tr class="doc' + (d.cambio && EV.vista !== 'antes' ? ' camb' : '') + '" onclick="fichaF(\'' + esc(d.k) + '\')"><td><b>' + esc(d.doc) + '</b>' + (d.mon !== 'PEN' ? ' <span class="chip">' + d.mon + '</span>' : '') + '</td><td>' + ff(d.f) + '</td><td>' + ff(d.ve) + '</td>' +
         '<td class="num">' + fm(d.tot) + '</td><td class="num">' + z(d.nc) + '</td><td class="num">' + z(d.ret) + '</td><td class="num">' + z(d.det) + '</td><td class="num">' + z(d.pag + d.otr) + '</td>' +
-        '<td class="num">' + rojo(d.sal) + '</td><td><span class="est ' + e[0] + '">' + e[1] + '</span></td><td>' + (ms.length ? ms.map(chip).join('') : '<span style="color:var(--gr)">—</span>') + '</td></tr>';
+        '<td class="num">' + salCelda(d) + '</td><td><span class="est ' + e[0] + '">' + e[1] + '</span></td><td>' + (ms.length ? ms.map(chip).join('') : '<span style="color:var(--gr)">—</span>') + '</td></tr>';
     }).join('') +
     '<tr class="pie"><td>Total (' + t.n + ')</td><td></td><td></td><td class="num">' + fm(t.tot) + '</td><td class="num">' + z(t.nc) + '</td><td class="num">' + z(t.ret) + '</td><td class="num">' + z(t.det) + '</td><td class="num">' + z(t.pag + t.otr) + '</td><td class="num">' + rojo(t.sal) + '</td><td></td><td></td></tr></table>';
   return x + favorHtml(sg);
@@ -1344,7 +1399,7 @@ function detalladoE(sg) {
   sg.docs.forEach(function (d) {
     var e = estadoDoc(d), saldo = d.tot;
     x += '<tr class="doc fac" onclick="fichaF(\'' + esc(d.k) + '\')"><td><b>📄 ' + esc(d.doc) + '</b></td><td>' + ff(d.f) + '</td><td>Factura' + (d.ve ? ' · vence ' + ff(d.ve) : '') + (d.mon !== 'PEN' ? ' · ' + d.mon : '') + ' <span class="est ' + e[0] + '">' + e[1] + '</span></td><td></td><td class="num"><b>' + fm(d.tot) + '</b></td><td class="num">' + fm(d.tot) + '</td><td></td></tr>';
-    (S.movK[d.k] || []).forEach(function (m) {
+    (EV.movK[d.k] || []).forEach(function (m) {
       var c = cat(m), suma = c.g === 'nd';
       saldo = r2(suma ? saldo + m.m : saldo - m.m);
       (cats[c.g] = cats[c.g] || { t: 0, n: 0 }); cats[c.g].t += m.m; cats[c.g].n++;
@@ -1356,7 +1411,7 @@ function detalladoE(sg) {
       x += '<tr class="mov"><td style="padding-left:22px">' + c.ic + ' ' + esc(c.g === 'pago' ? 'Pago' : c.t.split(' ')[0] === 'Retención' ? 'Retención' : c.t.split(' ').slice(0, 2).join(' ')) + '</td><td>' + ff(m.f) + '</td><td>' + esc(c.t) + extra + '</td><td>' + esc([m.op, m.bco].filter(Boolean).join(' · ')) + '</td>' +
         '<td class="num">' + (suma ? '+' : '−') + fm(Math.abs(m.m)) + '</td><td class="num">' + fm(saldo) + '</td><td style="color:var(--gr);font-size:11px">' + esc(m.o + (m.nota ? ' · ' + m.nota : '')) + '</td></tr>';
     });
-    x += '<tr class="sal"><td style="padding-left:22px" colspan="4">Saldo de ' + esc(d.doc) + '</td><td></td><td class="num">' + rojo(d.sal) + '</td><td></td></tr>';
+    x += '<tr class="sal"><td style="padding-left:22px" colspan="4">Saldo de ' + esc(d.doc) + '</td><td></td><td class="num">' + salCelda(d) + '</td><td></td></tr>';
   });
   x += '</table>';
   // Cómo se canceló (cuadro por concepto)
@@ -1370,10 +1425,10 @@ function detalladoE(sg) {
   x += '<div style="flex:1;min-width:320px"><b>💳 Vouchers de este ' + (S.lado === 'Por pagar' ? 'proveedor' : 'cliente') + ' (' + vs.length + ')</b>' + (vs.length ? '<table class="mini" style="width:100%"><tr><th>Fecha</th><th>Operación</th><th class="num">Monto</th><th>Se aplicó a</th><th class="num">Sobra</th></tr>' +
     vs.map(function (v) {
       var cv = colV(v.id), docs = {};
-      (S.movP[v.id] || []).forEach(function (m) { if (m.mod === 'Pago') docs[m.k] = (docs[m.k] || 0) + m.m; });
+      (EV.movP[v.id] || []).forEach(function (m) { if (m.mod === 'Pago') docs[m.k] = (docs[m.k] || 0) + m.m; });
       var ks = Object.keys(docs);
       return '<tr class="doc" onclick="fichaV(\'' + esc(v.id) + '\')"><td>' + ff(v.f) + '</td><td><span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:' + cv.b + ';margin-right:4px"></span>' + esc(v.bco + ' ' + v.op) + (v.dev ? ' ↩️' : '') + '</td><td class="num">' + fm(v.m) + '</td>' +
-        '<td>' + (v.dev ? '<i>devolución del proveedor</i>' : ks.length ? ks.map(function (k) { return esc(S.D[k] ? S.D[k].doc : k) + ' ' + fm(docs[k]); }).join(', ') : '<i style="color:var(--am)">sin aplicar</i>') + '</td><td class="num" style="color:#065F46">' + (v._sobra > 0.05 && !v.dev ? fm(v._sobra) : '') + '</td></tr>';
+        '<td>' + (v.dev ? '<i>devolución del proveedor</i>' : ks.length ? ks.map(function (k) { return esc(EV.D[k] ? EV.D[k].doc : k) + ' ' + fm(docs[k]); }).join(', ') : '<i style="color:var(--am)">sin aplicar</i>') + '</td><td class="num" style="color:#065F46">' + (v._sobra > 0.05 && !v.dev ? fm(v._sobra) : '') + '</td></tr>';
     }).join('') + '</table>' : '<div style="color:var(--gr)">Sin vouchers en estas fechas.</div>') + '</div></div>';
   return x;
 }
@@ -1384,14 +1439,14 @@ function copiarE() {
     EVIS.forEach(function (d) {
       var saldo = d.tot; n++;
       L.push([d.cn, nomEmp(d.er), d.doc, ff(d.f), 'Factura', estadoDoc(d)[1], '', '', d.tot, d.tot, ''].join('\t'));
-      (S.movK[d.k] || []).forEach(function (m) { var c = cat(m); saldo = r2(c.g === 'nd' ? saldo + m.m : saldo - m.m); L.push([d.cn, nomEmp(d.er), d.doc, ff(m.f), m.mod, c.t, m.op, m.bco, (c.g === 'nd' ? 1 : -1) * m.m, saldo, m.o].join('\t')); });
+      (EV.movK[d.k] || []).forEach(function (m) { var c = cat(m); saldo = r2(c.g === 'nd' ? saldo + m.m : saldo - m.m); L.push([d.cn, nomEmp(d.er), d.doc, ff(m.f), m.mod, c.t, m.op, m.bco, (c.g === 'nd' ? 1 : -1) * m.m, saldo, m.o].join('\t')); });
     });
   } else {
     L.push(['Proveedor/Cliente', 'RUC', 'Empresa', 'Documento', 'Emisión', 'Vence', 'Moneda', 'Total', 'N/C', 'Retención', 'Detracción', 'Otros', 'Pagado', 'Saldo', 'Estado', 'Cancelado con'].join('\t'));
     EVIS.forEach(function (d) {
       n++;
       L.push([d.cn, d.cr, nomEmp(d.er), d.doc, ff(d.f), ff(d.ve), d.mon, d.tot, d.nc, d.ret, d.det, d.otr, d.pag, d.sal, estadoDoc(d)[1],
-        (S.movK[d.k] || []).map(function (m) { var c = cat(m); return c.t + ' ' + fm(m.m) + (c.vou && nDocsDe(m.id) > 1 ? ' (paga ' + nDocsDe(m.id) + ' facturas)' : ''); }).join(' | ')].join('\t'));
+        (EV.movK[d.k] || []).map(function (m) { var c = cat(m); return c.t + ' ' + fm(m.m) + (c.vou && nDocsDe(m.id) > 1 ? ' (paga ' + nDocsDe(m.id) + ' facturas)' : ''); }).join(' | ')].join('\t'));
     });
   }
   var t = document.createElement('textarea'); t.value = L.join('\n'); document.body.appendChild(t); t.select();
@@ -1402,8 +1457,9 @@ function imprimirE() { var antes = S.E.todo; S.E.todo = true; S.E.abiertos = {};
 
 /** 🔍 Ficha de una factura: de Total a Saldo, cada movimiento en orden. */
 function fichaF(k) {
-  var d = S.D[k]; if (!d) return;
-  var ms = S.movK[k] || [], e = estadoDoc(d);
+  construirEV(S.modo === 'e' ? (segV('eVis') === 'antes' ? 'antes' : 'despues') : (sucios().length || rSucios().length ? 'despues' : 'antes'));
+  var d = EV.D[k]; if (!d) return;
+  var ms = EV.movK[k] || [], e = estadoDoc(d);
   var grupos = [['nc', '📄 Notas de crédito'], ['nd', '➕ Notas de débito'], ['ret', '🧾 Retenciones'], ['det', '🏦 Detracciones'], ['pago', '💳 Pagos con voucher'], ['man', '💵 Efectivo / pagos manuales'], ['otr', '🔄 Compensaciones y otros descuentos'], ['dev', '↩️ Devoluciones del proveedor']];
   var por = {}; ms.forEach(function (m) { var c = cat(m); (por[c.g] = por[c.g] || []).push({ m: m, c: c }); });
   // barra: cómo se compone el total
@@ -1412,6 +1468,7 @@ function fichaF(k) {
   Object.keys(colG).forEach(function (g) { var t = (por[g] || []).reduce(function (s, x) { return s + (x.c.g === 'dev' ? 0 : x.m.m); }, 0); if (t > 0.005) seg.push([colG[g], t, g]); });
   if (d.sal > 0.005) seg.push(['#FCA5A5', d.sal, 'saldo']);
   var h = '<h3 style="margin:0 0 4px">🔍 ' + esc(d.doc) + ' · ' + esc(d.cn) + ' <span class="est ' + e[0] + '">' + e[1] + '</span></h3>' +
+    (EV.vista !== 'antes' && d.cambio ? '<div style="background:#FFFBEB;color:#92400E;padding:4px 8px;border-radius:6px;margin:4px 0">✏️ Así quedará con los cambios <b>sin guardar</b> de la Mesa (las líneas 🆕). Guardado hoy: saldo ' + fm(d.salAntes) + '.</div>' : '') +
     '<div class="d2" style="color:var(--gr)">' + (S.lado === 'Por pagar' ? 'Proveedor' : 'Cliente') + ' RUC ' + esc(d.cr) + ' · empresa ' + esc(nomEmp(d.er)) + ' · emitida ' + ff(d.f) + (d.ve ? ' · vence ' + ff(d.ve) : '') + ' · ' + d.mon +
     (d.prod ? '<br>' + esc(d.prod) : '') + '</div>' +
     '<div class="barra" title="Cómo se compone el total">' + seg.map(function (s) { return '<span style="background:' + s[0] + ';width:' + Math.max(1, s[1] / tot * 100) + '%" title="' + esc(s[2] + ' ' + fm(s[1])) + '"></span>'; }).join('') + '</div>' +
@@ -1423,8 +1480,8 @@ function fichaF(k) {
     xs.forEach(function (x) {
       var m = x.m, extra = '';
       if (x.c.vou) {
-        var n = nDocsDe(m.id), cv = colV(m.id), otros = (S.movP[m.id] || []).filter(function (y) { return y.mod === 'Pago' && y.k !== k; });
-        extra = ' · voucher ' + fm(m.mp) + (n > 1 ? ' · <span style="color:' + cv.b + '">también pagó ' + otros.map(function (y) { return '<a href="#" onclick="fichaF(\'' + esc(y.k) + '\');return false">' + esc(S.D[y.k] ? S.D[y.k].doc : y.k) + '</a> ' + fm(y.m); }).join(', ') + '</span>' : '');
+        var n = nDocsDe(m.id), cv = colV(m.id), otros = (EV.movP[m.id] || []).filter(function (y) { return y.mod === 'Pago' && y.k !== k; });
+        extra = ' · voucher ' + fm(m.mp) + (n > 1 ? ' · <span style="color:' + cv.b + '">también pagó ' + otros.map(function (y) { return '<a href="#" onclick="fichaF(\'' + esc(y.k) + '\');return false">' + esc(EV.D[y.k] ? EV.D[y.k].doc : y.k) + '</a> ' + fm(y.m); }).join(', ') + '</span>' : '');
         extra += ' · <a href="#" onclick="fichaV(\'' + esc(m.id) + '\');return false">ver voucher</a>';
       }
       h += '<tr><td>' + x.c.ic + ' ' + esc(x.c.t) + (m.f ? ' <span style="color:var(--gr)">· ' + ff(m.f) + '</span>' : '') + '<div style="color:var(--gr);font-size:11px">' + esc(m.o) + (m.nota ? ' · ' + esc(m.nota) : '') + extra + (m.fu && !/^(SIRE)$/.test(m.fu) ? ' · ' + esc(m.fu) : '') + '</div></td><td style="text-align:center">' + signo + '</td><td style="text-align:right;font-variant-numeric:tabular-nums">' + fm(Math.abs(m.m)) + '</td></tr>';
@@ -1437,7 +1494,8 @@ function fichaF(k) {
 }
 /** 🔍 Ficha de un voucher (o de una retención, N/C o pago manual): a qué facturas se aplicó. */
 function fichaV(id) {
-  var ms = (S.movP[id] || []).slice(), v = S.V[id];
+  construirEV(S.modo === 'e' ? (segV('eVis') === 'antes' ? 'antes' : 'despues') : (sucios().length || rSucios().length ? 'despues' : 'antes'));
+  var ms = (EV.movP[id] || []).slice(), v = S.V[id];
   var m0 = ms[0] || {}, c0 = ms.length ? cat(m0) : { ic: '💳', t: '', vou: true };
   var monto = v ? v.m : (m0.mp || ms.reduce(function (t, m) { return t + m.m; }, 0));
   var apl = ms.reduce(function (t, m) { return t + (m.mod === 'Devolución' ? 0 : m.m); }, 0), sobra = r2(monto - apl);
@@ -1449,11 +1507,11 @@ function fichaV(id) {
   var ks = Object.keys(docs);
   h += '<p style="margin:8px 0 4px"><b>' + (ks.length ? 'Se aplicó a ' + ks.length + ' factura(s)' : 'No está aplicado a ninguna factura') + '</b>' + (ks.length > 1 ? ' — un mismo pago repartido' : '') + '</p>';
   if (ks.length) {
-    h += '<div class="barra">' + ks.map(function (k, i) { var t = docs[k].reduce(function (s, m) { return s + m.m; }, 0); return '<span style="background:hsl(' + (hue(id) + i * 47) % 360 + ',60%,55%);width:' + Math.max(1, t / Math.max(monto, 0.01) * 100) + '%" title="' + esc((S.D[k] ? S.D[k].doc : k) + ' ' + fm(t)) + '"></span>'; }).join('') +
+    h += '<div class="barra">' + ks.map(function (k, i) { var t = docs[k].reduce(function (s, m) { return s + m.m; }, 0); return '<span style="background:hsl(' + (hue(id) + i * 47) % 360 + ',60%,55%);width:' + Math.max(1, t / Math.max(monto, 0.01) * 100) + '%" title="' + esc((EV.D[k] ? EV.D[k].doc : k) + ' ' + fm(t)) + '"></span>'; }).join('') +
       (sobra > 0.05 ? '<span style="background:#BBF7D0;width:' + sobra / monto * 100 + '%" title="sobra ' + fm(sobra) + '"></span>' : '') + '</div>';
     h += '<table class="tf"><tr><th>Factura</th><th>' + (S.lado === 'Por pagar' ? 'Proveedor' : 'Cliente') + '</th><th>Empresa</th><th style="text-align:right">Aplicado</th><th style="text-align:right">Saldo de la factura</th><th>Cómo</th></tr>' +
       ks.map(function (k) {
-        var d = S.D[k], t = docs[k].reduce(function (s, m) { return s + m.m; }, 0);
+        var d = EV.D[k], t = docs[k].reduce(function (s, m) { return s + m.m; }, 0);
         return '<tr class="doc" onclick="fichaF(\'' + esc(k) + '\')"><td><b>' + esc(d ? d.doc : k) + '</b></td><td>' + esc(d ? d.cn : '') + '</td><td>' + esc(d ? nomEmp(d.er) : '') + '</td><td class="num">' + fm(t) + '</td><td class="num">' + (d ? fm(d.sal) : '') + '</td><td style="color:var(--gr);font-size:11px">' + esc(docs[k].map(function (m) { return m.o + (m.nota ? ' (' + m.nota + ')' : ''); }).join(' · ')) + '</td></tr>';
       }).join('') + '</table>';
   }
