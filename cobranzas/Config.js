@@ -58,6 +58,7 @@ function onOpen() {
       .addItem('🟢 Solo referenciados (lo escrito en el voucher)', 'menuModoReferenciados')
       .addItem('🔵 Estricto (+ exactos por monto)', 'menuModoEstricto')
       .addItem('🟡 Inteligente (+ sugerencias)', 'menuModoInteligente'))
+    .addItem('🧩 Mesa de conciliación (facturas ↔ vouchers)', 'MESA_menuAbrir')
     .addItem('🖼 Abrir visor de vouchers', 'abrirVisorVoucher')
     .addItem('✍️ Registrar cobro/pago manual (efectivo, compensación…)', 'menuNuevoRegistroManual')
     .addItem('🔁 Reasignar una retención a otra factura', 'menuReasignarRetencion')

@@ -31,6 +31,7 @@ function TG_ok_() {
 }
 
 function doGet(e) {
+  if (e && e.parameter && e.parameter.mesa) return MESA_pagina_(e.parameter.mesa);   // 🧩 Mesa de conciliación (Mesa.js)
   if (e && e.parameter && e.parameter.vivo) return TGEV_pagina_(e.parameter.vivo);   // 📺 el robot en vivo (TG_EnVivo.js)
   return HtmlService.createHtmlOutput('<p style="font-family:sans-serif">🤖 Asistente de Cuentas por Cobrar y Pagar: activo.</p>');
 }
@@ -118,6 +119,10 @@ function TG_manejar_(u) {
   if (texto.charAt(0) === '/') return TG_comando_(ctx, texto);
   var atajo = TG_ATAJOS_[texto];
   if (atajo) return TG_comando_(ctx, atajo);
+  if (MESA_RX_.test(texto)) {   // 🧩 «mesa»: enlace a la Mesa de conciliación (Mesa.js)
+    try { var me = MESA_textoEnlace_('Telegram · ' + (nombre || chatId)); return TG_enviar_(chatId, '🧩 <b>Mesa de conciliación</b> (facturas ↔ vouchers): <a href="' + me.url + '">abrir</a>. Vale 6 horas desde el último uso; no la reenvíe.'); }
+    catch (err) { return TG_enviar_(chatId, '⚠️ ' + TG_esc_(err.message)); }
+  }
   if (TGRL_tg_(ctx, texto)) return;   // 🔁 "volver a leer Originales 2666" (TG_Releer.js)
   if (TGQ_RX_.test(texto)) return TGQ_tg_(ctx, texto);   // 📋 "procesados hoy sonia" (TG_Procesados.js)
   var vivo = TGEV_comando_(texto) || TGPC_comando_(texto);   // 📺 «en vivo sí/no» · 🖥 «en pc sí/no» (TG_EnVivo.js)

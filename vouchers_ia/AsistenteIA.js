@@ -113,6 +113,18 @@ function VIA_menuIdentificarRuc() {
   ui.showModalDialog(html, '🔎 Identificar RUC de los proveedores');
 }
 
+/** 🧩 Mesa de conciliación: es una página de Cobranzas (facturas de SIRE + estos vouchers); se abre con un enlace temporal. */
+function VIA_menuMesa() {
+  var quien = ''; try { quien = Session.getActiveUser().getEmail(); } catch (e) {}
+  var r = VIA_llamar_('mesa', { quien: quien });
+  if (!r || !r.url) return SpreadsheetApp.getUi().alert((r && r.error) || 'No pude abrir la Mesa de conciliación.');
+  var html = '<div style="font:13px Arial;padding:6px">La Mesa muestra las facturas de SIRE (Cuentas por Cobrar y Pagar) a un lado y estos vouchers al otro, para cruzarlos con líneas. ' +
+    'Lo que guarde se escribe aquí, en «Tipo y Nº Doc.», «ID Beneficiario» e «ID Usuario».' +
+    '<p><a href="' + r.url + '" target="_blank" onclick="setTimeout(function(){google.script.host.close()},300)" style="background:#1D4ED8;color:#fff;padding:9px 14px;border-radius:6px;text-decoration:none">🧩 Abrir la Mesa de conciliación</a></p>' +
+    '<p style="color:#64748b;font-size:11px">El enlace vale 6 horas desde el último uso. No lo comparta.</p></div>';
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(460).setHeight(210), '🧩 Mesa de conciliación');
+}
+
 function VIA_rucEscribir(ids) { try { return VIA_aplicar(ids, false); } catch (e) { return { error: e.message }; } }
 function VIA_rucExternos(filas) { try { return VIA_llamar_('rucexternos', { filas: filas }); } catch (e) { return { error: e.message }; } }
 function VIA_rucEstado(id) { try { return VIA_llamar_('rucestado', { id: id }); } catch (e) { return { error: e.message }; } }

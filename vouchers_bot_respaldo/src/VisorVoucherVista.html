@@ -570,7 +570,18 @@ function filtrar() {
     var x = a[K.f] || '', y = b[K.f] || '';
     return (ord[1] === '-' ? (y > x ? 1 : y < x ? -1 : 0) : (x > y ? 1 : x < y ? -1 : 0)) || a[K.fila] - b[K.fila];
   });
-  if (dm === 'u') { var vistos = {}; lista = lista.filter(function (f) { if (!f[K.dup]) return true; if (vistos[f[K.dup]]) return false; vistos[f[K.dup]] = 1; return true; }); }
+  // «Únicos»: de cada grupo de repetidos queda UNO, eligiendo primero el de 📄 Originales (h=0) y, dentro de la
+  // misma pestaña, la fila más antigua (la primera registrada). Antes quedaba el primero según el orden de la
+  // lista, y con fechas iguales ganaba la Foto (fila más baja) y se ocultaba el Original.
+  if (dm === 'u') {
+    var mejor = {};
+    lista.forEach(function (f) {
+      var k = f[K.dup]; if (!k) return;
+      var m = mejor[k];
+      if (!m || f[K.h] < m[K.h] || (f[K.h] === m[K.h] && f[K.fila] < m[K.fila])) mejor[k] = f;
+    });
+    lista = lista.filter(function (f) { return !f[K.dup] || mejor[f[K.dup]] === f; });
+  }
   if (dm === 'd') lista.sort(function (a, b) { return a[K.dup] < b[K.dup] ? -1 : a[K.dup] > b[K.dup] ? 1 : a[K.h] - b[K.h] || a[K.fila] - b[K.fila]; });   // los repetidos, juntos
   RES = lista; VISTOS = 300;
   var pen = 0, usd = 0; lista.forEach(function (f) { if (/USD|\$/i.test(f[K.mon])) usd += f[K.monto]; else pen += f[K.monto]; });
