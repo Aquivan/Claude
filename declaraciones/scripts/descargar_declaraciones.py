@@ -338,8 +338,9 @@ def main():
             for i, it in enumerate(soloDet, 1):
                 try:
                     detalle = c.detalle(it["numOrd"])
+                    # sin detalle en SUNAT: la hoja lo anota para no volver a pedirlo
+                    enviar(destino, llave, {"accion": "detalle", "ruc": ruc, "numOrd": it["numOrd"], "detalle": base64.b64encode(detalle).decode()})
                     if detalle:
-                        enviar(destino, llave, {"accion": "detalle", "ruc": ruc, "numOrd": it["numOrd"], "detalle": base64.b64encode(detalle).decode()})
                         bien += 1
                     print(f"  detalle {i}/{len(soloDet)} formulario {it['codFor']} · periodo {it.get('strPerTri', '')} · " + ("✓" if detalle else "SUNAT no lo tiene"))
                 except Exception as e:   # noqa: BLE001

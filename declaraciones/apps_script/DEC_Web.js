@@ -22,6 +22,7 @@ function doPost(e) {
     if (d.accion === 'lista') return salida(DEC_webLista_(d));
     if (d.accion === 'guardar') return salida(DEC_webGuardar_(d));
     if (d.accion === 'fin') return salida(DEC_webFin_(d));
+    if (d.accion === 'detalle') return salida(DEC_webDetalle_(d));
     return salida({ ok: false, error: 'acción desconocida' });
   } catch (x) {
     console.error(x);
@@ -33,16 +34,19 @@ function doPost(e) {
 
 /** ¿Qué N° de orden faltan en la hoja? */
 function DEC_webLista_(d) {
-  var tengo = {};
-  if (!d.rehacer) {
-    DEC_leerDecl_().forEach(function (r) { if (r.pdf) tengo[r.numOrd] = 1; });
-  }
+  var tengo = {}, sinDet = {};
+  DEC_leerDecl_().forEach(function (r) {
+    if (r.pdf && !d.rehacer) tengo[r.numOrd] = 1;
+    if (r.pdf && !r.det && (r.form === '0621' || r.form === '0626') && !(r.datos && r.datos.sinDetalle)) sinDet[r.numOrd] = 1;
+  });
   var faltan = (d.items || []).filter(function (it) { return !tengo[String(it.numOrd)]; }).map(function (it) { return String(it.numOrd); });
+  // las que ya están pero sin su PDF «Detalle de la declaración» (621 y 626): el robot baja solo el detalle
+  var faltanDetalle = (d.items || []).filter(function (it) { return tengo[String(it.numOrd)] && sinDet[String(it.numOrd)]; }).map(function (it) { return String(it.numOrd); });
   var res = DEC_resultados_();
   var emp = (d.items && d.items[0] && d.items[0].empresa) || (res[d.ruc] && res[d.ruc].empresa) || '';
   res[d.ruc] = { empresa: emp, t: DEC_ahora_(), total: (d.items || []).length, faltan: faltan.length, bien: 0, mal: 0, enCurso: true };
   DEC_guardarResultados_(res);
-  return { ok: true, faltan: faltan };
+  return { ok: true, faltan: faltan, faltanDetalle: faltanDetalle };
 }
 
 function DEC_webGuardar_(d) {
@@ -61,17 +65,18 @@ function DEC_webGuardar_(d) {
   var previos = carpeta.getFilesByName(nombre);
   while (previos.hasNext()) previos.next().setTrashed(true);
   var archivo = carpeta.createFile(Utilities.newBlob(Utilities.base64Decode(d.pdf), 'application/pdf', nombre));
+  var det = d.detalle ? DEC_guardarDetallePdf_(carpeta, nombre, d.detalle) : null;
   var tributos = (cons.tributos || []).map(function (t) {
     return { cod: String(t.codTri || ''), nom: String(t.descCodTri || '').trim(), deuda: Number(t.mtoTotDeu) || 0, pagado: Number(t.mtoPagtot) || 0, porPagar: Number(t.mtoResPag) || 0 };
   });
   var extra = { trabajadores: cons.trabajadores, pensionistas: cons.pensionistas, personalCuarta: cons.personalCuarta, tributos: tributos, casillas: d.casillas || {} };
   DEC_anotar_({
-    empresa: empresa, ruc: d.ruc, periodo: periodo, form: form, desc: String(it.desFor || DEC_FORMULARIOS[form] || '').trim(),
+    empresa: empresa, ruc: d.ruc, periodo: periodo, form: form, desc: DEC_FORMULARIOS[form] || String(it.desFor || '').replace(/\uFFFD/g, 'ó').trim(),
     numOrd: String(it.numOrd), numOrdOri: String(it.numOrdOri || '0'), tipo: tipo, fecha: String(it.strFecPres || ''),
     deuda: tributos.reduce(function (s, t) { return s + t.deuda; }, 0), pagado: tributos.reduce(function (s, t) { return s + t.pagado; }, 0),
     importe: Number(it.mtoPag) || 0, banco: String(it.nomEntFin || '').trim(), operacion: String(it.numOpebco || '').trim(),
     medio: String(it.medioPres || '') === '02' ? 'PDT (aplicativo)' : String(it.medioPres || '') === '01' ? 'Portal SUNAT' : String(it.medioPres || ''),
-    pdf: archivo.getUrl(), pdfId: archivo.getId(), datos: extra,
+    pdf: archivo.getUrl(), pdfId: archivo.getId(), det: det ? det.getUrl() : '', detId: det ? det.getId() : '', datos: extra,
   });
   var res = DEC_resultados_();
   if (res[d.ruc]) { res[d.ruc].bien = (res[d.ruc].bien || 0) + 1; res[d.ruc].t = DEC_ahora_(); DEC_guardarResultados_(res); }
@@ -120,4 +125,33 @@ function DEC_carpetaMes_(cfg, ruc, empresa, periodo) {
   while (it.hasNext()) { var f = it.next(); if (f.getName().indexOf(ruc) === 0) { emp = f; break; } }
   if (!emp) emp = raiz.createFolder(ruc + ' - ' + empresa);
   return DEC_sub_(DEC_sub_(emp, periodo.slice(0, 4)), periodo.slice(4, 6));
+}
+
+/** Guarda el PDF «Detalle de la declaración» junto a la constancia (mismo nombre + « - Detalle»). */
+function DEC_guardarDetallePdf_(carpeta, nombreConstancia, b64) {
+  var nombre = nombreConstancia.replace(/\.pdf$/i, '') + ' - Detalle.pdf';
+  var previos = carpeta.getFilesByName(nombre);
+  while (previos.hasNext()) previos.next().setTrashed(true);
+  return carpeta.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'application/pdf', nombre));
+}
+
+/** Solo el detalle de una declaración que ya estaba (el robot lo bajó después). */
+function DEC_webDetalle_(d) {
+  var r = DEC_leerDecl_().filter(function (x) { return x.numOrd === String(d.numOrd); })[0];
+  if (!r) return { ok: false, error: 'esa declaración no está en la hoja' };
+  if (!d.detalle) {   // SUNAT no tiene el detalle de esta declaración (p. ej. presentada con el PDT): no se vuelve a pedir
+    var h = DEC_hojaDecl_(), f = DEC_filaDe_(h, r.numOrd);
+    r.datos.sinDetalle = true;
+    if (f) { h.getRange(f, DEC_C_._datos + 1).setValue(JSON.stringify(r.datos).slice(0, 49000)); h.getRange(f, DEC_C_.Detalle + 1).setValue('— SUNAT no lo da'); }
+    return { ok: true };
+  }
+  var carpeta;
+  try { carpeta = DriveApp.getFileById(r.pdfId).getParents().next(); } catch (e) { carpeta = DEC_carpetaMes_(DEC_cfg_(), r.ruc, r.empresa, r.periodo); }
+  var nombre;
+  try { nombre = DriveApp.getFileById(r.pdfId).getName(); } catch (e) { nombre = r.periodo + ' ' + DEC_corto_(r.form) + ' N° ' + r.numOrd + ' ' + r.tipo + '.pdf'; }
+  var f = DEC_guardarDetallePdf_(carpeta, nombre, d.detalle);
+  DEC_ponerDetalle_(r.numOrd, f.getUrl(), f.getId());
+  var res = DEC_resultados_();
+  if (res[d.ruc]) { res[d.ruc].detalles = (res[d.ruc].detalles || 0) + 1; DEC_guardarResultados_(res); }
+  return { ok: true };
 }

@@ -10,6 +10,12 @@ Baja de SUNAT SOL las **declaraciones presentadas** de todas las empresas, con s
 
 Se lee de **SUNAT SOL → Mis declaraciones y pagos → Consultas → Consulta de Declaraciones y Pagos** (menú 55.2.1.1.1), igual que una persona. **Solo lee.**
 
+## Constancia y detalle
+- **Constancia**: el comprobante de presentación (tributos y monto).
+- **Detalle**: la declaración completa con todas sus casillas. Es el PDF oficial de SUNAT «Detalle de la declaración» y SUNAT lo da para el **PDT 621** y el **PDT 626**.
+- Para el PLAME presentado con el PDT, SUNAT no da ese PDF, pero sus casillas igual quedan en la hoja.
+- Si una declaración ya estaba sin detalle, la próxima descarga baja solo el detalle.
+
 ## Rectificatorias
 Cada presentación tiene su **N° de orden** y se bajan **todas**. La **última presentada** de cada empresa + formulario + periodo es la **✅ Vigente** (la que cuentan los reportes). Las anteriores quedan como **🗄 Respaldo**, y su PDF pasa a la subcarpeta `Respaldo (anteriores)` del mes.
 
@@ -33,10 +39,13 @@ El repositorio es **público**, así que el robot **no guarda nada** en él. Cad
 | Pestaña | Qué tiene |
 |---|---|
 | 📊 Panel | Por empresa: último 621 / 601 / 626, cuántas hay, cuántas se rectificaron y **qué falta** (periodos ya vencidos sin presentar o sin bajar) |
-| 🗂 Por periodo | **El reporte**: por empresa y mes, lo vigente de cada formulario (fecha, tipo, IGV, Renta, trabajadores, retenciones, pagado) |
+| 📒 IGV-Renta 621 | Por empresa y año: ventas, compras, crédito fiscal, determinación del IGV, renta (ingresos, coeficiente, pago a cuenta) y total, mes a mes, con el **total del año como fórmula** |
+| 👷 PLAME 601 | Igual: personal, bases y aportes (EsSalud, ONP, renta de 5ta y de 4ta) y total |
+| 🧾 Retenciones 626 | Igual: retenciones efectuadas, pagos previos, interés y total |
+| 🗂 Por periodo | Las tres declaraciones lado a lado por empresa y mes (fecha, tipo, IGV, Renta, trabajadores, retenciones, pagado) |
 | 📄 Declaraciones | Todas las presentaciones (originales y rectificatorias) con estado y **📄 Ver PDF** |
 | 🧾 Tributos | El detalle de tributos de cada declaración (total deuda, pagado, por pagar) |
-| 🔢 Casillas | Las casillas con valor de las declaraciones vigentes |
+| 🔢 Casillas | Las casillas con valor de las declaraciones vigentes, con su **sección y nombre oficial de SUNAT** (catálogo en `DEC_Catalogo.js`, tomado de la pantalla «Detalle de la declaración» de SUNAT) |
 | ⚙️ Config / 📖 Ayuda | Parámetros y ayuda |
 
 Los PDF quedan en Drive, en la carpeta `PDF Declaraciones/<RUC - Empresa>/<Año>/<Mes>/`, junto a la hoja.
@@ -49,7 +58,9 @@ Los PDF quedan en Drive, en la carpeta `PDF Declaraciones/<RUC - Empresa>/<Año>
 | `apps_script/DEC_Config.js` | Menú, ⚙️ Config, token, descarga mensual, 🧰 Preparar |
 | `apps_script/DEC_Pedir.js` | Crea la llave de un solo uso y lanza el robot; 🔎 Estado |
 | `apps_script/DEC_Web.js` | Aplicación web: recibe la lista, cada constancia (PDF a Drive) y el fin |
-| `apps_script/DEC_Hojas.js` | Vigente / respaldo, PDF a su carpeta, reportes, ayuda |
+| `apps_script/DEC_Hojas.js` | Vigente / respaldo, PDF a su carpeta, Panel, Por periodo, Tributos, ayuda |
+| `apps_script/DEC_Reportes.js` | Reportes anuales 📒 621, 👷 601 y 🧾 626, y 🔢 Casillas |
+| `apps_script/DEC_Catalogo.js` | Nombres oficiales de las casillas (621, 626, PLAME 601) |
 | `apps_script/DEC_Despliegue.js` | ID de la aplicación web y de la hoja (lo escribe el workflow; vacío en el repositorio) |
 
 **Robots de GitHub** (`.github/workflows/`):
