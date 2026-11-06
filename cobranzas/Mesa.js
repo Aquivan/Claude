@@ -389,6 +389,37 @@ function MESA_manual_(tk, x) {
   return { mensaje: '✍️ Registrado en ' + HOJA.MANUAL + ' (fila ' + fila + '): ' + x.modalidad + ' ' + (x.moneda || 'PEN') + ' ' + redondear2_(monto).toFixed(2) + ' a ' + x.doc + '. Cobranzas se recalcula en ~1 minuto.', fila: fila, lote: lote };
 }
 
+/**
+ * 📜 Historial de guardados: lo último escrito desde la Mesa (o copiado de Fotos), y si cada celda de Vouchers
+ * SIGUE diciendo lo que se escribió (✅) o alguien la cambió después (⚠️).
+ */
+function MESA_historial(tk) {
+  var quien = MESA_ok_(tk);
+  return MESA_reintentar_(function () {
+    var ss = ssPrincipal_(), sh = ss.getSheetByName(MESA_HOJA_LOG_);
+    if (!sh || sh.getLastRow() < 2) return { filas: [] };
+    var n = Math.min(80, sh.getLastRow() - 1), v = sh.getRange(sh.getLastRow() - n + 1, 1, n, MESA_ENC_LOG_.length).getValues().reverse();
+    var cfg = leerConfig_(ss), ssV = null, cols = {}, shs = {};
+    var filas = v.map(function (r) {
+      var f = { fecha: r[0] instanceof Date ? Utilities.formatDate(r[0], 'America/Lima', 'dd/MM HH:mm') : String(r[0]), quien: String(r[1]), lote: String(r[2]), fuente: String(r[3]), col: String(r[4]),
+        antes: String(r[5]).slice(0, 80), despues: String(r[6]).slice(0, 80), mio: String(r[1]) === quien, sigue: '' };
+      var p = f.fuente.split('!');
+      if (/^(Originales|Fotos)$/.test(p[0]) && f.col && !/^Fila /.test(f.col)) {
+        try {
+          ssV = ssV || SpreadsheetApp.openById(cfg.idVouchers);
+          var shV = shs[p[0]] = shs[p[0]] || ssV.getSheetByName(p[0]);
+          if (!cols[p[0]]) cols[p[0]] = indiceColumnas_(shV.getRange(1, 1, 1, shV.getLastColumn()).getValues()[0]);
+          var ci = f.col === 'Tipo y Nº Doc.' ? cols[p[0]]('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc') : cols[p[0]](f.col);
+          if (ci >= 0) { var act = String(shV.getRange(parseInt(p[1], 10), ci + 1).getDisplayValue()).trim(); f.ahora = act.slice(0, 80); f.sigue = act.toUpperCase() === String(r[6]).trim().toUpperCase() ? 'si' : 'no'; }
+        } catch (e) {}
+      }
+      return f;
+    });
+    var et = MESA_etapa_();
+    return { filas: filas, recalc: PropertiesService.getScriptProperties().getProperty('MESA_PEDIDO') ? (et ? et.e : 'cola') : '', ultima: PropertiesService.getScriptProperties().getProperty('MESA_ULTIMA') || '' };
+  });
+}
+
 function MESA_hojaLog_(ss) {
   var sh = ss.getSheetByName(MESA_HOJA_LOG_);
   if (!sh) {
@@ -500,6 +531,35 @@ function MESA_recalcular() {
   if (props.getProperty('MESA_PEDIDO') === pedido) { props.deleteProperty('MESA_PEDIDO'); props.deleteProperty('MESA_ETAPA'); }
   else { props.setProperty('MESA_ETAPA', JSON.stringify({ e: 'cola', t: Date.now() })); ScriptApp.newTrigger('MESA_recalcular').timeBased().after(30 * 1000).create(); }   // alguien guardó mientras tanto
   props.setProperty('MESA_ULTIMA', new Date().toISOString());
+}
+
+/**
+ * ⚡ Recalcular ahora: recalcula Cobranzas en este mismo momento (sin esperar el arranque de Google ni la
+ * actualización de cada 10 minutos). Si ya hay un recálculo corriendo, lo dice y no empieza otro.
+ */
+function MESA_recalcularAhora(tk) {
+  MESA_ok_(tk);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) {
+    var et = MESA_etapa_();
+    return { enCurso: true, mensaje: '⏳ Ya se está recalculando' + (et && et.e === 'calc' ? ' (lleva ' + Math.round((Date.now() - et.t) / 1000) + ' s)' : '') + ': espere a que termine, la Mesa se recarga sola.' };
+  }
+  lock.releaseLock();
+  try { TG_ss_(); } catch (e) {}   // en la ventana aparte no hay «hoja activa»: se fija la de Cobranzas
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'MESA_recalcular') ScriptApp.deleteTrigger(t); });
+  var props = PropertiesService.getScriptProperties(), pedido = props.getProperty('MESA_PEDIDO'), t0 = Date.now();
+  props.setProperty('MESA_ETAPA', JSON.stringify({ e: 'calc', t: t0 }));
+  if (!pedido) props.setProperty('MESA_PEDIDO', String(t0));
+  var r;
+  try { r = actualizarTodo_(true); } catch (e) {
+    props.deleteProperty('MESA_ETAPA');
+    MESA_programarRecalculo_();   // que lo intente de nuevo solo
+    return { error: '❌ No terminó: ' + e.message + ' · Se vuelve a intentar solo en ~1 minuto.' };
+  }
+  if (/en curso/.test(r)) { props.setProperty('MESA_ETAPA', JSON.stringify({ e: 'espera', t: Date.now() })); MESA_programarRecalculo_(); return { enCurso: true, mensaje: '⏳ ' + r }; }
+  props.deleteProperty('MESA_PEDIDO'); props.deleteProperty('MESA_ETAPA');
+  props.setProperty('MESA_RESULTADO', String(r).slice(0, 300)); props.setProperty('MESA_ULTIMA', new Date().toISOString());
+  return { ok: true, mensaje: '✅ ' + r };
 }
 
 /**
