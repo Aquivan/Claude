@@ -59,6 +59,9 @@ input,select{font:inherit;padding:4px 6px;border:1px solid var(--bo);border-radi
 #visor .vc{flex:1;overflow:auto;background:#F1F5F9;text-align:center}
 #visor img{max-width:none;transform-origin:center top}
 #visor iframe,#visor embed{width:100%;height:100%;border:0}
+#visor canvas{max-width:none;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);margin:8px auto;display:block;transform-origin:center top}
+#vMsg{padding:8px 10px;font-size:12px}#vMsg.err{background:#FEF2F2;color:#991B1B}#vMsg.av{background:#FFFBEB;color:#92400E}
+#vArch{padding:4px 10px;font-size:11.5px}#vArch a{margin-right:8px}
 #modal{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:40;display:none;align-items:center;justify-content:center}
 #modal.on{display:flex}
 #modal .caja{background:#fff;border-radius:10px;width:min(760px,96vw);max-height:90vh;overflow:auto;padding:12px}
@@ -164,7 +167,10 @@ table.tf td:last-child{white-space:normal}
   <div id="estado"></div>
 </div>
 <div id="visor"><div class="vb"><b id="vTit" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></b>
-  <button onclick="zoom(-1)">−</button><button onclick="zoom(1)">+</button><button onclick="girar()">⟳</button><button id="vNueva" onclick="visorNueva()">↗</button><button onclick="cerrarVisor()">✖</button></div>
+  <span id="vPag" style="display:none"><button onclick="pagina(-1)" title="Página anterior">◀</button> <span id="vPagN"></span> <button onclick="pagina(1)" title="Página siguiente">▶</button></span>
+  <button onclick="zoom(-1)" title="Alejar">−</button><button onclick="zoom(1)" title="Acercar">+</button><button onclick="girar()" title="Girar">⟳</button>
+  <button onclick="recargarVisor()" title="Volver a pedir el archivo (si no cargó o se volvió a subir)">🔄 Recargar</button><button id="vNueva" onclick="visorNueva()" title="Abrir en otra pestaña">↗</button><button onclick="cerrarVisor()">✖</button></div>
+  <div id="vMsg" style="display:none"></div><div id="vArch"></div>
   <div class="vc" id="vCont"></div><div id="vPie" style="padding:4px 8px;color:var(--gr);font-size:11px"></div></div>
 <div id="modal"><div class="caja" id="mCaja"></div></div>
 
@@ -772,31 +778,84 @@ function deshacerGuardado() {
 }
 
 /* ------------------------------------------------ 🖼 ver voucher / 📄 factura */
-var VIS = { z: 1, g: 0, url: '' };
+var VIS = { z: 1, g: 0, url: '', pdf: null, pag: 1, n: 0, req: null };
 function verVoucher(id) { var v = S.V[id]; abrirVisor('🖼 ' + v.fu + ' · ' + v.bco + ' ' + v.op + ' · ' + fm(v.m), 'v', v.fu); }
 function verFactura(k) { var d = S.D[k]; abrirVisor('📄 ' + d.doc + ' · ' + d.cn, 'f', d.pdf); }
-function abrirVisor(tit, tipo, ref) {
-  $('visor').className = 'on'; $('vTit').textContent = tit; $('vCont').innerHTML = '<p style="padding:20px">⏳ Cargando…</p>'; $('vPie').textContent = '';
-  VIS = { z: 1, g: 0, url: '' };
-  R.withFailureHandler(function (e) { $('vCont').innerHTML = '<p style="padding:20px;color:#b91c1c">❌ ' + esc(e.message) + '</p>'; }).withSuccessHandler(function (r) {
+function msgVisor(t, cls) { var m = $('vMsg'); m.style.display = t ? '' : 'none'; m.className = cls || ''; m.innerHTML = t || ''; }
+function recargarVisor() { if (VIS.req) abrirVisor(VIS.req[0], VIS.req[1], VIS.req[2], VIS.req[3]); }
+function abrirVisor(tit, tipo, ref, pagina) {
+  $('visor').className = 'on'; $('vTit').textContent = tit; $('vCont').innerHTML = '<p style="padding:20px">⏳ Cargando…</p>'; $('vPie').textContent = ''; $('vArch').innerHTML = ''; msgVisor('');
+  $('vPag').style.display = 'none';
+  VIS = { z: 1, g: 0, url: '', pdf: null, pag: 1, n: 0, req: [tit, tipo, ref, pagina] };
+  if (!ref) { $('vCont').innerHTML = ''; msgVisor('⚠️ ' + (tipo === 'f' ? 'Esta factura no tiene PDF guardado.' : 'Sin archivo.'), 'err'); return; }
+  R.withFailureHandler(function (e) { $('vCont').innerHTML = ''; msgVisor('❌ ' + esc(e.message) + ' — pruebe 🔄 Recargar.', 'err'); }).withSuccessHandler(function (r) {
+    r = r || {};
     var pie = [];
-    if (r.archivo) pie.push('Archivo: ' + r.archivo + (r.pagina ? ' · página ' + r.pagina : ''));
-    if (r.url && tipo === 'f') pie.push('<a href="' + esc(r.url) + '" target="_blank">↗ Abrir en Drive</a>');
-    if (r.varios) pie.push('⚠️ hay ' + r.varios + ' archivos con ese nombre: se muestra la imagen de la celda de esta fila');
-    if (r.error) pie.push('⚠️ ' + r.error);
-    $('vPie').innerHTML = pie.map(function (x) { return /^<a /.test(x) ? x : esc(x); }).join(' · ');
+    if (r.archivo) pie.push('Archivo: ' + esc(r.archivo) + (r.pagina ? ' · página ' + r.pagina : ''));
+    if (r.url) pie.push('<a href="' + esc(r.url) + '" target="_blank">↗ Abrir el enlace original</a>');
+    $('vPie').innerHTML = pie.join(' · ');
+    if (r.error) msgVisor('⚠️ ' + esc(r.error), 'err'); else if (r.aviso) msgVisor('⚠️ ' + esc(r.aviso), 'av');
+    if ((r.archivos || []).length > 1 || (r.archivos || []).length === 1 && !r.b64) {
+      $('vArch').innerHTML = '<b>Archivos «' + esc(r.archivo) + '» en Drive:</b> ' + r.archivos.map(function (a, i) {
+        return '<a href="#" onclick="abrirVisor(\'' + esc(tit).replace(/'/g, '') + ' · archivo ' + (i + 1) + '\',\'d\',\'' + a.id + '\',' + (r.pagina || 1) + ');return false">' + (i + 1) + ' (' + esc(a.fecha) + ', ' + a.mb + ' MB)</a>';
+      }).join('');
+    }
     if (r.b64) {
       var bytes = atob(r.b64), arr = new Uint8Array(bytes.length);
       for (var i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-      VIS.url = URL.createObjectURL(new Blob([arr], { type: r.mime }));
-      if (/pdf/i.test(r.mime)) $('vCont').innerHTML = '<iframe src="' + VIS.url + (r.pagina ? '#page=' + r.pagina : '') + '"></iframe>';
-      else $('vCont').innerHTML = '<img id="vImg" src="' + VIS.url + '" style="width:100%">';
-    } else if (r.url) { VIS.url = r.url; $('vCont').innerHTML = '<p style="padding:20px"><a href="' + esc(r.url) + '" target="_blank">↗ Abrir en otra pestaña</a></p>'; }
-    else $('vCont').innerHTML = '<p style="padding:20px">' + esc(r.error || 'Sin archivo.') + '</p>';
+      VIS.url = URL.createObjectURL(new Blob([arr], { type: r.mime || '' }));
+      if (/pdf/i.test(r.mime)) mostrarPdf(arr, pagina || r.pagina || 1);
+      else if (/image/i.test(r.mime)) $('vCont').innerHTML = '<img id="vImg" src="' + VIS.url + '" style="width:100%">';
+      else { $('vCont').innerHTML = '<pre style="text-align:left;white-space:pre-wrap;padding:10px;font-size:11px">' + esc(new TextDecoder().decode(arr).slice(0, 20000)) + '</pre>'; }
+    } else if (r.url) { VIS.url = r.url; $('vCont').innerHTML = /googleusercontent/.test(r.url) ? '<img id="vImg" src="' + esc(r.url) + '" style="width:100%">' : '<p style="padding:20px"><a href="' + esc(r.url) + '" target="_blank">↗ Abrir en otra pestaña</a></p>'; }
+    else { $('vCont').innerHTML = ''; if (!r.error) msgVisor('⚠️ No llegó ningún archivo. Pruebe 🔄 Recargar.', 'err'); }
   }).MESA_archivo(TK, tipo, ref);
 }
-function zoom(n) { var i = $('vImg'); if (!i) return; VIS.z = Math.max(.3, Math.min(5, VIS.z + n * .25)); i.style.width = (VIS.z * 100) + '%'; }
-function girar() { var i = $('vImg'); if (!i) return; VIS.g = (VIS.g + 90) % 360; i.style.transform = 'rotate(' + VIS.g + 'deg)'; }
+// PDF: se dibuja la página en la pantalla con pdf.js (el visor de PDF del navegador no funciona dentro de esta ventana)
+var PDFJS = null;
+function cargarPdfjs(cb) {
+  if (PDFJS) return cb();
+  var sc = document.createElement('script');
+  sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  sc.onload = function () { PDFJS = window['pdfjs-dist/build/pdf']; PDFJS.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; cb(); };
+  sc.onerror = function () { cb('No pude cargar el lector de PDF.'); };
+  document.head.appendChild(sc);
+}
+function mostrarPdf(arr, pag) {
+  $('vCont').innerHTML = '<p style="padding:20px">⏳ Abriendo el PDF…</p>';
+  cargarPdfjs(function (err) {
+    if (err) { $('vCont').innerHTML = '<p style="padding:20px"><a href="' + VIS.url + '" target="_blank">↗ Abrir el PDF en otra pestaña</a></p>'; msgVisor('⚠️ ' + err, 'err'); return; }
+    PDFJS.getDocument({ data: arr }).promise.then(function (pdf) {
+      VIS.pdf = pdf; VIS.n = pdf.numPages; VIS.pag = Math.min(Math.max(1, Number(pag) || 1), pdf.numPages);
+      if (Number(pag) > pdf.numPages) msgVisor('⚠️ La fila dice página ' + pag + ' pero el PDF tiene ' + pdf.numPages + ': se muestra la última.', 'av');
+      $('vPag').style.display = pdf.numPages > 1 ? '' : 'none';
+      dibujarPagina();
+    }).catch(function (e) { $('vCont').innerHTML = '<p style="padding:20px"><a href="' + VIS.url + '" target="_blank">↗ Abrir el PDF en otra pestaña</a></p>'; msgVisor('⚠️ No pude leer el PDF: ' + esc(e.message), 'err'); });
+  });
+}
+function dibujarPagina() {
+  if (!VIS.pdf) return;
+  $('vPagN').textContent = 'pág. ' + VIS.pag + ' de ' + VIS.n;
+  VIS.pdf.getPage(VIS.pag).then(function (pg) {
+    var ancho = Math.max(300, $('vCont').clientWidth - 20), v1 = pg.getViewport({ scale: 1 });
+    var esc2 = ancho / v1.width * VIS.z, vp = pg.getViewport({ scale: esc2 * (window.devicePixelRatio || 1), rotation: VIS.g });
+    var cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height; cv.id = 'vCanvas';
+    cv.style.width = (vp.width / (window.devicePixelRatio || 1)) + 'px';
+    $('vCont').innerHTML = ''; $('vCont').appendChild(cv);
+    pg.render({ canvasContext: cv.getContext('2d'), viewport: vp });
+  });
+}
+function pagina(n) { if (!VIS.pdf) return; VIS.pag = Math.min(VIS.n, Math.max(1, VIS.pag + n)); dibujarPagina(); }
+function zoom(n) {
+  VIS.z = Math.max(.3, Math.min(5, VIS.z + n * .25));
+  if (VIS.pdf) return dibujarPagina();
+  var i = $('vImg'); if (i) i.style.width = (VIS.z * 100) + '%';
+}
+function girar() {
+  VIS.g = (VIS.g + 90) % 360;
+  if (VIS.pdf) return dibujarPagina();
+  var i = $('vImg'); if (i) i.style.transform = 'rotate(' + VIS.g + 'deg)';
+}
 function visorNueva() { if (VIS.url) window.open(VIS.url, '_blank'); }
 function cerrarVisor() { $('visor').className = ''; }
 
