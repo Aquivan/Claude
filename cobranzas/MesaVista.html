@@ -629,8 +629,55 @@ function unir(id, k) {
   S.sug = S.sug.filter(function (s) { return !(s.p === id && s.ks.every(function (x) { return S.links[id].indexOf(x) >= 0; })); });
   if (!S.act) S.act = id;
   simular(); pintar(); detalle();
-  var x = S.sim.amt[id + '|' + k] || 0;
-  estado('🔗 ' + v.fu + ' → ' + d.doc + ': ' + fm(x) + (x <= 0.005 ? ' (⚠️ la factura ya no tiene saldo)' : '') + (S.sim.sobra[id] > 0.05 ? ' · al voucher le sobran ' + fm(S.sim.sobra[id]) : ' · voucher completo ✅'), x <= 0.005);
+  var x = S.sim.amt[id + '|' + k] || 0, quedaF = S.sim.saldo[k] || 0;
+  if (x <= 0.005 && quedaF > 0.05 && S.links[id].length > 1) {   // la factura sí tiene saldo, pero al voucher ya no le queda dinero
+    estado('🔗 ' + v.fu + ' → ' + d.doc + ': 0.00 · ⚠️ al voucher ya no le queda dinero (lo usan sus otras facturas); la factura tiene saldo ' + fm(quedaF) + '. Elija cómo cubrirlo.', true);
+    return opcionesFalta(id, k);
+  }
+  estado('🔗 ' + v.fu + ' → ' + d.doc + ': ' + fm(x) + (x <= 0.005 ? (quedaF <= 0.05 ? ' (⚠️ la factura ya no tiene saldo)' : ' (⚠️ al voucher ya no le queda dinero)') : x < quedaF + x - 0.05 && quedaF > 0.05 ? ' · la factura queda con saldo ' + fm(quedaF) : '') + (S.sim.sobra[id] > 0.05 ? ' · al voucher le sobran ' + fm(S.sim.sobra[id]) : ' · voucher completo ✅'), x <= 0.005);
+}
+/** Prueba un cambio en un voucher sin dejarlo puesto: devuelve cómo quedarían sus facturas. */
+function probar(id, cambio) {
+  var l0 = S.links[id].slice(), m0 = {}; Object.keys(S.montos).forEach(function (x) { if (x.indexOf(id + '|') === 0) m0[x] = S.montos[x]; });
+  cambio();
+  simular();
+  var r = S.links[id].map(function (k) { return { k: k, x: S.sim.amt[id + '|' + k] || 0, s: S.sim.saldo[k] || 0 }; });
+  S.links[id] = l0; Object.keys(S.montos).forEach(function (x) { if (x.indexOf(id + '|') === 0) delete S.montos[x]; }); for (var x in m0) S.montos[x] = m0[x];
+  simular();
+  return r;
+}
+/** 💡 La factura tiene saldo pero el voucher ya se gastó en sus otras facturas: opciones para descontar de ellas. */
+function opcionesFalta(id, k) {
+  var v = S.V[id], d = S.D[k], falta = r2(S.sim.saldo[k] || 0);
+  var otras = S.links[id].filter(function (j) { return j !== k && (S.sim.amt[id + '|' + j] || 0) > 0.005; });
+  window._op = [];
+  var desc = function (r) {
+    return r.map(function (z) { var ant = S.sim.amt[id + '|' + z.k] || 0, dd = S.D[z.k]; return '<div style="font-size:11.5px">' + (z.k === k ? '<b>' : '') + esc(dd.doc) + (z.k === k ? '</b>' : '') + ': ' + fm(ant) + ' → <b>' + fm(z.x) + '</b>' + (z.s > 0.05 ? ' <span style="color:var(--ro)">· queda con saldo ' + fm(z.s) + '</span>' : ' <span style="color:var(--ve)">· cancelada</span>') + '</div>'; }).join('');
+  };
+  var h = '<h3 style="margin-top:0">💡 ' + esc(d.doc) + ' tiene saldo ' + fm(falta) + ', pero el voucher ' + esc(v.bco + ' ' + v.op) + ' (' + fm(v.m) + ') ya se usa completo en sus otras facturas</h3>' +
+    '<p style="color:var(--gr);margin-top:0">Elija de dónde sale el dinero para ' + esc(d.doc) + '. La factura de la que se descuente quedará con ese saldo pendiente (lo puede cubrir otro voucher).</p>';
+  // A) pagar esta primero (se descuenta de la última)
+  var rA = probar(id, function () { S.links[id] = [k].concat(S.links[id].filter(function (j) { return j !== k; })); });
+  window._op.push(function () { guardarHist(id); S.links[id] = [k].concat(S.links[id].filter(function (j) { return j !== k; })); });
+  h += '<div class="combo" onclick="usarOp(0)"><b>⬆ Pagar esta primero</b> — el voucher la cubre antes y lo que falte se descuenta de las siguientes, en orden' + desc(rA) + '</div>';
+  // B) descontar de una factura en particular
+  otras.forEach(function (j) {
+    var ant = S.sim.amt[id + '|' + j] || 0, nuevo = r2(Math.max(0, ant - falta));
+    var rB = probar(id, function () { S.montos[id + '|' + j] = nuevo; });
+    var n = window._op.length;
+    window._op.push(function () { guardarHist(id); S.montos[id + '|' + j] = nuevo; });
+    h += '<div class="combo" onclick="usarOp(' + n + ')"><b>✂️ Descontar de ' + esc(S.D[j].doc) + '</b> (' + fm(ant) + ' → ' + fm(nuevo) + ')' + desc(rB) + '</div>';
+  });
+  window._op.push(function () { guardarHist(id); S.links[id] = S.links[id].filter(function (j) { return j !== k; }); });
+  h += '<p><button onclick="usarOp(' + (window._op.length - 1) + ')">✖ No cruzar esta factura</button> <button onclick="cerrarModal()">Dejarlo así (aplica 0.00)</button></p>' +
+    '<p style="color:var(--gr);font-size:11.5px">Nada se escribe hasta 💾 Guardar. Puede deshacer con ↶.</p>';
+  modal(h);
+}
+function usarOp(i) {
+  var f = window._op && window._op[i]; if (!f) return; cerrarModal();
+  f(); simular(); pintar(); detalle();
+  var id = S.act, v = id && S.V[id];
+  estado('✅ Listo (sin guardar)' + (v ? ': ' + v.fu + ' → ' + S.links[id].map(function (k) { return S.D[k].doc + ' ' + fm(S.sim.amt[id + '|' + k] || 0); }).join(', ') : '') + '.');
 }
 function quitar(id, k) {
   guardarHist(id);
@@ -679,6 +726,7 @@ function clicLinea(ev, el) {
       '<div style="margin-top:6px">Monto de esta línea: <input id="mLin" type="number" step="0.01" min="0" style="width:110px" value="' + (S.montos[L.id + '|' + L.k] != null ? S.montos[L.id + '|' + L.k] : '') + '" placeholder="automático"> ' +
       '<button onclick="montoLinea(\'' + esc(L.id) + '\',\'' + esc(L.k) + '\')">✔ Usar</button> <button onclick="montoLinea(\'' + esc(L.id) + '\',\'' + esc(L.k) + '\',1)" title="El voucher llena la factura con lo que le quede (en orden)">Automático</button>' +
       '<div style="color:var(--gr);font-size:11px">Vacío = automático (llena la factura con lo que quede del voucher, en orden).</div></div>' +
+      ((S.sim.saldo[L.k] || 0) > 0.05 && S.links[L.id].length > 1 ? '<div style="margin-top:6px"><button onclick="cerrarPop();opcionesFalta(\'' + esc(L.id) + '\',\'' + esc(L.k) + '\')">💡 Cubrir su saldo (' + fm(S.sim.saldo[L.k]) + ') descontando de las otras facturas del voucher</button></div>' : '') +
       '<div style="margin-top:6px"><button onclick="quitar(\'' + esc(L.id) + '\',\'' + esc(L.k) + '\');cerrarPop()">✂️ Quitar este cruce</button> ' +
       (S.links[L.id].length > 1 && S.links[L.id][0] !== L.k ? '<button onclick="primero(\'' + esc(L.id) + '\',\'' + esc(L.k) + '\');cerrarPop()" title="El voucher llena primero esta factura">⬆ Pagar esta primero</button>' : '') + '</div>';
   }
