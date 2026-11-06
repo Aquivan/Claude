@@ -1,0 +1,158 @@
+# Proyecto "Declaraciones · Grupo" (carpeta declaraciones/). Baja de SUNAT SOL las declaraciones
+# presentadas (PDT 621 IGV-Renta, PDT 601 PLAME, PDT 626 Agentes de Retención) con su constancia PDF,
+# incluidas las rectificatorias.
+#
+# NO GUARDA NADA EN GITHUB (el repositorio es público): cada constancia va directo a la hoja
+# «Declaraciones · Grupo». Por eso este robot solo lo pide la hoja (menú 📑 Declaraciones o su descarga
+# mensual), que le pasa su dirección y una llave de un solo uso. Ambas se tapan en el registro antes de
+# usarlas, y el registro solo dice cuántas declaraciones hubo (sin montos ni números).
+
+name: Declaraciones - descargar (SUNAT SOL)
+run-name: Declaraciones · ${{ inputs.empresa }} · ${{ inputs.desde || 'últimos 3' }}-${{ inputs.hasta || 'meses' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      empresa:
+        description: "RUC de una empresa, o 'todas' (las activas de empresas.json)"
+        required: true
+        default: "todas"
+      desde:
+        description: "Desde qué periodo (AAAAMM). Vacío = los últimos 3 meses"
+        required: false
+        default: ""
+      hasta:
+        description: "Hasta qué periodo (AAAAMM). Vacío = el mes anterior"
+        required: false
+        default: ""
+      formularios:
+        description: "Formularios separados por coma"
+        required: false
+        default: "0621,0601,0626"
+      rehacer:
+        description: "Volver a bajar también las que la hoja ya tiene"
+        type: boolean
+        default: false
+      destino:
+        description: "(lo llena la hoja) dirección de la hoja"
+        required: true
+      llave:
+        description: "(lo llena la hoja) llave de un solo uso"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: declaraciones-descargar
+  cancel-in-progress: false
+
+jobs:
+  empresas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      lista: ${{ steps.e.outputs.lista }}
+      una: ${{ steps.una.outputs.una }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: empresas.json
+          sparse-checkout-cone-mode: false
+      - name: ¿Una sola máquina para todas las empresas? (si existe el secreto SUNAT_CLAVES)
+        id: una
+        env:
+          CLAVES: ${{ secrets.SUNAT_CLAVES }}
+        run: if [ -n "$CLAVES" ]; then echo "una=true" >> "$GITHUB_OUTPUT"; else echo "una=false" >> "$GITHUB_OUTPUT"; fi
+      - id: e
+        env:
+          EMPRESA: ${{ inputs.empresa }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          sel = os.environ["EMPRESA"].strip()
+          emp = [e for e in json.load(open("empresas.json"))["empresas"] if e.get("activo")]
+          rucs = [e["ruc"] for e in emp] if sel.lower() == "todas" else [r.strip() for r in sel.split(",") if r.strip()]
+          print("lista=" + json.dumps(rucs))
+          PY
+          cat "$GITHUB_OUTPUT"
+
+  # Todas las empresas una tras otra en UNA máquina (con el secreto SUNAT_CLAVES).
+  descargar-todas:
+    name: descargar (todas)
+    needs: empresas
+    if: needs.empresas.outputs.lista != '[]' && needs.empresas.outputs.una == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Tapar la dirección y la llave de la hoja (antes de todo)
+        run: |
+          D=$(jq -r '.inputs.destino // ""' "$GITHUB_EVENT_PATH"); L=$(jq -r '.inputs.llave // ""' "$GITHUB_EVENT_PATH")
+          echo "::add-mask::$D"; echo "::add-mask::$L"
+          { echo "DESTINO=$D"; echo "LLAVE=$L"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            declaraciones/scripts
+            scripts/por_empresa.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar navegador
+        run: |
+          pip install playwright==1.47.0
+          python -m playwright install --with-deps chromium
+      - name: Bajar declaraciones de todas las empresas
+        env:
+          SUNAT_CLAVES: ${{ secrets.SUNAT_CLAVES }}
+          LISTA: ${{ needs.empresas.outputs.lista }}
+          DESDE: ${{ inputs.desde }}
+          HASTA: ${{ inputs.hasta }}
+          FORMULARIOS: ${{ inputs.formularios }}
+          REHACER: ${{ inputs.rehacer }}
+        run: |
+          extra=""; if [ "$REHACER" = "true" ]; then extra="--rehacer"; fi
+          python3 scripts/por_empresa.py --rucs "$LISTA" --minutos 25 -- \
+            python declaraciones/scripts/descargar_declaraciones.py --desde "$DESDE" --hasta "$HASTA" --formularios "$FORMULARIOS" $extra
+
+  # Si no existe SUNAT_CLAVES: una máquina por empresa (con las claves de su Environment).
+  descargar:
+    needs: empresas
+    if: needs.empresas.outputs.lista != '[]' && needs.empresas.outputs.una != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        ruc: ${{ fromJson(needs.empresas.outputs.lista) }}
+    environment: ${{ matrix.ruc }}
+    steps:
+      - name: Tapar la dirección y la llave de la hoja (antes de todo)
+        run: |
+          D=$(jq -r '.inputs.destino // ""' "$GITHUB_EVENT_PATH"); L=$(jq -r '.inputs.llave // ""' "$GITHUB_EVENT_PATH")
+          echo "::add-mask::$D"; echo "::add-mask::$L"
+          { echo "DESTINO=$D"; echo "LLAVE=$L"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: declaraciones/scripts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar navegador
+        run: |
+          pip install playwright==1.47.0
+          python -m playwright install --with-deps chromium
+      - name: Bajar declaraciones
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          DESDE: ${{ inputs.desde }}
+          HASTA: ${{ inputs.hasta }}
+          FORMULARIOS: ${{ inputs.formularios }}
+          REHACER: ${{ inputs.rehacer }}
+        run: |
+          extra=""; if [ "$REHACER" = "true" ]; then extra="--rehacer"; fi
+          python declaraciones/scripts/descargar_declaraciones.py --desde "$DESDE" --hasta "$HASTA" --formularios "$FORMULARIOS" $extra
