@@ -116,10 +116,10 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 .ana th.g{background:#2C5282;text-align:center}.ana td{padding:3px 5px;border-bottom:1px solid #EEF2F7;white-space:nowrap}
 .ana .n{text-align:right}.ana tr.apv td{background:#DBE5F1;font-weight:bold;color:#1F3A5F;font-size:12px;padding-top:6px}
 .ana tr.adc td{background:#F8FAFF}.ana tr.adc .adoc{color:#1D4ED8;font-weight:bold}.ana tr.aam td{color:#334155}.ana tr.aam td:first-child{padding-left:16px}
-.ana tr.atp td{background:#EEF2F7;font-weight:bold;border-top:1px solid #94A3B8}.ana tr.atg td{background:#1F3A5F;color:#fff;font-weight:bold;font-size:12px}
+.ana td:last-child{max-width:260px;overflow:hidden;text-overflow:ellipsis}.ana tr.atp td{background:#EEF2F7;font-weight:bold;border-top:1px solid #94A3B8}.ana tr.atg td{background:#1F3A5F;color:#fff;font-weight:bold;font-size:12px}
 .ana .neg{color:#047857}.ana .pos{color:#B91C1C}.ana tr.atg .neg,.ana tr.atg .pos{color:#fff}.ana .tg2{display:inline-block;padding:0 6px;border-radius:8px;font-size:9.5px;font-weight:bold;color:#fff}
 @media print{.ana{font-size:9px}.ana th{position:static}}
-#ecHoja.ancha{width:1180px}#ecHoja .ana{font-size:9.5px}#ecHoja .ana th{position:static;font-size:9px;padding:3px 4px}#ecHoja .ana th.g{background:#2C5282;text-align:center}#ecHoja .ana td{padding:2px 4px;white-space:nowrap;vertical-align:middle}#ecHoja .ana td:last-child{white-space:normal;min-width:90px}
+#ecHoja.ancha{width:1180px;max-width:none}#ecHoja .ana{font-size:9.5px}#ecHoja .ana th{position:static;font-size:9px;padding:3px 4px}#ecHoja .ana th.g{background:#2C5282;text-align:center}#ecHoja .ana td{padding:2px 4px;white-space:nowrap;vertical-align:middle}#ecHoja .ana td:last-child{max-width:200px;overflow:hidden;text-overflow:ellipsis}
 /* 📨 estado de cuenta para enviar */
 #ec{position:fixed;inset:0;background:#E5E7EB;z-index:70;display:none;flex-direction:column}#ec.on{display:flex}
 #ecBar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#fff;border-bottom:1px solid var(--bo);font-size:12.5px}
@@ -2174,7 +2174,7 @@ function analisisE(lista, agr, opc) {
   var monV = opc.mon || $('eAnaMon').value, res = opc.res != null ? opc.res : segV('eAnaRes') === 'res', pagar = S.lado === 'Por pagar';
   var conPen = monV !== 'usd', conUsd = monV !== 'pen';
   var eq = function (d, x, tc) { return { pen: d.mon === 'USD' ? (tc ? x * tc : 0) : x, usd: d.mon === 'USD' ? x : (tc ? x / tc : 0) }; };
-  var filas = [], TG = { pen: [0, 0, 0], usd: [0, 0, 0] };
+  var filas = [], TG = { pen: [0, 0, 0], usd: [0, 0, 0] }, NAT = {}, sinTc = 0, descuadre = 0;
   var mes = function (f) { return f ? f.slice(5, 7) + '/' + f.slice(0, 4) : ''; };
   // agrupar por proveedor (o cliente) aunque el reporte esté por empresa
   var porC = {};
@@ -2185,7 +2185,9 @@ function analisisE(lista, agr, opc) {
     var P = porC[cr], TP = { pen: [0, 0, 0], usd: [0, 0, 0] };
     filas.push({ t: 'pv', txt: (cr ? cr + ' - ' : '') + P.nom });
     P.docs.sort(function (a, b) { return a.f < b.f ? -1 : a.f > b.f ? 1 : cmpNum(a, b); }).forEach(function (d) {
-      var tc = tcDe(d), ms = (EV.movK[d.k] || []).slice().sort(function (a, b) { return (a.f || '') < (b.f || '') ? -1 : 1; });
+      var tc = tcDe(d); if (!tc && ((d.mon === 'USD' && conPen) || (d.mon !== 'USD' && conUsd))) sinTc++;
+      NAT[d.mon] = r2((NAT[d.mon] || 0) + d.sal);
+      var ms = (EV.movK[d.k] || []).slice().sort(function (a, b) { return (a.f || '') < (b.f || '') ? -1 : 1; });
       var s = d.tot, cancel = '';
       ms.forEach(function (m) { s += m.mod === 'N/D' ? m.m : -m.m; if (!cancel && s <= 0.05) cancel = mes(m.f); });
       var amTot = r2(d.tot - d.sal);
@@ -2206,20 +2208,24 @@ function analisisE(lista, agr, opc) {
           var adoc = c.g === 'ret' ? String(m.op).replace(/^CRE\s*/, '') : c.g === 'pago' ? ((m.bco ? m.bco + ' ' : '') + (m.op || '')) : (m.op || '');
           filas.push(linea(tipo, 'am', { doc: d.doc, adoc: adoc, afec: m.f, glosa: c.t + (m.nota ? ' · ' + m.nota : '') }, car ? m.m : 0, car ? 0 : m.m, sal));
         });
+        // cuadre de la línea: el saldo acumulado debe terminar igual al saldo del documento en Cobranzas
+        var dif = r2(sal - d.sal);
+        if (Math.abs(dif) > 0.05) { descuadre++; filas.push(linea('Ajuste', 'am', { doc: d.doc, adoc: '', afec: '', glosa: 'Diferencia con el saldo de Cobranzas (otros descuentos o movimientos sin fecha)' }, dif < 0 ? -dif : 0, dif > 0 ? dif : 0, d.sal)); }
       }
       [0, 1, 2].forEach(function (i) { var e = eq(d, [d.tot, amTot, d.sal][i], tc); TP.pen[i] += e.pen; TP.usd[i] += e.usd; });
     });
     // pagos a cuenta sin factura (saldo a favor) del proveedor
     P.fav.forEach(function (v) {
       var d = { mon: v.mon, tc: 0, f: v.f }, tc = tcDe(d), e = eq(d, v._sobra, tc);
+      NAT[v.mon] = r2((NAT[v.mon] || 0) - v._sobra); if (!tc && ((v.mon === 'USD' && conPen) || (v.mon !== 'USD' && conUsd))) sinTc++;
       filas.push({ t: 'am', tipo: 'A cuenta', doc: '(sin factura)', adoc: (v.bco + ' ' + v.op).trim(), afec: v.f, glosa: (pagar ? 'Pago' : 'Cobro') + ' a cuenta · ' + v.fu, mon: v.mon, tc: tc, pen: [0, e.pen, -e.pen], usd: [0, e.usd, -e.usd] });
       TP.pen[1] += e.pen; TP.pen[2] -= e.pen; TP.usd[1] += e.usd; TP.usd[2] -= e.usd;
     });
     filas.push({ t: 'tp', txt: 'TOTAL ' + P.nom, pen: TP.pen.slice(), usd: TP.usd.slice() });
     [0, 1, 2].forEach(function (i) { TG.pen[i] += TP.pen[i]; TG.usd[i] += TP.usd[i]; });
   });
-  filas.push({ t: 'tg', txt: 'TOTAL GENERAL · ' + claves.length + ' ' + (pagar ? 'proveedor(es)' : 'cliente(s)'), pen: TG.pen, usd: TG.usd });
-  ANA = { filas: filas, conPen: conPen, conUsd: conUsd, conEmp: conEmp, res: res, pagar: pagar, nombre: opc.nombre || '' };
+  if (!(opc.envio && claves.length === 1)) filas.push({ t: 'tg', txt: 'TOTAL GENERAL · ' + claves.length + ' ' + (pagar ? 'proveedor(es)' : 'cliente(s)'), pen: TG.pen, usd: TG.usd });
+  ANA = { nat: NAT, sinTc: sinTc, descuadre: descuadre, filas: filas, conPen: conPen, conUsd: conUsd, conEmp: conEmp, res: res, pagar: pagar, nombre: opc.nombre || '' };
   // tabla
   var cols = '<th>Documento</th>' + (conEmp ? '<th>Empresa</th>' : '') + '<th>F. doc.</th><th>F. venc.</th><th>Mes cancel.</th><th>Tipo</th><th>' + (res ? 'Amortizaciones' : 'Doc. amortización') + '</th><th>Fecha</th><th>Mon.</th><th class="n">T.C.</th>';
   var nPre = conEmp ? 10 : 9;
@@ -2228,7 +2234,7 @@ function analisisE(lista, agr, opc) {
   var h = '<div' + (opc.envio ? '' : ' style="overflow:auto;max-height:calc(100vh - 330px)"') + '><table class="ana"><thead><tr><th colspan="' + nPre + '"></th>' + gr + '<th></th></tr><tr>' + cols + (conPen ? sub() : '') + (conUsd ? sub() : '') + '<th>Glosa</th></tr></thead><tbody>';
   var N = function (v, sal) { if (Math.abs(v) < 0.005) return '<span style="color:#CBD5E1">–</span>'; return sal ? '<span class="' + (v > 0.05 ? 'pos' : 'neg') + '">' + fm(v) + '</span>' : fm(v); };
   var montos = function (f) { return (conPen ? '<td class="n">' + N(f.pen[0]) + '</td><td class="n">' + N(f.pen[1]) + '</td><td class="n"><b>' + N(f.pen[2], 1) + '</b></td>' : '') + (conUsd ? '<td class="n">' + N(f.usd[0]) + '</td><td class="n">' + N(f.usd[1]) + '</td><td class="n"><b>' + N(f.usd[2], 1) + '</b></td>' : ''); };
-  var colT = { Factura: '#1D4ED8', 'N/D': '#1E40AF', 'N/C': '#C2410C', Pago: '#15803D', 'Pago manual': '#166534', Retención: '#7C3AED', Detracción: '#0E7490', Devolución: '#BE185D', 'A cuenta': '#047857', Otro: '#475569' };
+  var colT = { Factura: '#1D4ED8', 'N/D': '#1E40AF', 'N/C': '#C2410C', Pago: '#15803D', 'Pago manual': '#166534', Retención: '#7C3AED', Detracción: '#0E7490', Devolución: '#BE185D', 'A cuenta': '#047857', Ajuste: '#B45309', Otro: '#475569' };
   var ncol = nPre + (conPen ? 3 : 0) + (conUsd ? 3 : 0) + 1;
   filas.forEach(function (f) {
     if (f.t === 'pv') { h += '<tr class="apv"><td colspan="' + ncol + '">' + esc(f.txt) + '</td></tr>'; return; }
@@ -2239,6 +2245,12 @@ function analisisE(lista, agr, opc) {
   h += '</tbody></table></div><div style="display:flex;gap:18px;justify-content:flex-end;padding:8px 4px;font-size:13px"><span>Total registros: <b>' + filas.filter(function (f) { return f.t === 'dc' || f.t === 'am'; }).length + '</b></span>' +
     (conPen ? '<span>Total saldo S/: <b class="' + (TG.pen[2] > 0.05 ? 'pos' : 'neg') + '" style="color:' + (TG.pen[2] > 0.05 ? '#B91C1C' : '#047857') + '">' + fm(TG.pen[2]) + '</b></span>' : '') +
     (conUsd ? '<span>Total saldo US$: <b style="color:' + (TG.usd[2] > 0.05 ? '#B91C1C' : '#047857') + '">' + fm(TG.usd[2]) + '</b></span>' : '') + '</div>' +
+    // cuadre
+    '<div style="padding:4px;font-size:12px">' + (conPen ? '<div>Cuadre S/: compromiso ' + fm(TG.pen[0]) + ' − amortización ' + fm(TG.pen[1]) + ' = saldo <b>' + fm(TG.pen[0] - TG.pen[1]) + '</b> ' + (Math.abs(TG.pen[0] - TG.pen[1] - TG.pen[2]) < 0.05 ? '✅' : '⚠') + '</div>' : '') +
+    (conUsd ? '<div>Cuadre US$: compromiso ' + fm(TG.usd[0]) + ' − amortización ' + fm(TG.usd[1]) + ' = saldo <b>' + fm(TG.usd[0] - TG.usd[1]) + '</b> ' + (Math.abs(TG.usd[0] - TG.usd[1] - TG.usd[2]) < 0.05 ? '✅' : '⚠') + '</div>' : '') +
+    (descuadre ? '<div style="color:#B45309">⚠ ' + descuadre + ' documento(s) con una línea «Ajuste»: sus movimientos no llegan al saldo de Cobranzas (pulse ⚡ Recalcular ahora y revise su 🔍 ficha).</div>' : '') +
+    (sinTc ? '<div style="color:#B91C1C">⚠ ' + sinTc + ' documento(s) sin tipo de cambio: en la otra moneda salen en 0 y el total convertido NO está completo. Pulse ⚡ Recalcular ahora (llena la columna «T.C.») o use «Solo soles» / «Solo dólares» según la moneda de los documentos.</div>' : '') +
+    (opc.extra || '') + '</div>' +
     '<div class="d2" style="color:var(--gr);padding:0 4px">Montos convertidos con el tipo de cambio del documento (SIRE); si es en soles y no lo tiene, con el del día más cercano conocido. Saldo <span style="color:#B91C1C">rojo</span> = por ' + (pagar ? 'pagar' : 'cobrar') + ' · <span style="color:#047857">verde/negativo</span> = a favor.</div>';
   return h;
 }
@@ -2417,7 +2429,24 @@ function ecAnalisis(cr, er, de, ha) {
   var nomC = (docs[0] || {}).cn || cr, emp = er ? (S.data.empresas || []).filter(function (e) { return e.ruc === er; })[0] : null, nomE = emp ? emp.nombre : 'Grupo (todas las empresas)';
   var guard = $('eSinEmp') ? $('eSinEmp').value : 'todos'; if ($('eSinEmp')) $('eSinEmp').value = $('ecSinEmp').value;   // pagos a cuenta según el selector de aquí
   var fav = []; try { fav = favorDe(cr, er).filter(function (v) { return v.f <= ha && (!de || v.f >= de); }); } finally { if ($('eSinEmp')) $('eSinEmp').value = guard; }
-  var tabla = analisisE([{ ruc: cr, nombre: nomC, subs: [{ ruc: cr, nombre: nomC, docs: docs, fav: fav }] }], 'ep', { mon: $('ecAnaMon').value, res: segV('ecAnaRes') === 'res', docs: docs, envio: true, nombre: nomC });
+  // cruce con el estado de cuenta (mismo proveedor, empresa y corte): el saldo de cada moneda debe ser el mismo
+  var extra = '';
+  if (!de && ha >= hoy) {
+    var mons = {}; docs.forEach(function (d) { mons[d.mon] = 1; }); fav.forEach(function (v) { mons[v.mon] = 1; });
+    var cruce = Object.keys(mons).map(function (mo) {
+      var fin = r2(ecDatos(cr, er, mo).L.reduce(function (t, l) { return l.f <= ha ? t + l.cargo - l.abono : t; }, 0));
+      return { mo: mo, fin: fin };
+    });
+    extra = '<!--CRUCE-->' + JSON.stringify(cruce);
+  }
+  var tabla = analisisE([{ ruc: cr, nombre: nomC, subs: [{ ruc: cr, nombre: nomC, docs: docs, fav: fav }] }], 'ep', { mon: $('ecAnaMon').value, res: segV('ecAnaRes') === 'res', docs: docs, envio: true, nombre: nomC, extra: '<span id="anaCruce"></span>' });
+  if (extra) {
+    var cr2 = JSON.parse(extra.replace('<!--CRUCE-->', ''));
+    tabla = tabla.replace('<span id="anaCruce"></span>', cr2.map(function (c) {
+      var a = r2(ANA.nat[c.mo] || 0), ok = Math.abs(a - c.fin) < 0.05, s = c.mo === 'USD' ? 'US$' : 'S/';
+      return '<div>' + (ok ? '✅' : '⚠') + ' Cruce con el estado de cuenta (' + s + '): análisis ' + fm(a) + (ok ? ' = ' : ' ≠ ') + 'saldo final ' + fm(c.fin) + (ok ? '' : ' · diferencia ' + fm(r2(a - c.fin))) + '</div>';
+    }).join(''));
+  }
   var h = '<div class="cab"><div><div class="et">' + (pagar ? 'Emitido por (cliente)' : 'Emitido por (proveedor)') + '</div><div style="font-size:15px;font-weight:bold">' + esc(nomE) + '</div>' + (er ? '<div>RUC ' + esc(er) + '</div>' : '') + '</div>' +
     '<div style="text-align:right"><h1>ANÁLISIS DE CUENTA</h1><div class="sub">' + (pagar ? 'Cuentas por pagar · Proveedor' : 'Cuentas por cobrar · Cliente') + ' · análisis de documentos</div><div style="margin-top:4px">Fecha de emisión: <b>' + ff(hoy) + '</b></div></div></div>' +
     '<div style="display:flex;gap:10px;margin-top:12px"><div class="caja"><div class="et">' + (pagar ? 'Proveedor' : 'Cliente') + '</div><div style="font-weight:bold;font-size:13px">' + esc(nomC) + '</div><div>RUC ' + esc(cr) + '</div></div>' +
