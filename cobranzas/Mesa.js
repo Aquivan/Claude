@@ -119,9 +119,12 @@ function MESA_datos(tk, lado) {
 
   // ---- Vouchers (una vez cada uno: Originales manda, como en el motor)
   var vch = leerVouchers_(cfg);
-  var dups = {}, refsDeCopia = {};
+  var dups = {}, refsDeCopia = {}, copias = [];
   vch.duplicados.forEach(function (d) {
     (dups[d.otra] = dups[d.otra] || []).push(d.fuente);
+    var pz = String(d.id || '').split('|');   // BANCO|op|aaaammdd|monto
+    copias.push({ fu: d.fuente, de: d.otra, bco: pz[0] || '', op: pz[1] || '', f: /^\d{8}$/.test(pz[2] || '') ? pz[2].slice(0, 4) + '-' + pz[2].slice(4, 6) + '-' + pz[2].slice(6) : '',
+      m: Number(pz[3]) || 0, tom: (d.tomados || []).join(', ') });
     if ((d.tomados || []).indexOf('factura') >= 0) refsDeCopia[d.otra] = 1;   // la fila principal tenía «Tipo y Nº Doc.» vacío
   });
   var grupo = {}; cfg.grupo.forEach(function (r) { grupo[r] = 1; });
@@ -195,7 +198,7 @@ function MESA_datos(tk, lado) {
   var ultima = '';
   try { ultima = PropertiesService.getScriptProperties().getProperty('MESA_ULTIMA') || ''; } catch (e) {}
   try { ultima = PropertiesService.getDocumentProperties().getProperty('ultimaActualizacion') || ultima; } catch (e) {}
-  return { lado: lado, empresas: empresas, docs: docs, vouchers: vouchers, links: links, sug: sug, ultima: ultima, rets: rets, reas: reas,
+  return { lado: lado, empresas: empresas, docs: docs, vouchers: vouchers, links: links, sug: sug, ultima: ultima, rets: rets, reas: reas, copias: copias,
     modalidades: MODALIDADES_MANUAL_,
     recalculando: !!PropertiesService.getScriptProperties().getProperty('MESA_PEDIDO') };
 }
