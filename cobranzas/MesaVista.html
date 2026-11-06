@@ -1758,7 +1758,8 @@ function pintarE() {
   lista.sort(function (a, b) { return ord === 'n' ? a.nombre.localeCompare(b.nombre) : ord === 'v' ? b.t.venc - a.t.venc || b.t.sal - a.t.sal : b.t.sal - a.t.sal || a.nombre.localeCompare(b.nombre); });
   lista.forEach(function (g) {
     g.subs = Object.keys(g.sub).map(function (k) { return g.sub[k]; }).sort(function (a, b) { return b.t.sal - a.t.sal; });
-    g.subs.forEach(function (sg) { sg.cr = agr === 'pe' ? g.ruc : sg.ruc; sg.er = agr === 'pe' ? sg.ruc : g.ruc; sg.fav = favorDe(sg.cr, sg.er); sg.favT = sg.fav.reduce(function (t, v) { return t + v._sobra; }, 0); });
+    g.subs.forEach(function (sg) { sg.cr = agr === 'pe' ? g.ruc : sg.ruc; sg.er = agr === 'pe' ? sg.ruc : g.ruc; sg.fav = favorDe(sg.cr, sg.er); sg.favT = sg.fav.reduce(function (t, v) { return t + v._sobra; }, 0);
+      if (niv === 'ana') sg.anaV = vouchersDe(sg.cr, sg.er).filter(function (v) { return !v.dev && v.m - v._apl > 0.05; }); });
     g.favT = g.subs.reduce(function (t, sg) { return t + sg.favT; }, 0);
   });
   S.E.auto = S.E.todo != null ? S.E.todo : (lista.length <= 8 || !!c || !!q);
@@ -1855,7 +1856,7 @@ function detalladoE(sg) {
         extra = ' <span class="cc" style="border-color:' + cv.b + ';background:' + cv.f + '" onclick="event.stopPropagation();fichaV(\'' + esc(m.id) + '\')">💳 voucher ' + fm(m.mp) + (n > 1 ? ' <span class="x" style="background:' + cv.b + '">⧉' + n + '</span>' : '') + '</span>';
       }
       x += '<tr class="mov"><td style="padding-left:22px">' + c.ic + ' ' + esc(c.g === 'pago' ? 'Pago' : c.t.split(' ')[0] === 'Retención' ? 'Retención' : c.t.split(' ').slice(0, 2).join(' ')) + '</td><td>' + ff(m.f) + '</td><td>' + esc(c.t) + extra + '</td><td>' + esc([m.op, m.bco].filter(Boolean).join(' · ')) + '</td>' +
-        '<td class="num">' + (suma ? '+' : '−') + fm(Math.abs(m.m)) + '</td><td class="num">' + fm(saldo) + '</td><td style="color:var(--gr);font-size:11px">' + esc(m.o + (m.nota ? ' · ' + m.nota : '')) + '</td></tr>';
+        '<td class="num">' + ((suma ? m.m : -m.m) > 0 ? '+' : '−') + fm(Math.abs(m.m)) + '</td><td class="num">' + fm(saldo) + '</td><td style="color:var(--gr);font-size:11px">' + esc(m.o + (m.nota ? ' · ' + m.nota : '')) + '</td></tr>';
     });
     x += '<tr class="sal"><td style="padding-left:22px" colspan="4">Saldo de ' + esc(d.doc) + '</td><td></td><td class="num">' + salCelda(d) + '</td><td></td></tr>';
   });
@@ -2178,7 +2179,7 @@ function analisisE(lista, agr, opc) {
   var mes = function (f) { return f ? f.slice(5, 7) + '/' + f.slice(0, 4) : ''; };
   // agrupar por proveedor (o cliente) aunque el reporte esté por empresa
   var porC = {};
-  lista.forEach(function (g) { g.subs.forEach(function (sg) { var cr = agr === 'pe' ? g.ruc : sg.ruc, nom = agr === 'pe' ? g.nombre : sg.nombre; var x = porC[cr] || (porC[cr] = { cr: cr, nom: nom, docs: [], fav: [] }); x.docs = x.docs.concat(sg.docs); x.fav = x.fav.concat(sg.fav || []); }); });
+  lista.forEach(function (g) { g.subs.forEach(function (sg) { var cr = agr === 'pe' ? g.ruc : sg.ruc, nom = agr === 'pe' ? g.nombre : sg.nombre; var x = porC[cr] || (porC[cr] = { cr: cr, nom: nom, docs: [], fav: [] }); x.docs = x.docs.concat(sg.docs); x.fav = x.fav.concat(sg.anaV || sg.fav || []); }); });
   var claves = Object.keys(porC).sort(function (a, b) { return porC[a].nom.localeCompare(porC[b].nom); });
   var varias = {}; (opc.docs || EVIS).forEach(function (d) { varias[d.er] = 1; }); var conEmp = Object.keys(varias).length > 1;
   claves.forEach(function (cr) {
@@ -2189,7 +2190,7 @@ function analisisE(lista, agr, opc) {
       NAT[d.mon] = r2((NAT[d.mon] || 0) + d.sal);
       var ms = (EV.movK[d.k] || []).slice().sort(function (a, b) { return (a.f || '') < (b.f || '') ? -1 : 1; });
       var s = d.tot, cancel = '';
-      ms.forEach(function (m) { s += m.mod === 'N/D' ? m.m : -m.m; if (!cancel && s <= 0.05) cancel = mes(m.f); });
+      ms.forEach(function (m) { s += m.mod === 'N/D' ? m.m : -m.m; if (!cancel && s <= 0.05) cancel = mes(m.f); });   // ↩️ devolución: llega en negativo → suma
       var amTot = r2(d.tot - d.sal);
       var linea = function (tipo, cls, campos, comp, amor, saldo) {
         var e1 = eq(d, comp, tc), e2 = eq(d, amor, tc), e3 = eq(d, saldo, tc);
@@ -2202,11 +2203,11 @@ function analisisE(lista, agr, opc) {
         var sal = d.tot;
         filas.push(linea(/^07_/.test(d.doc) ? 'N/C' : /^08_/.test(d.doc) ? 'N/D' : 'Factura', 'dc', base, d.tot, 0, sal));
         ms.forEach(function (m) {
-          var c = cat(m), car = c.g === 'nd';
-          sal = r2(sal + (car ? m.m : -m.m));
+          var c = cat(m), dlt = c.g === 'nd' ? m.m : -m.m;   // + = cargo (N/D, devolución recibida) · − = amortización
+          sal = r2(sal + dlt);
           var tipo = c.g === 'pago' ? 'Pago' : c.g === 'ret' ? 'Retención' : c.g === 'det' ? 'Detracción' : c.g === 'nc' ? 'N/C' : c.g === 'man' ? 'Pago manual' : c.g === 'dev' ? 'Devolución' : 'Otro';
           var adoc = c.g === 'ret' ? String(m.op).replace(/^CRE\s*/, '') : c.g === 'pago' ? ((m.bco ? m.bco + ' ' : '') + (m.op || '')) : (m.op || '');
-          filas.push(linea(tipo, 'am', { doc: d.doc, adoc: adoc, afec: m.f, glosa: c.t + (m.nota ? ' · ' + m.nota : '') }, car ? m.m : 0, car ? 0 : m.m, sal));
+          filas.push(linea(tipo, 'am', { doc: d.doc, adoc: adoc, afec: m.f, glosa: (c.g === 'dev' ? 'Devolución recibida de lo pagado de más ' + (m.op || '') : c.t) + (m.nota ? ' · ' + m.nota : '') }, dlt > 0 ? dlt : 0, dlt < 0 ? -dlt : 0, sal));
         });
         // cuadre de la línea: el saldo acumulado debe terminar igual al saldo del documento en Cobranzas
         var dif = r2(sal - d.sal);
@@ -2215,11 +2216,23 @@ function analisisE(lista, agr, opc) {
       [0, 1, 2].forEach(function (i) { var e = eq(d, [d.tot, amTot, d.sal][i], tc); TP.pen[i] += e.pen; TP.usd[i] += e.usd; });
     });
     // pagos a cuenta sin factura (saldo a favor) del proveedor
+    // (lo pagado de más o sin factura, y debajo lo que el proveedor devolvió de ese depósito)
+    var vistos = {};
     P.fav.forEach(function (v) {
-      var d = { mon: v.mon, tc: 0, f: v.f }, tc = tcDe(d), e = eq(d, v._sobra, tc);
-      NAT[v.mon] = r2((NAT[v.mon] || 0) - v._sobra); if (!tc && ((v.mon === 'USD' && conPen) || (v.mon !== 'USD' && conUsd))) sinTc++;
-      filas.push({ t: 'am', tipo: 'A cuenta', doc: '(sin factura)', adoc: (v.bco + ' ' + v.op).trim(), afec: v.f, glosa: (pagar ? 'Pago' : 'Cobro') + ' a cuenta · ' + v.fu, mon: v.mon, tc: tc, pen: [0, e.pen, -e.pen], usd: [0, e.usd, -e.usd] });
+      if (vistos[v.id]) return; vistos[v.id] = 1;
+      var exc = r2(v.m - v._apl); if (exc <= 0.05) return;
+      var d = { mon: v.mon, tc: 0, f: v.f }, tc = tcDe(d), e = eq(d, exc, tc), sal = -exc;
+      if (!tc && ((v.mon === 'USD' && conPen) || (v.mon !== 'USD' && conUsd))) sinTc++;
+      filas.push({ t: 'am', tipo: 'A cuenta', doc: '(sin factura)', adoc: (v.bco + ' ' + v.op).trim(), afec: v.f, glosa: (pagar ? 'Pagado' : 'Cobrado') + ' de más / a cuenta' + (v._apl > 0.005 ? ' (del depósito de ' + fm(v.m) + ' se aplicó ' + fm(v._apl) + ')' : '') + ' · ' + v.fu, mon: v.mon, tc: tc, pen: [0, e.pen, -e.pen], usd: [0, e.usd, -e.usd] });
       TP.pen[1] += e.pen; TP.pen[2] -= e.pen; TP.usd[1] += e.usd; TP.usd[2] -= e.usd;
+      (S.devDe[v.id] || []).forEach(function (q) {
+        var w = S.V[q.de], e2 = eq(d, q.m, tc); sal = r2(sal + q.m);
+        filas.push({ t: 'am', tipo: 'Devolución', doc: '(sin factura)', adoc: w ? (w.bco + ' ' + w.op).trim() : q.fu, afec: w ? w.f : '', glosa: 'Devolución ' + (pagar ? 'recibida del proveedor' : 'hecha al cliente') + ' de ' + (v.bco + ' ' + v.op).trim(), mon: v.mon, tc: tc, pen: [e2.pen, 0, 0], usd: [e2.usd, 0, 0] });
+        TP.pen[0] += e2.pen; TP.usd[0] += e2.usd; TP.pen[2] += e2.pen; TP.usd[2] += e2.usd;
+      });
+      NAT[v.mon] = r2((NAT[v.mon] || 0) + sal);
+      // saldo que va quedando de ese depósito
+      var ult = filas[filas.length - 1], eS = eq(d, sal, tc); ult.pen[2] = eS.pen; ult.usd[2] = eS.usd;
     });
     filas.push({ t: 'tp', txt: 'TOTAL ' + P.nom, pen: TP.pen.slice(), usd: TP.usd.slice() });
     [0, 1, 2].forEach(function (i) { TG.pen[i] += TP.pen[i]; TG.usd[i] += TP.usd[i]; });
@@ -2317,8 +2330,8 @@ function ecDatos(cr, er, mon) {
       var c = cat(m);
       if (m.mod === 'Pago' && S.V[m.id]) { var v = S.V[m.id], x = vou[m.id] || (vou[m.id] = { f: v.f, doc: (v.bco + ' ' + v.op).trim(), apl: [], m: 0, v: v }); x.apl.push(d.doc + ' ' + fm(m.m)); x.m = r2(x.m + m.m); return; }
       if (m.mod === 'Retención') { var y = cre[m.op] || (cre[m.op] = { f: m.f, doc: String(m.op).replace(/^CRE\s*/, ''), apl: [], m: 0 }); y.apl.push(d.doc + ' ' + fm(m.m)); y.m = r2(y.m + m.m); return; }
-      var cargo = m.mod === 'N/D' || m.mod === 'Devolución';
-      L.push({ f: m.f || d.f, doc: m.op || '', con: c.t.replace(/\s+$/, '') + ' · aplicado a ' + d.doc, ref: m.bco || '', cargo: cargo ? m.m : 0, abono: cargo ? 0 : m.m, g: c.g });
+      var dlt = m.mod === 'N/D' ? m.m : -m.m;   // ↩️ la devolución llega en negativo: es un cargo
+      L.push({ f: m.f || d.f, doc: m.op || '', con: (m.mod === 'Devolución' ? 'Devolución recibida de lo pagado de más ' + (m.op || '') : c.t.replace(/\s+$/, '')) + ' · aplicado a ' + d.doc, ref: m.bco || '', cargo: dlt > 0 ? dlt : 0, abono: dlt < 0 ? -dlt : 0, g: c.g });
     });
   });
   // vouchers de ese proveedor/cliente y empresa aún sin aplicar del todo (pagos a cuenta)
@@ -2368,7 +2381,7 @@ function ecPintar() {
   var ab = [0, 0, 0, 0, 0], pend = [];
   x.docs.forEach(function (d) {
     if (d.f > ha || d.tot <= 0) return;
-    var s = d.tot; (EV.movK[d.k] || []).forEach(function (m) { if ((m.f || d.f) <= ha) s += (m.mod === 'N/D' || m.mod === 'Devolución') ? m.m : -m.m; });
+    var s = d.tot; (EV.movK[d.k] || []).forEach(function (m) { if ((m.f || d.f) <= ha) s += m.mod === 'N/D' ? m.m : -m.m; });
     s = r2(s); if (s <= 0.05) return;
     var dd = dias(d.ve || d.f, ha), b = dd <= 0 ? 0 : dd <= 30 ? 1 : dd <= 60 ? 2 : dd <= 90 ? 3 : 4;
     ab[b] = r2(ab[b] + s); pend.push({ d: d, s: s, dd: dd });
@@ -2428,7 +2441,7 @@ function ecAnalisis(cr, er, de, ha) {
   var docs = EV.docs.filter(function (d) { return d.cr === cr && (!er || d.er === er) && d.f <= ha && (!de || d.f >= de); });
   var nomC = (docs[0] || {}).cn || cr, emp = er ? (S.data.empresas || []).filter(function (e) { return e.ruc === er; })[0] : null, nomE = emp ? emp.nombre : 'Grupo (todas las empresas)';
   var guard = $('eSinEmp') ? $('eSinEmp').value : 'todos'; if ($('eSinEmp')) $('eSinEmp').value = $('ecSinEmp').value;   // pagos a cuenta según el selector de aquí
-  var fav = []; try { fav = favorDe(cr, er).filter(function (v) { return v.f <= ha && (!de || v.f >= de); }); } finally { if ($('eSinEmp')) $('eSinEmp').value = guard; }
+  var fav = []; try { fav = vouchersDe(cr, er).filter(function (v) { return !v.dev && v.m - v._apl > 0.05 && v.f <= ha && (!de || v.f >= de); }); } finally { if ($('eSinEmp')) $('eSinEmp').value = guard; }
   // cruce con el estado de cuenta (mismo proveedor, empresa y corte): el saldo de cada moneda debe ser el mismo
   var extra = '';
   if (!de && ha >= hoy) {
