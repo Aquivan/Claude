@@ -36,6 +36,7 @@ input,select{font:inherit;padding:4px 6px;border:1px solid var(--bo);border-radi
 .fila.sel{background:#EEF2FF}
 .fila.unida{background:#ECFDF5}
 .fila.drop{outline:2px dashed var(--ve);outline-offset:-2px}
+.fila.copia{background:#F8FAFC;color:#64748B;cursor:default;padding-left:22px}.fila.copia .l1{font-weight:normal}
 .fila.mod::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--am)}
 .chip{display:inline-block;border-radius:9px;padding:0 6px;font-size:10.5px;background:#E2E8F0;color:#334155;margin-right:3px;font-weight:normal}
 .c-v{background:var(--vec);color:#166534}.c-a{background:var(--amc);color:#92400E}.c-r{background:var(--roc);color:#991B1B}.c-z{background:var(--azc);color:#1E3A8A}
@@ -104,6 +105,7 @@ input,select{font:inherit;padding:4px 6px;border:1px solid var(--bo);border-radi
       <h3 id="hV">💳 Vouchers <span id="tV" class="chip"></span></h3>
       <span class="seg" id="sRet" style="display:none"><button data-v="todas" class="on" onclick="seg(this)">Todas</button><button data-v="reas" onclick="seg(this)">Reasignadas</button><button data-v="exc" onclick="seg(this)" title="Su factura tiene retención de más">En factura con ret. de más</button></span>
       <span class="seg" id="sVou"><button data-v="sin" class="on" onclick="seg(this)">Sin aplicar</button><button data-v="todos" onclick="seg(this)">Todos</button><button data-v="apl" onclick="seg(this)">Aplicados</button><button data-v="ruc" onclick="seg(this)">Sin RUC</button></span>
+      <span class="seg" id="sCop" title="Un mismo voucher puede estar en Originales y en Fotos: se cuenta UNA vez (manda Originales)"><button data-v="u" class="on" onclick="seg(this)">Únicos</button><button data-v="a" onclick="seg(this)">Con copias de Fotos</button></span>
       <input id="qV" placeholder="🔎 buscar op., banco, nombre, monto…" style="flex:1;min-width:120px" oninput="tarde(pintar)">
       <select id="oV" onchange="pintar()" title="Ordenar vouchers"><option value="f">📅 Fecha: más antiguos primero</option><option value="f-">📅 Fecha: más recientes primero</option><option value="m-">💰 Mayor monto</option><option value="m">💰 Menor monto</option><option value="op">🔢 N° de operación</option><option value="fu">📄 Fila de la hoja</option></select>
       <span class="res" id="rV"></span>
@@ -347,6 +349,8 @@ function pintar() {
   if (!FV.length) hF.push('<div class="mas" style="color:var(--gr)">No hay facturas con estos filtros.</div>');
   $('lf').innerHTML = hF.join('');
   if (S.modo === 'r') { pintarR(c, emp, conGrupo); lineas(); return; }
+  var copiasDe = {};
+  if (segV('sCop') === 'a') (S.data.copias || []).forEach(function (c) { (copiasDe[c.de] = copiasDe[c.de] || []).push(c); });
   var hV = VV.slice(0, S.verV).map(function (v, i) {
     var lk = S.links[v.id], sob = S.sim.sobra[v.id], dirty = esSucio(v.id);
     var ruc = S.lado === 'Por pagar' ? v.br : v.pr;
@@ -358,7 +362,12 @@ function pintar() {
     return '<div class="fila' + (v.id === S.act ? ' act' : '') + (S.selV[v.id] ? ' sel' : '') + (dirty ? ' mod' : '') + '" id="V' + i + '" data-id="' + esc(v.id) + '" draggable="true" onclick="clicV(event,this)" ondragstart="arr(event,\'V\',this)" ondragover="sobre(event,this)" ondragleave="fuera(this)" ondrop="soltar(event,this)">' +
       '<div style="min-width:0"><div class="l1">' + chips + esc(S.lado === 'Por pagar' ? (v.bn || '¿beneficiario?') : (v.us || v.bn || '¿quién paga?')) + '</div>' +
       '<div class="l2">' + ff(v.f) + ' · ' + esc(v.bco) + ' ' + esc(v.op) + ' · ' + esc(v.fu) + (v.dups.length ? ' (+' + v.dups.length + ' copia)' : '') + (lks ? ' · → ' + esc(lks) : '') + '</div></div>' +
-      '<div class="num"><div class="sal">' + v.mon + ' ' + fm(v.m) + '</div><div class="l2">' + est + ' <button class="ic" title="Ver el voucher" onclick="event.stopPropagation();verVoucher(\'' + esc(v.id) + '\')">🖼</button></div></div></div>';
+      '<div class="num"><div class="sal">' + v.mon + ' ' + fm(v.m) + '</div><div class="l2">' + est + ' <button class="ic" title="Ver el voucher" onclick="event.stopPropagation();verVoucher(\'' + esc(v.id) + '\')">🖼</button></div></div></div>' +
+      (copiasDe[v.fu] || []).map(function (c) {
+        return '<div class="fila copia" title="Copia del mismo voucher (mismo banco, operación y monto): se cuenta una sola vez, la de ' + esc(v.fu) + '. Se cruza desde la fila de arriba." onclick="event.stopPropagation()">' +
+          '<div style="min-width:0"><div class="l1">↳ 📷 copia en ' + esc(c.fu) + '</div><div class="l2">' + ff(c.f) + ' · ' + esc(c.bco) + ' ' + esc(c.op) + (c.tom ? ' · de esta copia se tomó: ' + esc(c.tom) : '') + ' · no se cuenta dos veces</div></div>' +
+          '<div class="num"><div>' + fm(c.m) + '</div><div class="l2"><button class="ic" title="Ver esta copia" onclick="event.stopPropagation();abrirVisor(\'🖼 ' + esc(c.fu) + ' (copia)\',\'v\',\'' + esc(c.fu) + '\')">🖼</button></div></div></div>';
+      }).join('');
   });
   if (VV.length > S.verV) hV.push('<div class="mas"><button onclick="S.verV+=300;pintar()">Ver 300 más (' + (VV.length - S.verV) + ' restantes)</button></div>');
   if (!VV.length) hV.push('<div class="mas" style="color:var(--gr)">No hay vouchers con estos filtros.</div>');
@@ -849,7 +858,7 @@ function rCambios() {
 function cambiarModo(b) {
   segOn('sModo', b.dataset.v); S.modo = b.dataset.v; S.act = ''; S.actR = ''; S.selV = {};
   var r = S.modo === 'r';
-  $('sVou').style.display = r ? 'none' : ''; $('sRet').style.display = r ? '' : 'none';
+  $('sVou').style.display = r ? 'none' : ''; $('sCop').style.display = r ? 'none' : ''; $('sRet').style.display = r ? '' : 'none';
   $('hV').firstChild.textContent = r ? '🧾 Retenciones ' : '💳 Vouchers ';
   $('qV').placeholder = r ? '🔎 buscar comprobante, factura, monto…' : '🔎 buscar op., banco, nombre, monto…';
   $('ayuda').innerHTML = r ? '🧾 <b>Retenciones</b>: cada comprobante (CRE) con la(s) factura(s) donde se aplica · si una factura retenida se anuló con nota de crédito, toque el comprobante y luego la <b>otra factura</b> del mismo proveedor (o arrástrelo): se pasa el monto que indique · toque una línea morada para cambiar el monto o quitarla · <b>💾 Guardar</b> lo escribe en «🔁 Reasignar retenciones».'
@@ -988,6 +997,7 @@ function ayudaCompleta() {
     '<li><b>💲 Monto por línea</b>: toque una línea y escriba cuánto de ese voucher va a esa factura (vacío = automático). Se guarda como «01_F001-12=1500.00» en «Tipo y Nº Doc.».</li>' +
     '<li><b>🧾 Retenciones</b> (arriba): lista cada comprobante de retención con su factura. Si la factura retenida se anuló con nota de crédito, toque el comprobante y luego la otra factura del mismo proveedor: se pasa el monto que indique. «Ret. de más» en Facturas muestra las que tienen retención mayor al 3%. Se guarda en «🔁 Reasignar retenciones», igual que a mano.</li>' +
     '<li><b>✍️ Pago sin voucher</b> (botón en cada factura): efectivo, compensación, retención o detracción manual… Solo fecha, modalidad y monto (lo demás es opcional); se escribe en «✍️ Registro manual».</li>' +
+    '<li><b>Únicos / Con copias de Fotos</b>: un voucher que está en Originales y en Fotos se cuenta una sola vez y manda el de <b>Originales</b> (como en todo el sistema). «Con copias de Fotos» muestra debajo, en gris, la copia (con 🖼 para verla); se cruza desde la fila principal.</li>' +
     '<li>Los vouchers ↩️ de devolución y los que dicen otra cosa (PLANILLA, etc.) se marcan; una devolución no se cruza con facturas.</li></ol><button onclick="cerrarModal()">Cerrar</button>');
 }
 document.addEventListener('keydown', function (e) {
