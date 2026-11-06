@@ -482,52 +482,80 @@ function MESA_archivo(tk, tipo, ref) {
   MESA_ok_(tk);
   var ss = ssPrincipal_(), cfg = leerConfig_(ss);
   try {
-    if (tipo === 'f') {
-      var id = (String(ref).match(/[-\w]{25,}/) || [])[0];
-      if (!id) return { url: String(ref) };
-      return MESA_blob_(DriveApp.getFileById(id).getBlob(), String(ref));
+    if (tipo === 'd') {   // un archivo de Drive elegido de la lista (cuando hay varios con el mismo nombre)
+      var fd = DriveApp.getFileById(String(ref));
+      return MESA_blob_(fd.getBlob(), fd.getUrl());
     }
+    if (tipo === 'f') return MESA_factura_(String(ref || ''));
     var p = String(ref).split('!'), sh = SpreadsheetApp.openById(cfg.idVouchers).getSheetByName(p[0]);
-    if (!sh) return { error: 'No existe la pestaña ' + p[0] };
+    if (!sh) return { error: 'No existe la pestaña ' + p[0] + ' en la hoja de Vouchers.' };
     var fila = parseInt(p[1], 10), enc = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0], c = indiceColumnas_(enc);
     var iArch = c('Archivo Original'), iPag = c('Pagina', 'Página');
     var archivo = iArch >= 0 ? String(sh.getRange(fila, iArch + 1).getValue() || '').trim() : '';
-    var pagina = iPag >= 0 ? sh.getRange(fila, iPag + 1).getValue() : '';
+    var pagina = iPag >= 0 ? Number(sh.getRange(fila, iPag + 1).getValue()) || 1 : 1;
     var norm = enc.map(normHeader_), celdaImg = null;
     for (var i = 0; i < norm.length; i++) {
-      if (!/^voucher imagen|^imagen/.test(norm[i])) continue;
+      if (!/imagen/.test(norm[i])) continue;
       var val = sh.getRange(fila, i + 1).getValue();
       if (val && typeof val === 'object' && typeof val.getContentUrl === 'function') { celdaImg = val; break; }
     }
-    // Varios archivos con el mismo nombre: la imagen de la celda es la de ESTA fila
+    // Archivos con ese nombre en Drive (sin los de la papelera), el más nuevo primero
     var archivos = [];
-    if (archivo) { var it = DriveApp.getFilesByName(archivo); while (it.hasNext() && archivos.length < 5) archivos.push(it.next()); }
+    if (archivo) {
+      var it = DriveApp.getFilesByName(archivo);
+      while (it.hasNext() && archivos.length < 8) { var f = it.next(); if (!f.isTrashed()) archivos.push(f); }
+    }
     archivos.sort(function (a, b) { return b.getDateCreated() - a.getDateCreated(); });
-    var info = { archivo: archivo, pagina: pagina, varios: archivos.length > 1 ? archivos.length : 0 };
-    if (archivos.length === 1 || (archivos.length > 1 && !celdaImg)) {
-      var r = MESA_blob_(archivos[0].getBlob(), archivos[0].getUrl());
-      for (var k in info) r[k] = info[k];
+    var info = { archivo: archivo, pagina: pagina, fuente: String(ref),
+      archivos: archivos.map(function (f) { return { id: f.getId(), nombre: f.getName(), fecha: Utilities.formatDate(f.getDateCreated(), 'America/Lima', 'dd/MM/yyyy HH:mm'), mb: Math.round(f.getSize() / 104857.6) / 10 }; }) };
+    var mezcla = function (r) { for (var k in info) if (r[k] == null) r[k] = info[k]; return r; };
+    // 1) La imagen de la celda es la de ESTA fila (la más segura cuando hay varios archivos con el mismo nombre)
+    if (celdaImg) {
+      var u = '';
+      try { u = celdaImg.getContentUrl(); } catch (e) {}
+      if (u) {
+        try {
+          var resp = UrlFetchApp.fetch(u, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+          if (resp.getResponseCode() === 200) return mezcla(MESA_blob_(resp.getBlob(), ''));
+        } catch (e) {}
+        info.urlImg = u;
+      }
+    }
+    // 2) El archivo original (si es PDF, la página de la fila se muestra en la Mesa)
+    if (archivos.length) {
+      var r = mezcla(MESA_blob_(archivos[0].getBlob(), archivos[0].getUrl()));
+      if (archivos.length > 1) r.aviso = 'Hay ' + archivos.length + ' archivos llamados «' + archivo + '»: se muestra el más nuevo. Elija otro abajo si no es este.';
       return r;
     }
-    if (celdaImg) {
-      var u = celdaImg.getContentUrl();
-      try {
-        var resp = UrlFetchApp.fetch(u, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
-        if (resp.getResponseCode() === 200) { var rr = MESA_blob_(resp.getBlob(), ''); for (var k2 in info) rr[k2] = info[k2]; return rr; }
-      } catch (e) {}
-      info.url = u; return info;
-    }
-    info.error = 'No encontré la imagen ni el archivo «' + archivo + '» en Drive.';
+    if (info.urlImg) { info.url = info.urlImg; return info; }
+    info.error = !archivo ? 'Esta fila no tiene «Archivo Original» ni imagen en la celda.' :
+      'No hay imagen en la celda y no existe en Drive ningún archivo llamado «' + archivo + '» (¿se borró o se le cambió el nombre?).';
     return info;
   } catch (e) {
-    return { error: e.message };
+    return { error: e.message, fuente: String(ref) };
   }
+}
+
+/** PDF de la factura: un archivo de Drive o el enlace público donde el robot del SIRE guarda los PDF. */
+function MESA_factura_(url) {
+  if (!url) return { error: 'Esta factura no tiene PDF guardado (columna PDF vacía en 📋 Documentos).' };
+  var drive = url.match(/(?:drive|docs)\.google\.com\/.*?(?:\/d\/|[?&]id=)([-\w]{20,})/);
+  if (drive) return MESA_blob_(DriveApp.getFileById(drive[1]).getBlob(), url);
+  if (!/^https?:\/\//i.test(url)) return { error: 'El enlace del PDF no es válido: ' + url.slice(0, 120) };
+  var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+  var code = resp.getResponseCode();
+  if (code !== 200) return { url: url, error: code === 404 ? 'El PDF ya no está en ese enlace (404). Puede volver a descargarlo con el robot del SIRE.' : 'No pude descargar el PDF (HTTP ' + code + ').' };
+  var blob = resp.getBlob(), tipo = String(blob.getContentType() || '');
+  if (!/pdf|image/i.test(tipo) && /\.pdf(\?|$)/i.test(url)) blob.setContentType('application/pdf');
+  return MESA_blob_(blob, url);
 }
 
 function MESA_blob_(blob, url) {
   var b = blob.getBytes();
-  if (b.length > 12 * 1024 * 1024) return { url: url, error: 'El archivo es muy grande para verlo aquí (' + Math.round(b.length / 1048576) + ' MB).' };
-  return { nombre: blob.getName(), mime: blob.getContentType(), b64: Utilities.base64Encode(b), url: url };
+  if (b.length > 15 * 1024 * 1024) return { url: url, error: 'El archivo pesa ' + Math.round(b.length / 1048576) + ' MB: es muy grande para verlo aquí. Ábralo con el enlace.' };
+  var mime = blob.getContentType() || '';
+  if (!mime || mime === 'application/octet-stream') { var h = b.slice(0, 4).map(function (x) { return String.fromCharCode(x & 255); }).join(''); if (h === '%PDF') mime = 'application/pdf'; }
+  return { nombre: blob.getName(), mime: mime, b64: Utilities.base64Encode(b), url: url };
 }
 
 /* ============================================================ 🤖 IA y 🔎 RUC */
