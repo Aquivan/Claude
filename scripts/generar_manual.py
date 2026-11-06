@@ -189,6 +189,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
+    ('06/11/2026', 'Mesa: 📒 análisis para enviar', 'En 📨 Estado de cuenta para enviar, tercer formato «📒 Análisis»: análisis de documentos del proveedor (o cliente) con encabezado formal, moneda soles/dólares/ambas, Detalle o Resumir y conformidad; 🖨 PDF horizontal, 🖼 imagen, 📋 copiar y ⬇ Excel.'),
     ('06/11/2026', 'Mesa: 📒 análisis de cuenta (tipo Contasis)', 'Nuevo nivel «📒 Análisis» en el Estado de cuenta: por proveedor o cliente, cada documento con compromiso, amortizaciones (pago, retención, detracción, N/C) con su documento y fecha, saldo acumulado y mes de cancelación; Detalle o Resumir; en soles y dólares, solo soles o solo dólares (tipo de cambio del SIRE, nueva columna «T.C.» en 📋 Documentos); totales por proveedor y general; ⬇ Excel, copiar e imprimir.'),
     ('06/11/2026', 'Mesa: con / sin empresa', 'Filtros «Con empresa» y «Sin empresa» en vouchers; en el Estado de cuenta y en el estado para enviar, selector «Vouchers con y sin empresa / Solo con empresa / Solo sin empresa».'),
     ('06/11/2026', 'Mesa: 📨 estado de cuenta para enviar', 'Formato de sistema contable (QuickBooks/Xero/SAP, carta de confirmación de saldos): resumen del periodo con saldo inicial y final, antigüedad de saldos, facturas pendientes, movimientos con saldo acumulado y conformidad; desde/hasta, resumido o detallado; PDF, imagen o copiar.'),

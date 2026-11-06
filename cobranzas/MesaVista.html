@@ -114,11 +114,12 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 .ana{width:100%;border-collapse:collapse;font-size:11.5px;font-variant-numeric:tabular-nums}
 .ana th{position:sticky;top:0;background:#1F3A5F;color:#fff;padding:4px 5px;text-align:left;font-size:10.5px;white-space:nowrap;z-index:1}
 .ana th.g{background:#2C5282;text-align:center}.ana td{padding:3px 5px;border-bottom:1px solid #EEF2F7;white-space:nowrap}
-.ana .n{text-align:right}.ana tr.pv td{background:#DBE5F1;font-weight:bold;color:#1F3A5F;font-size:12px;padding-top:6px}
-.ana tr.dc td{background:#F8FAFF}.ana tr.dc .doc{color:#1D4ED8;font-weight:bold}.ana tr.am td{color:#334155}.ana tr.am td:first-child{padding-left:16px}
-.ana tr.tp td{background:#EEF2F7;font-weight:bold;border-top:1px solid #94A3B8}.ana tr.tg td{background:#1F3A5F;color:#fff;font-weight:bold;font-size:12px}
-.ana .neg{color:#047857}.ana .pos{color:#B91C1C}.ana tr.tg .neg,.ana tr.tg .pos{color:#fff}.ana .tg2{display:inline-block;padding:0 6px;border-radius:8px;font-size:9.5px;font-weight:bold;color:#fff}
+.ana .n{text-align:right}.ana tr.apv td{background:#DBE5F1;font-weight:bold;color:#1F3A5F;font-size:12px;padding-top:6px}
+.ana tr.adc td{background:#F8FAFF}.ana tr.adc .adoc{color:#1D4ED8;font-weight:bold}.ana tr.aam td{color:#334155}.ana tr.aam td:first-child{padding-left:16px}
+.ana tr.atp td{background:#EEF2F7;font-weight:bold;border-top:1px solid #94A3B8}.ana tr.atg td{background:#1F3A5F;color:#fff;font-weight:bold;font-size:12px}
+.ana .neg{color:#047857}.ana .pos{color:#B91C1C}.ana tr.atg .neg,.ana tr.atg .pos{color:#fff}.ana .tg2{display:inline-block;padding:0 6px;border-radius:8px;font-size:9.5px;font-weight:bold;color:#fff}
 @media print{.ana{font-size:9px}.ana th{position:static}}
+#ecHoja.ancha{width:1180px}#ecHoja .ana{font-size:9.5px}#ecHoja .ana th{position:static;font-size:9px;padding:3px 4px}#ecHoja .ana th.g{background:#2C5282;text-align:center}#ecHoja .ana td{padding:2px 4px;white-space:nowrap;vertical-align:middle}#ecHoja .ana td:last-child{white-space:normal;min-width:90px}
 /* 📨 estado de cuenta para enviar */
 #ec{position:fixed;inset:0;background:#E5E7EB;z-index:70;display:none;flex-direction:column}#ec.on{display:flex}
 #ecBar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#fff;border-bottom:1px solid var(--bo);font-size:12.5px}
@@ -278,7 +279,10 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 <div id="modal"><div class="caja" id="mCaja"></div></div>
 <div id="ec"><div id="ecBar"><b>📨 Estado de cuenta para enviar</b>
   <label>Desde</label><input type="date" id="ecDe" onchange="ecPintar()"><label>Hasta</label><input type="date" id="ecHa" onchange="ecPintar()">
-  <span class="seg" id="ecNiv"><button data-v="res" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">📋 Resumido</button><button data-v="det" class="on" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">🔎 Detallado</button></span>
+  <span class="seg" id="ecNiv"><button data-v="res" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">📋 Resumido</button><button data-v="det" class="on" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">🔎 Detallado</button><button data-v="ana" onclick="segOn('ecNiv',this.dataset.v);ecPintar()" title="Análisis de documentos (como Contasis): cada documento con su compromiso, amortizaciones y saldo, en soles y/o dólares">📒 Análisis</button></span>
+  <span id="ecAnaOpc" style="display:none;gap:4px;align-items:center"><select id="ecAnaMon" onchange="ecPintar()"><option value="ambas">Soles y dólares</option><option value="pen">Solo soles (S/)</option><option value="usd">Solo dólares (US$)</option></select>
+  <span class="seg" id="ecAnaRes"><button data-v="det" class="on" onclick="segOn('ecAnaRes',this.dataset.v);ecPintar()">Detalle</button><button data-v="res" onclick="segOn('ecAnaRes',this.dataset.v);ecPintar()">Resumir</button></span>
+  <button onclick="anaExcel()" title="Descargar este análisis en Excel (.xlsx)">⬇ Excel</button></span>
   <select id="ecMon" onchange="ecPintar()"></select>
   <label><input type="checkbox" id="ecConf" checked onchange="ecPintar()"> con conformidad (firma)</label>
   <select id="ecSinEmp" onchange="ecPintar()" title="Pagos a cuenta que se incluyen"><option value="todos">Vouchers con y sin empresa</option><option value="con">Solo con empresa</option><option value="sin">Solo sin empresa</option></select>
@@ -2136,7 +2140,7 @@ function ayudaCompleta() {
     '<li>En el estado de cuenta: <b>💾 Guardado</b> (lo que está hoy), <b>✏️ Con mis cambios</b> (cómo quedará si guarda: saldo antes tachado → después, líneas 🆕) y <b>⚖️ Comparar</b> (solo lo que cambia). Desde ahí mismo puede 💾 Guardar.</li>' +
     '<li><b>🧮 Calculadora</b> (botón arriba o F2): flotante y movible; IGV, retención 3%, detracción, memoria e historial. <b>Alt+clic</b> en cualquier monto de la pantalla lo pasa a la calculadora.</li>' +
     '<li><b>🧹 Quitar cruces</b>: deja en blanco los cruces del proveedor / empresa filtrados (y, si lo marca, las reasignaciones de retención y las devoluciones) para volver a cruzar desde cero. Nada se escribe hasta 💾 Guardar; ↶ lo vuelve todo de una vez.</li>' +
-    '<li><b>📒 Análisis</b> (en 📊 Estado de cuenta, junto a Detallado): el análisis de cuenta de los sistemas contables (como Contasis): por proveedor o cliente, cada documento con su <b>compromiso</b>, cada <b>amortización</b> (pago, retención, detracción, N/C, efectivo) con su documento y fecha, el <b>saldo</b> que va quedando y el <b>mes en que se canceló</b>; total por proveedor y total general en S/ y US$. <b>Detalle</b> o <b>Resumir</b> (una línea por documento); moneda <b>soles y dólares / solo soles / solo dólares</b> (convierte con el tipo de cambio del documento del SIRE o, si no lo tiene, el del día más cercano). <b>⬇ Excel</b>, 📋 Copiar y 🖨 Imprimir. Respeta los filtros de arriba.</li>' +
+    '<li><b>📒 Análisis</b> (en 📊 Estado de cuenta, junto a Detallado): el análisis de cuenta de los sistemas contables (como Contasis): por proveedor o cliente, cada documento con su <b>compromiso</b>, cada <b>amortización</b> (pago, retención, detracción, N/C, efectivo) con su documento y fecha, el <b>saldo</b> que va quedando y el <b>mes en que se canceló</b>; total por proveedor y total general en S/ y US$. <b>Detalle</b> o <b>Resumir</b> (una línea por documento); moneda <b>soles y dólares / solo soles / solo dólares</b> (convierte con el tipo de cambio del documento del SIRE o, si no lo tiene, el del día más cercano). <b>⬇ Excel</b>, 📋 Copiar y 🖨 Imprimir. Respeta los filtros de arriba. También está en <b>📨 Para enviar</b> (botón «📒 Análisis»): el análisis de un proveedor con encabezado formal y conformidad, para mandar en PDF (sale horizontal), imagen, texto o Excel.</li>' +
     '<li><b>📨 Estado de cuenta para enviar</b> (en 📊 Estado de cuenta: botón «📨 Para enviar» arriba o en cada proveedor): el formato de los sistemas contables, listo para mandar al proveedor o cliente. Encabezado (empresa, proveedor, periodo, moneda), <b>resumen del periodo</b> (saldo inicial + facturas − N/C − retenciones − detracciones − pagos + devoluciones = saldo final), <b>antigüedad de saldos</b> (por vencer, 1–30, 31–60, 61–90, +90), <b>facturas pendientes</b> y, en «Detallado», los <b>movimientos</b> con saldo acumulado (cada pago en una línea con las facturas que canceló). Elija desde/hasta (vacío = desde el inicio), resumido o detallado y si lleva conformidad (firma). <b>🖨 Imprimir / PDF</b>, <b>🖼 Imagen</b> (para WhatsApp) o <b>📋 Copiar</b> (Excel o correo).</li>' +
     '<li><b>📄 Comprobantes</b>: en la 🔍 ficha de una factura, cada retención tiene «📄 ver comprobante de retención» y cada detracción «📄 ver constancia de detracción»; se abren en el visor con sus datos (fecha, monto retenido, facturas). También en 🧾 Retenciones al tocar un comprobante o su línea. Salen de las hojas de Retenciones y Detracciones (el PDF tiene que estar copiado a Drive).</li>' +
     '<li><b>↩️ Devoluciones</b>: toque la devolución y luego el <b>depósito</b> que le devuelven (los posibles se marcan en café; también puede arrastrar un voucher sobre el otro), la <b>factura pagada de más</b>, o elija la <b>N/C</b> en la lista. Se dibuja una línea rosada y se guarda como «DEVOLUCION op 5344» / «DEVOLUCION 01_FN01-19» / «DEVOLUCION 07_FC01-12». A cualquier voucher sin facturas se le puede marcar «↩️ Es una devolución del proveedor».</li>' +
@@ -2165,8 +2169,9 @@ function tcDe(d) {
   var a = t.f[lo], b = t.f[Math.max(0, lo - 1)];
   return t.v[Math.abs(dias(b, d.f)) < Math.abs(dias(a, d.f)) ? b : a];
 }
-function analisisE(lista, agr) {
-  var monV = $('eAnaMon').value, res = segV('eAnaRes') === 'res', pagar = S.lado === 'Por pagar';
+function analisisE(lista, agr, opc) {
+  opc = opc || {};
+  var monV = opc.mon || $('eAnaMon').value, res = opc.res != null ? opc.res : segV('eAnaRes') === 'res', pagar = S.lado === 'Por pagar';
   var conPen = monV !== 'usd', conUsd = monV !== 'pen';
   var eq = function (d, x, tc) { return { pen: d.mon === 'USD' ? (tc ? x * tc : 0) : x, usd: d.mon === 'USD' ? x : (tc ? x / tc : 0) }; };
   var filas = [], TG = { pen: [0, 0, 0], usd: [0, 0, 0] };
@@ -2175,7 +2180,7 @@ function analisisE(lista, agr) {
   var porC = {};
   lista.forEach(function (g) { g.subs.forEach(function (sg) { var cr = agr === 'pe' ? g.ruc : sg.ruc, nom = agr === 'pe' ? g.nombre : sg.nombre; var x = porC[cr] || (porC[cr] = { cr: cr, nom: nom, docs: [], fav: [] }); x.docs = x.docs.concat(sg.docs); x.fav = x.fav.concat(sg.fav || []); }); });
   var claves = Object.keys(porC).sort(function (a, b) { return porC[a].nom.localeCompare(porC[b].nom); });
-  var varias = {}; EVIS.forEach(function (d) { varias[d.er] = 1; }); var conEmp = Object.keys(varias).length > 1;
+  var varias = {}; (opc.docs || EVIS).forEach(function (d) { varias[d.er] = 1; }); var conEmp = Object.keys(varias).length > 1;
   claves.forEach(function (cr) {
     var P = porC[cr], TP = { pen: [0, 0, 0], usd: [0, 0, 0] };
     filas.push({ t: 'pv', txt: (cr ? cr + ' - ' : '') + P.nom });
@@ -2214,21 +2219,21 @@ function analisisE(lista, agr) {
     [0, 1, 2].forEach(function (i) { TG.pen[i] += TP.pen[i]; TG.usd[i] += TP.usd[i]; });
   });
   filas.push({ t: 'tg', txt: 'TOTAL GENERAL · ' + claves.length + ' ' + (pagar ? 'proveedor(es)' : 'cliente(s)'), pen: TG.pen, usd: TG.usd });
-  ANA = { filas: filas, conPen: conPen, conUsd: conUsd, conEmp: conEmp, res: res, pagar: pagar };
+  ANA = { filas: filas, conPen: conPen, conUsd: conUsd, conEmp: conEmp, res: res, pagar: pagar, nombre: opc.nombre || '' };
   // tabla
   var cols = '<th>Documento</th>' + (conEmp ? '<th>Empresa</th>' : '') + '<th>F. doc.</th><th>F. venc.</th><th>Mes cancel.</th><th>Tipo</th><th>' + (res ? 'Amortizaciones' : 'Doc. amortización') + '</th><th>Fecha</th><th>Mon.</th><th class="n">T.C.</th>';
   var nPre = conEmp ? 10 : 9;
   var gr = (conPen ? '<th class="g" colspan="3">SOLES (S/)</th>' : '') + (conUsd ? '<th class="g" colspan="3">DÓLARES (US$)</th>' : '');
   var sub = function (x) { return '<th class="n">Compromiso</th><th class="n">Amortización</th><th class="n">Saldo</th>'; };
-  var h = '<div style="overflow:auto;max-height:calc(100vh - 330px)"><table class="ana"><thead><tr><th colspan="' + nPre + '"></th>' + gr + '<th></th></tr><tr>' + cols + (conPen ? sub() : '') + (conUsd ? sub() : '') + '<th>Glosa</th></tr></thead><tbody>';
+  var h = '<div' + (opc.envio ? '' : ' style="overflow:auto;max-height:calc(100vh - 330px)"') + '><table class="ana"><thead><tr><th colspan="' + nPre + '"></th>' + gr + '<th></th></tr><tr>' + cols + (conPen ? sub() : '') + (conUsd ? sub() : '') + '<th>Glosa</th></tr></thead><tbody>';
   var N = function (v, sal) { if (Math.abs(v) < 0.005) return '<span style="color:#CBD5E1">–</span>'; return sal ? '<span class="' + (v > 0.05 ? 'pos' : 'neg') + '">' + fm(v) + '</span>' : fm(v); };
   var montos = function (f) { return (conPen ? '<td class="n">' + N(f.pen[0]) + '</td><td class="n">' + N(f.pen[1]) + '</td><td class="n"><b>' + N(f.pen[2], 1) + '</b></td>' : '') + (conUsd ? '<td class="n">' + N(f.usd[0]) + '</td><td class="n">' + N(f.usd[1]) + '</td><td class="n"><b>' + N(f.usd[2], 1) + '</b></td>' : ''); };
   var colT = { Factura: '#1D4ED8', 'N/D': '#1E40AF', 'N/C': '#C2410C', Pago: '#15803D', 'Pago manual': '#166534', Retención: '#7C3AED', Detracción: '#0E7490', Devolución: '#BE185D', 'A cuenta': '#047857', Otro: '#475569' };
   var ncol = nPre + (conPen ? 3 : 0) + (conUsd ? 3 : 0) + 1;
   filas.forEach(function (f) {
-    if (f.t === 'pv') { h += '<tr class="pv"><td colspan="' + ncol + '">' + esc(f.txt) + '</td></tr>'; return; }
-    if (f.t === 'tp' || f.t === 'tg') { h += '<tr class="' + f.t + '"><td colspan="' + nPre + '">' + esc(f.txt) + '</td>' + montos(f) + '<td></td></tr>'; return; }
-    h += '<tr class="' + f.t + '"><td class="doc">' + (f.t === 'am' ? '' : esc(f.doc)) + '</td>' + (conEmp ? '<td>' + esc(f.emp || '') + '</td>' : '') + '<td>' + (f.t === 'dc' ? ff(f.fdoc) : '') + '</td><td>' + (f.t === 'dc' ? ff(f.fven) : '') + '</td><td>' + esc(f.cancel || '') + '</td>' +
+    if (f.t === 'pv') { h += '<tr class="apv"><td colspan="' + ncol + '">' + esc(f.txt) + '</td></tr>'; return; }
+    if (f.t === 'tp' || f.t === 'tg') { h += '<tr class="a' + f.t + '"><td colspan="' + nPre + '">' + esc(f.txt) + '</td>' + montos(f) + '<td></td></tr>'; return; }
+    h += '<tr class="a' + f.t + '"><td class="adoc">' + (f.t === 'am' ? '' : esc(f.doc)) + '</td>' + (conEmp ? '<td>' + esc(f.emp || '') + '</td>' : '') + '<td>' + (f.t === 'dc' ? ff(f.fdoc) : '') + '</td><td>' + (f.t === 'dc' ? ff(f.fven) : '') + '</td><td>' + esc(f.cancel || '') + '</td>' +
       '<td><span class="tg2" style="background:' + (colT[f.tipo] || '#475569') + '">' + esc(f.tipo) + '</span></td><td>' + esc(f.adoc || '') + '</td><td>' + (f.afec ? ff(f.afec) : '') + '</td><td>' + (f.mon === 'USD' ? 'US$' : 'S/') + '</td><td class="n">' + (f.tc ? Number(f.tc).toFixed(3) : '') + '</td>' + montos(f) + '<td style="color:var(--gr)">' + esc(f.glosa || '') + '</td></tr>';
   });
   h += '</tbody></table></div><div style="display:flex;gap:18px;justify-content:flex-end;padding:8px 4px;font-size:13px"><span>Total registros: <b>' + filas.filter(function (f) { return f.t === 'dc' || f.t === 'am'; }).length + '</b></span>' +
@@ -2255,7 +2260,7 @@ function anaExcel() {
     ws['!cols'] = cab.map(function (c, i) { return { wch: i === 0 ? 18 : /Glosa/.test(c) ? 40 : /Amortizaciones|Doc\. amort/.test(c) ? 18 : 13 }; });
     ws['!freeze'] = { xSplit: 1, ySplit: 4 };
     XLSX.utils.book_append_sheet(wb, ws, 'Análisis');
-    XLSX.writeFile(wb, 'Analisis ' + (A.pagar ? 'cuentas por pagar' : 'cuentas por cobrar') + ' ' + new Date().toISOString().slice(0, 10) + '.xlsx');
+    XLSX.writeFile(wb, 'Analisis ' + (A.nombre ? A.nombre.replace(/[\\/:*?"<>|]/g, '') : A.pagar ? 'cuentas por pagar' : 'cuentas por cobrar') + ' ' + new Date().toISOString().slice(0, 10) + '.xlsx');
   };
   if (window.XLSX) return hacer();
   var sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload = hacer;
@@ -2327,7 +2332,11 @@ function ecDatos(cr, er, mon) {
 function ecPintar() {
   if (!EC) return;
   var cr = EC.cr, er = EC.er, mon = $('ecMon').value || 'PEN', de = $('ecDe').value, ha = $('ecHa').value || new Date().toISOString().slice(0, 10);
-  var det = segV('ecNiv') === 'det', pagar = S.lado === 'Por pagar';
+  var niv = segV('ecNiv'), det = niv === 'det', pagar = S.lado === 'Por pagar';
+  $('ecAnaOpc').style.display = niv === 'ana' ? 'inline-flex' : 'none';
+  $('ecHoja').classList.toggle('ancha', niv === 'ana');
+  $('ecMon').style.visibility = niv === 'ana' ? 'hidden' : '';
+  if (niv === 'ana') return ecAnalisis(cr, er, de, ha);
   var x = ecDatos(cr, er, mon), sim = mon === 'USD' ? 'US$' : 'S/';
   var d0 = x.docs[0] || {}, nomC = d0.cn || (S.V && Object.keys(S.V).map(function (i) { return S.V[i]; }).filter(function (v) { return (pagar ? v.br : v.pr) === cr; }).map(function (v) { return v.bn; })[0]) || cr;
   var emp = er ? (S.data.empresas || []).filter(function (e) { return e.ruc === er; })[0] : null;
@@ -2401,13 +2410,43 @@ function ecPintar() {
   $('ecHoja').innerHTML = h;
   EC.copiar = { nomE: nomE, er: er, nomC: nomC, cr: cr, de: de, ha: ha, mon: mon, ini: ini, fin: fin, per: per, pend: pend, ab: ab };
 }
-function ecImprimir() { document.body.classList.add('ecImp'); setTimeout(function () { window.print(); setTimeout(function () { document.body.classList.remove('ecImp'); }, 500); }, 100); }
+/** 📒 Análisis de documentos de un proveedor (o cliente) para enviar: mismo encabezado formal + la tabla del análisis. */
+function ecAnalisis(cr, er, de, ha) {
+  var pagar = S.lado === 'Por pagar', hoy = new Date().toISOString().slice(0, 10);
+  var docs = EV.docs.filter(function (d) { return d.cr === cr && (!er || d.er === er) && d.f <= ha && (!de || d.f >= de); });
+  var nomC = (docs[0] || {}).cn || cr, emp = er ? (S.data.empresas || []).filter(function (e) { return e.ruc === er; })[0] : null, nomE = emp ? emp.nombre : 'Grupo (todas las empresas)';
+  var guard = $('eSinEmp') ? $('eSinEmp').value : 'todos'; if ($('eSinEmp')) $('eSinEmp').value = $('ecSinEmp').value;   // pagos a cuenta según el selector de aquí
+  var fav = []; try { fav = favorDe(cr, er).filter(function (v) { return v.f <= ha && (!de || v.f >= de); }); } finally { if ($('eSinEmp')) $('eSinEmp').value = guard; }
+  var tabla = analisisE([{ ruc: cr, nombre: nomC, subs: [{ ruc: cr, nombre: nomC, docs: docs, fav: fav }] }], 'ep', { mon: $('ecAnaMon').value, res: segV('ecAnaRes') === 'res', docs: docs, envio: true, nombre: nomC });
+  var h = '<div class="cab"><div><div class="et">' + (pagar ? 'Emitido por (cliente)' : 'Emitido por (proveedor)') + '</div><div style="font-size:15px;font-weight:bold">' + esc(nomE) + '</div>' + (er ? '<div>RUC ' + esc(er) + '</div>' : '') + '</div>' +
+    '<div style="text-align:right"><h1>ANÁLISIS DE CUENTA</h1><div class="sub">' + (pagar ? 'Cuentas por pagar · Proveedor' : 'Cuentas por cobrar · Cliente') + ' · análisis de documentos</div><div style="margin-top:4px">Fecha de emisión: <b>' + ff(hoy) + '</b></div></div></div>' +
+    '<div style="display:flex;gap:10px;margin-top:12px"><div class="caja"><div class="et">' + (pagar ? 'Proveedor' : 'Cliente') + '</div><div style="font-weight:bold;font-size:13px">' + esc(nomC) + '</div><div>RUC ' + esc(cr) + '</div></div>' +
+    '<div class="caja"><div class="et">Documentos emitidos</div><div><b>' + (de ? ff(de) : 'Desde el inicio') + '</b> al <b>' + ff(ha) + '</b></div><div class="et" style="margin-top:4px">Moneda</div><div>' + { ambas: 'Soles y dólares', pen: 'Soles (S/)', usd: 'Dólares (US$)' }[$('ecAnaMon').value] + '</div></div></div>' +
+    '<h2>Análisis de documentos</h2>' + tabla.replace(/ style="color:var\(--gr\)"/g, ' style="color:#64748B"');
+  if ($('ecConf').checked) h += '<div class="firma"><div>' + esc(nomE) + '<br>Firma y sello</div><div>Conformidad de ' + esc(nomC) + '<br>Nombre, firma, sello y fecha</div></div>';
+  h += '<div class="sub" style="margin-top:16px;text-align:center">Generado el ' + ff(hoy) + ' · Cuentas por Cobrar y Pagar · Grupo</div>';
+  $('ecHoja').innerHTML = h;
+  EC.copiar = { ana: true, nomC: nomC, ha: ha };
+}
+/** 📋 Copiar el análisis (texto con tabulaciones para Excel o correo). */
+function anaCopiarTxt() {
+  var A = ANA, L = [], n = function (v) { return Math.abs(v) < 0.005 ? '' : v.toFixed(2); };
+  var mont = function (f) { return (A.conPen ? f.pen.map(n) : []).concat(A.conUsd ? f.usd.map(n) : []); };
+  L.push(['Documento', 'F. doc.', 'F. venc.', 'Mes cancel.', 'Tipo', A.res ? 'Amortizaciones' : 'Doc. amortización', 'Fecha', 'Moneda', 'T.C.'].concat(A.conPen ? ['Compromiso S/', 'Amortización S/', 'Saldo S/'] : [], A.conUsd ? ['Compromiso US$', 'Amortización US$', 'Saldo US$'] : [], ['Glosa']).join('\t'));
+  A.filas.forEach(function (f) {
+    if (f.t === 'pv') return L.push(f.txt);
+    if (f.t === 'tp' || f.t === 'tg') return L.push([f.txt, '', '', '', '', '', '', '', ''].concat(mont(f)).join('\t'));
+    L.push([f.t === 'am' ? '' : f.doc, f.t === 'dc' ? ff(f.fdoc) : '', f.t === 'dc' ? ff(f.fven) : '', f.cancel || '', f.tipo, f.adoc || '', f.afec ? ff(f.afec) : '', f.mon === 'USD' ? 'US$' : 'S/', f.tc ? Number(f.tc).toFixed(3) : ''].concat(mont(f), [f.glosa || '']).join('\t'));
+  });
+  return L.join('\n');
+}
+function ecImprimir() { var pg = $('ecPag') || document.head.appendChild(Object.assign(document.createElement('style'), { id: 'ecPag' })); pg.textContent = $('ecHoja').classList.contains('ancha') ? '@media print{@page{size:A4 landscape;margin:8mm}}' : ''; document.body.classList.add('ecImp'); setTimeout(function () { window.print(); setTimeout(function () { document.body.classList.remove('ecImp'); }, 500); }, 100); }
 function ecImagen() {
   var hacer = function () {
     $('ecMsg').textContent = '⏳ Generando imagen…';
     window.html2canvas($('ecHoja'), { scale: 2, backgroundColor: '#ffffff' }).then(function (cv) {
       var a = document.createElement('a'); a.href = cv.toDataURL('image/png');
-      a.download = 'Estado de cuenta ' + (EC.copiar ? EC.copiar.nomC : '') + ' ' + (EC.copiar ? EC.copiar.ha : '') + '.png';
+      a.download = (EC.copiar && EC.copiar.ana ? 'Analisis de cuenta ' : 'Estado de cuenta ') + (EC.copiar ? EC.copiar.nomC : '') + ' ' + (EC.copiar ? EC.copiar.ha : '') + '.png';
       document.body.appendChild(a); a.click(); a.remove(); $('ecMsg').textContent = '🖼 Imagen descargada (puede pegarla en WhatsApp o en un correo).';
     }).catch(function (e) { $('ecMsg').textContent = '❌ ' + e.message; });
   };
@@ -2417,6 +2456,7 @@ function ecImagen() {
 }
 function ecCopiar() {
   var c = EC.copiar; if (!c) return;
+  if (c.ana) { var tx = anaCopiarTxt(); return (navigator.clipboard ? navigator.clipboard.writeText(tx) : Promise.reject()).then(function () { $('ecMsg').textContent = '📋 Copiado: péguelo en Excel, Sheets o un correo.'; }, function () { prompt('Copie el texto:', tx); }); }
   var T = function (a) { return a.join('\t'); }, n = function (x) { return x.toFixed(2); }, L = [];
   L.push('ESTADO DE CUENTA'); L.push(T([S.lado === 'Por pagar' ? 'Proveedor' : 'Cliente', c.nomC, 'RUC ' + c.cr])); L.push(T(['Empresa', c.nomE, c.er ? 'RUC ' + c.er : '']));
   L.push(T(['Periodo', c.de ? ff(c.de) : 'Desde el inicio', ff(c.ha), c.mon])); L.push('');
