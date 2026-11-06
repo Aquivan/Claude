@@ -35,7 +35,11 @@ input,select{font:inherit;padding:4px 6px;border:1px solid var(--bo);border-radi
 .fila.act{background:var(--azc)!important;outline:2px solid var(--az);outline-offset:-2px}
 .fila.sel{background:#EEF2FF}
 .fila.unida{background:#ECFDF5}
-.fila.drop{outline:2px dashed var(--ve);outline-offset:-2px}
+.fila.drop{outline:2px dashed var(--ve);outline-offset:-2px;background:#F0FDF4!important}
+.pto{position:absolute;top:50%;transform:translateY(-50%);width:18px;height:18px;line-height:17px;text-align:center;border-radius:9px;font-size:13px;color:#94A3B8;background:#fff;border:1px solid #CBD5E1;cursor:grab;z-index:3;touch-action:none}
+.pto.pF{right:2px}.pto.pV{left:2px}.fila:hover .pto,.fila.act .pto,.fila.unida .pto{color:var(--az);border-color:var(--az)}
+body.arrastrando,body.arrastrando *{cursor:grabbing!important;user-select:none!important}
+#lf .fila{padding-right:24px}#lv .fila{padding-left:24px}
 .fila.copia{background:#F8FAFC;color:#64748B;cursor:default;padding-left:22px}.fila.copia .l1{font-weight:normal}
 .fila.mod::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--am)}
 .chip{display:inline-block;border-radius:9px;padding:0 6px;font-size:10.5px;background:#E2E8F0;color:#334155;margin-right:3px;font-weight:normal}
@@ -125,7 +129,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <button id="bAparte" onclick="aparte()" title="Abrir en una pestaña del navegador (pantalla completa, otro monitor o celular)">↗ Ventana aparte</button>
   <button onclick="ayudaCompleta()">❓</button>
 </div>
-<div id="ayuda">① Toque un <b>voucher</b> (derecha) · ② toque la(s) <b>factura(s)</b> que paga (izquierda) o <b>arrástrelo</b> encima — aparece la línea · toque una línea para quitarla · ③ <b>💾 Guardar</b>. Nada se escribe hasta guardar.</div>
+<div id="ayuda">① Toque un <b>voucher</b> (se marca en azul) · ② toque la(s) <b>factura(s)</b> que paga — o <b>arrastre</b> desde el punto ⦿ de una fila hasta la otra: la línea sigue al mouse · toque una línea para cambiar el monto o quitarla · ③ <b>💾 Guardar</b>. Nada se escribe hasta guardar.</div>
 <div id="rep">
   <div id="repBar">
     <b>📊 Estado de cuenta</b>
@@ -362,7 +366,6 @@ function pintar() {
   });
   var of = $('oF').value;
   FV.sort(function (a, b) {
-    var la = ligados[a.k] ? 0 : 1, lb = ligados[b.k] ? 0 : 1; if (la !== lb) return la - lb;
     var r;
     if (of === 'm-' || of === 'm') r = (S.sim.saldo[b.k] - S.sim.saldo[a.k]) * (of === 'm' ? -1 : 1);
     else if (of === 'n' || of === 'n-') r = cmpNum(a, b) * (of === 'n-' ? -1 : 1);
@@ -381,7 +384,6 @@ function pintar() {
   });
   var ov = $('oV').value;
   VV.sort(function (a, b) {
-    if (a.id === S.act) return -1; if (b.id === S.act) return 1;
     var r;
     if (ov === 'm-' || ov === 'm') r = (b.m - a.m) * (ov === 'm' ? -1 : 1);
     else if (ov === 'op') r = (parseFloat(String(a.op).replace(/\D/g, '')) || 0) - (parseFloat(String(b.op).replace(/\D/g, '')) || 0);
@@ -395,7 +397,7 @@ function pintar() {
     var s = S.sim.saldo[d.k], cls = s <= 0.05 ? 'ok' : (s < base(d) - 0.05 ? 'pa' : 'pe');
     var nL = cuenta[d.k] || 0;
     var mod = S.sim.docsC[d.k] && Math.abs(s - d.sal) > 0.005;
-    return '<div class="fila' + (ligados[d.k] ? ' unida' : '') + (S.selF[d.k] ? ' sel' : '') + (mod ? ' mod' : '') + '" id="F' + i + '" data-k="' + esc(d.k) + '" draggable="true" onclick="clicF(event,this)" ondragstart="arr(event,\'F\',this)" ondragover="sobre(event,this)" ondragleave="fuera(this)" ondrop="soltar(event,this)">' +
+    return '<div class="fila' + (ligados[d.k] ? ' unida' : '') + (S.selF[d.k] ? ' sel' : '') + (mod ? ' mod' : '') + '" id="F' + i + '" data-k="' + esc(d.k) + '" onclick="clicF(event,this)"><span class="pto pF" title="Arrastre desde aquí hasta el voucher">⦿</span>' +
       '<input type="checkbox" ' + (S.selF[d.k] ? 'checked' : '') + ' onclick="event.stopPropagation();marcaF(\'' + esc(d.k) + '\',this.checked)" title="Marcar para sumar o para cruzar varias">' +
       '<div style="min-width:0"><div class="l1">' + (conGrupo ? '<span class="chip c-z">🏢 ' + esc(nomEmp(d.er)) + '</span>' : '') + esc(d.doc) + ' · ' + esc(d.cn) + '</div>' +
       '<div class="l2">' + ff(d.f) + ' · Total ' + d.mon + ' ' + fm(d.tot) + (d.nc ? ' · N/C ' + fm(d.nc) : '') + (retDe(d) ? ' · Ret ' + fm(retDe(d)) + (exceso(d) > 0.05 ? ' <span class="chip c-r" title="Retención mayor al 3% de (Total − N/C)">de más ' + fm(exceso(d)) + '</span>' : '') : '') + (d.det ? ' · Det ' + fm(d.det) : '') + (nL ? ' · 🔗 ' + nL : '') + (d.sire && !/✅/.test(d.sire) ? ' · ' + esc(d.sire) : '') + '</div></div>' +
@@ -418,7 +420,7 @@ function pintar() {
       (S.lado === 'Por pagar' && !v.pr ? '<span class="chip c-a">⚠️ sin empresa</span>' : (conGrupo && v.pr ? '<span class="chip c-z">🏢 ' + esc(nomEmp(S.lado === 'Por pagar' ? v.pr : v.br)) + '</span>' : ''));
     var est = v.dev ? '' : (!lk.length ? '<span class="chip">sin aplicar</span>' : sob > 0.05 ? '<span class="chip c-a">sobra ' + fm(sob) + '</span>' : '<span class="chip c-v">✓ aplicado</span>');
     var lks = lk.map(function (k) { return S.D[k].doc + ' ' + fm(S.sim.amt[v.id + '|' + k] || 0) + (S.montos[v.id + '|' + k] != null ? '💲' : ''); }).join(', ');
-    return '<div class="fila' + (v.id === S.act ? ' act' : '') + (S.selV[v.id] ? ' sel' : '') + (dirty ? ' mod' : '') + '" id="V' + i + '" data-id="' + esc(v.id) + '" draggable="true" onclick="clicV(event,this)" ondragstart="arr(event,\'V\',this)" ondragover="sobre(event,this)" ondragleave="fuera(this)" ondrop="soltar(event,this)">' +
+    return '<div class="fila' + (v.id === S.act ? ' act' : '') + (S.selV[v.id] ? ' sel' : '') + (dirty ? ' mod' : '') + '" id="V' + i + '" data-id="' + esc(v.id) + '" onclick="clicV(event,this)"><span class="pto pV" title="Arrastre desde aquí hasta la factura">⦿</span>' +
       '<div style="min-width:0"><div class="l1">' + chips + esc(S.lado === 'Por pagar' ? (v.bn || '¿beneficiario?') : (v.us || v.bn || '¿quién paga?')) + '</div>' +
       '<div class="l2">' + ff(v.f) + ' · ' + esc(v.bco) + ' ' + esc(v.op) + ' · ' + esc(v.fu) + (v.dups.length ? ' (+' + v.dups.length + ' copia)' : '') + (lks ? ' · → ' + esc(lks) : '') + '</div></div>' +
       '<div class="num"><div class="sal">' + v.mon + ' ' + fm(v.m) + '</div><div class="l2">' + est + ' <button class="ic" title="Ver el voucher" onclick="event.stopPropagation();verVoucher(\'' + esc(v.id) + '\')">🖼</button> <button class="ic" title="Ficha: a qué facturas se aplicó" onclick="event.stopPropagation();fichaV(\'' + esc(v.id) + '\')">🔍</button></div></div></div>' +
@@ -517,25 +519,55 @@ function clicF(ev, el) {
   ids.forEach(function (id) { unir(id, k); });
 }
 function marcaF(k, on) { if (on) S.selF[k] = 1; else delete S.selF[k]; pintar(); detalle(); }
-var arrastre = null;
-function arr(ev, t, el) { arrastre = { t: t, v: t === 'F' ? el.dataset.k : (el.dataset.id || el.dataset.u) }; try { ev.dataTransfer.setData('text/plain', arrastre.v); ev.dataTransfer.effectAllowed = 'link'; } catch (e) {} }
-function sobre(ev, el) {
-  if (!arrastre) return; var esF = el.id[0] === 'F';
-  if ((arrastre.t === 'V') === esF) { ev.preventDefault(); el.classList.add('drop'); }
-}
-function fuera(el) { el.classList.remove('drop'); }
-function soltar(ev, el) {
-  ev.preventDefault(); el.classList.remove('drop'); if (!arrastre) return;
-  if (S.modo === 'r') { if (arrastre.t === 'V' && el.id[0] === 'F') pasarRet(arrastre.v, el.dataset.k); else if (arrastre.t === 'F' && el.dataset.u) pasarRet(el.dataset.u, arrastre.v); arrastre = null; return; }
-  var esF = el.id[0] === 'F';
-  if (arrastre.t === 'V' && esF) unir(arrastre.v, el.dataset.k);
-  else if (arrastre.t === 'F' && !esF) {
-    var ks = S.selF[arrastre.v] ? Object.keys(S.selF) : [arrastre.v];
-    ks.forEach(function (k) { unir(el.dataset.id, k); });
-    S.act = el.dataset.id; detalle();
+/* Arrastrar: se agarra la fila (o su punto ⦿) y aparece una línea que sigue al mouse o al dedo; al soltar
+   sobre una fila de la otra lista se cruzan. Funciona igual con mouse y en pantalla táctil (Pointer Events). */
+var arrastre = null, saltarClic = false;
+document.addEventListener('pointerdown', function (ev) {
+  var f = ev.target.closest && ev.target.closest('#lf .fila, #lv .fila');
+  if (!f || f.classList.contains('copia') || ev.button > 0 || ev.target.closest('button,input,select,a')) return;
+  var enPunto = !!ev.target.closest('.pto');
+  if (!enPunto && ev.pointerType !== 'mouse') return;   // con el dedo, solo desde el punto ⦿ (así se puede desplazar la lista)
+  arrastre = { el: f, t: f.closest('#lf') ? 'F' : 'V', v: f.dataset.k || f.dataset.id || f.dataset.u, x: ev.clientX, y: ev.clientY, activo: false, sobre: null };
+  if (enPunto) { ev.preventDefault(); empezarArrastre(); }
+});
+function empezarArrastre() { arrastre.activo = true; document.body.classList.add('arrastrando'); arrastre.el.classList.add('sel'); }
+document.addEventListener('pointermove', function (ev) {
+  if (!arrastre) return;
+  if (!arrastre.activo) { if (Math.abs(ev.clientX - arrastre.x) + Math.abs(ev.clientY - arrastre.y) < 8) return; empezarArrastre(); }
+  ev.preventDefault();
+  var dest = document.elementFromPoint(ev.clientX, ev.clientY), fila = dest && dest.closest && dest.closest(arrastre.t === 'F' ? '#lv .fila' : '#lf .fila');
+  if (fila && fila.classList.contains('copia')) fila = null;
+  if (arrastre.sobre && arrastre.sobre !== fila) arrastre.sobre.classList.remove('drop');
+  if (fila) fila.classList.add('drop');
+  arrastre.sobre = fila;
+  // línea temporal
+  var main = $('main').getBoundingClientRect(), r = arrastre.el.getBoundingClientRect();
+  var x1 = (arrastre.t === 'F' ? r.right : r.left) - main.left, y1 = r.top + r.height / 2 - main.top, x2 = ev.clientX - main.left, y2 = ev.clientY - main.top, mx = (x1 + x2) / 2;
+  var tmp = $('lineaTmp');
+  if (!tmp) { tmp = document.createElementNS('http://www.w3.org/2000/svg', 'path'); tmp.id = 'lineaTmp'; tmp.setAttribute('fill', 'none'); tmp.setAttribute('stroke-width', '3'); tmp.setAttribute('stroke-dasharray', '7 5'); $('svg').appendChild(tmp); }
+  tmp.setAttribute('stroke', fila ? '#16A34A' : '#1D4ED8');
+  tmp.setAttribute('d', 'M' + x1 + ',' + y1 + ' C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + x2 + ',' + y2);
+}, { passive: false });
+document.addEventListener('pointerup', function () {
+  if (!arrastre) return;
+  var a = arrastre; arrastre = null;
+  document.body.classList.remove('arrastrando');
+  var tmp = $('lineaTmp'); if (tmp) tmp.remove();
+  if (!a.activo) return;   // fue un clic normal
+  saltarClic = true; setTimeout(function () { saltarClic = false; }, 0);
+  a.el.classList.remove('sel');
+  if (a.sobre) a.sobre.classList.remove('drop');
+  if (!a.sobre) { estado('Suelte sobre una fila de la otra lista para cruzarlas.'); return; }
+  var otro = a.sobre.dataset.k || a.sobre.dataset.id || a.sobre.dataset.u;
+  if (S.modo === 'r') { if (a.t === 'V') pasarRet(a.v, otro); else pasarRet(otro, a.v); return; }
+  if (a.t === 'V') { S.act = a.v; unir(a.v, otro); }
+  else {
+    var ks = S.selF[a.v] ? Object.keys(S.selF) : [a.v];
+    S.act = otro; ks.forEach(function (k) { unir(otro, k); });
   }
-  arrastre = null;
-}
+  pintar(); detalle();
+});
+document.addEventListener('click', function (ev) { if (saltarClic) { ev.stopPropagation(); ev.preventDefault(); saltarClic = false; } }, true);
 function guardarHist(id) {
   var mm = {}; Object.keys(S.montos).forEach(function (x) { if (x.indexOf(id + '|') === 0) mm[x] = S.montos[x]; });
   S.hist.push({ id: id, l: S.links[id].slice(), r: S.reempl[id], mm: mm }); if (S.hist.length > 200) S.hist.shift();
@@ -550,6 +582,8 @@ function unir(id, k) {
   var rucV = S.lado === 'Por pagar' ? v.br : v.pr, rucD = S.lado === 'Por pagar' ? d.emi : d.rec;
   var empV = S.lado === 'Por pagar' ? v.pr : v.br, empD = S.lado === 'Por pagar' ? d.rec : d.emi;
   if (empV && empD && empV !== empD) return estado('⛔ ' + v.fu + ' lo ' + (S.lado === 'Por pagar' ? 'pagó' : 'recibió') + ' ' + nomEmp(empV) + ' y la factura ' + d.doc + ' es de ' + nomEmp(empD) + '. Si el voucher está mal, corrija «ID Usuario» en la hoja de Vouchers.', true);
+  var libre = r2((S.sim.saldo[k] || 0) + 0);
+  if (libre <= 0.05 && !confirm('La factura ' + d.doc + ' ya está cancelada (saldo ' + fm(libre) + ').\nSi la cruza con ' + v.fu + ' (' + fm(v.m) + '), este voucher no le aplicará nada: quedará como sobrante.\n\nSi quiere reordenar (que este voucher pague esa factura en lugar de otro), quite primero el cruce del otro voucher (toque su línea → ✂️ Quitar).\n\n¿Cruzar igual?')) return;
   guardarHist(id);
   if (rucV && rucD && rucV !== rucD) {
     if (!confirm('El voucher ' + v.fu + ' dice RUC ' + rucV + ' y la factura ' + d.doc + ' es de ' + d.cn + ' (' + rucD + ').\n¿Cruzar igual y, al guardar, reemplazar el RUC del voucher por ' + rucD + '?')) { S.hist.pop(); return; }
@@ -978,7 +1012,7 @@ function cambiarModo(b) {
   $('hV').firstChild.textContent = r ? '🧾 Retenciones ' : '💳 Vouchers ';
   $('qV').placeholder = r ? '🔎 buscar comprobante, factura, monto…' : '🔎 buscar op., banco, nombre, monto…';
   $('ayuda').innerHTML = r ? '🧾 <b>Retenciones</b>: cada comprobante (CRE) con la(s) factura(s) donde se aplica · si una factura retenida se anuló con nota de crédito, toque el comprobante y luego la <b>otra factura</b> del mismo proveedor (o arrástrelo): se pasa el monto que indique · toque una línea morada para cambiar el monto o quitarla · <b>💾 Guardar</b> lo escribe en «🔁 Reasignar retenciones».'
-    : '① Toque un <b>voucher</b> (derecha) · ② toque la(s) <b>factura(s)</b> que paga (izquierda) o <b>arrástrelo</b> encima — aparece la línea · toque una línea para quitarla · ③ <b>💾 Guardar</b>. Nada se escribe hasta guardar.';
+    : '① Toque un <b>voucher</b> (se marca en azul) · ② toque la(s) <b>factura(s)</b> que paga — o <b>arrastre</b> desde el punto ⦿ de una fila hasta la otra: la línea sigue al mouse · toque una línea para cambiar el monto o quitarla · ③ <b>💾 Guardar</b>. Nada se escribe hasta guardar.';
   if (r && segV('sFac') === 'saldo') segOn('sFac', 'todas');
   pintar(); detalle();
 }
@@ -996,7 +1030,6 @@ function pintarR(c, emp, conGrupo) {
   });
   var ov = $('oV').value;
   lista.sort(function (a, b) {
-    if (a.u === S.actR) return -1; if (b.u === S.actR) return 1;
     var ta = total(a), tb = total(b);
     if (ov === 'm-' || ov === 'm') return (tb - ta) * (ov === 'm' ? -1 : 1);
     if (ov === 'op') return a.cre.localeCompare(b.cre, undefined, { numeric: true });
@@ -1006,7 +1039,7 @@ function pintarR(c, emp, conGrupo) {
   var h = lista.slice(0, S.verV).map(function (U, i) {
     var d = S.D[U.kOrig], ls = S.rl[U.u] || [], dirty = JSON.stringify(ls) !== JSON.stringify(S.rlOrig[U.u]);
     var ex = exceso(d);
-    return '<div class="fila' + (U.u === S.actR ? ' act' : '') + (dirty ? ' mod' : '') + '" id="V' + i + '" data-u="' + esc(U.u) + '" draggable="true" onclick="clicR(this)" ondragstart="arr(event,\'V\',this)" ondragover="sobre(event,this)" ondragleave="fuera(this)" ondrop="soltar(event,this)">' +
+    return '<div class="fila' + (U.u === S.actR ? ' act' : '') + (dirty ? ' mod' : '') + '" id="V' + i + '" data-u="' + esc(U.u) + '" onclick="clicR(this)"><span class="pto pV" title="Arrastre desde aquí hasta la factura">⦿</span>' +
       '<div style="min-width:0"><div class="l1">' + (conGrupo ? '<span class="chip c-z">🏢 ' + esc(nomEmp(d.er)) + '</span>' : '') + '🧾 CRE ' + esc(U.cre) + ' · ' + esc(d.cn) + '</div>' +
       '<div class="l2">' + ff(U.f) + ' · original ' + esc(d.doc) + (ex > 0.05 ? ' <span class="chip c-r">ret. de más ' + fm(ex) + '</span>' : '') + ' · → ' +
       esc(ls.filter(function (x) { return x.m > 0.005; }).map(function (x) { return S.D[x.k].doc + ' ' + fm(x.m) + (x.fila || x.nuevo ? ' 🔁' : ''); }).join(', ')) + '</div></div>' +
