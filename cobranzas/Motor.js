@@ -77,7 +77,9 @@ function normTipo_(t) {
  *   01_E001-393,394             -> misma serie, varios numeros
  *   01_E001-393,01_E001-394     -> codigo completo cada vez
  *   E001-393 / 03_B001-12 / 01 E001 393 / espacios, ";", "/", " y "
- * Devuelve [{tipo, serie, numero, texto}] en el MISMO orden escrito y una
+ *   01_E001-393=1500.00         -> ese voucher paga SOLO 1,500.00 de esa factura (monto por línea, lo escribe
+ *                                  la 🧩 Mesa de conciliación; sin «=» el voucher llena la factura en orden)
+ * Devuelve [{tipo, serie, numero, texto, monto?}] en el MISMO orden escrito y una
  * lista de partes que no se entendieron.
  */
 function parsearReferencias_(texto) {
@@ -85,24 +87,29 @@ function parsearReferencias_(texto) {
   if (texto == null) return res;
   var s = String(texto).toUpperCase().replace(/\s+Y\s+/g, ',').replace(/[;/|]/g, ',').trim();
   if (!s || s === '?' ) return res;
+  s = s.replace(/\s*=\s*/g, '=');
   // "01 E001 393" -> "01_E001-393"
   s = s.replace(/\b(\d{2})\s*[_\s]\s*([A-Z0-9]{4})\s*[-\s]\s*(\d+)/g, '$1_$2-$3');
   s = s.replace(/\b([A-Z][A-Z0-9]{3})\s+(\d+)\b/g, '$1-$2');
   var partes = s.split(/[,\s]+/).filter(function (p) { return p; });
   var tipoActual = '01', serieActual = null;
-  partes.forEach(function (p) {
-    var m;
+  partes.forEach(function (p0) {
+    var m, monto = null, p = p0;
+    var mm = p0.match(/^(.+?)=(\d+(?:\.\d{1,2})?)$/);
+    if (mm) { p = mm[1]; monto = parseFloat(mm[2]); }
+    var ref = null;
     if ((m = p.match(/^(\d{1,2})_([A-Z0-9]{4})-0*(\d+)$/))) {
       tipoActual = normTipo_(m[1]); serieActual = m[2];
-      res.refs.push({ tipo: tipoActual, serie: serieActual, numero: parseInt(m[3], 10), texto: p });
+      ref = { tipo: tipoActual, serie: serieActual, numero: parseInt(m[3], 10), texto: p };
     } else if ((m = p.match(/^([A-Z0-9]{4})-0*(\d+)$/)) && /[A-Z]/.test(m[1])) {
       serieActual = m[1];
-      res.refs.push({ tipo: tipoActual, serie: serieActual, numero: parseInt(m[2], 10), texto: p });
+      ref = { tipo: tipoActual, serie: serieActual, numero: parseInt(m[2], 10), texto: p };
     } else if ((m = p.match(/^0*(\d+)$/)) && serieActual) {
-      res.refs.push({ tipo: tipoActual, serie: serieActual, numero: parseInt(m[1], 10), texto: p });
-    } else {
-      res.noEntendido.push(p);
+      ref = { tipo: tipoActual, serie: serieActual, numero: parseInt(m[1], 10), texto: p };
     }
+    if (!ref) { res.noEntendido.push(p0); return; }
+    if (monto != null && monto > 0) ref.monto = monto;
+    res.refs.push(ref);
   });
   return res;
 }
@@ -319,16 +326,39 @@ function ejecutarCruce_(entrada) {
       errores.push({ tipo: 'Referencia no entendida', pagoId: p.id, detalle: '"' + t + '" en "' + p.refs + '"', fuente: p.fuente });
     });
     if (!p.parse.refs.length) return;
-    var lista = [];
+    var lista = [], montos = [];
     p.parse.refs.forEach(function (ref) {
       var d = buscarDocPorRef(ref, p);
       var txt = ref.tipo + '_' + ref.serie + '-' + ref.numero;
       if (d === 'AMBIGUO') errores.push({ tipo: 'Referencia ambigua', pagoId: p.id, detalle: txt + ' existe para varios emisores; falta el RUC del beneficiario', fuente: p.fuente });
       else if (!d) errores.push({ tipo: p.origen ? 'Retención sin factura' : 'Referencia no existe', pagoId: p.id, detalle: (p.origen ? p.operacion + ': ' : '') + txt + (p.beneficiarioRuc ? ' no existe en SIRE para el RUC ' + p.beneficiarioRuc : ' no existe en SIRE') + (p.origen ? ' (puede ser de un año que no se lee: ⚙️ Config → Años SIRE a leer)' : ''), fuente: p.fuente });
-      else if (lista.indexOf(d) === -1) lista.push(d);
+      else if (lista.indexOf(d) === -1) { lista.push(d); montos.push(ref.monto != null ? ref.monto : null); }
     });
-    if (lista.length) encolar(p, lista, p.origen || (p.esManual ? ORIGEN.MANUAL : ORIGEN.REFERENCIADO));
+    if (!lista.length) return;
+    var origenRef = p.origen || (p.esManual ? ORIGEN.MANUAL : ORIGEN.REFERENCIADO);
+    if (p.modalidad === MODALIDAD.PAGO && montos.some(function (x) { return x != null; }) && mismaMoneda(p, lista)) aplicarConMontos(p, lista, montos, origenRef);
+    else encolar(p, lista, origenRef);
   });
+  /** «01_E001-393=1500»: el voucher paga a cada factura el monto escrito (sin pasar del saldo); las que no tienen
+   *  monto toman lo que quede, en orden. Lo que sobra queda como remanente del voucher. */
+  function aplicarConMontos(p, lista, montos, origen) {
+    var rem = p.monto;
+    lista.forEach(function (d, i) {
+      var falta = Math.max(0, pendiente(d));
+      var quiere = montos[i] != null ? montos[i] : rem;
+      var x = redondear2_(Math.max(0, Math.min(quiere, rem, falta)));
+      if (montos[i] != null && montos[i] > rem + 0.005) errores.push({ tipo: 'Monto por línea', pagoId: p.id, detalle: 'Op. ' + (p.operacion || '') + ': a ' + etiquetaDoc_(d) + ' se le asignó ' + montos[i].toFixed(2) + ' pero al voucher solo le quedaban ' + rem.toFixed(2), fuente: p.fuente });
+      else if (montos[i] != null && montos[i] > falta + 0.005) errores.push({ tipo: 'Monto por línea', pagoId: p.id, detalle: 'Op. ' + (p.operacion || '') + ': a ' + etiquetaDoc_(d) + ' se le asignó ' + montos[i].toFixed(2) + ' pero su saldo era ' + falta.toFixed(2) + ' (se aplicó el saldo)', fuente: p.fuente });
+      if (x > 0.005) registrarMov(d, x, p, MODALIDAD.PAGO, origen, montos[i] != null ? 'monto indicado' : '');
+      else if (falta <= 0.005) errores.push({ tipo: 'Ya pagada', pagoId: p.id, detalle: etiquetaDoc_(d) + ' ya estaba cancelada; no se le aplico nada de este pago', fuente: p.fuente });
+      rem = redondear2_(rem - x);
+    });
+    p.aplicado = true;
+    if (rem > 0.05) {
+      remanentes.push({ pago: p, monto: rem, moneda: lista[0].moneda, docs: lista.map(etiquetaDoc_).join(', ') });
+      errores.push({ tipo: 'Pago de más', pagoId: p.id, detalle: 'Op. ' + (p.operacion || '') + ': sobran ' + rem.toFixed(2) + ' después de aplicar ' + lista.map(etiquetaDoc_).join(', '), fuente: p.fuente });
+    }
+  }
   pagos.forEach(function (p) {
     if (p.aplicado || !dec[p.id] || dec[p.id].estado !== 'OK') return;
     var lista = (dec[p.id].docs || []).map(function (k) { return docs[k]; }).filter(Boolean);
