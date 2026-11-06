@@ -72,6 +72,27 @@ function MESA_html_(tk, modo) {
   return t.evaluate();
 }
 
+/* ============================================================ reintentos */
+
+/**
+ * Google a veces responde «Se agotó el tiempo de espera del servicio Hojas de cálculo» cuando la hoja está ocupada
+ * (por ejemplo, recalculándose después de un guardado). Se reintenta solo, esperando 3, 8 y 15 segundos.
+ * Guardar es seguro de repetir: lo que ya quedó escrito se reconoce y no se duplica.
+ */
+function MESA_reintentar_(fn) {
+  var esperas = [3000, 8000, 15000];
+  for (var i = 0; ; i++) {
+    try { return fn(); } catch (e) {
+      var m = String(e && e.message || e);
+      if (i >= esperas.length || !/tiempo de espera|timed out|time out|Service Spreadsheets|servicio Hojas|no está disponible|unavailable|Service invoked too many times|Try again|Vuelve a intentarlo|intentar de nuevo/i.test(m)) {
+        if (/tiempo de espera|timed out/i.test(m)) throw new Error('Google tardó demasiado en responder (la hoja se estaba recalculando). Sus cambios siguen en la Mesa: vuelva a intentar en un momento.');
+        throw e;
+      }
+      Utilities.sleep(esperas[i]);
+    }
+  }
+}
+
 /* ============================================================ datos */
 
 function MESA_fecha_(d) { return d instanceof Date && !isNaN(d.getTime()) ? Utilities.formatDate(d, 'America/Lima', 'yyyy-MM-dd') : ''; }
@@ -80,7 +101,8 @@ function MESA_fecha_(d) { return d instanceof Date && !isNaN(d.getTime()) ? Util
  * Todo lo que necesita la pantalla para un lado («Por pagar» o «Por cobrar»):
  * {empresas, docs, vouchers, links, sug, ultima}
  */
-function MESA_datos(tk, lado) {
+function MESA_datos(tk, lado) { var a = arguments; return MESA_reintentar_(function () { return MESA_datos_.apply(null, a); }); }
+function MESA_datos_(tk, lado) {
   MESA_ok_(tk);
   lado = lado === 'Por cobrar' ? 'Por cobrar' : 'Por pagar';
   var ss = ssPrincipal_(), cfg = leerConfig_(ss);
@@ -213,7 +235,8 @@ function MESA_datos(tk, lado) {
  * cambios: [{id, fu, dups, antes, refs, quitar:[claves], benef, usu, reemplazar}]
  * Devuelve {mensaje, ok:[id], conflictos:[{id, fu, motivo}]}
  */
-function MESA_guardar(tk, cambios) {
+function MESA_guardar(tk, cambios) { var a = arguments; return MESA_reintentar_(function () { return MESA_guardar_.apply(null, a); }); }
+function MESA_guardar_(tk, cambios) {
   var quien = MESA_ok_(tk);
   cambios = (cambios || []).slice(0, 500);
   if (!cambios.length) return { mensaje: 'No hay cambios.', ok: [], conflictos: [] };
@@ -248,6 +271,7 @@ function MESA_guardar(tk, cambios) {
       var rR = celda(x.fu, 'refs');
       if (!rR) { conflictos.push({ id: x.id, fu: x.fu, motivo: 'No encontré la columna «Tipo y Nº Doc.» en ' + x.fu }); return; }
       var actual = String(rR.getDisplayValue() || '').trim();
+      if (actual === String(x.refs || '').trim() && actual !== String(x.antes || '').trim()) { ok.push(x.id); return; }   // ya quedó guardado (reintento)
       if (actual !== String(x.antes || '').trim()) {
         conflictos.push({ id: x.id, fu: x.fu, motivo: 'Otra persona cambió «Tipo y Nº Doc.» mientras usted trabajaba (ahora dice «' + actual + '»). Recargue y revise.' });
         return;
@@ -304,7 +328,8 @@ function MESA_guardar(tk, cambios) {
  * 🔁 Reasignar retenciones desde la Mesa: escribe (o borra) filas en la pestaña 🔁 Reasignar retenciones, igual
  * que a mano. nuevos: [{cre, agente, origen, destino, monto}] · quitar: [{fila, antes:[A..E]}]
  */
-function MESA_reasignar(tk, nuevos, quitar) {
+function MESA_reasignar(tk, nuevos, quitar) { var a = arguments; return MESA_reintentar_(function () { return MESA_reasignar_.apply(null, a); }); }
+function MESA_reasignar_(tk, nuevos, quitar) {
   var quien = MESA_ok_(tk);
   var ss = ssPrincipal_(), sh = hojaReasignar_(ss);
   var lote = Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd-HHmmss') + '-' + Utilities.getUuid().slice(0, 4);
@@ -337,7 +362,8 @@ function MESA_reasignar(tk, nuevos, quitar) {
  * ✍️ Pago sin voucher (efectivo, compensación, retención o detracción manual…): una fila en ✍️ Registro manual,
  * igual que a mano. x = {fecha:'yyyy-mm-dd', modalidad, pagador, benef, doc, monto, moneda, op, banco, obs}
  */
-function MESA_manual(tk, x) {
+function MESA_manual(tk, x) { var a = arguments; return MESA_reintentar_(function () { return MESA_manual_.apply(null, a); }); }
+function MESA_manual_(tk, x) {
   var quien = MESA_ok_(tk);
   x = x || {};
   var monto = Number(x.monto);
@@ -375,7 +401,7 @@ function MESA_hojaLog_(ss) {
 }
 
 /** ↩️ Deshacer el último guardado de esta persona (solo lo que nadie cambió después). */
-function MESA_deshacer(tk) { return MESA_deshacerQuien_(MESA_ok_(tk), ''); }
+function MESA_deshacer(tk) { var q = MESA_ok_(tk); return MESA_reintentar_(function () { return MESA_deshacerQuien_(q, ''); }); }
 
 /** Deshace el último lote (sin deshacer) de «quien»; con prefijo, solo lotes que empiezan así (ej. 'VCO-'). */
 function MESA_deshacerQuien_(quien, prefijo) {
@@ -478,7 +504,8 @@ function MESA_estado(tk) {
 /* ============================================================ ver voucher y factura */
 
 /** Archivo para ver en la Mesa: {nombre, mime, b64} o {url} o {error}. tipo = 'v' (fuente) | 'f' (enlace PDF). */
-function MESA_archivo(tk, tipo, ref) {
+function MESA_archivo(tk, tipo, ref) { var a = arguments; return MESA_reintentar_(function () { return MESA_archivo_.apply(null, a); }); }
+function MESA_archivo_(tk, tipo, ref) {
   MESA_ok_(tk);
   var ss = ssPrincipal_(), cfg = leerConfig_(ss);
   try {
