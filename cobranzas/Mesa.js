@@ -148,15 +148,19 @@ function MESA_datos(tk, lado) {
   });
 
   // ---- Cruces actuales (💳 Movimientos)
-  var links = [], rets = [];
+  var links = [], rets = [], movs = [];
   var shM = ss.getSheetByName(HOJA.MOVS);
   if (shM && shM.getLastRow() > 1) {
     var encM = shM.getRange(1, 1, 1, shM.getLastColumn()).getValues()[0], cm = indiceColumnas_(encM);
     var vm = shM.getRange(2, 1, shM.getLastRow() - 1, encM.length).getValues();
-    var J = { mod: cm('Modalidad'), m: cm('Monto aplicado'), o: cm('Origen'), k: cm('Clave'), id: cm('ID pago'), op: cm('N° operación'), f: cm('Fecha'), fu: cm('Fuente') };
+    var J = { mod: cm('Modalidad'), m: cm('Monto aplicado'), o: cm('Origen'), k: cm('Clave'), id: cm('ID pago'), op: cm('N° operación'), f: cm('Fecha'), fu: cm('Fuente'),
+      bco: cm('Banco'), mp: cm('Monto del voucher'), nota: cm('Nota') };
     var junta = {};
     vm.forEach(function (r) {
       var k = String(r[J.k] || ''), id = String(r[J.id] || '');
+      // 📊 Todos los movimientos de cada factura (para el estado de cuenta y la ficha): [clave, fecha, modalidad, monto, origen, operación, banco, monto del voucher, fuente, id pago, nota]
+      if (porClave[k]) movs.push([k, MESA_fecha_(r[J.f]), String(r[J.mod] || ''), Number(r[J.m]) || 0, String(r[J.o] || ''), String(r[J.op] || ''), String(r[J.bco] || ''),
+        Number(r[J.mp]) || 0, String(r[J.fu] || ''), id, String(r[J.nota] || '').slice(0, 80)]);
       // 🧾 Retenciones de SUNAT (y las ya reasignadas): para el modo «Retenciones»
       if (porClave[k] && r[J.mod] === MODALIDAD.RETENCION && /^(CRE|REASIG)\|/.test(id)) {
         var re = id.match(/^REASIG\|(\d+)\|(.*)$/);
@@ -198,7 +202,7 @@ function MESA_datos(tk, lado) {
   var ultima = '';
   try { ultima = PropertiesService.getScriptProperties().getProperty('MESA_ULTIMA') || ''; } catch (e) {}
   try { ultima = PropertiesService.getDocumentProperties().getProperty('ultimaActualizacion') || ultima; } catch (e) {}
-  return { lado: lado, empresas: empresas, docs: docs, vouchers: vouchers, links: links, sug: sug, ultima: ultima, rets: rets, reas: reas, copias: copias,
+  return { lado: lado, empresas: empresas, docs: docs, vouchers: vouchers, links: links, sug: sug, ultima: ultima, rets: rets, reas: reas, copias: copias, movs: movs,
     modalidades: MODALIDADES_MANUAL_,
     recalculando: !!PropertiesService.getScriptProperties().getProperty('MESA_PEDIDO') };
 }
