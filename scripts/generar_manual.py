@@ -60,6 +60,7 @@ PROYECTOS = [
     ('Notificaciones · Grupo', 'notificaciones/', 'Hoja propia + GitHub', 'Baja el Buzón Electrónico de SUNAT (notificaciones y mensajes, con PDF) dos veces al día.', 'notificaciones-descargar.yml, deploy-notificaciones.yml'),
     ('Detracciones · Grupo', 'detracciones/', 'Hoja propia + GitHub', 'Baja los depósitos de detracciones (SPOT) y sus constancias, una vez al día de lunes a viernes.', 'detracciones-descargar.yml, deploy-detracciones.yml'),
     ('🚚 Guías de Remisión · Grupo', 'guias/', 'Hoja propia + portal web', 'Una fila = una guía con todos sus datos; catálogos, revisión automática, formulario, portal para celular; emite con el robot de Quesito o de SUNAT.', 'deploy-guias.yml, gre-quesito.yml'),
+    ('📑 Declaraciones · Grupo', 'declaraciones/', 'Hoja propia + aplicación web', 'Baja de SUNAT SOL las declaraciones PDT 621 (IGV-Renta), 601 (PLAME) y 626 (Agentes de Retención) con su constancia PDF, incluidas rectificatorias (la última es la vigente; las anteriores quedan de respaldo). Reportes por periodo, tributos y casillas. Nada queda en GitHub: los PDF van directo a la hoja con una llave de un solo uso. Sola una vez al mes (día 28).', 'declaraciones-descargar.yml, deploy-declaraciones.yml'),
     ('GRE por SUNAT', 'gre_sunat/', 'GitHub Actions (pedido por el bot)', 'Robot que llena la guía en SUNAT SOL: modo vista (se detiene antes de emitir) o emitir (solo con aprobación).', 'gre-sunat.yml'),
 ]
 
@@ -93,6 +94,7 @@ CLAVES = [
     ('Bot de Telegram (Vouchers)', 'Token del bot original', 'Hoja Sistema de Vouchers → Propiedades del script', 'Propiedades TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, TELEGRAM_ALLOWED_CHAT_IDS. No reutilizar en el asistente.'),
     ('Token de GitHub (para las hojas)', 'Permite a las hojas leer datos y lanzar robots', 'Cada hoja: menú → 🔑 Token de GitHub (Retenciones, Honorarios, Notificaciones, Detracciones, Guías, Telegram)', 'Propiedades RET_/HON_/NOT_/DET_/GR_/TG_GITHUB_TOKEN. Se crea en GitHub → Settings → Developer settings → Fine-grained tokens, con permiso «Actions: Read and write» y «Contents: Read» sobre Aquivan/Claude. Vence: renovarlo y pegarlo en cada hoja.'),
     ('WhatsApp (Meta)', 'Token de la app de Meta, número, verificación', 'Hoja Vouchers WhatsApp → menú 📲 WhatsApp → 1. Configurar; y 2. Datos para Cloudflare y Meta', 'Propiedades WA_* (WA_VERIFY, WA_GAS_TOKEN…). El puente Cloudflare (worker.js) usa sus propias variables: VERIFY_TOKEN, APP_SECRET, GAS_URL, GAS_TOKEN (en el panel de Cloudflare → Workers → Settings → Variables). Los números autorizados solo en el menú «Números autorizados».'),
+    ('Token de GitHub de Declaraciones', 'La hoja Declaraciones lanza su robot', 'Hoja Declaraciones · Grupo → menú 📑 Declaraciones → 🔑 Guardar token de GitHub', 'Propiedad DEC_GITHUB_TOKEN (permiso «Actions: Read and write»). La llave de un solo uso para recibir las constancias la crea la hoja sola (DEC_LLAVES, vence en 6 h).'),
     ('Repositorio y rama', 'Dónde corren los robots', 'Hoja Cobranzas → pestaña 🤖 Telegram (Repositorio de GitHub, Rama de GitHub)', 'Si se cambia de repositorio o rama, se cambia ahí y en las pestañas Config de cada hoja.'),
     ('Límite de minutos', 'Minutos gratis de GitHub al mes', 'Propiedad del script TGM_LIMITE en Cobranzas', 'Por defecto 2000. Solo sirve para los avisos de % (comando «minutos»).'),
     ('Conexión Vouchers ↔ Cobranzas', 'El Asistente IA y la Mesa de la hoja de Vouchers usan Cobranzas', 'Propiedades VIA_CLAVE (Vouchers) y VCH_CLAVE (Cobranzas)', 'Se crean y registran solas la primera vez. Para cambiarla: borrar VCH_CLAVE en Cobranzas y VIA_CLAVE en Vouchers; se vuelve a crear sola.'),
@@ -110,6 +112,8 @@ PROPS = {
     'VIA_CLAVE': 'Clave compartida hoja de Vouchers ↔ Cobranzas.',
     'WA_VERIFY': 'Palabra de verificación del webhook de WhatsApp (la misma en Cloudflare).',
     'WA_GAS_TOKEN': 'Secreto con el que el puente de Cloudflare entra a la hoja de WhatsApp.',
+    'DEC_GITHUB_TOKEN': 'Token de GitHub de la hoja Declaraciones (lanza su robot).',
+    'DEC_LLAVES': 'Llaves de un solo uso para recibir las constancias (las crea la hoja; vencen en 6 h).',
     'WEBHOOK_SECRET': 'Secreto del aviso instantáneo GitHub → hoja SIRE.',
     'HORA_EJECUCION_DIARIA_PERU': 'Hora de la descarga diaria puntual (hora de Lima).',
     'TGR_DIAS_ATRAS': 'Cuántos días atrás mira el bot los pagos sin retención.',
@@ -144,6 +148,7 @@ FLUJOS = [
     ('Cruce en la 🧩 Mesa', '1) Menú 🧠 Asistente IA → 🧩 Mesa (o «mesa» por el bot). 2) Elegir por pagar/cobrar, empresa o grupo. 3) Arrastrar desde ⦿ del voucher a la factura (o al revés); poner monto por línea si hace falta. 4) 💾 Guardar: escribe en la columna «Tipo y N° Doc.» del voucher y anota en _Mesa. 5) Cobranzas recalcula (⚡ Recalcular ahora para no esperar). 6) ↩️ Deshacer o 🧹 Quitar cruces si se equivocó.'),
     ('Retención (CRE)', '1) El motor detecta pagos a proveedores que debían retener 3% y no tienen CRE. 2) /emitir lista los pendientes. 3) 👁 Vista previa: el robot llena SUNAT SEE-SOL y se detiene. 4) ✅ Emitir solo con confirmación expresa. 5) El robot avisa el número del CRE.'),
     ('Guía de remisión (GRE)', '1) Fila en la hoja Guías, o fotos + texto por el bot. 2) 👁 Vista previa (Quesito o SUNAT, sin emitir). 3) ✅ Emitir con aprobación. 4) Si aparece captcha, la persona lo resuelve desde Telegram/WhatsApp.'),
+    ('Declaraciones (PDT 621/601/626)', '1) El día 28 (o a mano: 📑 Declaraciones → ⬇ Pedir a SUNAT) la hoja crea una llave de un solo uso y lanza el robot. 2) El robot entra a SOL → Consulta de Declaraciones y Pagos, busca los últimos meses y le pregunta a la hoja cuáles le faltan. 3) Por cada una nueva abre la constancia, baja el PDF y lo manda a la hoja (nada queda en GitHub). 4) La hoja guarda el PDF en Drive, marca la última presentada como Vigente y las anteriores como Respaldo, y rehace 📊 Panel, 🗂 Por periodo, 🧾 Tributos y 🔢 Casillas.'),
     ('Devolución de un proveedor', 'En el registro manual o en la Mesa se marca «DEVOLUCION op <número>» con el monto; se une con línea al depósito, a la factura o a la N/C. Así el saldo a favor no queda «sin aplicar».'),
     ('Cambio de código', '1) Se cambia el archivo en la carpeta del proyecto. 2) Se explica en la Ayuda y en este manual. 3) Se sube a GitHub (rama de trabajo y luego la rama principal claude/python-codes-izve18). 4) El robot «Desplegar …» de esa carpeta lo pasa a la hoja. 5) Se prueba en la hoja.'),
 ]
@@ -184,6 +189,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
+    ('06/11/2026', '📑 Declaraciones · Grupo', 'Proyecto nuevo: PDT 621, 601 PLAME y 626 con constancia PDF y rectificatorias (vigente + respaldo), reportes por periodo, tributos y casillas, descarga mensual el día 28. Los PDF van directo a la hoja (no a GitHub).'),
     ('06/11/2026', 'Detracciones de lunes a viernes', 'La descarga automática de detracciones corre una sola vez al día y solo de lunes a viernes (bot, hoja y reloj de GitHub). A mano se puede cualquier día.'),
     ('06/11/2026', 'Manual del proyecto', 'Este manual (Excel y Markdown) generado desde el código con scripts/generar_manual.py.'),
     ('06/11/2026', '⏱ Minutos de GitHub', 'Medición del mes cada 6 h, avisos al 50/75/90/100% (si el repositorio es privado), resumen los lunes y comando «minutos».'),
