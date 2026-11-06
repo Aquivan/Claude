@@ -24,7 +24,7 @@ Ojo: la opción antigua del menú SOL (12.4.1.1.2 "Consulta de detracciones") di
 | Qué | Dónde |
 |---|---|
 | Descargador (Chrome real, solo lee) | `scripts/descargar_detracciones.py` |
-| Descarga multiempresa | workflow `detracciones-descargar.yml`: todos los días ~7:17 a. m. (la hoja la pide a las 8 a. m. y el cron es respaldo), últimos 3 meses; a mano: empresa, desde/hasta (AAAAMM), IVAP |
+| Descarga multiempresa | workflow `detracciones-descargar.yml`: una vez al día, **de lunes a viernes** (el bot la pide a las 3 a. m., la hoja a las 8 a. m. si aún no corrió y el cron es respaldo; sábado y domingo no corre sola), últimos 3 meses; a mano: empresa, desde/hasta (AAAAMM), IVAP |
 | Datos | `datos/<RUC>/<AAAA>/<MM>/detracciones.csv` (mes = fecha de pago) y `masivos.json` si hubo pagos masivos |
 | Constancias (opcional) | `datos/<RUC>/<AAAA>/<MM>/constancias/<N°>.html`: la **Constancia de Depósito oficial** de SUNAT (~5 KB c/u). Se baja como una persona: clic en el número de constancia y botón "Guardar". Solo se bajan las que faltan. Se activa/desactiva en la hoja (Config → *Descargar constancias de SUNAT* SI/NO) o en el workflow (casilla *constancias*) |
 | Hoja | `apps_script/` → pestañas **Panel**, **Detracciones** (detalle), **Por proveedor**, **Por mes**, **Config** |
@@ -52,7 +52,7 @@ pagos individuales y masivos (cuenta convencional; IVAP opcional).
 - 📄 Solo ordenar constancias en Drive.
 - Config: *Descargar constancias de SUNAT* y *Copiar constancias a Drive* (SI/NO cada una).
 - ⬇ Pedir a SUNAT lo nuevo (últimos 3 meses) / elegir meses y empresa.
-- ⏰ Actualización diaria (8 a. m.: pide la descarga, espera y actualiza).
+- ⏰ Actualización diaria (8 a. m.: de lunes a viernes pide la descarga si aún no corrió, espera y actualiza; sábado y domingo solo actualiza la hoja).
 - 🔑 Token de GitHub (el mismo de las otras hojas) y 🔌 Probar conexión.
 
 Las claves SOL están en los Environments de GitHub (uno por RUC) y nunca se imprimen.

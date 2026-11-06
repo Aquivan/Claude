@@ -17,7 +17,7 @@ var TGN_TAREAS_ = {
     inputs: function () { return { empresa: 'todas', desde: TG_mes_(2), diario: 'true' }; } },
   retenciones: { nombre: 'Retenciones', wf: 'retenciones-descargar.yml', titulo: /^Retenciones · diario$/,
     inputs: function () { return { empresa: 'todas', periodo: TG_mes_(1), hasta: '', diario: 'true' }; } },
-  detracciones: { nombre: 'Detracciones', wf: 'detracciones-descargar.yml', titulo: /^Detracciones · diario$/,
+  detracciones: { nombre: 'Detracciones', wf: 'detracciones-descargar.yml', titulo: /^Detracciones · diario$/, dias: [1, 2, 3, 4, 5],   // solo de lunes a viernes
     inputs: function () { return { empresa: 'todas', desde: '', diario: 'true' }; } },
   honorarios: { nombre: 'Honorarios', wf: 'honorarios-descargar.yml', titulo: /^Honorarios · diario$/,
     inputs: function () { return { empresa: 'todas', periodo: TG_mes_(1), hasta: '', diario: 'true' }; } }
@@ -44,9 +44,11 @@ function TGN_revisar_(cfg) {
   var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
   var desde = new Date(hoy + 'T05:00:00Z').getTime();   // 0:00 de hoy en Lima
   var props = PropertiesService.getScriptProperties();
+  var diaSemana = Number(Utilities.formatDate(new Date(), 'America/Lima', 'u'));   // 1 = lunes … 7 = domingo
   Object.keys(horario).forEach(function (k) {
     var h = horario[k];
     if (hora < h || hora >= h + 6) return;   // solo dentro de las 6 horas siguientes a la elegida
+    if (TGN_TAREAS_[k].dias && TGN_TAREAS_[k].dias.indexOf(diaSemana) < 0) return;   // hoy no le toca (p. ej. detracciones: lunes a viernes)
     var t = TGN_TAREAS_[k], pk = 'TGN_' + k, est = {};
     try { est = JSON.parse(props.getProperty(pk) || '{}'); } catch (e) {}
     if (est.d !== hoy) est = { d: hoy, n: 0, t: 0 };

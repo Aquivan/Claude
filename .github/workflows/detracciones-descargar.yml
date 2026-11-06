@@ -10,9 +10,10 @@ name: Detracciones - descargar depósitos (SUNAT SOL)
 run-name: ${{ (github.event_name == 'schedule' || inputs.diario) && 'Detracciones · diario' || 'Detracciones - descargar depósitos (SUNAT SOL)' }}
 
 on:
-  # Todos los días ~7:17 a. m. de Lima, todas las empresas, los últimos 3 meses.
+  # Una vez al día, de LUNES A VIERNES, todas las empresas, los últimos 3 meses.
+  # Sábado y domingo no corre sola (a mano, desde la hoja o el bot, sí se puede).
   schedule:
-    - cron: '7 10 * * *'   # respaldo: 5:07 a.m. Perú (el bot la pide a las 3 a.m.; si ya corrió, no se repite)
+    - cron: '7 10 * * 1-5'   # respaldo: 5:07 a.m. Perú, lunes a viernes (el bot la pide a las 3 a.m.; si ya corrió, no se repite)
   workflow_dispatch:
     inputs:
       empresa:

@@ -8,6 +8,7 @@
  *   3) Revisa cada 8 minutos y, cuando GitHub termina, importa a la hoja.
  * El cron de GitHub queda solo de respaldo y no repite lo que ya corrio
  * (ambas corridas se llaman "Detracciones · diario").
+ * Solo de LUNES A VIERNES (sábado y domingo no se pide nada; a mano sí se puede).
  */
 
 var DET_WORKFLOW_DIARIO_ = 'detracciones-descargar.yml';
@@ -16,6 +17,9 @@ var DET_MAX_REVISIONES_ = 12;  // 12 x 8 min = hasta ~1.5 horas esperando a GitH
 
 /** Disparador diario (mismo nombre de siempre: los activadores ya instalados siguen funcionando). */
 function DET_actualizacionAutomatica() {
+  // La descarga automática es solo de lunes a viernes (sábado y domingo solo se importa lo que haya).
+  var dia = Number(Utilities.formatDate(new Date(), 'America/Lima', 'u'));   // 1 = lunes … 7 = domingo
+  if (dia > 5) { DET_importarAhora_(); return; }
   var estado = 'nada';
   try {
     var cfg = DET_leerConfig_();

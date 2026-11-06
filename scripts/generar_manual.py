@@ -58,7 +58,7 @@ PROYECTOS = [
     ('Retenciones · Grupo', 'retenciones/', 'Hoja propia + GitHub', 'Baja de SUNAT SOL los comprobantes de retención emitidos y recibidos (PDF/XML). Emisión de CRE con vista previa (retenciones/emision/).', 'retenciones-descargar.yml, retenciones-cre.yml, deploy-retenciones.yml'),
     ('Honorarios · Grupo', 'honorarios/', 'Hoja propia + GitHub', 'Baja los recibos por honorarios recibidos y los concilia con los vouchers.', 'honorarios-descargar.yml, deploy-honorarios.yml'),
     ('Notificaciones · Grupo', 'notificaciones/', 'Hoja propia + GitHub', 'Baja el Buzón Electrónico de SUNAT (notificaciones y mensajes, con PDF) dos veces al día.', 'notificaciones-descargar.yml, deploy-notificaciones.yml'),
-    ('Detracciones · Grupo', 'detracciones/', 'Hoja propia + GitHub', 'Baja los depósitos de detracciones (SPOT) y sus constancias.', 'detracciones-descargar.yml, deploy-detracciones.yml'),
+    ('Detracciones · Grupo', 'detracciones/', 'Hoja propia + GitHub', 'Baja los depósitos de detracciones (SPOT) y sus constancias, una vez al día de lunes a viernes.', 'detracciones-descargar.yml, deploy-detracciones.yml'),
     ('🚚 Guías de Remisión · Grupo', 'guias/', 'Hoja propia + portal web', 'Una fila = una guía con todos sus datos; catálogos, revisión automática, formulario, portal para celular; emite con el robot de Quesito o de SUNAT.', 'deploy-guias.yml, gre-quesito.yml'),
     ('GRE por SUNAT', 'gre_sunat/', 'GitHub Actions (pedido por el bot)', 'Robot que llena la guía en SUNAT SOL: modo vista (se detiene antes de emitir) o emitir (solo con aprobación).', 'gre-sunat.yml'),
 ]
@@ -184,6 +184,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
+    ('06/11/2026', 'Detracciones de lunes a viernes', 'La descarga automática de detracciones corre una sola vez al día y solo de lunes a viernes (bot, hoja y reloj de GitHub). A mano se puede cualquier día.'),
     ('06/11/2026', 'Manual del proyecto', 'Este manual (Excel y Markdown) generado desde el código con scripts/generar_manual.py.'),
     ('06/11/2026', '⏱ Minutos de GitHub', 'Medición del mes cada 6 h, avisos al 50/75/90/100% (si el repositorio es privado), resumen los lunes y comando «minutos».'),
     ('06/11/2026', 'Robots de SUNAT más tolerantes', 'SIRE: si SUNAT está lenta queda «pendiente» y se reintenta (sin marcar error). Detracciones: espera hasta ~60 s el menú de SOL. Tiempos máximos en los robots para no gastar minutos colgados.'),
