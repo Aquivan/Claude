@@ -76,10 +76,16 @@ function DEC_cfg_() {
   var mapa = {};
   hoja.getRange(4, 1, DEC_PARAMETROS.length, 2).getDisplayValues().forEach(function (f) { mapa[f[0]] = String(f[1] || '').trim(); });
   var v = function (i) { return mapa[DEC_PARAMETROS[i][0]] || DEC_PARAMETROS[i][1]; };
+  // «Formularios» debe ser texto como «0621,0601,0626». Si Google lo convirtió en número (pasó al crear la hoja), se repara.
+  var forms = v(2);
+  if (!/^\s*\d{3,4}(\s*[,;]\s*\d{3,4})*\s*$/.test(forms) || forms.split(/[,;]/).some(function (f) { return !/^0?6\d\d$/.test(f.trim()); })) {
+    forms = DEC_PARAMETROS[2][1];
+    var c = hoja.getRange(4 + 2, 2); c.setNumberFormat('@'); c.setValue(forms);
+  }
   var repo = v(0).split('/');
   return {
     owner: repo[0], repo: repo[1], rama: v(1),
-    formularios: v(2).split(/[,\s]+/).filter(String).map(function (f) { return ('0000' + f.replace(/\D/g, '')).slice(-4); }),
+    formularios: forms.split(/[,;\s]+/).filter(String).map(function (f) { return ('0000' + f.replace(/\D/g, '')).slice(-4); }),
     dia: Math.min(28, Math.max(1, parseInt(v(3), 10) || 28)),
     meses: Math.min(24, Math.max(1, parseInt(v(4), 10) || 3)),
     carpeta: v(5),
@@ -92,9 +98,10 @@ function DEC_crearConfig_(ss) {
   hoja.getRange('A1').setValue('⚙️ Configuración').setFontSize(14).setFontWeight('bold');
   hoja.getRange('A2').setValue('El token de GitHub NO va aquí: use el menú 📑 Declaraciones → 🔑 Guardar token de GitHub.').setFontColor('#666666');
   hoja.getRange(3, 1, 1, 3).setValues([['Parámetro', 'Valor', 'Ayuda']]).setFontWeight('bold').setBackground('#1f3b5c').setFontColor('#ffffff');
+  hoja.getRange(4, 2, DEC_PARAMETROS.length, 1).setNumberFormat('@');   // ANTES de escribir: «0621,0601,0626» es texto, no un número
   hoja.getRange(4, 1, DEC_PARAMETROS.length, 3).setValues(DEC_PARAMETROS);
   hoja.getRange(4, 1, DEC_PARAMETROS.length, 1).setFontWeight('bold');
-  hoja.getRange(4, 2, DEC_PARAMETROS.length, 1).setBackground('#fff8e1').setNumberFormat('@');
+  hoja.getRange(4, 2, DEC_PARAMETROS.length, 1).setBackground('#fff8e1');
   hoja.getRange(4 + DEC_PARAMETROS.length - 1, 2).setBackground('#f3f3f3');
   hoja.setColumnWidth(1, 210); hoja.setColumnWidth(2, 260); hoja.setColumnWidth(3, 520);
   hoja.setFrozenRows(3);

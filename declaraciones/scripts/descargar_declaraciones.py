@@ -137,6 +137,27 @@ class Consulta:
 
     def buscar(self, anio, mes_ini, mes_fin):
         fr = self.fr
+        # La página carga la lista de años después: sin ella, «Buscar» no hace nada (pasó el 06/11/2026).
+        for _ in range(60):
+            if fr.evaluate("(a) => [...document.querySelectorAll('select option')].some(o => o.value === 'number:' + a)", anio):
+                break
+            self.pag.wait_for_timeout(1000)
+        else:
+            raise SunatLenta("La consulta de SUNAT no cargó la lista de años")
+        self.pag.wait_for_timeout(1500)
+        for intento in range(2):
+            try:
+                return self._buscar(anio, mes_ini, mes_fin)
+            except SunatLenta:
+                raise
+            except Exception as e:   # noqa: BLE001
+                if intento:
+                    msg = fr.evaluate("() => [...document.querySelectorAll('.alert,.modal-body,.text-danger,.help-block')].filter(e => e.offsetParent !== null).map(e => e.innerText).join(' / ')")
+                    raise SunatLenta("SUNAT no respondió la búsqueda" + (": " + re.sub(r"\d{5,}", "…", msg)[:150] if msg else ""))
+                self.pag.wait_for_timeout(5000)
+
+    def _buscar(self, anio, mes_ini, mes_fin):
+        fr = self.fr
         fr.select_option("#numFormulario", ["Todos"])
         fr.evaluate("""([mi, mf, anio]) => {
             const sel = [...document.querySelectorAll('select')];
@@ -145,7 +166,7 @@ class Consulta:
               const e = document.getElementById(id); fija(e, m);
               const y = sel[sel.indexOf(e) + 1]; if (y) fija(y, 'number:' + anio);
             } }""", [mes_ini, mes_fin, anio])
-        with self.pag.expect_response(lambda r: "/factoriaConsulta/" in r.url, timeout=120000) as info:
+        with self.pag.expect_response(lambda r: "/factoriaConsulta/" in r.url, timeout=60000) as info:
             fr.evaluate("() => { const b = [...document.querySelectorAll('button')].find(b => /Buscar/.test(b.innerText) && b.offsetParent !== null); b.click(); }")
         r = info.value
         if r.status >= 500:
@@ -271,6 +292,14 @@ def main():
             except Exception:
                 pass
             sys.exit(75)
+        except Exception as e:   # noqa: BLE001 — que la hoja sepa por qué no llegó nada
+            msg = re.sub(r"\d{5,}", "…", str(e).splitlines()[0] if str(e) else type(e).__name__)[:150]
+            print(f"Error: {msg}")
+            try:
+                enviar(destino, llave, {"accion": "fin", "ruc": ruc, "error": msg})
+            except Exception:
+                pass
+            sys.exit(1)
         finally:
             ctx.close()
             nav.close()
