@@ -374,9 +374,14 @@ function MESA_reasignar_(tk, nuevos, quitar, token) {
     log.push([ahora, quien, lote, HOJA_REASIGNAR_ + '!' + fila, 'Fila borrada', JSON.stringify(crudo), '', '']);
     hechos++;
   });
+  // Las filas nuevas van al PRIMER HUECO de las columnas A–E (desde la fila 4). Antes iban después de la última
+  // fila usada de toda la pestaña, que incluye el cuadro 💡 SUGERIDAS de la derecha, y quedaban filas vacías.
+  var ultA = Math.max(sh.getLastRow(), 4);
+  var libres = sh.getRange(4, 1, ultA - 3, 5).getDisplayValues().map(function (r, i) { return r.every(function (c) { return !String(c).trim(); }) ? i + 4 : 0; }).filter(Boolean);
+  var siguiente = function () { return libres.length ? libres.shift() : ++ultA; };
   (nuevos || []).forEach(function (x) {
     if (!x.cre || !x.origen || !x.destino) return;
-    var fila = Math.max(4, sh.getLastRow() + 1);
+    var fila = siguiente();
     var valores = [String(x.cre), String(x.agente || ''), String(x.origen), String(x.destino), Number(x.monto) > 0 ? redondear2_(Number(x.monto)) : '',
       '🧩 Mesa · ' + (quien || '') + ' · ' + Utilities.formatDate(ahora, 'America/Lima', 'dd/MM/yyyy HH:mm') + marca];
     sh.getRange(fila, 1, 1, 4).setNumberFormat('@');

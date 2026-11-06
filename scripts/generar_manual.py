@@ -189,6 +189,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
+    ('06/11/2026', 'Mesa: reasignaciones sin huecos', 'Las filas nuevas de 🔁 Reasignar retenciones van al primer hueco de A–E (antes quedaban filas vacías por el cuadro 💡 SUGERIDAS de la derecha).'),
     ('06/11/2026', '📑 Declaraciones · Grupo', 'Proyecto nuevo: PDT 621, 601 PLAME y 626 con constancia PDF y rectificatorias (vigente + respaldo), reportes por periodo, tributos y casillas, descarga mensual el día 28. Los PDF van directo a la hoja (no a GitHub).'),
     ('06/11/2026', 'Detracciones de lunes a viernes', 'La descarga automática de detracciones corre una sola vez al día y solo de lunes a viernes (bot, hoja y reloj de GitHub). A mano se puede cualquier día.'),
     ('06/11/2026', 'Manual del proyecto', 'Este manual (Excel y Markdown) generado desde el código con scripts/generar_manual.py.'),
