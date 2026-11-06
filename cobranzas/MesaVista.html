@@ -42,7 +42,9 @@ body.arrastrando,body.arrastrando *{cursor:grabbing!important;user-select:none!i
 #lf .fila{padding-right:24px}#lv .fila{padding-left:24px}
 .fila.copia{background:#F8FAFC;color:#64748B;cursor:default;padding-left:22px}.fila.copia .l1{font-weight:normal}
 .fila.cand{outline:2px dashed #B45309;outline-offset:-2px;background:#FFFBEB}
-.fila.mod::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--am)}
+.fila.mod::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:#7C3AED}
+#leyenda{font-size:11px;color:var(--gr);padding:2px 10px 4px;display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
+#leyenda i{display:inline-block;width:18px;height:4px;border-radius:2px;vertical-align:middle;margin-right:3px}
 .chip{display:inline-block;border-radius:9px;padding:0 6px;font-size:10.5px;background:#E2E8F0;color:#334155;margin-right:3px;font-weight:normal}
 .c-v{background:var(--vec);color:#166534}.c-a{background:var(--amc);color:#92400E}.c-r{background:var(--roc);color:#991B1B}.c-z{background:var(--azc);color:#1E3A8A}
 .sal{font-weight:bold}.sal.ok{color:var(--ve)}.sal.pe{color:var(--ro)}.sal.pa{color:var(--am)}
@@ -150,6 +152,15 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <button onclick="ayudaCompleta()">❓</button>
 </div>
 <div id="ayuda">① Toque un <b>voucher</b> (se marca en azul) · ② toque la(s) <b>factura(s)</b> que paga — o <b>arrastre</b> desde el punto ⦿ de una fila hasta la otra: la línea sigue al mouse · toque una línea para cambiar el monto o quitarla · ③ <b>💾 Guardar</b>. Nada se escribe hasta guardar.</div>
+<div id="leyenda"><b>Colores:</b>
+<span><i style="background:#16A34A"></i>voucher usado completo</span>
+<span><i style="background:#D97706"></i>al voucher le sobra dinero</span>
+<span><i style="background:#DC2626"></i>no aplica nada · RUC o moneda distinta</span>
+<span><i style="background:#DB2777"></i>devolución del proveedor</span>
+<span><i style="background:#D97706;height:0;border-top:2px dashed #D97706"></i>sugerencia (morada = de la IA)</span>
+<span>línea <b>gruesa</b> = sin guardar · <b>pálida</b> = de otro voucher</span>
+<span><i style="background:#7C3AED;width:5px;height:12px"></i>franja morada = fila con cambios sin guardar</span>
+<span><i style="background:#ECFDF5;border:1px solid #16A34A;height:10px"></i>fondo verde = ya cruzada</span></div>
 <div id="rep">
   <div id="repBar">
     <b>📊 Estado de cuenta</b>
@@ -526,7 +537,7 @@ function dibujar() {
     var d = 'M' + x1 + ',' + p1.y + ' C' + mx + ',' + p1.y + ' ' + mx + ',' + p2.y + ' ' + x2 + ',' + p2.y;
     var col, dash = '', w = 2.2;
     if (tipo === 'sug') { col = nota && nota.de === 'ia' ? '#7C3AED' : '#D97706'; dash = '6 5'; w = 2; }
-    else if (tipo === 'dev') { col = '#B45309'; w = nota.sucio ? 3 : 2.2; if (nota.sucio) dash = '6 4'; }
+    else if (tipo === 'dev') { col = '#DB2777'; w = nota.sucio ? 3 : 2.2; if (nota.sucio) dash = '6 4'; }
     else if (tipo === 'r') { col = nota.fila || nota.nuevo ? '#7C3AED' : '#0EA5E9'; w = nota.nuevo ? 3.4 : 2.2; if (id === S.actR) w += 1; }
     else {
       var v = S.V[id], doc = S.D[k], x = S.sim.amt[id + '|' + k] || 0, nuevo = (S.orig[id] || []).indexOf(k) < 0 || S.montos[id + '|' + k] !== S.origMontos[id + '|' + k];
@@ -548,7 +559,7 @@ function dibujar() {
     svg.innerHTML = h.join(''); return;
   }
   Object.keys(posV).forEach(function (id) { (S.links[id] || []).forEach(function (k) { linea(id, k, 'l'); }); });
-  // ↩️ devoluciones: a la factura (línea café) o al depósito que devuelven (arco por el borde de la lista de vouchers)
+  // ↩️ devoluciones: a la factura (línea rosada) o al depósito que devuelven (arco por el borde de la lista de vouchers)
   Object.keys(posV).forEach(function (id) {
     var V0 = S.V[id]; if (!V0 || !V0.dev) return;
     var sucio = esSucio(id);
@@ -559,8 +570,8 @@ function dibujar() {
       var x = lv.left - main.left + 2, bx = x - Math.min(95, 30 + Math.abs(a1.y - a2.y) / 4);
       var d = 'M' + x + ',' + a1.y + ' C' + bx + ',' + a1.y + ' ' + bx + ',' + a2.y + ' ' + x + ',' + a2.y;
       var op = (a1.fuera || a2.fuera) ? .35 : 1, dato = esc(JSON.stringify({ id: id, t: 'dv', i: i }));
-      h.push('<path d="' + d + '" stroke="#B45309" stroke-width="' + (sucio ? 3 : 2.2) + '" fill="none" opacity="' + op + '"' + (sucio ? ' stroke-dasharray="6 4"' : '') + '/>' +
-        '<circle cx="' + x + '" cy="' + a1.y + '" r="3.2" fill="#B45309"/><circle cx="' + x + '" cy="' + a2.y + '" r="3.2" fill="#B45309"/>' +
+      h.push('<path d="' + d + '" stroke="#DB2777" stroke-width="' + (sucio ? 3 : 2.2) + '" fill="none" opacity="' + op + '"' + (sucio ? ' stroke-dasharray="6 4"' : '') + '/>' +
+        '<circle cx="' + x + '" cy="' + a1.y + '" r="3.2" fill="#DB2777"/><circle cx="' + x + '" cy="' + a2.y + '" r="3.2" fill="#DB2777"/>' +
         '<path class="hit" d="' + d + '" data-l="' + dato + '" onclick="clicLinea(evt,this)"/>');
       n++;
     });
@@ -1967,6 +1978,7 @@ function ayudaCompleta() {
     '<li><b>Cruzar</b>: toque un voucher y luego la(s) factura(s) que paga, o arrastre uno sobre otro. Ctrl+clic marca varios vouchers (varios pagos para una factura) o varias facturas (☑) para cruzarlas juntas.</li>' +
     '<li><b>Colores</b>: 🟢 cuadra · 🟠 al voucher le sobra dinero · 🔴 la factura ya no tiene saldo, otra moneda o el RUC del voucher no es el emisor · punteado: sugerencia (🟠 del sistema, 🟣 de la IA). Toque una línea para quitarla o aceptarla.</li>' +
     '<li>El voucher llena sus facturas <b>en orden</b> (igual que el sistema): «⬆ Pagar esta primero» cambia el orden. Lo que sobra queda como saldo a favor.</li>' +
+    '<li><b>Dos vouchers en la misma factura</b>: el <b>más antiguo</b> paga primero todo lo que puede y el siguiente solo lo que falta (lo demás de ese voucher sigue a sus otras facturas). Para decidir usted cuánto pone cada uno, toque la línea y escriba el monto (por ejemplo, el voucher nuevo paga solo 39,598.90).</li>' +
     '<li><b>🧮</b> busca qué facturas suman exacto el voucher (también neto de retención 3%) · <b>🤖</b> le pide la propuesta a la IA · <b>🔎 RUC</b> busca el RUC del beneficiario (padrón SUNAT e internet).</li>' +
     '<li><b>💾 Guardar</b> escribe en la hoja de Vouchers lo mismo que usted escribiría a mano: «Tipo y Nº Doc.» y, si están vacíos, «ID Beneficiario» / «ID Usuario» (con nota en la celda). Cobranzas se recalcula solo en ~1 minuto y la Mesa se recarga con los saldos reales.</li>' +
     '<li>Si otra persona cambió el mismo voucher mientras usted trabajaba, ese voucher no se guarda y se le avisa. <b>↩️ Deshacer último guardado</b> vuelve atrás lo suyo.</li>' +
@@ -1979,7 +1991,7 @@ function ayudaCompleta() {
     '<li>En el estado de cuenta: <b>💾 Guardado</b> (lo que está hoy), <b>✏️ Con mis cambios</b> (cómo quedará si guarda: saldo antes tachado → después, líneas 🆕) y <b>⚖️ Comparar</b> (solo lo que cambia). Desde ahí mismo puede 💾 Guardar.</li>' +
     '<li><b>🧮 Calculadora</b> (botón arriba o F2): flotante y movible; IGV, retención 3%, detracción, memoria e historial. <b>Alt+clic</b> en cualquier monto de la pantalla lo pasa a la calculadora.</li>' +
     '<li><b>🧹 Quitar cruces</b>: deja en blanco los cruces del proveedor / empresa filtrados (y, si lo marca, las reasignaciones de retención y las devoluciones) para volver a cruzar desde cero. Nada se escribe hasta 💾 Guardar; ↶ lo vuelve todo de una vez.</li>' +
-    '<li><b>↩️ Devoluciones</b>: toque la devolución y luego el <b>depósito</b> que le devuelven (los posibles se marcan en café; también puede arrastrar un voucher sobre el otro), la <b>factura pagada de más</b>, o elija la <b>N/C</b> en la lista. Se dibuja una línea café y se guarda como «DEVOLUCION op 5344» / «DEVOLUCION 01_FN01-19» / «DEVOLUCION 07_FC01-12». A cualquier voucher sin facturas se le puede marcar «↩️ Es una devolución del proveedor».</li>' +
+    '<li><b>↩️ Devoluciones</b>: toque la devolución y luego el <b>depósito</b> que le devuelven (los posibles se marcan en café; también puede arrastrar un voucher sobre el otro), la <b>factura pagada de más</b>, o elija la <b>N/C</b> en la lista. Se dibuja una línea rosada y se guarda como «DEVOLUCION op 5344» / «DEVOLUCION 01_FN01-19» / «DEVOLUCION 07_FC01-12». A cualquier voucher sin facturas se le puede marcar «↩️ Es una devolución del proveedor».</li>' +
     '<li>Los vouchers ↩️ de devolución y los que dicen otra cosa (PLANILLA, etc.) se marcan; una devolución no se cruza con facturas.</li></ol><button onclick="cerrarModal()">Cerrar</button>');
 }
 document.addEventListener('keydown', function (e) {

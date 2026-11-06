@@ -336,29 +336,11 @@ function ejecutarCruce_(entrada) {
     });
     if (!lista.length) return;
     var origenRef = p.origen || (p.esManual ? ORIGEN.MANUAL : ORIGEN.REFERENCIADO);
-    if (p.modalidad === MODALIDAD.PAGO && montos.some(function (x) { return x != null; }) && mismaMoneda(p, lista)) aplicarConMontos(p, lista, montos, origenRef);
+    // Con monto por línea («=1500») también entra al lote, en su turno por FECHA (antes se aplicaba primero que
+    // todos y le ganaba la factura a un voucher más antiguo; la 🧩 Mesa los ordenaba por fecha y no coincidían).
+    if (p.modalidad === MODALIDAD.PAGO && montos.some(function (x) { return x != null; }) && mismaMoneda(p, lista)) { lote.push({ p: p, lista: lista, origen: origenRef, montos: montos }); p.aplicado = true; }
     else encolar(p, lista, origenRef);
   });
-  /** «01_E001-393=1500»: el voucher paga a cada factura el monto escrito (sin pasar del saldo); las que no tienen
-   *  monto toman lo que quede, en orden. Lo que sobra queda como remanente del voucher. */
-  function aplicarConMontos(p, lista, montos, origen) {
-    var rem = p.monto;
-    lista.forEach(function (d, i) {
-      var falta = Math.max(0, pendiente(d));
-      var quiere = montos[i] != null ? montos[i] : rem;
-      var x = redondear2_(Math.max(0, Math.min(quiere, rem, falta)));
-      if (montos[i] != null && montos[i] > rem + 0.005) errores.push({ tipo: 'Monto por línea', pagoId: p.id, detalle: 'Op. ' + (p.operacion || '') + ': a ' + etiquetaDoc_(d) + ' se le asignó ' + montos[i].toFixed(2) + ' pero al voucher solo le quedaban ' + rem.toFixed(2), fuente: p.fuente });
-      else if (montos[i] != null && montos[i] > falta + 0.005) errores.push({ tipo: 'Monto por línea', pagoId: p.id, detalle: 'Op. ' + (p.operacion || '') + ': a ' + etiquetaDoc_(d) + ' se le asignó ' + montos[i].toFixed(2) + ' pero su saldo era ' + falta.toFixed(2) + ' (se aplicó el saldo)', fuente: p.fuente });
-      if (x > 0.005) registrarMov(d, x, p, MODALIDAD.PAGO, origen, montos[i] != null ? 'monto indicado' : '');
-      else if (falta <= 0.005) errores.push({ tipo: 'Ya pagada', pagoId: p.id, detalle: etiquetaDoc_(d) + ' ya estaba cancelada; no se le aplico nada de este pago', fuente: p.fuente });
-      rem = redondear2_(rem - x);
-    });
-    p.aplicado = true;
-    if (rem > 0.05) {
-      remanentes.push({ pago: p, monto: rem, moneda: lista[0].moneda, docs: lista.map(etiquetaDoc_).join(', ') });
-      errores.push({ tipo: 'Pago de más', pagoId: p.id, detalle: 'Op. ' + (p.operacion || '') + ': sobran ' + rem.toFixed(2) + ' después de aplicar ' + lista.map(etiquetaDoc_).join(', '), fuente: p.fuente });
-    }
-  }
   pagos.forEach(function (p) {
     if (p.aplicado || !dec[p.id] || dec[p.id].estado !== 'OK') return;
     var lista = (dec[p.id].docs || []).map(function (k) { return docs[k]; }).filter(Boolean);
@@ -383,17 +365,26 @@ function ejecutarCruce_(entrada) {
       e.asign = e.lista.map(function () { return 0; });
       e.rem = e.p.monto;
       e.lista.forEach(function (d, i) {
-        var x = Math.max(0, Math.min(e.rem, pd(d)));
-        e.asign[i] += x; pend[d.clave] = redondear2_(pd(d) - x); e.rem = redondear2_(e.rem - x);
+        // «01_E001-393=1500»: esa línea paga como máximo el monto escrito; las demás, lo que quede (en orden)
+        var tope = e.montos && e.montos[i] != null ? e.montos[i] : Infinity, falta = pd(d);
+        var x = redondear2_(Math.max(0, Math.min(e.rem, falta, tope)));
+        if (e.montos && e.montos[i] != null) {
+          if (falta <= 0.005) errores.push({ tipo: 'Ya pagada', pagoId: e.p.id, detalle: etiquetaDoc_(d) + ' ya estaba cancelada; no se le aplico nada de este pago', fuente: e.p.fuente });
+          else if (e.montos[i] > e.rem + 0.005) errores.push({ tipo: 'Monto por línea', pagoId: e.p.id, detalle: 'Op. ' + (e.p.operacion || '') + ': a ' + etiquetaDoc_(d) + ' se le asignó ' + e.montos[i].toFixed(2) + ' pero al voucher solo le quedaban ' + e.rem.toFixed(2), fuente: e.p.fuente });
+          else if (e.montos[i] > falta + 0.005) errores.push({ tipo: 'Monto por línea', pagoId: e.p.id, detalle: 'Op. ' + (e.p.operacion || '') + ': a ' + etiquetaDoc_(d) + ' se le asignó ' + e.montos[i].toFixed(2) + ' pero su saldo era ' + Math.max(0, falta).toFixed(2) + ' (se aplicó el saldo)', fuente: e.p.fuente });
+        }
+        e.asign[i] += x; pend[d.clave] = redondear2_(falta - x); e.rem = redondear2_(e.rem - x);
       });
     });
     // Caminos de reacomodo (como un flujo): desde el voucher con sobrante se
     // busca una cadena voucher→factura→otro voucher→otra factura... hasta una
     // factura que aun tenga saldo, y se corre el dinero a lo largo de la cadena.
     var usanDoc = {};
-    lote.forEach(function (e) { e.lista.forEach(function (d) { (usanDoc[d.clave] = usanDoc[d.clave] || []).push(e); }); });
+    // Los vouchers con monto por línea no se reacomodan: lo que la persona escribió se respeta tal cual.
+    lote.forEach(function (e) { if (!e.montos) e.lista.forEach(function (d) { (usanDoc[d.clave] = usanDoc[d.clave] || []).push(e); }); });
     function idx(e, d) { return e.lista.indexOf(d); }
     lote.forEach(function (v) {
+      if (v.montos) return;
       for (var intento = 0; intento < 50 && v.rem > 0.05; intento++) {
         var padre = {}, cola = [], destino = null;
         v.lista.forEach(function (d) { if (!padre[d.clave]) { padre[d.clave] = { e: v, prev: null, doc: d }; cola.push(d); } });
@@ -427,7 +418,7 @@ function ejecutarCruce_(entrada) {
       }
     });
     lote.forEach(function (e) {
-      e.lista.forEach(function (d, i) { if (e.asign[i] > 0.005) registrarMov(d, e.asign[i], e.p, MODALIDAD.PAGO, e.origen); });
+      e.lista.forEach(function (d, i) { if (e.asign[i] > 0.005) registrarMov(d, e.asign[i], e.p, MODALIDAD.PAGO, e.origen, e.montos && e.montos[i] != null ? 'monto indicado' : ''); });
       if (e.rem > 0.05) {
         remanentes.push({ pago: e.p, monto: e.rem, moneda: e.lista[0].moneda, docs: e.lista.map(etiquetaDoc_).join(', ') });
         errores.push({ tipo: 'Pago de más', pagoId: e.p.id, detalle: 'Op. ' + (e.p.operacion || '') + ': sobran ' + e.rem.toFixed(2) + ' después de cancelar ' + e.lista.map(etiquetaDoc_).join(', '), fuente: e.p.fuente });
