@@ -125,6 +125,11 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 #ecHoja .tot td{font-weight:bold;border-top:2px solid #1F3A5F;background:#F1F5F9}#ecHoja .sub{color:#6B7280;font-size:10.5px}
 #ecHoja .fin{background:#1F3A5F;color:#fff;font-weight:bold;font-size:13px}#ecHoja .fin td{border:0;padding:7px 8px}
 #ecHoja .ini td{background:#F8FAFC;font-style:italic}#ecHoja .ag th,#ecHoja .ag td{text-align:right}#ecHoja .ag th:first-child,#ecHoja .ag td:first-child{text-align:left}
+#ecHoja .tg{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;font-weight:bold;color:#fff;white-space:nowrap}
+#ecHoja .pt{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:middle}
+#ecHoja tr.fac td{background:#F5F8FF}#ecHoja tr.fac .doc{color:#1D4ED8;font-weight:bold}
+#ecHoja .car{color:#111827;font-weight:bold}#ecHoja .abo{font-weight:bold}#ecHoja .deb{color:#B91C1C;font-weight:bold}#ecHoja .fav{color:#047857;font-weight:bold}
+#ecHoja .ley{display:flex;flex-wrap:wrap;gap:6px 12px;margin:6px 0 2px;font-size:10.5px;color:#374151}
 #ecHoja .firma{display:flex;gap:30px;margin-top:34px}#ecHoja .firma div{flex:1;border-top:1px solid #111;padding-top:4px;text-align:center;font-size:10.5px;color:#374151}
 @media print{body.ecImp>*:not(#ec){display:none!important}body.ecImp #ecBar{display:none!important}body.ecImp #ec{position:static;display:block;background:#fff}body.ecImp #ecScroll{padding:0;overflow:visible}body.ecImp #ecHoja{box-shadow:none;width:auto;padding:0}@page{size:A4;margin:12mm}}
 @media print{#top,#ayuda,#main,#pie,#repBar button,#repBar select,#repBar input,.seg{display:none!important}body{overflow:visible;height:auto;display:block}#rep{display:block!important;overflow:visible}.grp{break-inside:avoid-page}}
@@ -2131,6 +2136,8 @@ document.addEventListener('keydown', function (e) {
  * de saldos de los auditores en Perú): encabezado, cuadro resumen del periodo (saldo inicial + cargos − abonos =
  * saldo final), antigüedad de saldos, facturas pendientes, movimientos con saldo acumulado y conformidad. */
 var EC = null;
+// tipos de movimiento: nombre y color (los mismos en el resumen, la leyenda y cada línea)
+var ECT = { fac: ['Factura', '#1D4ED8'], nd: ['Nota débito', '#1E40AF'], nc: ['Nota crédito', '#C2410C'], ret: ['Retención', '#7C3AED'], det: ['Detracción', '#0E7490'], pago: ['Pago', '#15803D'], man: ['Pago manual', '#166534'], dev: ['Devolución', '#BE185D'], otr: ['Otro', '#475569'] };
 function ecDesdeFiltro() {
   var c = contraFiltro(), emp = $('fEmp').value, rucs = {};
   EVIS.forEach(function (d) { rucs[d.cr] = 1; });
@@ -2157,7 +2164,7 @@ function ecDatos(cr, er, mon) {
   var L = [], vou = {}, cre = {};
   docs.forEach(function (d) {
     var nd = /^08_/.test(d.doc), nc = /^07_/.test(d.doc) || d.tot < 0;
-    L.push({ f: d.f, doc: d.doc, con: (nc ? 'Nota de crédito' : nd ? 'Nota de débito' : 'Factura') + (d.ve ? ' · vence ' + ff(d.ve) : ''), ref: er ? '' : nomEmp(d.er), cargo: nc ? 0 : d.tot, abono: nc ? -d.tot : 0, g: 'fac', k: d.k });
+    L.push({ f: d.f, doc: d.doc, con: (nc ? 'Nota de crédito' : nd ? 'Nota de débito' : 'Factura') + (d.ve ? ' · vence ' + ff(d.ve) : ''), ref: er ? '' : nomEmp(d.er), cargo: nc ? 0 : d.tot, abono: nc ? -d.tot : 0, g: nc ? 'nc' : nd ? 'nd' : 'fac', k: d.k });
     (EV.movK[d.k] || []).forEach(function (m) {
       var c = cat(m);
       if (m.mod === 'Pago' && S.V[m.id]) { var v = S.V[m.id], x = vou[m.id] || (vou[m.id] = { f: v.f, doc: (v.bco + ' ' + v.op).trim(), apl: [], m: 0, v: v }); x.apl.push(d.doc + ' ' + fm(m.m)); x.m = r2(x.m + m.m); return; }
@@ -2201,7 +2208,7 @@ function ecPintar() {
     var n = r2(l.cargo - l.abono);
     if (de && l.f < de) { ini = r2(ini + n); return; }
     per.push(l);
-    var g = l.g === 'fac' ? (l.cargo ? (/débito/.test(l.con) ? 'nd' : 'fac') : 'nc') : l.g === 'man' ? 'pago' : (R[l.g] != null ? l.g : 'otr');
+    var g = l.g === 'man' ? 'pago' : (R[l.g] != null ? l.g : 'otr');
     R[g] = r2(R[g] + (l.cargo || l.abono));
   });
   fin = r2(ini + per.reduce(function (t, l) { return t + l.cargo - l.abono; }, 0));
@@ -2225,8 +2232,8 @@ function ecPintar() {
   // resumen
   h += '<h2>Resumen del periodo</h2><table><tr><th>Concepto</th><th class="n">' + sim + '</th></tr>' +
     '<tr class="ini"><td>Saldo inicial' + (de ? ' al ' + ff(de) : '') + '</td><td class="n">' + M(ini) + '</td></tr>' +
-    [['(+) Facturas emitidas', R.fac], ['(+) Notas de débito', R.nd], ['(−) Notas de crédito', -R.nc], ['(−) Retenciones del IGV (3%)', -R.ret], ['(−) Detracciones (SPOT)', -R.det], ['(−) ' + (pagar ? 'Pagos realizados' : 'Cobros recibidos'), -R.pago], ['(−) Otros descuentos y compensaciones', -R.otr], ['(+) Devoluciones ' + (pagar ? 'recibidas' : 'hechas'), R.dev]]
-      .filter(function (r) { return Math.abs(r[1]) > 0.005; }).map(function (r) { return '<tr><td>' + r[0] + '</td><td class="n">' + M(r[1]) + '</td></tr>'; }).join('') +
+    [['(+) Facturas emitidas', R.fac, 'fac'], ['(+) Notas de débito', R.nd, 'nd'], ['(−) Notas de crédito', -R.nc, 'nc'], ['(−) Retenciones del IGV (3%)', -R.ret, 'ret'], ['(−) Detracciones (SPOT)', -R.det, 'det'], ['(−) ' + (pagar ? 'Pagos realizados' : 'Cobros recibidos'), -R.pago, 'pago'], ['(−) Otros descuentos y compensaciones', -R.otr, 'otr'], ['(+) Devoluciones ' + (pagar ? 'recibidas' : 'hechas'), R.dev, 'dev']]
+      .filter(function (r) { return Math.abs(r[1]) > 0.005; }).map(function (r) { var c = ECT[r[2]][1]; return '<tr><td><span class="pt" style="background:' + c + '"></span><b style="color:' + c + '">' + r[0] + '</b></td><td class="n" style="color:' + c + ';font-weight:bold">' + M(r[1]) + '</td></tr>'; }).join('') +
     '<tr class="fin"><td>SALDO FINAL al ' + ff(ha) + (fin < -0.05 ? ' (a favor de ' + esc(pagar ? nomE : nomC) + ')' : '') + '</td><td class="n">' + sim + ' ' + M(fin) + '</td></tr></table>';
   // antigüedad
   h += '<h2>Antigüedad de saldos al ' + ff(ha) + '</h2><table class="ag"><tr><th>Facturas pendientes</th><th>Por vencer</th><th>1 – 30 días</th><th>31 – 60 días</th><th>61 – 90 días</th><th>Más de 90</th><th>Total</th></tr>' +
@@ -2237,16 +2244,24 @@ function ecPintar() {
   // facturas pendientes
   if (pend.length) {
     h += '<h2>Detalle de facturas pendientes</h2><table><tr><th>Documento</th><th>Emisión</th><th>Vencimiento</th><th class="n">Días vencido</th><th class="n">Importe</th><th class="n">Saldo</th></tr>' +
-      pend.sort(function (a, b) { return a.d.f < b.d.f ? -1 : 1; }).map(function (p) { return '<tr><td>' + esc(p.d.doc) + (er ? '' : ' <span class="sub">' + esc(nomEmp(p.d.er)) + '</span>') + '</td><td>' + ff(p.d.f) + '</td><td>' + (p.d.ve ? ff(p.d.ve) : '—') + '</td><td class="n">' + (p.dd > 0 ? p.dd : 'por vencer') + '</td><td class="n">' + fm(p.d.tot) + '</td><td class="n"><b>' + fm(p.s) + '</b></td></tr>'; }).join('') +
+      pend.sort(function (a, b) { return a.d.f < b.d.f ? -1 : 1; }).map(function (p) { return '<tr><td style="color:#1D4ED8;font-weight:bold">' + esc(p.d.doc) + (er ? '' : ' <span class="sub">' + esc(nomEmp(p.d.er)) + '</span>') + '</td><td>' + ff(p.d.f) + '</td><td>' + (p.d.ve ? ff(p.d.ve) : '—') + '</td><td class="n" style="' + (p.dd > 60 ? 'color:#B91C1C;font-weight:bold' : p.dd > 0 ? 'color:#C2410C;font-weight:bold' : 'color:#047857') + '">' + (p.dd > 0 ? p.dd : 'por vencer') + '</td><td class="n">' + fm(p.d.tot) + '</td><td class="n"><b>' + fm(p.s) + '</b></td></tr>'; }).join('') +
       '<tr class="tot"><td colspan="5">Total pendiente</td><td class="n">' + fm(pend.reduce(function (t, p) { return t + p.s; }, 0)) + '</td></tr></table>';
   }
   // movimientos
   if (det) {
     var s = ini;
-    h += '<h2>Movimientos del periodo</h2><table><tr><th style="width:72px">Fecha</th><th style="width:118px">Documento</th><th>Concepto</th><th class="n" style="width:82px">Cargos</th><th class="n" style="width:82px">Abonos</th><th class="n" style="width:90px">Saldo</th></tr>' +
-      '<tr class="ini"><td colspan="5">Saldo inicial' + (de ? ' al ' + ff(de) : '') + '</td><td class="n">' + M(ini) + '</td></tr>' +
-      per.map(function (l) { s = r2(s + l.cargo - l.abono); return '<tr><td>' + ff(l.f) + '</td><td>' + esc(l.doc) + '</td><td>' + esc(l.con) + (l.ref && l.g !== 'pago' ? ' <span class="sub">' + esc(l.ref) + '</span>' : '') + '</td><td class="n">' + (l.cargo ? fm(l.cargo) : '') + '</td><td class="n">' + (l.abono ? fm(l.abono) : '') + '</td><td class="n">' + M(s) + '</td></tr>'; }).join('') +
-      '<tr class="tot"><td colspan="3">Totales del periodo</td><td class="n">' + fm(per.reduce(function (t, l) { return t + l.cargo; }, 0)) + '</td><td class="n">' + fm(per.reduce(function (t, l) { return t + l.abono; }, 0)) + '</td><td class="n">' + M(fin) + '</td></tr></table>';
+    var usados = {}; per.forEach(function (l) { usados[ECT[l.g] ? l.g : 'otr'] = 1; });
+    h += '<h2>Movimientos del periodo</h2><div class="ley">' + Object.keys(ECT).filter(function (g) { return usados[g]; }).map(function (g) { return '<span><span class="tg" style="background:' + ECT[g][1] + '">' + ECT[g][0] + '</span></span>'; }).join('') +
+      '<span>· saldo <b class="deb">rojo</b> = por ' + (pagar ? 'pagar' : 'cobrar') + ' · <b class="fav">(verde)</b> = a favor</span></div>' +
+      '<table><tr><th style="width:70px">Fecha</th><th style="width:78px">Tipo</th><th style="width:108px">Documento</th><th>Concepto</th><th class="n" style="width:78px">Cargos</th><th class="n" style="width:78px">Abonos</th><th class="n" style="width:86px">Saldo</th></tr>' +
+      '<tr class="ini"><td colspan="6">Saldo inicial' + (de ? ' al ' + ff(de) : '') + '</td><td class="n">' + M(ini) + '</td></tr>' +
+      per.map(function (l) {
+        s = r2(s + l.cargo - l.abono);
+        var tp = ECT[l.g] || ECT.otr, con = esc(l.con).replace(/(\d{2}_[A-Z0-9]{4}-\d+)/g, '<b>$1</b>');
+        return '<tr class="' + (l.g === 'fac' || l.g === 'nd' ? 'fac' : '') + '"><td>' + ff(l.f) + '</td><td><span class="tg" style="background:' + tp[1] + '">' + tp[0] + '</span></td><td class="doc" style="color:' + tp[1] + ';font-weight:bold">' + esc(l.doc) + '</td><td>' + con + (l.ref && l.g !== 'pago' ? ' <span class="sub">' + esc(l.ref) + '</span>' : '') + '</td>' +
+          '<td class="n car">' + (l.cargo ? fm(l.cargo) : '') + '</td><td class="n abo" style="color:' + tp[1] + '">' + (l.abono ? fm(l.abono) : '') + '</td><td class="n ' + (s > 0.05 ? 'deb' : s < -0.05 ? 'fav' : '') + '">' + M(s) + '</td></tr>';
+      }).join('') +
+      '<tr class="tot"><td colspan="4">Totales del periodo</td><td class="n">' + fm(per.reduce(function (t, l) { return t + l.cargo; }, 0)) + '</td><td class="n">' + fm(per.reduce(function (t, l) { return t + l.abono; }, 0)) + '</td><td class="n ' + (fin > 0.05 ? 'deb' : fin < -0.05 ? 'fav' : '') + '">' + M(fin) + '</td></tr></table>';
   }
   h += '<p class="sub" style="margin-top:14px">Saldos en ' + (mon === 'USD' ? 'dólares' : 'soles') + '; los paréntesis indican saldo a favor de ' + esc(pagar ? nomE : nomC) + '. Las retenciones del IGV se sustentan con los comprobantes de retención electrónicos y las detracciones con sus constancias de depósito. ' +
     'Le agradeceremos revisar este estado de cuenta y comunicarnos cualquier diferencia dentro de los 10 días de recibido; de no recibir observaciones, se considerará conforme.</p>';
