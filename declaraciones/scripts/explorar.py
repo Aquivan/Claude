@@ -27,6 +27,7 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 PATRON = r"declarac|consulta|constancia|pdt|formulario|plame|621|601|626|retenc|presentad|rectific"
 ESTATICO = re.compile(r"\.(js|css|png|gif|jpg|jpeg|svg|woff2?|ttf|ico|map)(\?|$)", re.I)
 SECRETOS = []
+CABECERAS = {}
 
 
 def tapar(t):
@@ -132,31 +133,29 @@ def buscar(pag, periodo):
     print(f"  filas visibles ({len(filas)}):")
     for f in filas[:25]:
         print("    ", tapar(f))
-    acciones = fr.evaluate("""() => { const r = [...document.querySelectorAll('table tbody tr')].find(r => r.offsetParent !== null && r.cells.length > 4);
-        return r ? [...r.querySelectorAll('a,button,input,img,span[ng-click],i')].map(e => e.outerHTML.slice(0, 300)) : []; }""")
-    print("  botones de la 1.ª fila:", [tapar(x) for x in acciones])
-    for i in range(min(len(acciones), 4)):
-        print(f"\n  ---- Clic en el botón {i} de la 1.ª fila ----")
+    # 1) Cabeceras que usa la página para hablar con SUNAT (solo nombres)
+    print("  cabeceras de la consulta:", CABECERAS.get("consulta"))
+    for n in range(2):
+        print(f"\n  ---- Constancia de la fila {n + 1} ----")
         try:
-            pag.wait_for_timeout(1500)
-            el = fr.locator("table tbody tr:visible").first.locator("a,button,input,img,span[ng-click],i").nth(i)
-            with pag.expect_download(timeout=20000) as d:
-                el.click(timeout=8000)
-            dd = d.value
-            ruta = "/tmp/_decl_prueba"
-            dd.save_as(ruta)
-            print("    [descarga]", tapar(dd.suggested_filename), os.path.getsize(ruta), "bytes", open(ruta, "rb").read(5))
+            fila = fr.locator("table tbody tr:visible").nth(n)
+            fila.locator("a[ng-click^='mostrarConstancia']").first.click(timeout=10000)
+            pag.wait_for_timeout(6000)
+            print("    botones visibles:", [tapar(x) for x in fr.evaluate("() => [...document.querySelectorAll('button,a.btn')].filter(e => e.offsetParent !== null).map(e => (e.innerText || e.title).trim() + ' :: ' + (e.getAttribute('ng-click') || ''))")])
+            with pag.expect_download(timeout=30000) as d:
+                fr.locator("button[ng-click='generarReportePdf()']:visible").first.click(timeout=8000)
+            ruta = "/tmp/_decl_prueba.pdf"
+            d.value.save_as(ruta)
+            print("    [PDF]", tapar(d.value.suggested_filename), os.path.getsize(ruta), "bytes", open(ruta, "rb").read(5))
             os.remove(ruta)
         except Exception as e:
-            print("    (sin descarga directa)", tapar(str(e))[:160])
-            print("    ventanas:", [tapar(p.url.split("?")[0]) for p in pag.context.pages])
-            print("    modal:", tapar(fr.evaluate("() => [...document.querySelectorAll('.modal,[role=dialog]')].filter(e => e.offsetParent !== null).map(e => e.innerText).join(' / ')"))[:800])
-            print("    botones ahora:", [tapar(x) for x in fr.evaluate("() => [...document.querySelectorAll('button,a')].filter(e => e.offsetParent !== null && /pdf|descarg|imprim|constancia|detalle|cerrar|volver/i.test(e.innerText + e.title + e.className)).map(e => e.outerHTML.slice(0, 250))")][:15])
-            for p2 in pag.context.pages[1:]:
-                try:
-                    p2.close()
-                except Exception:
-                    pass
+            print("    (falló)", tapar(str(e))[:200])
+        try:
+            vuelve = fr.evaluate("() => { const b = [...document.querySelectorAll('button,a')].find(e => e.offsetParent !== null && /regresar|volver|retornar|atr[aá]s|nueva consulta/i.test(e.innerText || e.title || '')); if (b) { b.click(); return (b.innerText || b.title).trim() + ' :: ' + (b.getAttribute('ng-click') || ''); } return ''; }")
+            pag.wait_for_timeout(3000)
+            print("    regresar con:", tapar(vuelve), "· filas visibles ahora:", fr.locator("table tbody tr:visible").count())
+        except Exception as e:
+            print("    (regresar falló)", tapar(str(e))[:150])
 
 
 def main():
@@ -188,6 +187,8 @@ def main():
                     forma = json.dumps(estructura_json(r.json()), ensure_ascii=False)[:1500]
             except Exception:
                 pass
+            if "factoriaConsulta" in r.url:
+                CABECERAS["consulta"] = sorted(r.request.headers.keys())
             print(f"  >> {r.request.method} {tapar(r.url.split('?')[0])[:180]} · HTTP {r.status} · {forma}")
             try:
                 if r.request.post_data:
