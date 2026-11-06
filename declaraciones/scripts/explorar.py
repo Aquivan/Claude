@@ -138,12 +138,11 @@ def buscar(pag, periodo):
     for n in range(2):
         print(f"\n  ---- Constancia de la fila {n + 1} ----")
         try:
-            fila = fr.locator("table tbody tr:visible").nth(n)
-            fila.locator("a[ng-click^='mostrarConstancia']").first.click(timeout=10000)
+            fr.locator("a[ng-click^='mostrarConstancia']:visible").nth(n).click(timeout=10000)
             pag.wait_for_timeout(6000)
             print("    botones visibles:", [tapar(x) for x in fr.evaluate("() => [...document.querySelectorAll('button,a.btn')].filter(e => e.offsetParent !== null).map(e => (e.innerText || e.title).trim() + ' :: ' + (e.getAttribute('ng-click') || ''))")])
             with pag.expect_download(timeout=30000) as d:
-                fr.locator("button[ng-click='generarReportePdf()']:visible").first.click(timeout=8000)
+                fr.locator("[ng-click='exportarConstancia()']:visible").first.click(timeout=8000)
             ruta = "/tmp/_decl_prueba.pdf"
             d.value.save_as(ruta)
             print("    [PDF]", tapar(d.value.suggested_filename), os.path.getsize(ruta), "bytes", open(ruta, "rb").read(5))
@@ -151,7 +150,7 @@ def buscar(pag, periodo):
         except Exception as e:
             print("    (falló)", tapar(str(e))[:200])
         try:
-            vuelve = fr.evaluate("() => { const b = [...document.querySelectorAll('button,a')].find(e => e.offsetParent !== null && /regresar|volver|retornar|atr[aá]s|nueva consulta/i.test(e.innerText || e.title || '')); if (b) { b.click(); return (b.innerText || b.title).trim() + ' :: ' + (b.getAttribute('ng-click') || ''); } return ''; }")
+            vuelve = fr.evaluate("() => { const b = [...document.querySelectorAll('[ng-click=\\'closeModal()\\']')].find(e => e.offsetParent !== null); if (b) { b.click(); return 'closeModal'; } return ''; }")
             pag.wait_for_timeout(3000)
             print("    regresar con:", tapar(vuelve), "· filas visibles ahora:", fr.locator("table tbody tr:visible").count())
         except Exception as e:
