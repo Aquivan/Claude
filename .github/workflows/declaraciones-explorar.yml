@@ -1,0 +1,57 @@
+# Proyecto "Declaraciones · Grupo" (carpeta declaraciones/). Recorre SUNAT SOL SOLO LEYENDO
+# para ubicar la consulta de declaraciones presentadas (PDT 621, 601 PLAME, 626).
+# El repositorio es público: el registro solo muestra la estructura de las pantallas (montos y
+# números tapados), no guarda fotos ni archivos, y nunca imprime claves.
+
+name: Declaraciones - explorar SUNAT (solo mirar)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ruc:
+        description: "RUC de la empresa (su Environment con claves SOL)"
+        required: true
+        default: "20447969531"
+      modo:
+        description: "menu = listar opciones · opcion = abrir códigos"
+        required: true
+        default: "menu"
+        type: choice
+        options: [menu, opcion]
+      codigos:
+        description: "Códigos de opción separados por coma (modo opcion)"
+        required: false
+        default: ""
+      periodo:
+        description: "Mes AAAAMM (opcional)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  explorar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.ruc }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: declaraciones/scripts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar navegador
+        run: |
+          pip install playwright==1.47.0
+          python -m playwright install --with-deps chromium
+      - name: Recorrido
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+          MODO: ${{ inputs.modo }}
+          CODIGOS: ${{ inputs.codigos }}
+          PERIODO: ${{ inputs.periodo }}
+        run: python declaraciones/scripts/explorar.py --modo "$MODO" --codigos "$CODIGOS" --periodo "$PERIODO"
