@@ -692,6 +692,51 @@ function MESA_estado(tk) {
 
 /** Archivo para ver en la Mesa: {nombre, mime, b64} o {url} o {error}. tipo = 'v' (fuente) | 'f' (enlace PDF). */
 function MESA_archivo(tk, tipo, ref) { var a = arguments; return MESA_reintentar_(function () { return MESA_archivo_.apply(null, a); }); }
+/**
+ * 🧾 Comprobante de retención (CRE): lo busca en la hoja «Retenciones · Grupo» (pestañas Emitidas y Recibidas)
+ * por su número y las dos empresas, y devuelve su PDF (copiado a Drive por esa hoja) con sus datos.
+ * q = {cre: 'E001-51', emp: RUC de la empresa del grupo, contra: RUC del proveedor o del agente}
+ */
+function MESA_comprobanteRet_(cfg, q) {
+  if (!cfg.idRetenciones) return { error: 'Falta el ID de la hoja de Retenciones en ⚙️ Config de Cobranzas.' };
+  var norm = function (s) { var m = String(s || '').toUpperCase().match(/([A-Z0-9]{4})\s*-\s*0*(\d+)/); return m ? m[1] + '-' + Number(m[2]) : String(s || '').trim(); };
+  var buscado = norm(q.cre), ss = SpreadsheetApp.openById(cfg.idRetenciones), hallado = null;
+  ['Emitidas', 'Recibidas'].some(function (nombre) {
+    var sh = ss.getSheetByName(nombre);
+    if (!sh || sh.getLastRow() < 4) return false;
+    var enc = sh.getRange(3, 1, 1, sh.getLastColumn()).getValues()[0], c = indiceColumnas_(enc);
+    var iC = c('Comprobante'), iE = c('RUC empresa'), iO = c(nombre === 'Emitidas' ? 'RUC proveedor' : 'RUC agente'), iP = c('PDF');
+    if (iC < 0 || iE < 0) return false;
+    var n = sh.getLastRow() - 3, v = sh.getRange(4, 1, n, sh.getLastColumn()).getValues();
+    for (var i = 0; i < n; i++) {
+      if (norm(v[i][iC]) !== buscado) continue;
+      var e = aRuc_(v[i][iE]), o = iO >= 0 ? aRuc_(v[i][iO]) : '';
+      if (q.emp && e && e !== q.emp && e !== q.contra) continue;
+      if (q.contra && o && o !== q.contra && o !== q.emp) continue;
+      var url = '';
+      if (iP >= 0) {
+        var rg = sh.getRange(i + 4, iP + 1);
+        try { var rt = rg.getRichTextValue(); url = rt && rt.getLinkUrl() || ''; } catch (x) {}
+        if (!url) { var fo = String(rg.getFormula() || ''); var mm = fo.match(/HYPERLINK\("([^"]+)"/i); url = mm ? mm[1] : ''; }
+      }
+      var dato = function (t) { var j = c(t); return j >= 0 ? v[i][j] : ''; };
+      var f = dato('Fecha emisión');
+      hallado = { url: url, pestana: nombre, datos: {
+        comprobante: String(v[i][iC]), fecha: f instanceof Date ? Utilities.formatDate(f, 'America/Lima', 'dd/MM/yyyy') : String(f || ''),
+        empresa: String(dato('Empresa') || ''), contraparte: String(dato(nombre === 'Emitidas' ? 'Proveedor (retenido)' : 'Agente de retención') || ''),
+        retenido: Number(dato('Importe retenido S/')) || 0, pagado: Number(dato('Importe pagado S/')) || 0,
+        facturas: Number(dato('N° facturas')) || 0, estado: String(dato('Estado') || ''), tasa: dato('Tasa %') } };
+      return true;
+    }
+    return false;
+  });
+  if (!hallado) return { error: 'No encontré el comprobante ' + buscado + ' en la hoja de Retenciones (¿falta descargarlo de SUNAT?).' };
+  if (!hallado.url) return { error: 'El comprobante ' + buscado + ' está en la hoja de Retenciones (' + hallado.pestana + ') pero su PDF aún no se copió a Drive (hoja Retenciones → 🔄 Actualizar).', datos: hallado.datos };
+  var r = MESA_factura_(hallado.url);
+  r.datos = hallado.datos;
+  return r;
+}
+
 function MESA_archivo_(tk, tipo, ref) {
   MESA_ok_(tk);
   var ss = ssPrincipal_(), cfg = leerConfig_(ss);
@@ -701,6 +746,7 @@ function MESA_archivo_(tk, tipo, ref) {
       return MESA_blob_(fd.getBlob(), fd.getUrl());
     }
     if (tipo === 'f') return MESA_factura_(String(ref || ''));
+    if (tipo === 'r') return MESA_comprobanteRet_(cfg, JSON.parse(String(ref)));
     var p = String(ref).split('!'), sh = SpreadsheetApp.openById(cfg.idVouchers).getSheetByName(p[0]);
     if (!sh) return { error: 'No existe la pestaña ' + p[0] + ' en la hoja de Vouchers.' };
     var fila = parseInt(p[1], 10), enc = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0], c = indiceColumnas_(enc);

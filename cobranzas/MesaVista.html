@@ -1067,6 +1067,11 @@ function verVoucher(id) { var v = S.V[id]; abrirVisor('🖼 ' + v.fu + ' · ' + 
 function verFactura(k) { var d = S.D[k]; abrirVisor('📄 ' + d.doc + ' · ' + d.cn, 'f', d.pdf); }
 function msgVisor(t, cls) { var m = $('vMsg'); m.style.display = t ? '' : 'none'; m.className = cls || ''; m.innerHTML = t || ''; }
 function recargarVisor() { if (VIS.req) abrirVisor(VIS.req[0], VIS.req[1], VIS.req[2], VIS.req[3]); }
+/** 🧾 Comprobante de retención en el visor (lo busca en la hoja de Retenciones por número y empresas). */
+function verRetencion(cre, k) {
+  var d = S.D[k] || {};
+  abrirVisor('🧾 Comprobante de retención ' + cre + (d.cn ? ' · ' + d.cn : ''), 'r', JSON.stringify({ cre: cre, emp: d.er || '', contra: d.cr || '' }));
+}
 function abrirVisor(tit, tipo, ref, pagina) {
   $('visor').className = 'on'; $('vTit').textContent = tit; $('vCont').innerHTML = '<p style="padding:20px">⏳ Cargando…</p>'; $('vPie').textContent = ''; $('vArch').innerHTML = ''; msgVisor('');
   $('vPag').style.display = 'none';
@@ -1076,6 +1081,7 @@ function abrirVisor(tit, tipo, ref, pagina) {
     r = r || {};
     var pie = [];
     if (r.archivo) pie.push('Archivo: ' + esc(r.archivo) + (r.pagina ? ' · página ' + r.pagina : ''));
+    if (r.datos) { var q = r.datos; pie.push('<b>' + esc(q.comprobante) + '</b> · ' + esc(q.fecha) + ' · ' + esc(q.contraparte || q.empresa) + ' · retenido <b>S/ ' + fm(q.retenido) + '</b> de S/ ' + fm(q.pagado) + ' pagado' + (q.facturas ? ' · ' + q.facturas + ' factura(s)' : '') + (q.estado ? ' · ' + esc(q.estado) : '')); }
     if (r.url) pie.push('<a href="' + esc(r.url) + '" target="_blank">↗ Abrir el enlace original</a>');
     $('vPie').innerHTML = pie.join(' · ');
     if (r.error) msgVisor('⚠️ ' + esc(r.error), 'err'); else if (r.aviso) msgVisor('⚠️ ' + esc(r.aviso), 'av');
@@ -1361,6 +1367,7 @@ function popRet(L, ev) {
     '<div style="color:var(--gr)">Factura: total ' + fm(d.tot) + (d.nc ? ' · N/C ' + fm(d.nc) : '') + ' · 3% = ' + fm(Math.max(0, d.tot - d.nc) * 0.03) + ' · retención ahora ' + fm(retDe(d)) + '</div>';
   if (!esOrig) h += '<div style="margin-top:6px">Monto: <input id="mRet" type="number" step="0.01" min="0" style="width:110px" value="' + x.m.toFixed(2) + '"> <button onclick="montoRet(\'' + esc(L.id) + '\',' + L.i + ')">✔ Usar</button> <button onclick="quitarRet(\'' + esc(L.id) + '\',' + L.i + ')">✂️ Quitar (vuelve a ' + esc(S.D[U.kOrig].doc) + ')</button></div>';
   else h += '<div style="margin-top:6px;color:var(--gr)">Para pasar parte a otra factura: toque el comprobante (derecha) y luego la otra factura.</div>';
+  h += '<div style="margin-top:6px"><button onclick="cerrarPop();verRetencion(\'' + esc(U.cre) + '\',\'' + esc(U.kOrig) + '\')">📄 Ver comprobante de retención</button></div>';
   pop(h, ev.clientX, ev.clientY);
 }
 function montoRet(u, i) {
@@ -1382,7 +1389,8 @@ function detalleR() {
   if (!U) { $('det').innerHTML = '<span class="d2">🧾 Toque un comprobante de retención. Use «Ret. de más» en Facturas para ver las facturas cuya retención pasa del 3% (por ejemplo, anuladas con nota de crédito).</span>'; return; }
   var o = S.D[U.kOrig];
   $('det').innerHTML = '<div class="d1">🧾 CRE ' + esc(U.cre) + ' · ' + ff(U.f) + ' · ' + esc(o.cn) + ' · original ' + esc(o.doc) + (exceso(o) > 0.05 ? ' · <span style="color:var(--ro)">retención de más ' + fm(exceso(o)) + '</span>' : '') + '</div>' +
-    '<div class="d2">Toque la otra factura (izquierda) del mismo ' + (S.lado === 'Por pagar' ? 'proveedor' : 'cliente') + ' para pasarle una parte o toda la retención. Se guarda en «🔁 Reasignar retenciones», igual que a mano.</div>';
+    '<div class="d2">Toque la otra factura (izquierda) del mismo ' + (S.lado === 'Por pagar' ? 'proveedor' : 'cliente') + ' para pasarle una parte o toda la retención. Se guarda en «🔁 Reasignar retenciones», igual que a mano.</div>' +
+    '<div style="margin-top:4px"><button onclick="verRetencion(\'' + esc(U.cre) + '\',\'' + esc(U.kOrig) + '\')">📄 Ver comprobante de retención</button></div>';
 }
 
 /* ------------------------------------------------ ✍️ pago sin voucher (→ ✍️ Registro manual) */
@@ -1865,7 +1873,11 @@ function fichaF(k) {
         extra = ' · voucher ' + fm(m.mp) + (n > 1 ? ' · <span style="color:' + cv.b + '">también pagó ' + otros.map(function (y) { return '<a href="#" onclick="fichaF(\'' + esc(y.k) + '\');return false">' + esc(EV.D[y.k] ? EV.D[y.k].doc : y.k) + '</a> ' + fm(y.m); }).join(', ') + '</span>' : '');
         extra += ' · <a href="#" onclick="fichaV(\'' + esc(m.id) + '\');return false">ver voucher</a>';
       }
-      h += '<tr><td>' + x.c.ic + ' ' + esc(x.c.t) + (m.f ? ' <span style="color:var(--gr)">· ' + ff(m.f) + '</span>' : '') + '<div style="color:var(--gr);font-size:11px">' + esc(m.o) + (m.nota ? ' · ' + esc(m.nota) : '') + extra + (m.fu && !/^(SIRE)$/.test(m.fu) ? ' · ' + esc(m.fu) : '') + '</div></td><td style="text-align:center">' + signo + '</td><td style="text-align:right;font-variant-numeric:tabular-nums">' + fm(Math.abs(m.m)) + '</td></tr>';
+      // 🧾 comprobante de retención / 🏦 constancia de detracción: se ven en el visor
+      if (x.c.g === 'ret' && /CRE\s+\S+/.test(m.op || '')) extra += ' · <a href="#" onclick="verRetencion(\'' + esc(String(m.op).replace(/^CRE\s+/, '')) + '\',\'' + esc(k) + '\');return false">📄 ver comprobante de retención</a>';
+      var urlDet = x.c.g === 'det' ? ((String(m.fu || '') + ' ' + String(m.o || '')).match(/https?:\/\/\S+/) || [])[0] : '';
+      if (urlDet) extra += ' · <a href="#" onclick="abrirVisor(\'🏦 Constancia de detracción ' + esc(m.op || '') + '\',\'f\',\'' + esc(urlDet) + '\');return false">📄 ver constancia de detracción</a>';
+      h += '<tr><td>' + x.c.ic + ' ' + esc(x.c.t) + (m.f ? ' <span style="color:var(--gr)">· ' + ff(m.f) + '</span>' : '') + '<div style="color:var(--gr);font-size:11px">' + esc(m.o) + (m.nota ? ' · ' + esc(m.nota) : '') + extra + (m.fu && !/^(SIRE)$/.test(m.fu) ? ' · ' + esc(String(m.fu).replace(/\s*·\s*https?:\/\/\S+/, '')) : '') + '</div></td><td style="text-align:center">' + signo + '</td><td style="text-align:right;font-variant-numeric:tabular-nums">' + fm(Math.abs(m.m)) + '</td></tr>';
     });
   });
   if (!ms.length) h += '<tr><td colspan="3" style="color:var(--gr);padding:8px 6px">Sin pagos, notas ni retenciones registrados.</td></tr>';
@@ -2070,6 +2082,7 @@ function ayudaCompleta() {
     '<li>En el estado de cuenta: <b>💾 Guardado</b> (lo que está hoy), <b>✏️ Con mis cambios</b> (cómo quedará si guarda: saldo antes tachado → después, líneas 🆕) y <b>⚖️ Comparar</b> (solo lo que cambia). Desde ahí mismo puede 💾 Guardar.</li>' +
     '<li><b>🧮 Calculadora</b> (botón arriba o F2): flotante y movible; IGV, retención 3%, detracción, memoria e historial. <b>Alt+clic</b> en cualquier monto de la pantalla lo pasa a la calculadora.</li>' +
     '<li><b>🧹 Quitar cruces</b>: deja en blanco los cruces del proveedor / empresa filtrados (y, si lo marca, las reasignaciones de retención y las devoluciones) para volver a cruzar desde cero. Nada se escribe hasta 💾 Guardar; ↶ lo vuelve todo de una vez.</li>' +
+    '<li><b>📄 Comprobantes</b>: en la 🔍 ficha de una factura, cada retención tiene «📄 ver comprobante de retención» y cada detracción «📄 ver constancia de detracción»; se abren en el visor con sus datos (fecha, monto retenido, facturas). También en 🧾 Retenciones al tocar un comprobante o su línea. Salen de las hojas de Retenciones y Detracciones (el PDF tiene que estar copiado a Drive).</li>' +
     '<li><b>↩️ Devoluciones</b>: toque la devolución y luego el <b>depósito</b> que le devuelven (los posibles se marcan en café; también puede arrastrar un voucher sobre el otro), la <b>factura pagada de más</b>, o elija la <b>N/C</b> en la lista. Se dibuja una línea rosada y se guarda como «DEVOLUCION op 5344» / «DEVOLUCION 01_FN01-19» / «DEVOLUCION 07_FC01-12». A cualquier voucher sin facturas se le puede marcar «↩️ Es una devolución del proveedor».</li>' +
     '<li>Los vouchers ↩️ de devolución y los que dicen otra cosa (PLANILLA, etc.) se marcan; una devolución no se cruza con facturas.</li></ol><button onclick="cerrarModal()">Cerrar</button>');
 }
