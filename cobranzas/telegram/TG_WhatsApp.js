@@ -113,6 +113,10 @@ function TGW_responder_(q) {
   // 🧾 "emitir" (lista de pendientes) o "emite la retención de F001-215" (o citando el mensaje): propuesta con botones.
   // 🚚 "guía" con fotos, ✏️ corrección pendiente o "emitir guía <caso>" (TG_GRE.js).
   // 📋 "procesados hoy sonia", "procesados 26-10-26 Sonia(Edit).pdf": lista por tanda y RUC que falte (TG_Procesados.js).
+  if (MESA_RX_.test(texto)) {   // 🧩 «mesa»: enlace a la Mesa de conciliación (Mesa.js)
+    var me; try { me = MESA_textoEnlace_('WhatsApp').texto; } catch (err) { me = '⚠️ ' + err.message; }
+    return { ok: true, respuesta: me, tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  }
   if (!(q.adjuntos || []).length) { var rl = TGRL_wa_(ss, texto, q.numero); if (rl) return rl; }   // 🔁 volver a leer una página (TG_Releer.js)
   if (TGQ_RX_.test(texto) && !(q.adjuntos || []).length) return TGQ_wa_(ss, texto, clave);
   var gre = TGG_atajoWA_(ss, q, clave);

@@ -45,6 +45,8 @@ function VCH_doPost_(e) {
       case 'rucestado': return TGW_json_(TGQ_rucEstado_(String(q.id || '')));
       case 'rucotro': return TGW_json_(TGQ_rucOtroNombre_(ss, q.nombre, q.filas));   // 🔎 buscar con otro nombre
       case 'rucelegir': return TGW_json_(TGQ_rucElegirFilas_(ss, q.prov, q.filas, q.ruc, q.det));
+      case 'mesa':   // 🧩 Mesa de conciliación abierta desde la hoja de Vouchers (Mesa.js): enlace con llave temporal
+        return TGW_json_({ url: MESA_enlace_('Vouchers · ' + String(q.quien || '').slice(0, 60)) });
       case 'hoja':   // enlace a la hoja de Cobranzas (y a una pestaña) para lo que se trabaja allá
         var sh = q.pestana ? ss.getSheetByName(q.pestana) : null;
         return TGW_json_({ url: ss.getUrl() + (sh ? '#gid=' + sh.getSheetId() : '') });
