@@ -189,6 +189,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
+    ('06/11/2026', 'Mesa: completar datos y RUC de varios', '✏️ Completar datos del voucher (empresa que paga, RUC y nombre del beneficiario, nota) escritos en la hoja de Vouchers; filtro Con RUC; 🔎 Buscar RUC de varios vouchers a la vez.'),
     ('06/11/2026', 'Declaraciones: detalle y reportes de contador', 'El robot también baja el PDF oficial «Detalle de la declaración» (621 y 626), también de las ya descargadas. Reportes anuales 📒 IGV-Renta 621, 👷 PLAME 601 y 🧾 Retenciones 626 (meses en columnas, total con fórmula); casillas con su nombre oficial de SUNAT; fechas y periodos con formato correcto.'),
     ('06/11/2026', 'Mesa: recalcular espera al guardado', '⚡ Recalcular ahora (y el recálculo automático) espera a que termine de escribirse lo que se está guardando —de usted o de otra persona— para no calcular con datos a medias.'),
     ('06/11/2026', 'Mesa: 💯 voucher completo', 'Tocando una línea: «Que este voucher pague completo esta factura»; los otros vouchers de la factura solo ponen lo que falte (montos por línea), y lo que les sobre sigue a sus otras facturas.'),

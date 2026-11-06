@@ -397,6 +397,51 @@ function MESA_reasignar_(tk, nuevos, quitar, token) {
  * ✍️ Pago sin voucher (efectivo, compensación, retención o detracción manual…): una fila en ✍️ Registro manual,
  * igual que a mano. x = {fecha:'yyyy-mm-dd', modalidad, pagador, benef, doc, monto, moneda, op, banco, obs}
  */
+/**
+ * ✏️ Completar datos de un voucher en la hoja de Vouchers (empresa, RUC y nombre del beneficiario, nota).
+ * x = {id, fu, dups, campos: {'ID Usuario': ..., 'Empresa': ..., 'ID Beneficiario': ..., 'Proveedor (Beneficiario)': ..., 'Nota': ...}}
+ * Cada celda queda con una nota y en _Mesa (↩️ Deshacer último guardado la devuelve). Las copias en Fotos se completan
+ * solo si están vacías. Repetir el mismo pedido no duplica nada.
+ */
+function MESA_completar(tk, x, token) { var a = arguments; return MESA_escribiendo_(function () { return MESA_reintentar_(function () { return MESA_completar_.apply(null, a); }); }); }
+function MESA_completar_(tk, x, token) {
+  var quien = MESA_ok_(tk);
+  var ss = ssPrincipal_(), cfg = leerConfig_(ss), ssV = SpreadsheetApp.openById(cfg.idVouchers);
+  var lote = Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd-HHmmss') + '-' + Utilities.getUuid().slice(0, 4);
+  var ahora = new Date(), firma = '✏️ Mesa · ' + (quien || '¿?') + ' · ' + Utilities.formatDate(ahora, 'America/Lima', 'dd/MM/yyyy HH:mm');
+  var log = [], avisos = [], hechos = 0, cols = {};
+  function columna(hoja, titulo) {
+    var sh = ssV.getSheetByName(hoja); if (!sh) return null;
+    if (!cols[hoja]) cols[hoja] = indiceColumnas_(sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]);
+    var i = cols[hoja](titulo);
+    return i >= 0 ? { sh: sh, i: i } : null;
+  }
+  function poner(fuente, titulo, valor, soloVacia) {
+    var p = String(fuente).split('!'), c = columna(p[0], titulo);
+    if (!c) { if (!soloVacia) avisos.push('«' + titulo + '» no existe en ' + p[0] + '.'); return; }
+    var rg = c.sh.getRange(parseInt(p[1], 10), c.i + 1), antes = String(rg.getDisplayValue() || '').trim();
+    if (antes === String(valor)) return;
+    if (soloVacia && antes) return;
+    if (/^\d{8,11}$/.test(String(valor))) rg.setNumberFormat('@');
+    rg.setValue(valor);
+    try { rg.setNote(firma + (antes ? '\nAntes: ' + antes : '')); } catch (e) {}
+    log.push([ahora, quien, lote, fuente, titulo, antes, String(valor), x.id || '']);
+    hechos++;
+  }
+  Object.keys(x.campos || {}).forEach(function (titulo) {
+    var val = String(x.campos[titulo] == null ? '' : x.campos[titulo]).trim();
+    if (!val) return;
+    poner(x.fu, titulo, val, false);
+    if (titulo !== 'Nota') (x.dups || []).forEach(function (fu) { poner(fu, titulo, val, true); });
+  });
+  if (log.length) {
+    var shL = MESA_hojaLog_(ss);
+    shL.getRange(shL.getLastRow() + 1, 1, log.length, MESA_ENC_LOG_.length).setValues(log);
+    MESA_programarRecalculo_();
+  }
+  return { mensaje: hechos ? '✏️ ' + hechos + ' dato(s) escritos en ' + x.fu + ' · Cobranzas se recalcula en ~1 minuto.' : '✏️ No había nada que cambiar (ya estaba así).', lote: log.length ? lote : '', avisos: avisos };
+}
+
 function MESA_manual(tk, x, token) { var a = arguments; return MESA_escribiendo_(function () { return MESA_reintentar_(function () { return MESA_manual_.apply(null, a); }); }); }
 function MESA_manual_(tk, x, token) {
   var quien = MESA_ok_(tk);

@@ -194,7 +194,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
     <div class="cab">
       <h3 id="hV">💳 Vouchers <span id="tV" class="chip"></span></h3>
       <span class="seg" id="sRet" style="display:none"><button data-v="todas" class="on" onclick="seg(this)">Todas</button><button data-v="reas" onclick="seg(this)">Reasignadas</button><button data-v="exc" onclick="seg(this)" title="Su factura tiene retención de más">En factura con ret. de más</button></span>
-      <span class="seg" id="sVou"><button data-v="sin" class="on" onclick="seg(this)">Sin aplicar</button><button data-v="todos" onclick="seg(this)">Todos</button><button data-v="apl" onclick="seg(this)">Aplicados</button><button data-v="ruc" onclick="seg(this)">Sin RUC</button></span>
+      <span class="seg" id="sVou"><button data-v="sin" class="on" onclick="seg(this)">Sin aplicar</button><button data-v="todos" onclick="seg(this)">Todos</button><button data-v="apl" onclick="seg(this)">Aplicados</button><button data-v="ruc" onclick="seg(this)">Sin RUC</button><button data-v="conruc" onclick="seg(this)">Con RUC</button></span>
       <span class="seg" id="sCop" title="Un mismo voucher puede estar en Originales y en Fotos: se cuenta UNA vez (manda Originales)"><button data-v="u" class="on" onclick="seg(this)">Únicos</button><button data-v="a" onclick="seg(this)">Con copias de Fotos</button></span>
       <input id="qV" placeholder="🔎 buscar op., banco, nombre, monto…" style="flex:1;min-width:120px" oninput="tarde(pintar)">
       <select id="oV" onchange="pintar()" title="Ordenar vouchers"><option value="f">📅 Fecha: más antiguos primero</option><option value="f-">📅 Fecha: más recientes primero</option><option value="m-">💰 Mayor monto</option><option value="m">💰 Menor monto</option><option value="op">🔢 N° de operación</option><option value="fu">📄 Fila de la hoja</option></select>
@@ -443,6 +443,7 @@ function pintar() {
     if (ev === 'sin' && !(v.dev ? !(S.devT[v.id] || []).length : (!lk.length || sob > 0.05))) return false;
     if (ev === 'apl' && !(lk.length && sob <= 0.05)) return false;
     if (ev === 'ruc' && (S.lado === 'Por pagar' ? v.br : v.pr)) return false;
+    if (ev === 'conruc' && !(S.lado === 'Por pagar' ? v.br : v.pr)) return false;
     return texto(qv, nn([v.op, v.bco, v.bn, v.us, v.des, v.refs, fm(v.m), v.f, ff(v.f), v.fu, v.env].join(' ')));
   });
   var ov = $('oV').value;
@@ -504,7 +505,14 @@ function pintar() {
   VV.forEach(function (v) { sv[v.mon === 'USD' ? 'USD' : 'PEN'] += v.m; });
   $('tF').textContent = FV.length; $('tV').textContent = VV.length;
   $('rF').textContent = 'Saldo: S/ ' + fm(sf.PEN) + (sf.USD ? ' · US$ ' + fm(sf.USD) : '') + selResumen();
-  $('rV').textContent = 'Montos: S/ ' + fm(sv.PEN) + (sv.USD ? ' · US$ ' + fm(sv.USD) : '') + (Object.keys(S.selV).length ? ' · ' + Object.keys(S.selV).length + ' marcados' : '');
+  // 🔎 RUC de varios a la vez: los marcados (Ctrl+clic) sin RUC, o todos los «sin RUC» que se ven
+  var sinRuc = function (v) { return !(S.lado === 'Por pagar' ? v.br : v.pr); };
+  var marcSin = Object.keys(S.selV).concat(S.act ? [S.act] : []).filter(function (id, i, a) { return a.indexOf(id) === i && S.V[id] && sinRuc(S.V[id]); });
+  var visSin = VV.filter(sinRuc);
+  window._rucVarios = (marcSin.length > 1 ? marcSin : visSin.map(function (v) { return v.id; })).map(function (id) { return S.V[id].fu; });
+  $('rV').innerHTML = esc('Montos: S/ ' + fm(sv.PEN) + (sv.USD ? ' · US$ ' + fm(sv.USD) : '') + (Object.keys(S.selV).length ? ' · ' + Object.keys(S.selV).length + ' marcados' : '')) +
+    (window._rucVarios.length > 1 ? ' <button style="padding:1px 8px;font-size:11px" onclick="rucPanel(window._rucVarios)" title="Busca el RUC de varios vouchers a la vez (alias, facturas del grupo y, si falta, el padrón de SUNAT)">🔎 Buscar RUC de ' +
+      (marcSin.length > 1 ? 'los ' + marcSin.length + ' marcados' : 'los ' + visSin.length + ' sin RUC') + '</button>' : '');
   lineas();
 }
 function cmpFecha(a, b) { return a.f > b.f ? 1 : a.f < b.f ? -1 : 0; }
@@ -848,6 +856,7 @@ function detalle() {
     (lk.length ? ' · aplica ' + fm(v.m - (S.sim.sobra[v.id] || 0)) + (S.sim.sobra[v.id] > 0.05 ? ' · sobran ' + fm(S.sim.sobra[v.id]) : ' ✅') : '') + (v.des ? ' · ' + esc(v.des) : '') + (v.env ? ' · enviado por ' + esc(v.env) : '') + '</div>' +
     '<div style="margin-top:3px"><button onclick="verVoucher(\'' + esc(v.id) + '\')">🖼 Ver voucher</button> <button onclick="combinaciones()">🧮 ¿Qué facturas suman ' + fm(v.m) + '?</button> ' +
     '<button onclick="iaContraparte()">🤖 Sugerir con IA</button> ' + (!ruc ? '<button onclick="rucPanel([\'' + esc(v.fu) + '\'])">🔎 Buscar RUC</button> ' : '') +
+    '<button onclick="completarDatos(\'' + esc(v.id) + '\')" title="Empresa que paga, RUC y nombre del beneficiario y una nota, escritos en la hoja de Vouchers">✏️ Completar datos</button> ' +
     (lk.length ? '<button onclick="quitarTodo()">✂️ Quitar sus facturas</button> ' : '<button onclick="marcarDev(\'' + esc(v.id) + '\')" title="El proveedor le devolvió dinero: no paga facturas, se descuenta del saldo a favor">↩️ Es una devolución del proveedor</button> ') + (sug.length ? '<span class="chip c-a">' + sug.length + ' sugerencia(s): toque la línea punteada</span>' : '') +
     (Object.keys(S.selF).length ? ' <button class="v" onclick="unirMarcadas()">🔗 Cruzar con las ' + Object.keys(S.selF).length + ' marcadas</button> <span class="d2">' + esc(selResumen()) + '</span>' : '') + '</div>';
 }
@@ -1136,6 +1145,43 @@ function cerrarVisor() { $('visor').className = ''; }
 
 /* ------------------------------------------------ 🔎 RUC del beneficiario (padrón, grupo, internet con IA) */
 var KR = 0, DATR = {};
+/** ✏️ Completar datos del voucher en la hoja de Vouchers: empresa que paga (ID Usuario + Empresa), RUC y nombre
+ *  del beneficiario y una nota. Se escribe al instante (con nota en la celda) y se deshace con «Deshacer último guardado». */
+function completarDatos(id) {
+  var v = S.V[id]; if (!v) return;
+  var pagar = S.lado === 'Por pagar', emp = pagar ? v.pr : v.br, otro = pagar ? v.br : v.pr;
+  var c = contraFiltro(), sugRuc = otro || (c && c.ruc) || '', sugNom = v.bn || (c && c.nombre) || '';
+  modal('<h3>✏️ Completar datos · ' + esc(v.fu) + '</h3><div class="d2">' + ff(v.f) + ' · ' + esc(v.bco + ' ' + v.op) + ' · ' + v.mon + ' ' + fm(v.m) + '</div>' +
+    '<div class="form" style="display:grid;grid-template-columns:auto 1fr;gap:6px 10px;margin-top:8px">' +
+    '<label>' + (pagar ? 'Empresa que paga' : 'Empresa que cobra') + '</label><select id="cEmp"><option value="">— (no cambiar)</option>' + (S.data.empresas || []).map(function (e) {
+      return '<option value="' + esc(e.ruc) + '"' + (e.ruc === emp ? ' selected' : '') + '>' + esc(e.nombre) + ' · ' + esc(e.ruc) + '</option>'; }).join('') + '</select>' +
+    '<label>' + (pagar ? 'RUC del proveedor (beneficiario)' : 'RUC del cliente') + '</label><input id="cRuc" inputmode="numeric" maxlength="11" value="' + esc(sugRuc) + '" placeholder="11 dígitos">' +
+    (pagar ? '<label>Nombre del beneficiario</label><input id="cNom" value="' + esc(sugNom) + '">' : '') +
+    '<label>Nota</label><input id="cNota" placeholder="opcional (ej. adelanto, devolución, pago a cuenta)">' +
+    '</div><p class="d2">Se escribe en la hoja de Vouchers (' + esc(v.fu) + (v.dups && v.dups.length ? ' y su copia en Fotos' : '') + ') con una nota en cada celda. Si se equivoca: «Deshacer último guardado».</p>' +
+    '<p><button class="p" id="cGu" onclick="guardarDatos(\'' + esc(id) + '\')">💾 Escribir en la hoja</button> <button onclick="cerrarModal()">Cancelar</button> <span id="cMsg"></span></p>');
+}
+function guardarDatos(id) {
+  var v = S.V[id], pagar = S.lado === 'Por pagar';
+  var ruc = String($('cRuc').value || '').replace(/\D/g, ''), er = $('cEmp').value, nom = $('cNom') ? $('cNom').value.trim() : '', nota = $('cNota').value.trim();
+  if (ruc && !/^(10|15|17|20)\d{9}$/.test(ruc)) { $('cMsg').textContent = '⚠️ El RUC debe tener 11 dígitos (10…, 20…).'; return; }
+  var campos = {};
+  if (er) { campos[pagar ? 'ID Usuario' : 'ID Beneficiario'] = er; if (pagar) campos['Empresa'] = nomEmp(er); }
+  if (ruc) campos[pagar ? 'ID Beneficiario' : 'ID Usuario'] = ruc;
+  if (pagar && nom && nom !== v.bn) campos['Proveedor (Beneficiario)'] = nom;
+  if (nota) campos['Nota'] = nota;
+  if (!Object.keys(campos).length) { $('cMsg').textContent = 'No hay nada que escribir.'; return; }
+  $('cGu').disabled = true; $('cMsg').textContent = '⏳ Escribiendo…'; S.guardando = true;
+  R.withFailureHandler(function (e) { finGuardar(); $('cGu').disabled = false; $('cMsg').textContent = '❌ ' + e.message; }).withSuccessHandler(function (r) {
+    finGuardar();
+    if (r.error) { $('cGu').disabled = false; $('cMsg').textContent = '⚠️ ' + r.error; return; }
+    if (er) { if (pagar) v.pr = er; else v.br = er; }
+    if (ruc) { if (pagar) v.br = ruc; else v.pr = ruc; }
+    if (nom) v.bn = nom;
+    cerrarModal(); simular(); pintar(); detalle();
+    estado(r.mensaje + (r.avisos && r.avisos.length ? ' · ⚠️ ' + r.avisos.join(' ') : '')); esperarRecalculo();
+  }).MESA_completar(TK, { id: id, fu: v.fu, dups: v.dups || [], campos: campos }, Math.random().toString(36).slice(2, 10));
+}
 function modal(h) { $('mCaja').innerHTML = h; $('modal').className = 'on'; }
 function cerrarModal() { $('modal').className = ''; $('mCaja').style.width = ''; }
 function rucPanel(fuentes) {
@@ -2007,7 +2053,7 @@ function aparte() { if (URLM) window.open(URLM, '_blank'); }
 function ayudaCompleta() {
   modal('<h3>🧩 Mesa de conciliación — cómo se usa</h3><ol>' +
     '<li><b>Elija</b> Por pagar / Por cobrar, la empresa (o todo el grupo) y, si quiere, el proveedor o cliente, las fechas y la moneda.</li>' +
-    '<li><b>Facturas</b>: «Con saldo» (lo pendiente), «Todas» (para reordenar todo desde el principio) o «Canceladas». <b>Vouchers</b>: «Sin aplicar» (o con sobrante), «Todos», «Aplicados» o «Sin RUC».</li>' +
+    '<li><b>Facturas</b>: «Con saldo» (lo pendiente), «Todas» (para reordenar todo desde el principio) o «Canceladas». <b>Vouchers</b>: «Sin aplicar» (o con sobrante), «Todos», «Aplicados», «Sin RUC» o «Con RUC». Con varios sin RUC aparece arriba <b>🔎 Buscar RUC de los N sin RUC</b> (o de los marcados con Ctrl+clic): los busca todos juntos. <b>✏️ Completar datos</b> (abajo, en el voucher): empresa que paga, RUC y nombre del beneficiario y una nota, escritos en la hoja de Vouchers (se deshace con «Deshacer último guardado»).</li>' +
     '<li><b>Cruzar</b>: toque un voucher y luego la(s) factura(s) que paga, o arrastre uno sobre otro. Ctrl+clic marca varios vouchers (varios pagos para una factura) o varias facturas (☑) para cruzarlas juntas.</li>' +
     '<li><b>Colores</b>: 🟢 cuadra · 🟠 al voucher le sobra dinero · 🔴 la factura ya no tiene saldo, otra moneda o el RUC del voucher no es el emisor · punteado: sugerencia (🟠 del sistema, 🟣 de la IA). Toque una línea para quitarla o aceptarla.</li>' +
     '<li>El voucher llena sus facturas <b>en orden</b> (igual que el sistema): «⬆ Pagar esta primero» cambia el orden. Lo que sobra queda como saldo a favor.</li>' +
