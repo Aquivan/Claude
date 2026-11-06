@@ -53,6 +53,7 @@ concurrency:
 jobs:
   empresas:
     runs-on: ubuntu-latest
+    timeout-minutes: 5   # tope de seguridad: si se cuelga no gasta 6 horas de minutos
     outputs:
       lista: ${{ steps.e.outputs.lista }}
       una: ${{ steps.una.outputs.una }}

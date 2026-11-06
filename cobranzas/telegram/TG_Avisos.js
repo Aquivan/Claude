@@ -47,6 +47,9 @@ function TG_vigia() {
   // (tiene su propia hora, por eso no se salta de noche)
   try { TGV_activarParaTodos_(ss, us); TGV_avisar_(ss, para('oblig')); } catch (e) { console.warn('Vencimientos SUNAT: ' + e.message); }
 
+  // ⏱ Minutos de GitHub del mes: mide cada 6 h y avisa al 50/75/90/100% (TG_Minutos.js)
+  try { TGM_revisar_(ss, cfg); } catch (e) { console.warn('Minutos de GitHub: ' + e.message); }
+
   // ☀️ Resumen de la mañana y ⏰ vencimientos (respaldo del reloj TG_resumenManana: si a esa hora no salió, sale con el vigía dentro de las 3 horas siguientes)
   if (cfg.horaResumen >= 0 && hora >= cfg.horaResumen && hora < cfg.horaResumen + 3) TG_mandarResumenDia_(ss, us);
 }

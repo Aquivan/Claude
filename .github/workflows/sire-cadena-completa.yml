@@ -129,6 +129,7 @@ jobs:
   # tocar este workflow.
   preparar_empresas:
     runs-on: ubuntu-latest
+    timeout-minutes: 10   # tope de seguridad: si se cuelga no gasta 6 horas de minutos
     outputs:
       matriz: ${{ steps.leer.outputs.matriz }}
       paralelo: ${{ steps.leer.outputs.paralelo || '1' }}

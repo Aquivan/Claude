@@ -119,6 +119,9 @@ function TG_manejar_(u) {
   if (texto.charAt(0) === '/') return TG_comando_(ctx, texto);
   var atajo = TG_ATAJOS_[texto];
   if (atajo) return TG_comando_(ctx, atajo);
+  if (TGM_RX_.test(texto)) {   // ⏱ «minutos»: consumo de GitHub del mes (TG_Minutos.js)
+    try { return TG_enviar_(chatId, TG_esc_(TGM_respuesta_(TG_cfg_(ss)))); } catch (err) { return TG_enviar_(chatId, '⚠️ ' + TG_esc_(err.message)); }
+  }
   if (MESA_RX_.test(texto)) {   // 🧩 «mesa»: enlace a la Mesa de conciliación (Mesa.js)
     try { var me = MESA_textoEnlace_('Telegram · ' + (nombre || chatId)); return TG_enviar_(chatId, '🧩 <b>Mesa de conciliación</b> (facturas ↔ vouchers): <a href="' + me.url + '">abrir</a>. Vale 6 horas desde el último uso; no la reenvíe.'); }
     catch (err) { return TG_enviar_(chatId, '⚠️ ' + TG_esc_(err.message)); }

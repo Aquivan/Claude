@@ -113,6 +113,10 @@ function TGW_responder_(q) {
   // 🧾 "emitir" (lista de pendientes) o "emite la retención de F001-215" (o citando el mensaje): propuesta con botones.
   // 🚚 "guía" con fotos, ✏️ corrección pendiente o "emitir guía <caso>" (TG_GRE.js).
   // 📋 "procesados hoy sonia", "procesados 26-10-26 Sonia(Edit).pdf": lista por tanda y RUC que falte (TG_Procesados.js).
+  if (TGM_RX_.test(texto)) {   // ⏱ «minutos»: consumo de GitHub del mes (TG_Minutos.js)
+    var tm; try { tm = TGM_respuesta_(TG_cfg_(ss)); } catch (err) { tm = '⚠️ ' + err.message; }
+    return { ok: true, respuesta: tm, tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  }
   if (MESA_RX_.test(texto)) {   // 🧩 «mesa»: enlace a la Mesa de conciliación (Mesa.js)
     var me; try { me = MESA_textoEnlace_('WhatsApp').texto; } catch (err) { me = '⚠️ ' + err.message; }
     return { ok: true, respuesta: me, tablas: [], sugerencias: [], archivos: [], avisos: [] };

@@ -9,6 +9,7 @@ permissions:
 jobs:
   descargar:
     runs-on: ubuntu-latest
+    timeout-minutes: 120   # tope de seguridad: si se cuelga no gasta 6 horas de minutos
     steps:
       - name: Checkout
         uses: actions/checkout@v4

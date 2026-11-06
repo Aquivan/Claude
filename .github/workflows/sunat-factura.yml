@@ -28,6 +28,7 @@ on:
 jobs:
   descargar:
     runs-on: ubuntu-latest
+    timeout-minutes: 45   # tope de seguridad: si se cuelga no gasta 6 horas de minutos
     steps:
       - name: Mostrar IP de salida del runner (para verificar estabilidad)
         run: curl -s https://api.ipify.org && echo
