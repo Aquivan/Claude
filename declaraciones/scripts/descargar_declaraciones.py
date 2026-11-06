@@ -68,7 +68,15 @@ def tramos(desde, hasta):
 
 
 def enviar(destino, llave, datos, intentos=3):
-    """Manda a la hoja (aplicación web de Apps Script). Devuelve su respuesta JSON."""
+    """Manda a la hoja (aplicación web de Apps Script). Devuelve su respuesta JSON.
+    Con DESTINO=prueba no manda nada (solo prueba la descarga): la «hoja» dice que le falta todo."""
+    if destino == "prueba":
+        if datos.get("accion") == "lista":
+            todos = [str(i["numOrd"]) for i in datos.get("items", [])]
+            return {"ok": True, "faltan": todos, "faltanDetalle": []}
+        if datos.get("pdf") or datos.get("detalle"):
+            print(f"     (prueba) constancia {len(base64.b64decode(datos.get('pdf') or ''))} bytes · detalle {len(base64.b64decode(datos.get('detalle') or ''))} bytes")
+        return {"ok": True}
     cuerpo = json.dumps(dict(datos, llave=llave), ensure_ascii=False).encode("utf-8")
     ultimo = None
     for i in range(intentos):
@@ -175,6 +183,47 @@ class Consulta:
         self.pag.wait_for_timeout(2500)
         return datos if isinstance(datos, list) else []
 
+    def detalle(self, num):
+        """PDF oficial «Detalle de la declaración» (todas las casillas). SUNAT lo da para el 621 y el 626
+        presentados por Declara Fácil / formulario virtual; si no lo tiene, devuelve b'' (no es error)."""
+        fr, pag = self.fr, self.pag
+        abierto = fr.evaluate("""(num) => {
+            if (!window.angular) return '';
+            const links = [...document.querySelectorAll("a[ng-click^='mostrarConstancia']")];
+            let s = null, c = null;
+            for (const a of links) { const x = angular.element(a).scope(); if (x && x.constancia && String(x.constancia.numOrd) === num) { s = x; c = x.constancia; break; } }
+            if (!s && links[0]) {
+              s = angular.element(links[0]).scope();
+              for (let y = s; y && !c; y = y.$parent) for (const k of Object.keys(y)) {
+                const v = y[k]; if (Array.isArray(v) && v.length && v[0] && v[0].numOrd !== undefined) { c = v.find(z => String(z.numOrd) === num) || null; if (c) break; }
+              }
+            }
+            if (!s || !c || !s.mostrarDetalle) return '';
+            s.$apply(() => s.mostrarDetalle(c));
+            return 'ok';
+        }""", num)
+        if not abierto:
+            return b""
+        boton = fr.locator("[ng-click='guardarDeclaracion()']:visible").first
+        try:
+            boton.wait_for(timeout=30000)
+        except Exception:
+            return b""
+        pag.wait_for_timeout(3000)   # que termine de cargar las casillas (ecmCasillas)
+        pdf = b""
+        try:
+            with pag.expect_download(timeout=60000) as d:
+                boton.click(timeout=15000)
+            pdf = open(d.value.path(), "rb").read()
+        except Exception:
+            pdf = b""
+        try:
+            fr.evaluate("() => { document.querySelectorAll(\"[ng-click='closeModal()']\").forEach(b => { if (b.offsetParent !== null) b.click(); }); }")
+        except Exception:
+            pass
+        pag.wait_for_timeout(1200)
+        return pdf if pdf.startswith(b"%PDF") else b""
+
     def constancia(self, num):
         """Abre la constancia de un N° de orden (en la tabla, o por la página si no está a la vista) y baja su PDF."""
         fr, pag = self.fr, self.pag
@@ -267,20 +316,35 @@ def main():
             res = enviar(destino, llave, {"accion": "lista", "ruc": ruc, "desde": desde, "hasta": hasta,
                                           "formularios": sorted(forms), "items": items, "rehacer": a.rehacer})
             faltan = set(map(str, res.get("faltan", [])))
+            faltanDet = set(map(str, res.get("faltanDetalle", [])))
             pendientes = [it for it in items if it["numOrd"] in faltan]
-            print(f"La hoja ya tiene {len(items) - len(pendientes)}; se bajan {len(pendientes)}.")
+            soloDet = [it for it in items if it["numOrd"] in faltanDet and it["numOrd"] not in faltan]
+            print(f"La hoja ya tiene {len(items) - len(pendientes)}; se bajan {len(pendientes)}" +
+                  (f" y el detalle de {len(soloDet)} que ya estaban" if soloDet else "") + ".")
             bien, mal = 0, 0
             for i, it in enumerate(pendientes, 1):
                 try:
                     pdf, cons, det = c.constancia(it["numOrd"])
+                    detalle = c.detalle(it["numOrd"]) if it["codFor"] in ("0621", "0626") else b""
                     enviar(destino, llave, {"accion": "guardar", "ruc": ruc, "item": it, "constancia": cons,
-                                            "casillas": det, "pdf": base64.b64encode(pdf).decode()})
+                                            "casillas": det, "pdf": base64.b64encode(pdf).decode(),
+                                            "detalle": base64.b64encode(detalle).decode()})
                     bien += 1
-                    print(f"  {i}/{len(pendientes)} formulario {it['codFor']} · periodo {it.get('strPerTri', '')} · ✓")
+                    print(f"  {i}/{len(pendientes)} formulario {it['codFor']} · periodo {it.get('strPerTri', '')} · ✓" + (" + detalle" if detalle else ""))
                 except Exception as e:   # noqa: BLE001
                     mal += 1
                     msg = re.sub(r"\d{5,}", "…", str(e))[:160]
                     print(f"  {i}/{len(pendientes)} formulario {it['codFor']} · periodo {it.get('strPerTri', '')} · ✗ {msg}")
+            for i, it in enumerate(soloDet, 1):
+                try:
+                    detalle = c.detalle(it["numOrd"])
+                    if detalle:
+                        enviar(destino, llave, {"accion": "detalle", "ruc": ruc, "numOrd": it["numOrd"], "detalle": base64.b64encode(detalle).decode()})
+                        bien += 1
+                    print(f"  detalle {i}/{len(soloDet)} formulario {it['codFor']} · periodo {it.get('strPerTri', '')} · " + ("✓" if detalle else "SUNAT no lo tiene"))
+                except Exception as e:   # noqa: BLE001
+                    msg = re.sub(r"\d{5,}", "…", str(e))[:120]
+                    print(f"  detalle {i}/{len(soloDet)} · ✗ {msg}")
             enviar(destino, llave, {"accion": "fin", "ruc": ruc, "bien": bien, "mal": mal, "total": len(items)})
             print(f"Listo: {bien} constancia(s) nuevas en la hoja" + (f", {mal} con error" if mal else "") + ".")
             if mal:
