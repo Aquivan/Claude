@@ -189,7 +189,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
-    ('06/11/2026', 'Mesa: sin empresa', 'Filtro «Sin empresa» en vouchers y casilla «incluir vouchers sin empresa» en el Estado de cuenta y en el estado para enviar.'),
+    ('06/11/2026', 'Mesa: con / sin empresa', 'Filtros «Con empresa» y «Sin empresa» en vouchers; en el Estado de cuenta y en el estado para enviar, selector «Vouchers con y sin empresa / Solo con empresa / Solo sin empresa».'),
     ('06/11/2026', 'Mesa: 📨 estado de cuenta para enviar', 'Formato de sistema contable (QuickBooks/Xero/SAP, carta de confirmación de saldos): resumen del periodo con saldo inicial y final, antigüedad de saldos, facturas pendientes, movimientos con saldo acumulado y conformidad; desde/hasta, resumido o detallado; PDF, imagen o copiar.'),
     ('06/11/2026', 'Mesa: ver comprobantes', 'En la ficha de cada factura y en 🧾 Retenciones: ver el comprobante de retención (PDF de la hoja Retenciones, con fecha, retenido y facturas) y la constancia de detracción en el visor.'),
     ('06/11/2026', 'Mesa: completar datos y RUC de varios', '✏️ Completar datos del voucher (empresa que paga, RUC y nombre del beneficiario, nota) escritos en la hoja de Vouchers; filtro Con RUC; 🔎 Buscar RUC de varios vouchers a la vez.'),

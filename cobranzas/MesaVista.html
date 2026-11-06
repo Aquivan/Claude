@@ -186,7 +186,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
     <span class="seg" id="eAgr" title="Cómo agrupar"><button data-v="pe" class="on" onclick="segE(this)">Proveedor → Empresa</button><button data-v="ep" onclick="segE(this)">Empresa → Proveedor</button></span>
     <span class="seg" id="eEst"><button data-v="saldo" class="on" onclick="segE(this)">Con saldo</button><button data-v="todas" onclick="segE(this)">Todas</button><button data-v="canc" onclick="segE(this)">Canceladas</button><button data-v="venc" onclick="segE(this)">Vencidas</button></span>
     <span class="seg" id="eDet" title="Cuánto detalle"><button data-v="res" onclick="segE(this)" title="Una línea por proveedor (y empresa) con los totales de cada concepto">📋 Resumen</button><button data-v="fac" class="on" onclick="segE(this)" title="Una línea por factura: total, N/C, retención, detracción, pagado y saldo">🧾 Por factura</button><button data-v="det" onclick="segE(this)" title="Cada factura con sus movimientos y el saldo que va quedando, y los vouchers del proveedor">🔎 Detallado</button></span>
-    <label title="Vouchers del proveedor que no dicen qué empresa del grupo pagó: se pueden sumar o no al saldo a favor" style="font-size:12px;white-space:nowrap"><input type="checkbox" id="eSinEmp" checked onchange="pintarE()"> incluir vouchers sin empresa</label>
+    <select id="eSinEmp" onchange="pintarE()" title="Pagos (vouchers) que se suman al saldo a favor: los que dicen qué empresa del grupo pagó, los que no, o ambos"><option value="todos">Vouchers con y sin empresa</option><option value="con">Solo vouchers con empresa</option><option value="sin">Solo vouchers sin empresa</option></select>
     <select id="eOrd" onchange="pintarE()" title="Orden de los grupos"><option value="s-">Mayor saldo primero</option><option value="n">Nombre (A-Z)</option><option value="v">Más vencido primero</option></select>
     <input id="eQ" placeholder="🔎 factura, voucher (n° op.), proveedor o monto" style="flex:1;min-width:200px" oninput="tarde(pintarE)">
     <button onclick="abrirTodo(true)">⊞ Abrir todo</button><button onclick="abrirTodo(false)">⊟ Cerrar todo</button>
@@ -212,7 +212,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
     <div class="cab">
       <h3 id="hV">💳 Vouchers <span id="tV" class="chip"></span></h3>
       <span class="seg" id="sRet" style="display:none"><button data-v="todas" class="on" onclick="seg(this)">Todas</button><button data-v="reas" onclick="seg(this)">Reasignadas</button><button data-v="exc" onclick="seg(this)" title="Su factura tiene retención de más">En factura con ret. de más</button></span>
-      <span class="seg" id="sVou"><button data-v="sin" class="on" onclick="seg(this)">Sin aplicar</button><button data-v="todos" onclick="seg(this)">Todos</button><button data-v="apl" onclick="seg(this)">Aplicados</button><button data-v="ruc" onclick="seg(this)">Sin RUC</button><button data-v="conruc" onclick="seg(this)">Con RUC</button><button data-v="sinemp" onclick="seg(this)" title="Vouchers sin la empresa del grupo que paga (o cobra)">Sin empresa</button></span>
+      <span class="seg" id="sVou"><button data-v="sin" class="on" onclick="seg(this)">Sin aplicar</button><button data-v="todos" onclick="seg(this)">Todos</button><button data-v="apl" onclick="seg(this)">Aplicados</button><button data-v="ruc" onclick="seg(this)">Sin RUC</button><button data-v="conruc" onclick="seg(this)">Con RUC</button><button data-v="conemp" onclick="seg(this)" title="Vouchers que ya dicen qué empresa del grupo paga (o cobra)">Con empresa</button><button data-v="sinemp" onclick="seg(this)" title="Vouchers sin la empresa del grupo que paga (o cobra)">Sin empresa</button></span>
       <span class="seg" id="sCop" title="Un mismo voucher puede estar en Originales y en Fotos: se cuenta UNA vez (manda Originales)"><button data-v="u" class="on" onclick="seg(this)">Únicos</button><button data-v="a" onclick="seg(this)">Con copias de Fotos</button></span>
       <input id="qV" placeholder="🔎 buscar op., banco, nombre, monto…" style="flex:1;min-width:120px" oninput="tarde(pintar)">
       <select id="oV" onchange="pintar()" title="Ordenar vouchers"><option value="f">📅 Fecha: más antiguos primero</option><option value="f-">📅 Fecha: más recientes primero</option><option value="m-">💰 Mayor monto</option><option value="m">💰 Menor monto</option><option value="op">🔢 N° de operación</option><option value="fu">📄 Fila de la hoja</option></select>
@@ -262,7 +262,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <span class="seg" id="ecNiv"><button data-v="res" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">📋 Resumido</button><button data-v="det" class="on" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">🔎 Detallado</button></span>
   <select id="ecMon" onchange="ecPintar()"></select>
   <label><input type="checkbox" id="ecConf" checked onchange="ecPintar()"> con conformidad (firma)</label>
-  <label title="Pagos del proveedor sin la empresa del grupo que pagó"><input type="checkbox" id="ecSinEmp" onchange="ecPintar()"> incluir vouchers sin empresa</label>
+  <select id="ecSinEmp" onchange="ecPintar()" title="Pagos a cuenta que se incluyen"><option value="todos">Vouchers con y sin empresa</option><option value="con">Solo con empresa</option><option value="sin">Solo sin empresa</option></select>
   <span style="flex:1"></span>
   <button onclick="ecImprimir()">🖨 Imprimir / PDF</button><button onclick="ecImagen()">🖼 Imagen</button><button onclick="ecCopiar()">📋 Copiar</button><button onclick="ecCerrar()">✖ Cerrar</button>
   <span id="ecMsg" style="color:var(--gr)"></span></div>
@@ -473,6 +473,7 @@ function pintar() {
     if (ev === 'ruc' && (S.lado === 'Por pagar' ? v.br : v.pr)) return false;
     if (ev === 'conruc' && !(S.lado === 'Por pagar' ? v.br : v.pr)) return false;
     if (ev === 'sinemp' && (S.lado === 'Por pagar' ? v.pr : v.br)) return false;
+    if (ev === 'conemp' && !(S.lado === 'Por pagar' ? v.pr : v.br)) return false;
     return texto(qv, nn([v.op, v.bco, v.bn, v.us, v.des, v.refs, fm(v.m), v.f, ff(v.f), v.fu, v.env].join(' ')));
   });
   var ov = $('oV').value;
@@ -1683,7 +1684,7 @@ function sumar(t, d) {
 }
 function tot0() { return { n: 0, tot: 0, nc: 0, ret: 0, det: 0, otr: 0, des: 0, pag: 0, sal: 0, venc: 0, demas: 0, ult: '' }; }
 /** ¿Se cuentan los vouchers que no dicen qué empresa del grupo pagó (o cobró)? (casilla del Estado de cuenta) */
-function conSinEmp() { var c = $('eSinEmp'); return !c || c.checked; }
+function modoEmp() { var c = $('eSinEmp'); return c ? c.value : 'todos'; }
 function favorDe(cr, er) {   // vouchers de ese proveedor y empresa sin aplicar o con sobrante (saldo a favor)
   return vouchersDe(cr, er).filter(function (v) { return !v.dev && v._sobra > 0.05; });   // ya descuenta lo devuelto
 }
@@ -1693,7 +1694,8 @@ function vouchersDe(cr, er, docsK) {
   (docsK || []).forEach(function (k) { (EV.movK[k] || []).forEach(function (m) { if (m.mod === 'Pago' && S.V[m.id]) ids[m.id] = 1; }); });
   S.data.vouchers.forEach(function (v) {
     var c = S.lado === 'Por pagar' ? v.br : v.pr, e = S.lado === 'Por pagar' ? v.pr : v.br;
-    if (c === cr && (e ? (!er || e === er) : conSinEmp())) ids[v.id] = 1;
+    var modo = modoEmp();
+    if (c === cr && (e ? modo !== 'sin' && (!er || e === er) : modo !== 'con')) ids[v.id] = 1;
   });
   var de = $('fDe').value, ha = $('fHa').value;
   return Object.keys(ids).map(function (id) {
@@ -2097,7 +2099,7 @@ function aparte() { if (URLM) window.open(URLM, '_blank'); }
 function ayudaCompleta() {
   modal('<h3>🧩 Mesa de conciliación — cómo se usa</h3><ol>' +
     '<li><b>Elija</b> Por pagar / Por cobrar, la empresa (o todo el grupo) y, si quiere, el proveedor o cliente, las fechas y la moneda.</li>' +
-    '<li><b>Facturas</b>: «Con saldo» (lo pendiente), «Todas» (para reordenar todo desde el principio) o «Canceladas». <b>Vouchers</b>: «Sin aplicar» (o con sobrante), «Todos», «Aplicados», «Sin RUC», «Con RUC» o «Sin empresa» (no dicen qué empresa del grupo pagó). En 📊 Estado de cuenta y en 📨 Para enviar, la casilla «incluir vouchers sin empresa» decide si esos pagos se suman al saldo a favor del proveedor. Con varios sin RUC aparece arriba <b>🔎 Buscar RUC de los N sin RUC</b> (o de los marcados con Ctrl+clic): los busca todos juntos. <b>✏️ Completar datos</b> (abajo, en el voucher): empresa que paga, RUC y nombre del beneficiario y una nota, escritos en la hoja de Vouchers (se deshace con «Deshacer último guardado»).</li>' +
+    '<li><b>Facturas</b>: «Con saldo» (lo pendiente), «Todas» (para reordenar todo desde el principio) o «Canceladas». <b>Vouchers</b>: «Sin aplicar» (o con sobrante), «Todos», «Aplicados», «Sin RUC», «Con RUC», «Con empresa» o «Sin empresa» (no dicen qué empresa del grupo pagó). En 📊 Estado de cuenta y en 📨 Para enviar, el selector «Vouchers con y sin empresa / Solo con empresa / Solo sin empresa» decide qué pagos se suman al saldo a favor del proveedor. Con varios sin RUC aparece arriba <b>🔎 Buscar RUC de los N sin RUC</b> (o de los marcados con Ctrl+clic): los busca todos juntos. <b>✏️ Completar datos</b> (abajo, en el voucher): empresa que paga, RUC y nombre del beneficiario y una nota, escritos en la hoja de Vouchers (se deshace con «Deshacer último guardado»).</li>' +
     '<li><b>Cruzar</b>: toque un voucher y luego la(s) factura(s) que paga, o arrastre uno sobre otro. Ctrl+clic marca varios vouchers (varios pagos para una factura) o varias facturas (☑) para cruzarlas juntas.</li>' +
     '<li><b>Colores</b>: 🟢 cuadra · 🟠 al voucher le sobra dinero · 🔴 la factura ya no tiene saldo, otra moneda o el RUC del voucher no es el emisor · punteado: sugerencia (🟠 del sistema, 🟣 de la IA). Toque una línea para quitarla o aceptarla.</li>' +
     '<li>El voucher llena sus facturas <b>en orden</b> (igual que el sistema): «⬆ Pagar esta primero» cambia el orden. Lo que sobra queda como saldo a favor.</li>' +
@@ -2142,7 +2144,7 @@ function ecAbrir(cr, er) {
   var ms = Object.keys(mons); if (!ms.length) ms = ['PEN'];
   $('ecMon').innerHTML = ms.map(function (m) { return '<option>' + m + '</option>'; }).join(''); $('ecMon').style.display = ms.length > 1 ? '' : 'none';
   $('ecDe').value = $('fDe').value || ''; $('ecHa').value = $('fHa').value || new Date().toISOString().slice(0, 10);
-  $('ecSinEmp').checked = conSinEmp();
+  $('ecSinEmp').value = modoEmp();
   EC = { cr: cr, er: er };
   $('ec').className = 'on'; ecPintar();
 }
@@ -2168,7 +2170,8 @@ function ecDatos(cr, er, mon) {
   S.data.vouchers.forEach(function (v) {
     var c = pagar ? v.br : v.pr, e = pagar ? v.pr : v.br;
     if (c !== cr || (er && e && e !== er) || v.mon !== mon || v.dev) return;
-    if (!e && !$('ecSinEmp').checked) return;   // sin empresa: solo si se marcó la casilla
+    var modo = $('ecSinEmp').value;
+    if (!e ? modo === 'con' : modo === 'sin') return;   // con / sin empresa según el selector
     if (!vou[v.id]) vou[v.id] = { f: v.f, doc: (v.bco + ' ' + v.op).trim(), apl: [], m: 0, v: v };
   });
   Object.keys(vou).forEach(function (id) {
