@@ -189,6 +189,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
+    ('07/11/2026', 'Mesa: pago por el total en el análisis', 'En 📒 Análisis el depósito pagado de más se muestra por el total de la operación bajo la última factura que pagó (queda pagada de más, saldo negativo) y la devolución del proveedor va debajo de esa misma factura; «A cuenta» queda solo para depósitos sin factura.'),
     ('06/11/2026', 'Mesa: devoluciones en el análisis', 'En 📒 Análisis cada devolución del proveedor es una línea «Devolución» (cargo que reduce el saldo a favor): bajo la factura pagada de más o bajo el depósito «A cuenta» (lo pagado de más) del que se devolvió. Corregido el signo de las devoluciones ligadas a una factura en el estado para enviar y en 🔎 Detallado.'),
     ('06/11/2026', 'Mesa: cuadre del análisis', 'El 📒 Análisis muestra su cuadre (compromiso − amortización = saldo) y, en «Para enviar», el cruce con el saldo final del estado de cuenta por moneda; si los movimientos de un documento no llegan a su saldo en Cobranzas agrega una línea «Ajuste» y lo avisa; avisa los documentos sin tipo de cambio. La hoja ya no se recorta en el celular.'),
     ('06/11/2026', 'Mesa: 📒 análisis para enviar', 'En 📨 Estado de cuenta para enviar, tercer formato «📒 Análisis»: análisis de documentos del proveedor (o cliente) con encabezado formal, moneda soles/dólares/ambas, Detalle o Resumir y conformidad; 🖨 PDF horizontal, 🖼 imagen, 📋 copiar y ⬇ Excel.'),
