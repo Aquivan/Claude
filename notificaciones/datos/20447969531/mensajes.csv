@@ -1,4 +1,5 @@
 empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,etiqueta,leido,urgente,destacado,remitente,dependencia,adjuntos,archivos,nota_pdf,revision
+20447969531,Mensaje,1113274858,08/11/2026 22:01:36,08/11/2026,REPORTE DE TUS RETENCIONES IGV,Otro,,,NO,,,SUNAT,0211,1,,,
 20447969531,Mensaje,1112988191,08/11/2026 01:42:34,08/11/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1112942168,07/11/2026 19:12:50,07/11/2026,Comunicación de GRE - Remitente EG07-69 emitida por RUC N° 20606001763,Otro,20606001763,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1112648787,07/11/2026 03:09:28,07/11/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
@@ -45,7 +46,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20447969531,Mensaje,1093807904,12/10/2026 16:02:08,12/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,1,,,
 20447969531,Mensaje,1093522202,12/10/2026 08:01:28,12/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,1,,,
 20447969531,Mensaje,1093157625,11/10/2026 02:22:45,11/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
-20447969531,Mensaje,1092218497,09/10/2026 02:43:33,09/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1091655384,07/10/2026 20:56:53,07/10/2026,Comunicación de GRE - Remitente EG07-66 emitida por RUC N° 20606001763,Otro,20606001763,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1091145528,06/10/2026 17:14:55,06/10/2026,Comunicación de GRE - Remitente EG07-1939 emitida por RUC N° 20606334878,Otro,20606334878,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1086998973,30/09/2026 10:48:52,30/09/2026,Emisión Factura Electronica No. E001-832,Otro,,,NO,,,SUNAT,,0,,,
@@ -55,7 +55,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20447969531,Mensaje,1076783647,15/09/2026 19:04:00,15/09/2026,Comunicación Obligado a la presentación FV 621 período 08-2026,Otro,,,NO,,,9188,,1,,,
 20447969531,Mensaje,1076762193,15/09/2026 18:39:43,15/09/2026,Comunicación de GRE - Remitente EG07-63 emitida por RUC N° 20606001763,Otro,20606001763,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1075637849,14/09/2026 18:08:21,14/09/2026,Baja de Guía de Remisión Remitente - Electrónica EG07 - 4607,Otro,,,NO,,,SUNAT,0211,0,,,
-20447969531,Mensaje,1072900808,09/09/2026 07:31:35,09/09/2026,Comunicación de GRE - Remitente EG07-128 emitida por RUC N° 20605062670,Otro,20605062670,,NO,,,SUNAT,0211,0,,,
 20447969531,Mensaje,1059374703,19/08/2026 10:45:19,19/08/2026,Inconsistencias entre la Propuesta de casillas SUNAT versus la declaración Formulario Virtual 621,Otro,,,NO,,,SUNAT,0211,1,,,
 20447969531,Mensaje,1057792103,17/08/2026 20:17:00,17/08/2026,Comunicación Obligado a la presentación FV 621 período 07-2026,Otro,,,NO,,,9188,,1,,,
 20447969531,Mensaje,1054929899,12/08/2026 17:11:39,12/08/2026,Se Registró Expediente MPV,Otro,,,NO,,,SUNAT,,0,,,

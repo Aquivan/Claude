@@ -1,4 +1,5 @@
 empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,etiqueta,leido,urgente,destacado,remitente,dependencia,adjuntos,archivos,nota_pdf,revision
+20609309793,Mensaje,1113282727,08/11/2026 22:54:12,08/11/2026,REPORTE DE TUS RETENCIONES IGV,Otro,,,NO,,,SUNAT,0023,1,,,
 20609309793,Mensaje,1112617170,07/11/2026 02:24:34,07/11/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1112565082,07/11/2026 00:24:43,07/11/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,1,,,
 20609309793,Mensaje,1112403684,06/11/2026 16:39:33,06/11/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,1,,,
@@ -72,7 +73,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20609309793,Mensaje,1094193535,13/10/2026 02:32:33,13/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1094073293,13/10/2026 00:25:38,13/10/2026,Puesta a disposición de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,1,,,
 20609309793,Mensaje,1092299433,09/10/2026 07:37:54,09/10/2026,Comunicación de GRE - Remitente EG07-40 emitida por RUC N° 20615074897,Otro,20615074897,,NO,,,SUNAT,0023,0,,,
-20609309793,Mensaje,1092192934,09/10/2026 02:28:23,09/10/2026,Reporte Resumen de comprobantes - Plataforma de confirmación del RHE y de la FE,Otro,,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1086542608,29/09/2026 16:35:18,29/09/2026,Comunicación de GRE - Remitente EG07-202 emitida por RUC N° 20604305773,Otro,20604305773,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1086423967,29/09/2026 13:11:02,29/09/2026,Comunicación de GRE - Remitente EG07-5649 emitida por RUC N° 20516497379,Otro,20516497379,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1085929726,28/09/2026 15:41:17,28/09/2026,Comunicación de GRE - Remitente EG07-5642 emitida por RUC N° 20516497379,Otro,20516497379,,NO,,,SUNAT,0023,0,,,
@@ -92,7 +92,6 @@ empresa_ruc,tipo,codigo,fecha_publicacion,fecha_envio,asunto,clase,documento,eti
 20609309793,Mensaje,1077873429,16/09/2026 17:36:39,16/09/2026,Comunicación de GRE - Remitente EG07-181 emitida por RUC N° 20604305773,Otro,20604305773,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1075446678,14/09/2026 13:10:49,14/09/2026,Comunicación de GRE - Remitente EG07-135 emitida por RUC N° 20605062670,Otro,20605062670,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1073716539,10/09/2026 17:33:04,10/09/2026,Comunicación de GRE - Remitente EG07-35 emitida por RUC N° 20615074897,Otro,20615074897,,NO,,,SUNAT,0023,0,,,
-20609309793,Mensaje,1073066189,09/09/2026 12:59:50,09/09/2026,Comunicación de GRE - Remitente EG07-5503 emitida por RUC N° 20516497379,Otro,20516497379,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1060881234,20/08/2026 17:59:00,20/08/2026,Comunicación Obligado a la presentación FV 621 período 07-2026,Otro,,,NO,,,9188,,1,,,
 20609309793,Mensaje,1043757087,22/07/2026 10:34:54,22/07/2026,Comunicado Creación Expediente Electrónico de Devolución,Devolución,,,NO,,,SUNAT,0023,0,,,
 20609309793,Mensaje,1043757043,22/07/2026 10:34:47,22/07/2026,Constancia de Presentación Solicitud de Devolución 1649,Devolución,,,NO,,,SUNAT,0023,1,,,
