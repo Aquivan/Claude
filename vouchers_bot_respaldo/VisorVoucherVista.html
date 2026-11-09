@@ -90,6 +90,7 @@
   <button id="b-datos" onclick="modo('datos')" title="Solo los datos">📋</button>
   <button onclick="copiar()" title="Copiar la imagen del voucher (para pegar en WhatsApp, Telegram o un correo)">📋 Copiar</button>
   <button onclick="abrirOriginal()" title="Abrir el archivo original en Drive">📄</button>
+  <button id="b-releer" onclick="releer()" title="Volver a leer con IA la página de esta fila (si la IA leyó mal o se volvió a subir el archivo con la página cambiada). Muestra ANTES y AHORA y pide confirmar.">🔁 Releer con IA</button>
   <button onclick="ventanaAparte()" title="Abrir el voucher en una ventana aparte del navegador: se agranda o achica arrastrando el borde, se maximiza o se lleva a otro monitor">🗗 Ventana aparte</button>
   <button onclick="maximizar()" title="Agrandar esta ventana al máximo que permite Google Sheets (otro clic: tamaño normal)">⤢</button>
 </div>
@@ -120,7 +121,8 @@
   <div id="izq">
     <div class="herr"><button onclick="zoom(-1)" title="Achicar">−</button><span id="pz">100%</span><button onclick="zoom(1)" title="Agrandar (también Ctrl + rueda del mouse)">+</button>
       <button onclick="ajuste('ancho')" title="Ajustar al ancho">↔ Ancho</button><button onclick="ajuste('alto')" title="Ver la página completa">↕ Página</button>
-      <button onclick="girar()" title="Girar 90° (fotos de lado)">⟳</button><span style="flex:1"></span><span style="font-size:10px">arrastre la imagen para moverla</span></div>
+      <button onclick="girar()" title="Girar 90° (fotos de lado)">⟳</button>
+      <button onclick="recargarImagen()" title="Recargar la imagen y los datos de esta fila (si no se actualizó o se volvió a subir el archivo)">🔄 Recargar</button><span style="flex:1"></span><span style="font-size:10px">arrastre la imagen para moverla</span></div>
     <div id="marco"><div class="vacio">Haga clic en cualquier celda de una fila de vouchers y aquí aparece el voucher original.</div><span id="carga">cargando…</span></div>
     <div class="origen" id="origen"></div>
     <div id="divh" title="Arrastre hacia abajo para agrandar la imagen, hacia arriba para ver más datos"></div>
@@ -166,6 +168,76 @@ function mirar() {
     setTimeout(mirar, 500);
   }).withFailureHandler(function () { setTimeout(mirar, 2500); }).VV_estado(SEL.hoja, SEL.fila);
 }
+/* ---------- 🔁 Releer con IA la página de la fila (ReleerPagina.js) ---------- */
+var RL = null;
+function releerCaja(html) {
+  var c = DOC.getElementById('releerCaja');
+  if (!c) {
+    c = DOC.createElement('div'); c.id = 'releerCaja';
+    c.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9999;display:flex;align-items:center;justify-content:center';
+    DOC.body.appendChild(c);
+  }
+  if (html == null) { c.remove(); return; }
+  c.innerHTML = '<div style="background:#fff;border-radius:10px;max-width:640px;width:92%;padding:16px;font:13px Arial;box-shadow:0 10px 30px rgba(0,0,0,.3)">' + html + '</div>';
+}
+function esc2(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function releer() {
+  if (!actual || !actual.fila || actual.fila < 2) { aviso('⚠️ Primero elija una fila de voucher.'); return; }
+  if (nCambios()) { aviso('⚠️ Guarde o descarte los cambios de esta fila antes de volver a leerla.'); return; }
+  var h = actual.hoja, f = actual.fila;
+  releerCaja('<b>🔁 Leyendo otra vez con IA ' + esc2(h) + ' fila ' + f + '…</b><div style="color:#546e7a;margin-top:6px">Saca la página del archivo original (la versión más nueva) y la lee. Tarda unos 10–40 segundos.</div>');
+  google.script.run.withSuccessHandler(function (id) { RL = { id: id, n: 0 }; releerEsperar(); })
+    .withFailureHandler(function (e) { releerCaja('<b>❌ ' + esc2(e.message || e) + '</b><div style="margin-top:10px"><button onclick="releerCaja(null)">Cerrar</button></div>'); })
+    .RP_visorIniciar(h, f);
+}
+function releerEsperar() {
+  setTimeout(function () {
+    google.script.run.withSuccessHandler(function (r) {
+      if (!r || !r.listo) { if (++RL.n < 60) return releerEsperar(); return releerCaja('<b>⚠️ Tardó demasiado.</b> Inténtelo de nuevo.<div style="margin-top:10px"><button onclick="releerCaja(null)">Cerrar</button></div>'); }
+      if (r.error) return releerCaja('<b>❌ ' + esc2(r.error) + '</b><div style="margin-top:10px"><button onclick="releerCaja(null)">Cerrar</button></div>');
+      var ops = r.lineas.map(function (l, i) {
+        return '<label style="display:block;margin:4px 0"><input type="radio" name="rlop" value="' + i + '"' + (i === 0 ? ' checked' : '') + '> ' + esc2(l) + '</label>';
+      }).join('');
+      releerCaja('<b>🔁 ' + esc2(r.hoja) + ' fila ' + r.fila + '</b> · ' + esc2(r.archivo) + ' · página ' + r.pagina + ' <span style="color:#546e7a">(versión del ' + esc2(r.version) + ')</span>' +
+        '<div style="margin-top:10px"><b>ANTES:</b> ' + esc2(r.antes) + '</div>' +
+        '<div style="margin-top:6px"><b>AHORA' + (r.lineas.length > 1 ? ' (elija cuál va en esta fila)' : '') + ':</b>' + ops + '</div>' +
+        (r.dup ? '<div style="color:#b45309;margin-top:6px">⚠️ Ese N° de operación ya está en la fila ' + r.dup + ': se anotará como [DUPLICADO].</div>' : '') +
+        (r.agregado ? '<div style="color:#546e7a;margin-top:6px">ℹ️ Lo que usted agregó (revisado, empresa, factura, RUC…) no se toca. Revíselo después.</div>' : '') +
+        '<div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"><button onclick="releerCaja(null)">✖ No cambiar</button>' +
+        '<button class="pri" onclick="releerAplicar()">✅ Reemplazar</button></div>');
+    }).withFailureHandler(function () { if (++RL.n < 60) releerEsperar(); }).RP_visorEstado(RL.id);
+  }, 3000);
+}
+function releerAplicar() {
+  var sel = DOC.querySelector('input[name=rlop]:checked'), i = sel ? Number(sel.value) : 0;
+  releerCaja('<b>Escribiendo…</b>');
+  google.script.run.withSuccessHandler(function (r) {
+    releerCaja(null);
+    if (r && r.error) return aviso('⚠️ ' + r.error);
+    aviso(r.mensaje, true);
+    var h = actual.hoja, f = actual.fila;
+    google.script.run.withSuccessHandler(function (d) { if (d) pintar(d); }).VV_datos(h, f);
+  }).withFailureHandler(function (e) { releerCaja(null); aviso('⚠️ ' + (e.message || e)); }).RP_visorAplicar(RL.id, i);
+}
+var VERSIONES = [];
+function verVersion(i) {
+  var x = VERSIONES[i];
+  if (!x || !D) return;
+  var d = {}; for (var k in D) d[k] = D[k];
+  d.verOriginal = x;
+  DOC.getElementById('marco').innerHTML = '<span id="carga">cargando…</span>';
+  mostrarImagen(d, ++turno);
+}
+/** 🔄 Recargar la imagen y los datos de la fila actual (olvida lo recordado: archivo, imagen bajada). */
+function recargarImagen() {
+  if (!actual || !actual.fila) return aviso('⚠️ Elija una fila.');
+  if (nCambios()) return aviso('⚠️ Guarde o descarte los cambios antes de recargar.');
+  if (D && D.original) { delete ARCH[D.original.id]; (D.original.otros || []).forEach(function (x) { delete ARCH[x.id]; }); }
+  aviso('🔄 Recargando…');
+  var h = actual.hoja, f = actual.fila;
+  google.script.run.withSuccessHandler(function (d) { if (d) { pintar(d); aviso('🔄 Recargado.', true); } })
+    .withFailureHandler(function (e) { aviso('⚠️ ' + (e.message || e)); }).VV_refrescar(h, f);
+}
 function aviso(t, ok) { var m = DOC.getElementById('msg'); m.textContent = t || ''; m.style.color = ok ? '#2e7d32' : (t && /⚠️/.test(t) ? '#c62828' : '#546e7a'); }
 
 /* ---------- el original desde Drive ---------- */
@@ -199,9 +271,20 @@ function mostrarImagen(d, t) {
     };
   }
   if (!d.original || !d.original.id) { o.textContent = (d.img ? 'imagen de la celda · ' : '') + 'no encontré el original «' + (d.archivo || '?') + '» en Drive (¿lo movieron, renombraron o borraron?)'; return; }
+  // Varios archivos con el mismo nombre: no se sabe cuál es el de esta fila. Se queda la IMAGEN DE LA CELDA (la que se
+  // guardó al procesar ESTA fila) y se ofrecen los originales para verlos uno por uno.
+  var otros = d.original.otros || [];
+  if (otros.length && !d.verOriginal) {
+    var lista = [{ id: d.original.id, mime: d.original.mime, fecha: d.original.fecha || 'más nuevo' }].concat(otros);
+    VERSIONES = lista;
+    o.innerHTML = '⚠️ Hay ' + lista.length + ' archivos llamados «' + esc(d.archivo) + '»: ' + (d.img ? 'se muestra la imagen de la celda (la de esta fila).' : 'no sé cuál es el de esta fila.') +
+      ' Ver original: ' + lista.map(function (x, i) { return '<a href="#" onclick="verVersion(' + i + ');return false">' + (i + 1) + ' (' + esc(x.fecha) + ')</a>'; }).join(' · ');
+    if (d.img) return;
+  }
   carga(true);
-  var mime = String(d.original.mime || '');
-  bajar(d.original.id, mime).then(function (a) {
+  var orig = d.verOriginal || d.original;
+  var mime = String(orig.mime || '');
+  bajar(orig.id, mime).then(function (a) {
     if (t !== turno) return;
     if (a.pdf) {
       var n = Math.min(Math.max(parseInt(d.pagina, 10) || 1, 1), a.pdf.numPages);
@@ -220,7 +303,7 @@ function mostrarImagen(d, t) {
     return urlDe(new Blob([a.buf], { type: mime || 'image/jpeg' })).then(function (url) {
     if (t !== turno) return;
     m.innerHTML = '<img src="' + url + '"><span id="carga">cargando…</span>'; zoomable(m.querySelector('img'));
-    o.textContent = 'original (foto)';
+    o.textContent = 'original (foto)' + (otros.length ? ' · ⚠️ hay ' + (otros.length + 1) + ' archivos con este nombre' + (d.verOriginal ? ' (este es el del ' + (d.verOriginal.fecha || '') + ')' : '') : '');
     });
   }).catch(function (e) {
     if (t === turno) o.textContent = (d.img ? 'imagen de la celda' : '') + ' · no pude bajar el original (' + e.message + ')';
@@ -487,7 +570,18 @@ function filtrar() {
     var x = a[K.f] || '', y = b[K.f] || '';
     return (ord[1] === '-' ? (y > x ? 1 : y < x ? -1 : 0) : (x > y ? 1 : x < y ? -1 : 0)) || a[K.fila] - b[K.fila];
   });
-  if (dm === 'u') { var vistos = {}; lista = lista.filter(function (f) { if (!f[K.dup]) return true; if (vistos[f[K.dup]]) return false; vistos[f[K.dup]] = 1; return true; }); }
+  // «Únicos»: de cada grupo de repetidos queda UNO, eligiendo primero el de 📄 Originales (h=0) y, dentro de la
+  // misma pestaña, la fila más antigua (la primera registrada). Antes quedaba el primero según el orden de la
+  // lista, y con fechas iguales ganaba la Foto (fila más baja) y se ocultaba el Original.
+  if (dm === 'u') {
+    var mejor = {};
+    lista.forEach(function (f) {
+      var k = f[K.dup]; if (!k) return;
+      var m = mejor[k];
+      if (!m || f[K.h] < m[K.h] || (f[K.h] === m[K.h] && f[K.fila] < m[K.fila])) mejor[k] = f;
+    });
+    lista = lista.filter(function (f) { return !f[K.dup] || mejor[f[K.dup]] === f; });
+  }
   if (dm === 'd') lista.sort(function (a, b) { return a[K.dup] < b[K.dup] ? -1 : a[K.dup] > b[K.dup] ? 1 : a[K.h] - b[K.h] || a[K.fila] - b[K.fila]; });   // los repetidos, juntos
   RES = lista; VISTOS = 300;
   var pen = 0, usd = 0; lista.forEach(function (f) { if (/USD|\$/i.test(f[K.mon])) usd += f[K.monto]; else pen += f[K.monto]; });

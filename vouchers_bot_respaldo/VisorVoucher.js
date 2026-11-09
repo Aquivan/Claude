@@ -45,9 +45,14 @@ function VV_idArchivo_(nombre) {
   const cache = CacheService.getScriptCache(), k = 'vv_id_' + Utilities.base64EncodeWebSafe(nombre).slice(0, 200);
   const g = cache.get(k);
   if (g) return JSON.parse(g);
-  let f = buscarArchivoPorNombre(nombre) || VV_buscarEnTodoDrive_(nombre);
-  const r = f ? { id: f.getId(), mime: f.getMimeType() } : null;
-  cache.put(k, JSON.stringify(r), r ? 21600 : 600);   // si no está, se vuelve a buscar en 10 min
+  // Puede haber VARIOS archivos con el mismo nombre (se volvió a subir, o dos fotos distintas llamadas igual):
+  // se avisan todos (el más nuevo primero) para que el visor no muestre en silencio el de otro voucher.
+  const todos = VV_archivosPorNombre_(nombre);
+  let f = todos[0] || VV_buscarEnTodoDrive_(nombre);
+  const r = f ? { id: f.getId(), mime: f.getMimeType(), otros: todos.slice(1, 6).map(function (x) {
+    return { id: x.getId(), mime: x.getMimeType(), fecha: Utilities.formatDate(x.getDateCreated(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') }; }) } : null;
+  if (r && todos.length > 1) r.fecha = Utilities.formatDate(todos[0].getDateCreated(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
+  cache.put(k, JSON.stringify(r), r ? 1800 : 300);   // 30 min (antes 6 h: un archivo vuelto a subir se seguía viendo el viejo)
   return r;
 }
 
@@ -55,6 +60,29 @@ function VV_idArchivo_(nombre) {
  * Si no está en las carpetas del sistema (lo movieron, lo subieron a otra carpeta o le cambiaron la extensión),
  * se busca en todo el Drive de quien mira: primero el nombre exacto, luego sin extensión, luego que empiece igual.
  */
+/** Todos los archivos con ese nombre en las carpetas de vouchers, el más nuevo primero. */
+function VV_archivosPorNombre_(nombre) {
+  const ids = [CFG.CARPETA_ORIGINALES_PROCESADOS_ID, CFG.CARPETA_FOTOS_PROCESADOS_ID, CFG.CARPETA_DESCARTADOS_ID,
+    CFG.CARPETA_ORIGINALES_ENTRADA_ID, CFG.CARPETA_FOTOS_ENTRADA_ID], out = [], vistos = {};
+  ids.forEach(function (id) {
+    try {
+      const it = DriveApp.getFolderById(id).getFilesByName(nombre);
+      while (it.hasNext()) { const f = it.next(); if (!vistos[f.getId()]) { vistos[f.getId()] = 1; out.push(f); } }
+    } catch (e) {}
+  });
+  return out.sort(function (a, b) { return b.getDateCreated() - a.getDateCreated(); });
+}
+
+/** 🔄 Recargar: olvida lo recordado del archivo de esa fila y devuelve sus datos al día. */
+function VV_refrescar(hoja, fila) {
+  const sh = SpreadsheetApp.getActive().getSheetByName(hoja);
+  if (sh && fila >= 2) {
+    const nombre = String(sh.getRange(fila, 11).getDisplayValue() || '').trim();
+    if (nombre) CacheService.getScriptCache().remove('vv_id_' + Utilities.base64EncodeWebSafe(nombre).slice(0, 200));
+  }
+  return VV_datos(hoja, fila);
+}
+
 function VV_buscarEnTodoDrive_(nombre) {
   const q = function (t) { return String(t).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); };
   const base = String(nombre).replace(/\.[A-Za-z0-9]{2,5}$/, '');

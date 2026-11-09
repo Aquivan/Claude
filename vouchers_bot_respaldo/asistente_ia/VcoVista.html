@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html><head><base target="_top"><meta charset="utf-8">
+<style>
+body{font:13px Arial,sans-serif;margin:0;padding:10px;color:#0F172A}
+h4{margin:10px 0 4px}table{border-collapse:collapse;width:100%;font-size:12px}td,th{border-bottom:1px solid #E2E8F0;padding:3px 5px;text-align:left;vertical-align:top}
+th{background:#F1F5F9;position:sticky;top:0}.caja{max-height:230px;overflow:auto;border:1px solid #CBD5E1;border-radius:6px}
+button{padding:7px 12px;border:0;border-radius:6px;cursor:pointer;background:#1D4ED8;color:#fff;margin:6px 6px 0 0}button.g{background:#64748B}button:disabled{opacity:.5}
+#msg{margin:8px 0;color:#065F46}.r{color:#B91C1C}.nota{color:#64748B;font-size:11.5px}
+</style></head><body>
+<div class="nota">Mismo voucher = mismo banco, N° de operación y monto (fechas a 5 días o menos). Se copia de <b>Fotos</b> a <b>Originales</b> solo lo que está <b>vacío</b> en Originales: ID Usuario, Empresa, ID Beneficiario, Tipo y Nº Doc., Por retener, Retenido, Revisado y Nota. Lo que leyó la IA (fecha, monto, operación) no se toca. Cada celda queda con la nota «🔗 Copiado de Fotos!…» y se puede deshacer.</div>
+<div id="msg">⏳ Buscando los vouchers que están en Originales y en Fotos…</div>
+<div id="cont"></div>
+<div><button id="bC" onclick="copiar()" disabled>✅ Copiar a Originales</button><button class="g" id="bD" onclick="deshacer()">↩️ Deshacer la última copia</button><button class="g" onclick="google.script.host.close()">Cerrar</button></div>
+<script>
+var ID = '';
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function $(i) { return document.getElementById(i); }
+function falla(e) { $('msg').innerHTML = '<span class="r">❌ ' + esc(e && e.message || e) + '</span>'; }
+google.script.run.withFailureHandler(falla).withSuccessHandler(function (r) {
+  ID = r.id;
+  $('msg').innerHTML = '<b>' + r.pares + '</b> voucher(s) están en Originales y en Fotos · <b>' + r.nCopias + '</b> dato(s) por copiar · ' +
+    (r.nConflictos ? '<span class="r"><b>' + r.nConflictos + '</b> diferencia(s) para revisar (no se copian)</span>' : 'sin diferencias');
+  var h = '';
+  if (r.copias.length) {
+    h += '<h4>✅ Se copiaría</h4><div class="caja"><table><tr><th>Original</th><th>Columna</th><th>Valor (de la foto)</th><th>Copia</th></tr>' +
+      r.copias.map(function (x) { return '<tr><td>' + esc(x.o) + '</td><td>' + esc(x.titulo) + '</td><td>' + (x.valor === true ? '☑' : esc(x.valor)) + '</td><td>' + esc(x.f) + '</td></tr>'; }).join('') +
+      '</table></div>' + (r.nCopias > r.copias.length ? '<div class="nota">… y ' + (r.nCopias - r.copias.length) + ' más (también se copian).</div>' : '');
+  }
+  if (r.conflictos.length) {
+    h += '<h4 class="r">⚠️ Dicen distinto (revise cuál es el correcto; no se copia nada)</h4><div class="caja"><table><tr><th>Original</th><th>Columna</th><th>En Originales</th><th>En Fotos</th><th>Copia</th></tr>' +
+      r.conflictos.map(function (x) { return '<tr><td>' + esc(x.o) + '</td><td>' + esc(x.col) + '</td><td>' + esc(x.vo) + '</td><td>' + esc(x.vf) + '</td><td>' + esc(x.f) + '</td></tr>'; }).join('') + '</table></div>';
+  }
+  if (r.ambiguos.length) h += '<h4>❔ Con más de un Original posible (no se tocan)</h4><div class="nota">' + r.ambiguos.map(function (x) { return esc(x.f + ' → ' + x.o); }).join('<br>') + '</div>';
+  if (!h) h = '<p>✓ No hay nada por copiar: lo trabajado en Fotos ya está en Originales.</p>';
+  $('cont').innerHTML = h;
+  $('bC').disabled = !r.nCopias;
+}).VIA_vcoVer();
+function copiar() {
+  if (!confirm('¿Copiar los datos a Originales (solo celdas vacías)?')) return;
+  $('bC').disabled = true; $('msg').textContent = '⏳ Copiando…';
+  google.script.run.withFailureHandler(falla).withSuccessHandler(function (r) { $('msg').textContent = r.mensaje; }).VIA_vcoCopiar(ID);
+}
+function deshacer() {
+  if (!confirm('¿Deshacer la última copia de Fotos a Originales? (solo las celdas que nadie cambió después)')) return;
+  $('msg').textContent = '⏳ Deshaciendo…';
+  google.script.run.withFailureHandler(falla).withSuccessHandler(function (r) { $('msg').textContent = r.mensaje; }).VIA_vcoDeshacer();
+}
+</script></body></html>

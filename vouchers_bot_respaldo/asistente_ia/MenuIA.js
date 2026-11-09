@@ -3,9 +3,12 @@
 function VIA_menu_() {
   SpreadsheetApp.getUi().createMenu('🧠 Asistente IA')
     .addItem('❓ Ayuda: qué hace cada opción ↗', 'VIA_m_AYU_menuAbrir')
+    .addItem('🧩 Mesa de conciliación (facturas ↔ vouchers, con líneas)', 'VIA_menuMesa')
     .addItem('💬 Chat con la IA (preguntas, fotos, PDF, Excel)', 'VIA_menuAbrirChat')
     .addItem('📰 Resumen de cobranzas y pagos con IA', 'VIA_menuResumen')
     .addItem('📋 Analizar vouchers procesados (factura, empresa, retención)', 'VIA_menuProcesados')
+    .addItem('🔎 Identificar RUC de los proveedores (filas seleccionadas)', 'VIA_menuIdentificarRuc')
+    .addItem('🔗 Completar Originales con lo trabajado en Fotos', 'VIA_menuVco')
     .addSeparator()
     .addItem('🔍 Auditor IA: abrir (compras y pagos de todas las empresas) ↗', 'VIA_m_AUD_menuAbrir')
     .addItem('▶ Auditar con IA (según los filtros) ↗', 'VIA_m_AUD_menuAuditar')

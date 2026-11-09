@@ -37,7 +37,7 @@ const AYV_SECCIONES_ = [
     '• **Vistas**: 🖼 solo imagen · 🖼 📋 ambos · 📋 solo datos.',
     '• **Imagen**: − / + (o Ctrl + rueda), ↔ Ancho, ↕ Página, ⟳ girar, arrastrar para moverse. Una barra separa imagen y datos: arrástrela.',
     '• **◀ ▶** fila anterior o siguiente · **📋 Copiar** la imagen para pegarla en WhatsApp o correo · **📄** abre el original en Drive.',
-    '• **🔎 Buscar**: abre a la izquierda un buscador sobre **Originales y Fotos** (o solo una): escriba n° de operación, nombre, monto o archivo, y filtre por **fecha, banco, moneda, monto, empresa, revisado, retención e ID Beneficiario** (en «⚙️ Más filtros»). **Duplicados**: Todos · **Únicos** (uno por voucher) · **Solo duplicados** (mismo n° de operación, banco y monto; los repetidos salen juntos). Arriba ve cuántos son y la suma en S/ y US$.',
+    '• **🔎 Buscar**: abre a la izquierda un buscador sobre **Originales y Fotos** (o solo una): escriba n° de operación, nombre, monto o archivo, y filtre por **fecha, banco, moneda, monto, empresa, revisado, retención e ID Beneficiario** (en «⚙️ Más filtros»). **Duplicados**: Todos · **Únicos** (uno por voucher: si está en Originales y en Fotos, queda el de **Originales**) · **Solo duplicados** (mismo n° de operación, banco y monto; los repetidos salen juntos). Arriba ve cuántos son y la suma en S/ y US$.',
     '• Con un filtro puesto, **◀ ▶** (o las flechas ↑ ↓ del teclado) recorren **solo los resultados**, y el título dice «🔎 3 de 45». Al tocar un resultado se ve el voucher y se selecciona la fila en la hoja. **📋** copia la lista para pegarla en Excel o Sheets; **🔄** vuelve a leer la hoja; **✖ Limpiar** quita los filtros.',
     '• **🗗 Ventana aparte**: todo el visor en una ventana del navegador que se agranda arrastrando el borde o se lleva a otro monitor. Deje abierta la ventanita de Sheets (es la que avisa qué fila tocó).'
   ] },
@@ -64,6 +64,7 @@ const AYV_SECCIONES_ = [
   { id: 'problemas', e: '🛠', t: 'Si algo no sale bien', p: [
     '• **La imagen dice «Ver PDF» o está vacía**: 🔧 Reparar imágenes faltantes.',
     '• **Un dato está mal leído**: corríjalo en la celda o en el 🪟 Visor.',
+    '• **Monto con comisión**: el monto del voucher es lo que RECIBE el proveedor («IMPORTE», «Importe transferido»), no la «Cancelación total» ni el «Importe cargado» (traen la comisión y el ITF del banco, que son gasto de la empresa). Ej.: recaudación BBVA IMPORTE 49,993 + comisión 7 = 50,000 → el monto es 49,993. Si un voucher antiguo quedó con el total, use 🔁 Volver a leer con IA.',
     '• **La IA leyó mal una página, o volvió a subir el archivo con una página cambiada** (el sistema solo lee las páginas nuevas del final): póngase en la fila y use **🔁 Volver a leer con IA la página de la fila seleccionada**. Muestra ANTES y AHORA y pide confirmar; no toca lo que usted agregó (columnas O en adelante). **↩️ Deshacer la última relectura** lo devuelve. También desde Telegram o WhatsApp: «volver a leer Originales 2666».',
     '• **No se procesó un archivo**: ⚙️ Verificar Configuración, y revise que esté en la carpeta de entrada; ▶ Procesar.',
     '• **Se registró algo por error** (por WhatsApp): escriba **deshacer**.',
