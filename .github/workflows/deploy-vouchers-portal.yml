@@ -65,7 +65,7 @@ jobs:
         run: |
           if [ -f .clasp.json ]; then echo "::error::Ya existe vouchers_portal/apps_script/.clasp.json; no se crea otro."; exit 1; fi
           mkdir -p /tmp/nuevo && cd /tmp/nuevo
-          clasp create-script --type webapp --title "Portal de Vouchers" --rootDir .
+          clasp create-script --type standalone --title "Portal de Vouchers" --rootDir .
           test -f .clasp.json || { echo "::error::clasp no creo el proyecto"; exit 1; }
           python3 -c "import json;c=json.load(open('.clasp.json'));print(json.dumps({'scriptId':c['scriptId'],'rootDir':'.'}))" > "$GITHUB_WORKSPACE/vouchers_portal/apps_script/.clasp.json"
           cd "$GITHUB_WORKSPACE/vouchers_portal/apps_script"
