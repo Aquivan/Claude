@@ -68,19 +68,20 @@ jobs:
           python3 - <<'PY'
           import os, sys, difflib, shutil
           cambios, base, hoja = 'vouchers_bot_cambios/src', 'vouchers_bot_respaldo/src', '/tmp/hoja'
-          def buscar(nombre):
-              for raiz, _, fs in os.walk(hoja):
+          def buscar(nombre, donde=hoja):
+              for raiz, _, fs in os.walk(donde):
                   if nombre in fs: return os.path.join(raiz, nombre)
+          base_raiz = 'vouchers_bot_respaldo'   # el respaldo guarda cada archivo donde está en la hoja (raíz o src/)
           errores = []
           for f in sorted(os.listdir(cambios)):
               vivo = buscar(f)
               if not vivo:
-                  if os.path.exists(os.path.join(base, f)):
+                  if buscar(f, base_raiz):
                       errores.append(f + ': no está en la hoja (¿se borró a mano?)'); continue
                   print('================ ' + f + ' (ARCHIVO NUEVO) ================')
                   shutil.copy(os.path.join(cambios, f), os.path.join(hoja, f)); continue
               actual = open(vivo, encoding='utf-8').read()
-              esperado = open(os.path.join(base, f), encoding='utf-8').read()
+              esperado = open(buscar(f, base_raiz) or os.path.join(base, f), encoding='utf-8').read()
               nuevo = open(os.path.join(cambios, f), encoding='utf-8').read()
               if actual == nuevo: print(f + ': ya tiene el cambio'); continue
               if actual.strip() != esperado.strip():
