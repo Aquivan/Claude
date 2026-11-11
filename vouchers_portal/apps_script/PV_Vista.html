@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="theme-color" content="#1F3A5F">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{--az:#1F3A5F;--az2:#2563EB;--fo:#F1F5F9;--bo:#E2E8F0;--gr:#64748B;--ro:#B91C1C;--ve:#047857;--am:#B45309;--bl:#fff;--tx:#0F172A}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--fo);color:var(--tx);-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer;border:1px solid var(--bo);background:var(--bl);border-radius:8px;padding:7px 11px;color:var(--tx)}
+button.p{background:var(--az2);border-color:var(--az2);color:#fff;font-weight:600}button.r{color:var(--ro)}button:disabled{opacity:.5;cursor:default}
+input,select,textarea{border:1px solid #CBD5E1;border-radius:8px;padding:7px 9px;background:#fff;color:var(--tx);min-width:0}
+input:focus,select:focus,textarea:focus{outline:2px solid #93C5FD;border-color:var(--az2)}
+.oc{display:none!important}
+/* entrar */
+#login{min-height:100%;display:flex;align-items:center;justify-content:center;padding:16px}
+#login .caja{background:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(15,23,42,.12);padding:26px 22px;width:100%;max-width:360px}
+#login h1{font-size:20px;margin:0 0 4px;color:var(--az)}#login label{display:block;font-size:12px;color:var(--gr);margin:12px 0 4px}
+#login input{width:100%;font-size:16px;padding:10px 12px}#login button{width:100%;margin-top:16px;padding:11px;font-size:15px}
+/* app */
+#app{display:flex;flex-direction:column;height:100%}
+header{background:var(--az);color:#fff;display:flex;align-items:center;gap:8px;padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top));flex-wrap:wrap}
+header b{font-size:16px}header .yo{margin-left:auto;font-size:12px;opacity:.85;white-space:nowrap}
+header button{background:transparent;color:#fff;border-color:rgba(255,255,255,.35);padding:5px 9px;font-size:12px}
+nav{display:flex;gap:4px;background:#fff;border-bottom:1px solid var(--bo);padding:6px 8px;overflow-x:auto;scrollbar-width:none}
+nav button{border:0;background:transparent;white-space:nowrap;padding:7px 10px;border-radius:8px;color:#334155}
+nav button.on{background:#DBEAFE;color:#1E3A8A;font-weight:600}
+main{flex:1;min-height:0;overflow:auto}
+.pag{padding:10px 12px;max-width:1500px;margin:0 auto}
+.msg{padding:8px 12px;font-size:13px}.msg.e{color:var(--ro)}.msg.ok{color:var(--ve)}
+.chip{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;background:#E2E8F0;color:#334155;margin:1px 2px 1px 0;white-space:nowrap}
+.c-r{background:#FEE2E2;color:#991B1B}.c-v{background:#D1FAE5;color:#065F46}.c-a{background:#FEF3C7;color:#92400E}.c-z{background:#DBEAFE;color:#1E40AF}.c-m{background:#EDE9FE;color:#5B21B6}
+/* buscar */
+#bus{display:grid;grid-template-columns:minmax(330px,440px) 1fr;gap:12px;height:100%;padding:10px 12px}
+#bus .izq{display:flex;flex-direction:column;min-height:0}
+.filtros{background:#fff;border:1px solid var(--bo);border-radius:12px;padding:9px;display:flex;flex-direction:column;gap:7px}
+.filtros .f{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.filtros .f>*{flex:1 1 90px}
+.filtros input[type=search]{flex:1 1 100%;font-size:15px}
+.seg{display:inline-flex;border:1px solid #CBD5E1;border-radius:8px;overflow:hidden;flex:0 0 auto!important}.seg button{border:0;border-radius:0;padding:5px 9px;font-size:12.5px}.seg button.on{background:var(--az2);color:#fff}
+.marcas{display:flex;gap:5px;flex-wrap:wrap}.marcas button{font-size:12px;padding:4px 8px;border-radius:14px;flex:0 0 auto}.marcas button.on{background:#1E3A8A;color:#fff;border-color:#1E3A8A}
+.tot{font-size:12px;color:var(--gr);padding:6px 2px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+#lista{flex:1;overflow:auto;min-height:0;-webkit-overflow-scrolling:touch}
+.it{background:#fff;border:1px solid var(--bo);border-radius:10px;padding:8px 10px;margin-bottom:6px;cursor:pointer;display:flex;gap:8px;justify-content:space-between}
+.it:hover{border-color:#93C5FD}.it.sel{border-color:var(--az2);box-shadow:0 0 0 2px #BFDBFE}
+.it .a{min-width:0}.it .l1{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.it .l2{font-size:12px;color:var(--gr);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it .m{text-align:right;white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums}
+.mas{text-align:center;padding:10px}
+/* visor */
+#vis{background:#fff;border:1px solid var(--bo);border-radius:12px;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+#vis .vacio{margin:auto;color:var(--gr);text-align:center;padding:30px}
+.vbar{display:flex;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--bo);flex-wrap:wrap}
+.vbar .t{font-weight:700;margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vcuerpo{flex:1;min-height:0;display:grid;grid-template-columns:1.25fr 1fr;overflow:hidden}
+.vimg{background:#0F172A;position:relative;overflow:auto;min-height:260px;display:flex;flex-direction:column}
+.vimg .tabs{display:flex;gap:4px;padding:6px;background:#1E293B;position:sticky;top:0;z-index:2;flex-wrap:wrap}
+.vimg .tabs button{background:#334155;color:#E2E8F0;border:0;padding:4px 9px;font-size:12px}.vimg .tabs button.on{background:#2563EB;color:#fff}
+.vimg .lienzo{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:8px;touch-action:pan-x pan-y pinch-zoom}
+.vimg img,.vimg canvas{max-width:none;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+.vimg .aviso{color:#CBD5E1;padding:20px;text-align:center}
+.vdat{overflow:auto;padding:10px 12px;border-left:1px solid var(--bo)}
+.campo{display:grid;grid-template-columns:120px 1fr;gap:6px;align-items:center;padding:3px 0;border-bottom:1px dashed #EEF2F7}
+.campo label{font-size:12px;color:var(--gr);overflow:hidden;text-overflow:ellipsis}.campo input,.campo select{width:100%;padding:5px 7px}
+.campo .fijo{color:#334155;word-break:break-word}.campo.camb input,.campo.camb select{background:#FEF9C3;border-color:#EAB308}
+.vacc{display:flex;gap:6px;flex-wrap:wrap;padding:8px 0}
+.nota{white-space:pre-wrap;font-size:12px;color:#475569;background:#F8FAFC;border-radius:8px;padding:8px;margin-top:8px}
+/* subir */
+.zona{border:2px dashed #93C5FD;background:#EFF6FF;border-radius:14px;padding:22px;text-align:center;color:#1E3A8A}
+.zona.sobre{background:#DBEAFE}
+.zona .bot{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.sub{background:#fff;border:1px solid var(--bo);border-radius:10px;padding:8px;margin-top:8px;display:grid;grid-template-columns:64px 1fr auto;gap:8px;align-items:center}
+.sub img,.sub .ico{width:64px;height:64px;object-fit:cover;border-radius:6px;background:#F1F5F9;display:flex;align-items:center;justify-content:center;font-size:26px}
+.sub .n{display:flex;gap:6px;flex-wrap:wrap}.sub .n input{flex:1 1 180px}.sub .est{font-size:12px;margin-top:3px}
+/* tablas */
+.tb{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:13px}
+.tb th{background:#334155;color:#fff;text-align:left;padding:6px 8px;font-size:12px}.tb td{padding:6px 8px;border-bottom:1px solid #EEF2F7;vertical-align:top}
+.card{background:#fff;border:1px solid var(--bo);border-radius:12px;padding:12px;margin-bottom:10px}
+.card h3{margin:0 0 8px;font-size:15px;color:var(--az)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:10px}
+.kpi{background:#fff;border:1px solid var(--bo);border-radius:10px;padding:9px 11px}.kpi .t{font-size:11px;color:var(--gr);text-transform:uppercase}.kpi .v{font-size:18px;font-weight:700}
+/* ventana */
+#modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:12px}
+#modal .caja{background:#fff;border-radius:14px;max-width:640px;width:100%;max-height:90vh;overflow:auto;padding:16px}
+#modal h3{margin:0 0 10px;color:var(--az)}#modal .bot{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+#cargando{position:fixed;left:50%;top:10px;transform:translateX(-50%);background:#1E293B;color:#fff;padding:6px 14px;border-radius:16px;font-size:13px;z-index:60;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.ayuda p,.ayuda li{line-height:1.55}
+/* celular */
+@media (max-width:860px){
+  #bus{grid-template-columns:1fr;padding:8px}
+  #vis{position:fixed;inset:0;z-index:40;border-radius:0;border:0}
+  #vis.oc-movil{display:none}
+  .vcuerpo{grid-template-columns:1fr;overflow:auto;display:block}
+  .vimg{min-height:52vh;max-height:68vh}
+  .vdat{border-left:0;overflow:visible}
+  .campo{grid-template-columns:105px 1fr}
+  header .yo{display:none}
+}
+@media (min-width:861px){#vis .solo-movil{display:none}}
+</style>
+</head>
+<body>
+<div id="cargando" class="oc">⏳ Cargando…</div>
+
+<!-- ============ entrar ============ -->
+<div id="login" class="oc"><div class="caja">
+  <h1>🧾 Vouchers</h1><div style="color:var(--gr);font-size:13px">Entre con su usuario y su PIN.</div>
+  <label for="lu">Usuario</label><input id="lu" autocomplete="username" autocapitalize="none" spellcheck="false">
+  <label for="lp">PIN</label><input id="lp" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8">
+  <button class="p" id="lb" onclick="entrar()">Entrar</button>
+  <div id="lm" class="msg e" style="padding:8px 0 0"></div>
+</div></div>
+
+<!-- ============ app ============ -->
+<div id="app" class="oc">
+  <header><b>🧾 Vouchers</b><span class="yo" id="yo"></span><button onclick="salir()">Salir</button></header>
+  <nav id="nav">
+    <button data-p="bus" onclick="ir('bus')">🔎 Buscar</button>
+    <button data-p="sub" onclick="ir('sub')" data-perm="subir">📤 Subir</button>
+    <button data-p="pen" onclick="ir('pen')">📥 Pendientes</button>
+    <button data-p="res" onclick="ir('res')">📊 Resumen</button>
+    <button data-p="usu" onclick="ir('usu')" data-perm="admin">👥 Usuarios</button>
+    <button data-p="ayu" onclick="ir('ayu')">❓ Ayuda</button>
+  </nav>
+  <main>
+    <!-- buscar -->
+    <section id="p-bus" class="oc" style="height:100%"><div id="bus">
+      <div class="izq">
+        <div class="filtros">
+          <input type="search" id="q" placeholder="🔎 n° operación, proveedor, monto, RUC, empresa…" oninput="filtrarPronto()">
+          <div class="f">
+            <span class="seg" id="sHoja"><button data-v="" class="on" onclick="seg('sHoja',this)">Todas</button><button data-v="0" onclick="seg('sHoja',this)">Originales</button><button data-v="1" onclick="seg('sHoja',this)">Fotos</button></span>
+            <select id="fMon" onchange="filtrar()"><option value="">S/ y US$</option><option value="PEN">Soles</option><option value="USD">Dólares</option></select>
+          </div>
+          <div class="f"><input type="date" id="fDe" onchange="filtrar()" title="Desde"><input type="date" id="fHa" onchange="filtrar()" title="Hasta"></div>
+          <div class="f"><select id="fBco" onchange="filtrar()"><option value="">Todos los bancos</option></select><select id="fEmp" onchange="filtrar()"><option value="">Todas las empresas</option></select></div>
+          <div class="f"><input id="fMin" inputmode="decimal" placeholder="Monto desde" oninput="filtrarPronto()"><input id="fMax" inputmode="decimal" placeholder="Monto hasta" oninput="filtrarPronto()"></div>
+          <div class="marcas" id="marcas">
+            <button data-m="sinruc" onclick="marca(this)">Sin RUC</button>
+            <button data-m="sinrev" onclick="marca(this)">Sin revisar</button>
+            <button data-m="dup" onclick="marca(this)">Duplicados</button>
+            <button data-m="porret" onclick="marca(this)">Por retener</button>
+            <button data-m="sinemp" onclick="marca(this)">Sin empresa</button>
+            <button onclick="limpiar()" style="margin-left:auto">✖ Limpiar</button>
+          </div>
+        </div>
+        <div class="tot"><span id="cuenta"></span><span id="sumas"></span><button style="padding:2px 8px;font-size:12px" onclick="cargarIndice(true)" title="Traer los vouchers nuevos">🔄</button></div>
+        <div id="lista"></div>
+      </div>
+      <div id="vis" class="oc-movil"><div class="vacio">👈 Elija un voucher de la lista para verlo aquí.</div></div>
+    </div></section>
+
+    <!-- subir -->
+    <section id="p-sub" class="oc"><div class="pag" style="max-width:900px">
+      <div class="zona" id="zona">
+        <div style="font-size:30px">📤</div>
+        <div><b>Suba fotos o PDF de vouchers</b></div>
+        <div style="font-size:12.5px;color:#334155">Se guardan en la carpeta de entrada y la hoja los lee con IA (al instante si toca ⚡, o en su vuelta de 10 min).</div>
+        <div class="bot">
+          <button class="p" onclick="$('fCam').click()">📷 Tomar foto</button>
+          <button class="p" onclick="scanAbrir()" title="Varias fotos con la cámara → un solo PDF (una página por foto)">📄 Escanear a PDF</button>
+          <button onclick="$('fArch').click()">🖼 Elegir fotos o PDF</button>
+        </div>
+        <input type="file" id="fCam" accept="image/*" capture="environment" class="oc" onchange="agregarArchivos(this.files);this.value=''">
+        <input type="file" id="fArch" accept="image/*,application/pdf" multiple class="oc" onchange="agregarArchivos(this.files);this.value=''">
+      </div>
+      <!-- 📄 escanear a PDF -->
+      <div id="scan" class="card oc" style="margin-top:10px">
+        <h3>📄 Escanear a PDF <span class="chip" id="scanN">0 páginas</span></h3>
+        <div style="font-size:12.5px;color:var(--gr)">Tome una foto por página (o elíjalas de la galería). Puede girarlas, moverlas o quitarlas; al final toque <b>✅ Hacer el PDF</b>.</div>
+        <div id="scanPags" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="p" onclick="$('scCam').click()">📷 Agregar página (cámara)</button>
+          <button onclick="$('scGal').click()">🖼 Agregar desde galería</button>
+          <span style="flex:1"></span>
+          <button onclick="scanCerrar()">Cancelar</button><button class="p" id="scanOk" onclick="scanPdf()" disabled>✅ Hacer el PDF</button>
+        </div>
+        <input type="file" id="scCam" accept="image/*" capture="environment" class="oc" onchange="scanAgregar(this.files);this.value=''">
+        <input type="file" id="scGal" accept="image/*" multiple class="oc" onchange="scanAgregar(this.files);this.value=''">
+        <div id="scanMsg" class="msg" style="padding:6px 0 0"></div>
+      </div>
+      <div id="subLista"></div>
+      <div id="subBot" class="oc" style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:5px;margin-right:auto;font-size:13px"><input type="checkbox" id="subYa" checked> ⚡ Procesar al terminar</label>
+        <button onclick="subVaciar()">Quitar todo</button><button class="p" id="subBtn" onclick="subirTodo()">📤 Subir</button>
+      </div>
+      <div id="subMsg" class="msg"></div>
+    </div></section>
+
+    <!-- pendientes -->
+    <section id="p-pen" class="oc"><div class="pag" style="max-width:1000px" id="penCont"></div></section>
+    <!-- resumen -->
+    <section id="p-res" class="oc"><div class="pag" id="resCont"></div></section>
+    <!-- usuarios -->
+    <section id="p-usu" class="oc"><div class="pag" style="max-width:1000px" id="usuCont"></div></section>
+    <!-- ayuda -->
+    <section id="p-ayu" class="oc"><div class="pag ayuda" style="max-width:800px"><div class="card">
+      <h3>❓ Cómo usar el portal de Vouchers</h3>
+      <p><b>🔎 Buscar</b>: escriba un n° de operación, proveedor, RUC, monto o empresa. Filtre por pestaña (Originales / Fotos), moneda, fechas, banco, empresa, montos y marcas (<i>Sin RUC, Sin revisar, Duplicados, Por retener, Sin empresa</i>). Toque un voucher para verlo.</p>
+      <p><b>👁 Ver un voucher</b>: arriba la <b>imagen</b> de la hoja o el <b>archivo original</b> (PDF en la página exacta, o la foto). 🔍+ / 🔍− para acercar; en el celular también con dos dedos. ◀ ▶ pasan al voucher anterior o siguiente de la lista. ⬇ descarga el original.</p>
+      <p><b>✏️ Corregir</b> (permiso <i>editar</i>): cambie los datos y toque <b>💾 Guardar</b>; antes se muestra qué cambia. Queda una nota en la hoja con quién y qué cambió. <b>🔁 Releer con IA</b> vuelve a leer la página con la IA de la hoja y muestra ANTES / AHORA para elegir; <b>↩️ Deshacer relectura</b> lo devuelve.</p>
+      <p><b>📤 Subir</b> (permiso <i>subir</i>): <b>📷 Tomar foto</b> con la cámara, <b>📄 Escanear a PDF</b> (varias fotos con la cámara → un solo PDF, una página por foto; se pueden girar, ordenar o quitar antes) o elija fotos/PDF; póngales un nombre (no se puede repetir uno que ya existe), elija <i>Original</i> (PDF o comprobante formal) o <i>Foto</i>, y suba. Con ⚡ la hoja los procesa en ~1 minuto.</p>
+      <p><b>📥 Pendientes</b>: lo que espera en las carpetas de entrada (todavía no está en la hoja) y lo último descartado (duplicados, vacíos, muy pesados).</p>
+      <p><b>📊 Resumen</b>: cuántos vouchers hay, cuántos sin RUC, sin revisar o duplicados, por pestaña y por mes.</p>
+      <p><b>👥 Usuarios</b> (admin): crear usuarios, cambiar PIN y permiso, desactivar; y el registro de quién hizo qué.</p>
+      <p>En el celular (Android): abra el enlace en Chrome → menú ⋮ → <b>Agregar a la pantalla principal</b>. En iPhone: Safari → Compartir → <b>Agregar a inicio</b>.</p>
+    </div></div></section>
+  </main>
+</div>
+
+<div id="modal" class="oc"><div class="caja" id="modalCaja"></div></div>
+
+<script>
+var TK = null, YO = null, IDX = null, VIS = [], VER = 60, SEL = -1, FILA = null, ORIG = {}, TIMER = null;
+var PERM = ['ver', 'subir', 'editar', 'admin'];
+function $(id) { return document.getElementById(id); }
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function fm(n) { return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function norma(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
+function puede(p) { return YO && PERM.indexOf(YO.permiso) >= PERM.indexOf(p); }
+function guardaLocal(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
+function leeLocal(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+var nCarga = 0;
+function cargando(on, txt) { nCarga += on ? 1 : -1; if (nCarga < 0) nCarga = 0; $('cargando').textContent = '⏳ ' + (txt || 'Cargando…'); $('cargando').classList.toggle('oc', !nCarga); }
+
+/** Llamada al servidor (con la sesión). */
+function api(accion, d, txt) {
+  return new Promise(function (ok, ko) {
+    if (txt !== false) cargando(true, txt);
+    google.script.run.withSuccessHandler(function (r) { if (txt !== false) cargando(false); ok(r); })
+      .withFailureHandler(function (e) {
+        if (txt !== false) cargando(false);
+        var m = String(e && e.message || e);
+        if (/^SESION:|SESION:/.test(m)) { verLogin(m.replace(/.*SESION:\s*/, '')); }
+        ko(new Error(m.replace(/^Error:\s*/, '').replace(/^Exception:\s*/, '')));
+      }).PV_api(TK, accion, d || {});
+  });
+}
+
+/* ============================================================ entrar */
+function verLogin(m) { TK = null; guardaLocal('pv_tk', null); $('app').classList.add('oc'); $('login').classList.remove('oc'); $('lm').textContent = m || ''; setTimeout(function () { ($('lu').value ? $('lp') : $('lu')).focus(); }, 50); }
+function entrar() {
+  var u = $('lu').value.trim(), p = $('lp').value.trim();
+  if (!u || !p) { $('lm').textContent = 'Escriba su usuario y su PIN.'; return; }
+  $('lb').disabled = true; $('lm').textContent = '';
+  google.script.run.withSuccessHandler(function (r) {
+    $('lb').disabled = false; $('lp').value = ''; TK = r.token; guardaLocal('pv_tk', TK); guardaLocal('pv_u', r.usuario);
+    YO = r; iniciar();
+  }).withFailureHandler(function (e) { $('lb').disabled = false; $('lm').textContent = String(e.message || e).replace(/^Error:\s*/, ''); }).PV_entrar(u, p);
+}
+$('lp').addEventListener('keydown', function (e) { if (e.key === 'Enter') entrar(); });
+$('lu').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('lp').focus(); });
+function salir() { api('salir', {}, false).catch(function () {}); verLogin('Salió del portal.'); IDX = null; }
+function iniciar() {
+  $('login').classList.add('oc'); $('app').classList.remove('oc');
+  $('yo').textContent = (YO.nombre || YO.usuario) + ' · ' + YO.permiso;
+  document.querySelectorAll('nav button[data-perm]').forEach(function (b) { b.classList.toggle('oc', !puede(b.dataset.perm)); });
+  ir(leeLocal('pv_pag') && puede(leeLocal('pv_pag') === 'usu' ? 'admin' : leeLocal('pv_pag') === 'sub' ? 'subir' : 'ver') ? leeLocal('pv_pag') : 'bus');
+}
+(function () {
+  $('lu').value = leeLocal('pv_u') || '';
+  TK = leeLocal('pv_tk');
+  if (!TK) return verLogin('');
+  api('yo', {}, 'Entrando…').then(function (r) { YO = r; iniciar(); }).catch(function (e) { verLogin(/SESION/.test(e.message) ? '' : e.message); });
+})();
+
+/* ============================================================ navegación */
+function ir(p) {
+  document.querySelectorAll('main>section').forEach(function (s) { s.classList.toggle('oc', s.id !== 'p-' + p); });
+  document.querySelectorAll('#nav button').forEach(function (b) { b.classList.toggle('on', b.dataset.p === p); });
+  guardaLocal('pv_pag', p);
+  if (p === 'bus' && !IDX) cargarIndice();
+  if (p === 'pen') cargarPendientes();
+  if (p === 'res') { if (IDX) pintarResumen(); else cargarIndice().then(pintarResumen); }
+  if (p === 'usu') cargarUsuarios();
+}
+function seg(id, b) { $(id).querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); filtrar(); }
+function segV(id) { var b = $(id).querySelector('button.on'); return b ? b.dataset.v : ''; }
+function marca(b) { b.classList.toggle('on'); filtrar(); }
+
+/* ============================================================ 🔎 buscar */
+// fila del índice: [h, fila, aaaammdd, fecha, op, banco, moneda, monto, proveedor, empresa, rev, porRet, ret, idBenef, cliente, desc, archivo, pagina, dup, idUsu, doc, nota]
+var DUPS = {};
+function cargarIndice(forzar) {
+  return api('indice', {}, forzar ? 'Trayendo vouchers nuevos…' : 'Cargando vouchers…').then(function (r) {
+    IDX = r; DUPS = {};
+    r.filas.forEach(function (x) { if (x[18]) DUPS[x[18]] = (DUPS[x[18]] || 0) + 1; x.txt = norma(x.slice(3, 22).join(' | ') + ' ' + fm(x[7])); });
+    var bancos = {}, emps = {};
+    r.filas.forEach(function (x) { if (x[5]) bancos[x[5].toUpperCase()] = 1; if (x[9]) emps[x[9]] = 1; });
+    var opc = function (sel, o, t) { var v = $(sel).value; $(sel).innerHTML = '<option value="">' + t + '</option>' + Object.keys(o).sort().map(function (k) { return '<option>' + esc(k) + '</option>'; }).join(''); $(sel).value = v; };
+    opc('fBco', bancos, 'Todos los bancos'); opc('fEmp', emps, 'Todas las empresas');
+    filtrar();
+  }).catch(function (e) { $('lista').innerHTML = '<div class="msg e">❌ ' + esc(e.message) + '</div>'; });
+}
+function filtrarPronto() { clearTimeout(TIMER); TIMER = setTimeout(filtrar, 220); }
+function limpiar() { ['q', 'fDe', 'fHa', 'fMin', 'fMax'].forEach(function (i) { $(i).value = ''; }); ['fMon', 'fBco', 'fEmp'].forEach(function (i) { $(i).value = ''; }); document.querySelectorAll('#marcas button.on').forEach(function (b) { b.classList.remove('on'); }); seg('sHoja', $('sHoja').querySelector('button')); }
+function esUSD(m) { return /USD|US\$|DOLAR|DÓLAR/i.test(String(m)); }
+function sinRuc(x) { return !String(x[13] || '').replace(/\D/g, ''); }
+function filtrar() {
+  if (!IDX) return;
+  var q = norma($('q').value), h = segV('sHoja'), mon = $('fMon').value, de = $('fDe').value.replace(/-/g, ''), ha = $('fHa').value.replace(/-/g, ''), bco = $('fBco').value, emp = $('fEmp').value;
+  var mi = parseFloat(String($('fMin').value).replace(/,/g, '')), mx = parseFloat(String($('fMax').value).replace(/,/g, ''));
+  var M = {}; document.querySelectorAll('#marcas button.on').forEach(function (b) { M[b.dataset.m] = 1; });
+  var palabras = q ? q.split(' ') : [];
+  VIS = IDX.filas.filter(function (x) {
+    if (h !== '' && String(x[0]) !== h) return false;
+    if (mon && (mon === 'USD') !== esUSD(x[6])) return false;
+    if (de && (!x[2] || x[2] < de)) return false;
+    if (ha && (!x[2] || x[2] > ha)) return false;
+    if (bco && String(x[5]).toUpperCase() !== bco) return false;
+    if (emp && x[9] !== emp) return false;
+    if (!isNaN(mi) && x[7] < mi) return false;
+    if (!isNaN(mx) && x[7] > mx) return false;
+    if (M.sinruc && !sinRuc(x)) return false;
+    if (M.sinrev && x[10]) return false;
+    if (M.dup && !(/DUPLICADO/i.test(x[4]) || (x[18] && DUPS[x[18]] > 1))) return false;
+    if (M.porret && !x[11]) return false;
+    if (M.sinemp && x[9]) return false;
+    for (var i = 0; i < palabras.length; i++) if (x.txt.indexOf(palabras[i]) < 0) return false;
+    return true;
+  }).sort(function (a, b) { return (b[2] || '').localeCompare(a[2] || '') || b[0] - a[0] || b[1] - a[1]; });
+  VER = 60;
+  var pen = 0, usd = 0; VIS.forEach(function (x) { if (esUSD(x[6])) usd += x[7]; else pen += x[7]; });
+  $('cuenta').textContent = VIS.length.toLocaleString() + ' de ' + IDX.filas.length.toLocaleString() + ' vouchers';
+  $('sumas').innerHTML = 'S/ <b>' + fm(pen) + '</b>' + (usd ? ' · US$ <b>' + fm(usd) + '</b>' : '');
+  pintarLista();
+}
+function pintarLista() {
+  var h = VIS.slice(0, VER).map(function (x, i) {
+    var marcas = (x[0] ? '<span class="chip c-z">📸 Fotos</span>' : '<span class="chip">📄 Originales</span>') +
+      (/DUPLICADO/i.test(x[4]) || (x[18] && DUPS[x[18]] > 1) ? '<span class="chip c-r">⧉ duplicado</span>' : '') +
+      (sinRuc(x) ? '<span class="chip c-a">sin RUC</span>' : '') + (x[10] ? '<span class="chip c-v">✔ revisado</span>' : '') +
+      (x[11] ? '<span class="chip c-m">por retener</span>' : '') + (x[12] ? '<span class="chip c-m">retenido</span>' : '');
+    return '<div class="it' + (SEL === i ? ' sel' : '') + '" onclick="abrir(' + i + ')"><div class="a"><div class="l1">' + esc(x[8] || x[14] || '(sin proveedor)') + '</div>' +
+      '<div class="l2">' + esc(x[3]) + ' · ' + esc(x[5]) + ' · op ' + esc(x[4] || '—') + (x[9] ? ' · 🏢 ' + esc(x[9]) : '') + '</div><div>' + marcas + '</div></div>' +
+      '<div class="m">' + (esUSD(x[6]) ? 'US$ ' : 'S/ ') + fm(x[7]) + '<div class="l2" style="font-weight:normal">' + (x[0] ? 'Fotos' : 'Orig.') + ' fila ' + x[1] + '</div></div></div>';
+  }).join('');
+  if (VIS.length > VER) h += '<div class="mas"><button onclick="VER+=100;pintarLista()">Ver más (' + (VIS.length - VER) + ' más)</button></div>';
+  if (!VIS.length) h = '<div class="msg" style="color:var(--gr)">No hay vouchers con estos filtros.</div>';
+  $('lista').innerHTML = h;
+}
+
+/* ============================================================ 👁 visor */
+var ZOOM = 1, VISTA = 'img', PDFDOC = null;
+function abrir(i) {
+  if (i < 0 || i >= VIS.length) return;
+  SEL = i; if (i >= VER) { VER = i + 20; } pintarLista();
+  var x = VIS[i], hoja = IDX.hojas[x[0]];
+  $('vis').classList.remove('oc-movil');
+  $('vis').innerHTML = '<div class="vacio">⏳ Abriendo ' + esc(hoja) + ' fila ' + x[1] + '…</div>';
+  api('fila', { hoja: hoja, fila: x[1] }, false).then(function (d) {
+    if (d.vacio) { $('vis').innerHTML = '<div class="vacio">Esa fila ya está vacía (¿se ordenó la hoja?). Toque 🔄 para actualizar.</div>'; return; }
+    FILA = d; ORIG = {}; PDFDOC = null; ZOOM = 1; VISTA = d.conImagen ? 'img' : 'orig';
+    pintarVisor();
+  }).catch(function (e) { $('vis').innerHTML = '<div class="vacio msg e">❌ ' + esc(e.message) + '</div>'; });
+}
+function cerrarVisor() { $('vis').classList.add('oc-movil'); }
+function pintarVisor() {
+  var d = FILA, x = VIS[SEL] || [];
+  var tabs = (d.conImagen ? '<button data-v="img" onclick="verComo(\'img\')">🖼 Imagen de la hoja</button>' : '') +
+    (d.archivo ? '<button data-v="orig" onclick="verComo(\'orig\',0)">📄 Original' + (d.pagina > 1 ? ' · pág. ' + d.pagina : '') + '</button>' : '') +
+    (d.versiones.length > 1 ? d.versiones.slice(1).map(function (v, k) { return '<button data-v="orig' + (k + 1) + '" onclick="verComo(\'orig\',' + (k + 1) + ')" title="Otro archivo con el mismo nombre">📄 otra versión ' + esc(v.fecha) + '</button>'; }).join('') : '') +
+    '<span style="flex:1"></span><button onclick="zoom(1.25)">🔍+</button><button onclick="zoom(0.8)">🔍−</button><button onclick="zoom(0)">↔</button>';
+  var campos = d.cols.map(function (c) {
+    var v = c.v, id = 'c' + c.c, inp;
+    if (!d.editar || c.tipo === 'fijo') inp = '<div class="fijo">' + (c.tipo === 'check' ? (v ? '✔ sí' : '—') : esc(v) || '<span style="color:#CBD5E1">—</span>') + '</div>';
+    else if (c.tipo === 'check') inp = '<input type="checkbox" id="' + id + '"' + (v ? ' checked' : '') + ' onchange="marcado(this)" style="width:auto">';
+    else if (c.tipo === 'lista') inp = '<select id="' + id + '" onchange="marcado(this)"><option value=""></option>' + c.op.map(function (o) { return '<option' + (o === v ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + (v && c.op.indexOf(v) < 0 ? '<option selected>' + esc(v) + '</option>' : '') + '</select>';
+    else inp = '<input id="' + id + '" value="' + esc(v) + '" oninput="marcado(this)"' + (c.tipo === 'numero' ? ' inputmode="decimal"' : '') + (c.tipo === 'fecha' ? ' placeholder="dd/mm/aaaa"' : '') + '>';
+    return '<div class="campo" data-c="' + c.c + '"><label title="' + esc(c.t) + '">' + esc(c.t) + '</label>' + inp + '</div>';
+  }).join('');
+  var acc = d.editar ? '<button class="p" id="bGuardar" onclick="guardar()" disabled>💾 Guardar</button>' +
+    (YO.puente ? '<button onclick="releer()" title="Volver a leer la página con la IA de la hoja">🔁 Releer con IA</button><button onclick="deshacer()">↩️ Deshacer relectura</button>' : '') : '';
+  $('vis').innerHTML = '<div class="vbar"><button class="solo-movil" onclick="cerrarVisor()">✖</button><span class="t">' + esc(d.hoja) + ' · fila ' + d.fila + ' · ' + esc(x[8] || '') + '</span>' +
+    '<button onclick="abrir(SEL-1)" ' + (SEL > 0 ? '' : 'disabled') + '>◀</button><button onclick="abrir(SEL+1)" ' + (SEL < VIS.length - 1 ? '' : 'disabled') + '>▶</button>' +
+    (d.archivo ? '<button onclick="descargar()" title="Descargar el archivo original">⬇</button>' : '') + '</div>' +
+    '<div class="vcuerpo"><div class="vimg"><div class="tabs">' + tabs + '</div><div class="lienzo" id="lienzo"><div class="aviso">⏳</div></div></div>' +
+    '<div class="vdat"><div style="font-size:12px;color:var(--gr);margin-bottom:6px">📎 ' + esc(d.archivo || '(sin archivo)') + (d.pagina ? ' · página ' + d.pagina : '') +
+    (d.versiones[0] ? ' · ' + esc(d.versiones[0].donde) : '') + (d.versiones.length > 1 ? ' · <b style="color:var(--am)">⚠ ' + d.versiones.length + ' archivos con este nombre</b>' : '') + '</div>' +
+    campos + '<div class="vacc">' + acc + '</div><div id="vMsg" class="msg" style="padding:4px 0"></div>' + (d.nota ? '<div class="nota">' + esc(d.nota) + '</div>' : '') + '</div></div>';
+  verComo(VISTA, 0);
+}
+function marcado(el) {
+  var c = FILA.cols.filter(function (k) { return 'c' + k.c === el.id; })[0], v = el.type === 'checkbox' ? el.checked : el.value;
+  el.closest('.campo').classList.toggle('camb', c && String(v) !== String(c.v));
+  $('bGuardar').disabled = !document.querySelector('.campo.camb');
+}
+function verComo(v, n) {
+  VISTA = v;
+  document.querySelectorAll('.vimg .tabs button[data-v]').forEach(function (b) { b.classList.toggle('on', b.dataset.v === (v === 'img' ? 'img' : 'orig' + (n ? n : ''))); });
+  var L = $('lienzo'); if (!L) return;
+  L.innerHTML = '<div class="aviso">⏳ Cargando ' + (v === 'img' ? 'la imagen' : 'el original') + '…</div>';
+  var fila = FILA;
+  if (v === 'img') {
+    var k = 'img';
+    (ORIG[k] ? Promise.resolve(ORIG[k]) : api('imagen', { hoja: fila.hoja, fila: fila.fila }, false)).then(function (u) {
+      if (FILA !== fila) return; ORIG[k] = u;
+      L.innerHTML = u ? '<img id="imgV" src="' + u + '">' : '<div class="aviso">Sin imagen en la hoja' + (fila.texto ? ' (' + esc(fila.texto) + ')' : '') + '.</div>';
+      ajustar();
+    }).catch(function (e) { L.innerHTML = '<div class="aviso">❌ ' + esc(e.message) + '</div>'; });
+    return;
+  }
+  var ko = 'o' + (n || 0);
+  (ORIG[ko] ? Promise.resolve(ORIG[ko]) : api('original', { hoja: fila.hoja, fila: fila.fila, n: n || 0 }, false)).then(function (o) {
+    if (FILA !== fila) return; ORIG[ko] = o; ORIG.ultimo = o;
+    if (/pdf/i.test(o.mime) && window.pdfjsLib) {
+      var bytes = Uint8Array.from(atob(o.b64), function (c) { return c.charCodeAt(0); });
+      pdfjsLib.getDocument({ data: bytes }).promise.then(function (doc) {
+        PDFDOC = doc; var pg = Math.min(fila.pagina || 1, doc.numPages);
+        L.innerHTML = '<div style="width:100%"><div style="color:#CBD5E1;font-size:12px;text-align:center;margin-bottom:6px"><span id="pgInfo"></span>' +
+          (doc.numPages > 1 ? ' · <a href="#" style="color:#93C5FD" onclick="pagPdf(-1);return false">◀ anterior</a> · <a href="#" style="color:#93C5FD" onclick="pagPdf(1);return false">siguiente ▶</a>' : '') + '</div><canvas id="cv"></canvas></div>';
+        PDFDOC.pag = pg; dibujarPdf();
+      }).catch(function (e) { L.innerHTML = '<div class="aviso">❌ No pude abrir el PDF: ' + esc(e.message) + '</div>'; });
+    } else if (/^image\//.test(o.mime)) {
+      L.innerHTML = '<img id="imgV" src="data:' + o.mime + ';base64,' + o.b64 + '">'; ajustar();
+    } else L.innerHTML = '<div class="aviso">Archivo ' + esc(o.mime) + ': use ⬇ para descargarlo.</div>';
+  }).catch(function (e) { L.innerHTML = '<div class="aviso">❌ ' + esc(e.message) + '</div>'; });
+}
+function pagPdf(d) { if (!PDFDOC) return; PDFDOC.pag = Math.max(1, Math.min(PDFDOC.numPages, PDFDOC.pag + d)); dibujarPdf(); }
+function dibujarPdf() {
+  var cv = $('cv'); if (!cv || !PDFDOC) return;
+  if ($('pgInfo')) $('pgInfo').textContent = 'Página ' + PDFDOC.pag + ' de ' + PDFDOC.numPages + (FILA && PDFDOC.pag === FILA.pagina ? ' (la de esta fila)' : '');
+  PDFDOC.getPage(PDFDOC.pag).then(function (p) {
+    var ancho = $('lienzo').clientWidth - 20, v0 = p.getViewport({ scale: 1 }), esc2 = Math.max(0.3, ancho / v0.width) * ZOOM, dpr = window.devicePixelRatio || 1;
+    var vp = p.getViewport({ scale: esc2 * dpr });
+    cv.width = vp.width; cv.height = vp.height; cv.style.width = (vp.width / dpr) + 'px'; cv.style.height = (vp.height / dpr) + 'px';
+    p.render({ canvasContext: cv.getContext('2d'), viewport: vp });
+  });
+}
+function ajustar() { var im = $('imgV'), L = $('lienzo'); if (!im || !L) return; var f = function () { im.style.width = Math.round((L.clientWidth - 20) * ZOOM) + 'px'; }; if (im.complete) f(); else im.onload = f; }
+function zoom(z) { ZOOM = z ? Math.max(0.3, Math.min(6, ZOOM * z)) : 1; if ($('cv')) dibujarPdf(); else ajustar(); }
+window.addEventListener('resize', function () { if ($('cv')) dibujarPdf(); else ajustar(); });
+function descargar() {
+  var hacer = function (o) { var a = document.createElement('a'); a.href = 'data:' + o.mime + ';base64,' + o.b64; a.download = o.nombre; document.body.appendChild(a); a.click(); a.remove(); };
+  if (ORIG.o0) return hacer(ORIG.o0);
+  api('original', { hoja: FILA.hoja, fila: FILA.fila, n: 0 }, 'Bajando el original…').then(function (o) { ORIG.o0 = o; hacer(o); }).catch(function (e) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + e.message; });
+}
+
+/* ---------- ✏️ corregir ---------- */
+function guardar() {
+  var cambios = {}, lineas = [];
+  document.querySelectorAll('.campo.camb').forEach(function (div) {
+    var c = FILA.cols.filter(function (k) { return String(k.c) === div.dataset.c; })[0], el = $('c' + c.c), v = el.type === 'checkbox' ? el.checked : el.value;
+    cambios[c.c] = v; lineas.push('<li><b>' + esc(c.t) + '</b>: <s style="color:var(--gr)">' + esc(c.tipo === 'check' ? (c.v ? 'sí' : 'no') : c.v || '—') + '</s> → <b>' + esc(v === true ? 'sí' : v === false ? 'no' : v || '(vacío)') + '</b></li>');
+  });
+  if (!lineas.length) return;
+  modal('<h3>💾 ¿Guardar en ' + esc(FILA.hoja) + ' fila ' + FILA.fila + '?</h3><ul>' + lineas.join('') + '</ul><div style="font-size:12px;color:var(--gr)">Queda una nota en la hoja con quién y qué cambió.</div>',
+    [['Cancelar'], ['💾 Guardar', function () {
+      var fila = FILA;
+      api('guardar', { hoja: fila.hoja, fila: fila.fila, clave: fila.clave, cambios: cambios }, 'Guardando…').then(function (d) {
+        FILA = d; pintarVisor(); $('vMsg').className = 'msg ok'; $('vMsg').textContent = '✅ Guardado.';
+        var x = VIS[SEL]; if (x) actualizarIdx(x, d);
+      }).catch(function (e) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + e.message; });
+    }, 'p']]);
+}
+/** Lo guardado también cambia la lista sin volver a cargar todo. */
+function actualizarIdx(x, d) {
+  var por = {}; d.cols.forEach(function (c) { por[norma(c.t)] = c.v; });
+  var pick = function (re) { for (var k in por) if (re.test(k)) return por[k]; return undefined; };
+  var v;
+  if ((v = pick(/^fecha de dep/)) !== undefined) x[3] = v; if ((v = pick(/^numero de op|^n.? de op/)) !== undefined) x[4] = v;
+  if ((v = pick(/^banco/)) !== undefined) x[5] = v; if ((v = pick(/^moneda/)) !== undefined) x[6] = v;
+  if ((v = pick(/^monto/)) !== undefined) x[7] = Number(String(v).replace(/,/g, '')) || 0; if ((v = pick(/^proveedor/)) !== undefined) x[8] = v;
+  if ((v = pick(/^empresa/)) !== undefined) x[9] = v; if ((v = pick(/^revisado/)) !== undefined) x[10] = v === true ? 1 : 0;
+  if ((v = pick(/^id benef/)) !== undefined) x[13] = v;
+  x.txt = norma(x.slice(3, 22).join(' | ') + ' ' + fm(x[7])); pintarLista();
+}
+
+/* ---------- 🔁 releer con IA ---------- */
+function releer() {
+  var fila = FILA;
+  $('vMsg').className = 'msg'; $('vMsg').textContent = '🔁 Leyendo la página con la IA de la hoja… (puede tardar 10–40 s)';
+  api('releer', { hoja: fila.hoja, fila: fila.fila }, 'Leyendo con IA…').then(function (r) {
+    if (!r.ok) throw new Error(r.error || 'No se pudo leer.');
+    var n = 0, preguntar = function () {
+      api('releerEstado', { id: r.id }, false).then(function (e) {
+        if (!e.listo && n++ < 40) return setTimeout(preguntar, 3000);
+        if (!e.listo) throw new Error('La IA tardó demasiado: intente de nuevo.');
+        if (e.error) throw new Error(e.error);
+        $('vMsg').textContent = '';
+        modal('<h3>🔁 Releer con IA · ' + esc(fila.hoja) + ' fila ' + fila.fila + '</h3><div style="font-size:12px;color:var(--gr)">' + esc(e.archivo) + ' · página ' + e.pagina + ' (versión del ' + esc(e.version) + ')</div>' +
+          '<p><b>ANTES:</b> ' + esc(e.antes) + '</p><p><b>AHORA</b> (elija' + (e.lineas.length > 1 ? ' cuál va en esta fila' : '') + '):</p>' +
+          e.lineas.map(function (l, i) { return '<label style="display:block;padding:6px;border:1px solid var(--bo);border-radius:8px;margin:4px 0"><input type="radio" name="rl" value="' + i + '"' + (i ? '' : ' checked') + '> ' + esc(l) + '</label>'; }).join('') +
+          (e.dup ? '<p class="msg e" style="padding:0">⚠️ Ese N° de operación ya está en la fila ' + e.dup + ': se anotará como [DUPLICADO].</p>' : '') +
+          (e.agregado ? '<p style="font-size:12px;color:var(--am)">ℹ️ Lo agregado a mano (columnas O en adelante) se mantiene.</p>' : ''),
+          [['Cancelar'], ['✅ Reemplazar', function () {
+            var i = (document.querySelector('input[name=rl]:checked') || { value: 0 }).value;
+            api('releerAplicar', { id: r.id, i: i }, 'Reemplazando…').then(function (a) {
+              if (!a.ok) throw new Error(a.error || 'No se pudo.');
+              api('fila', { hoja: fila.hoja, fila: fila.fila }, false).then(function (d) { FILA = d; ORIG = {}; pintarVisor(); $('vMsg').className = 'msg ok'; $('vMsg').textContent = a.mensaje || '✅ Listo.'; if (VIS[SEL]) actualizarIdx(VIS[SEL], d); });
+            }).catch(function (er) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + er.message; });
+          }, 'p']]);
+      }).catch(function (er) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + er.message; });
+    };
+    preguntar();
+  }).catch(function (e) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + e.message; });
+}
+function deshacer() {
+  modal('<h3>↩️ Deshacer la última relectura</h3><p>Devuelve la última fila releída con IA (de cualquier persona) a como estaba antes. La imagen queda la de la página releída.</p>',
+    [['Cancelar'], ['↩️ Deshacer', function () {
+      api('deshacer', {}, 'Deshaciendo…').then(function (r) {
+        if (!r.ok) throw new Error(r.error || 'No se pudo.');
+        $('vMsg').className = 'msg ok'; $('vMsg').textContent = r.u ? '✅ ' + r.u.hoja + ' fila ' + r.u.fila + ' devuelta.' : 'No había ninguna relectura para deshacer.';
+        if (r.u && r.u.hoja === FILA.hoja && r.u.fila === FILA.fila) api('fila', { hoja: FILA.hoja, fila: FILA.fila }, false).then(function (d) { FILA = d; pintarVisor(); });
+      }).catch(function (e) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + e.message; });
+    }, 'p']]);
+}
+
+/* ============================================================ 📤 subir */
+var SUB = [];
+['dragenter', 'dragover'].forEach(function (ev) { $('zona').addEventListener(ev, function (e) { e.preventDefault(); $('zona').classList.add('sobre'); }); });
+['dragleave', 'drop'].forEach(function (ev) { $('zona').addEventListener(ev, function (e) { e.preventDefault(); $('zona').classList.remove('sobre'); }); });
+$('zona').addEventListener('drop', function (e) { agregarArchivos(e.dataTransfer.files); });
+function nombreSugerido(f) {
+  var n = String(f.name || '').trim();
+  if (!n || /^(image|img|photo|foto)[\s_-]?\d*\.(jpe?g|png|heic|webp)$/i.test(n) || /^\d{8,}\.(jpe?g|png)$/i.test(n)) {
+    var d = new Date(), p = function (x) { return ('0' + x).slice(-2); };
+    n = 'Voucher ' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + (SUB.length ? '-' + (SUB.length + 1) : '') + '.' + (/pdf/.test(f.type) ? 'pdf' : (f.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg'));
+  }
+  return n;
+}
+function agregarArchivos(fl) {
+  Array.prototype.forEach.call(fl || [], function (f) {
+    if (!/^(application\/pdf|image\/)/.test(f.type)) { $('subMsg').className = 'msg e'; $('subMsg').textContent = '«' + f.name + '» no es PDF ni imagen.'; return; }
+    if (f.size > 45 * 1048576) { $('subMsg').className = 'msg e'; $('subMsg').textContent = '«' + f.name + '» pesa más de 45 MB.'; return; }
+    SUB.push({ f: f, nombre: nombreSugerido(f), destino: /pdf/.test(f.type) ? 'original' : 'foto', est: '', url: /^image\//.test(f.type) ? URL.createObjectURL(f) : '' });
+  });
+  pintarSubir(); revisarRepetidos();
+}
+function pintarSubir() {
+  $('subLista').innerHTML = SUB.map(function (s, i) {
+    return '<div class="sub">' + (s.url ? '<img src="' + s.url + '">' : '<div class="ico">📄</div>') +
+      '<div><div class="n"><input value="' + esc(s.nombre) + '" oninput="SUB[' + i + '].nombre=this.value;SUB[' + i + '].est=\'\'" onchange="revisarRepetidos()" ' + (s.hecho ? 'disabled' : '') + '>' +
+      '<select onchange="SUB[' + i + '].destino=this.value" ' + (s.hecho ? 'disabled' : '') + '><option value="foto"' + (s.destino === 'foto' ? ' selected' : '') + '>📸 Foto</option><option value="original"' + (s.destino === 'original' ? ' selected' : '') + '>📄 Original</option></select></div>' +
+      '<div class="est" style="color:' + (s.hecho ? 'var(--ve)' : s.error ? 'var(--ro)' : 'var(--gr)') + '">' + esc(s.est || (Math.round(s.f.size / 1024) + ' KB')) + '</div></div>' +
+      (s.hecho ? '<span>✅</span>' : '<button onclick="SUB.splice(' + i + ',1);pintarSubir()">✖</button>') + '</div>';
+  }).join('');
+  $('subBot').classList.toggle('oc', !SUB.length);
+}
+function subVaciar() { SUB = []; pintarSubir(); $('subMsg').textContent = ''; }
+function revisarRepetidos() {
+  var pend = SUB.filter(function (s) { return !s.hecho; }); if (!pend.length) return;
+  var vistos = {}; pend.forEach(function (s) { var k = s.nombre.trim().toLowerCase(); if (vistos[k]) { s.error = true; s.est = '⚠️ Dos archivos con el mismo nombre: cambie uno.'; } vistos[k] = 1; });
+  api('repetidos', { nombres: pend.map(function (s) { return s.nombre; }) }, false).then(function (rep) {
+    pend.forEach(function (s) { if (rep.indexOf(s.nombre) >= 0) { s.error = true; s.est = '⚠️ Ya existe un archivo con ese nombre: cámbielo.'; } });
+    pintarSubir();
+  }).catch(function () {});
+}
+function leerB64(f) { return new Promise(function (ok, ko) { var r = new FileReader(); r.onload = function () { ok(String(r.result).split(',')[1]); }; r.onerror = function () { ko(new Error('No pude leer el archivo.')); }; r.readAsDataURL(f); }); }
+function subirTodo() {
+  var pend = SUB.filter(function (s) { return !s.hecho; }); if (!pend.length) return;
+  $('subBtn').disabled = true; var bien = 0, i = 0;
+  var sig = function () {
+    if (i >= pend.length) {
+      $('subBtn').disabled = false;
+      var fin = '✅ ' + bien + ' de ' + pend.length + ' subido(s).';
+      if (bien && $('subYa').checked) {
+        api('procesar', {}, 'Pidiendo que se procese…').then(function (r) { $('subMsg').className = 'msg ok'; $('subMsg').textContent = fin + (r.ok ? ' ⚡ La hoja los procesa en ~1 minuto: véalos en 📥 Pendientes y luego en 🔎 Buscar.' : ' (No pude pedir que se procese ya: ' + (r.error || '') + ' · se procesan en la vuelta de 10 min.)'); })
+          .catch(function (e) { $('subMsg').className = 'msg'; $('subMsg').textContent = fin + ' Se procesan en la vuelta de 10 min (' + e.message + ').'; });
+      } else { $('subMsg').className = 'msg ok'; $('subMsg').textContent = fin + (bien ? ' Se procesan en la vuelta de 10 min.' : ''); }
+      return;
+    }
+    var s = pend[i++]; s.est = '⏳ Subiendo…'; s.error = false; pintarSubir();
+    leerB64(s.f).then(function (b64) { return api('subir', { nombre: s.nombre, mime: s.f.type || 'image/jpeg', datos: b64, destino: s.destino }, false); }).then(function (r) {
+      if (r.ok) { s.hecho = true; s.est = '✅ ' + r.nombre + ' → ' + r.destino; bien++; } else { s.error = true; s.est = '❌ ' + r.error; }
+      pintarSubir(); sig();
+    }).catch(function (e) { s.error = true; s.est = '❌ ' + e.message; pintarSubir(); sig(); });
+  };
+  sig();
+}
+
+/* ---------- 📄 escanear a PDF (en el celular, sin subir nada hasta que se toca 📤 Subir) ---------- */
+var SCAN = [];
+function scanAbrir() { SCAN = []; $('scan').classList.remove('oc'); scanPintar(); $('scCam').click(); }
+function scanCerrar() { SCAN.forEach(function (p) { URL.revokeObjectURL(p.url); }); SCAN = []; $('scan').classList.add('oc'); }
+function scanAgregar(fl) {
+  Array.prototype.forEach.call(fl || [], function (f) { if (/^image\//.test(f.type)) SCAN.push({ f: f, url: URL.createObjectURL(f), rot: 0 }); });
+  scanPintar();
+}
+function scanPintar() {
+  $('scanN').textContent = SCAN.length + (SCAN.length === 1 ? ' página' : ' páginas');
+  $('scanOk').disabled = !SCAN.length;
+  $('scanPags').innerHTML = SCAN.map(function (p, i) {
+    return '<div style="width:108px;text-align:center;font-size:11px"><div style="height:130px;display:flex;align-items:center;justify-content:center;background:#F1F5F9;border-radius:8px;overflow:hidden">' +
+      '<img src="' + p.url + '" style="max-width:100%;max-height:130px;transform:rotate(' + p.rot + 'deg)"></div><div>Pág. ' + (i + 1) + '</div>' +
+      '<div style="display:flex;gap:2px;justify-content:center"><button style="padding:2px 6px" onclick="scanMover(' + i + ',-1)" ' + (i ? '' : 'disabled') + '>◀</button>' +
+      '<button style="padding:2px 6px" onclick="SCAN[' + i + '].rot=(SCAN[' + i + '].rot+90)%360;scanPintar()" title="Girar">⟳</button>' +
+      '<button style="padding:2px 6px" onclick="scanMover(' + i + ',1)" ' + (i < SCAN.length - 1 ? '' : 'disabled') + '>▶</button>' +
+      '<button style="padding:2px 6px" class="r" onclick="window.URL.revokeObjectURL(SCAN[' + i + '].url);SCAN.splice(' + i + ',1);scanPintar()">✖</button></div></div>';
+  }).join('');
+}
+function scanMover(i, d) { var x = SCAN.splice(i, 1)[0]; SCAN.splice(i + d, 0, x); scanPintar(); }
+function cargarLib(url, global) {
+  return new Promise(function (ok, ko) {
+    if (window[global]) return ok();
+    var s = document.createElement('script'); s.src = url; s.onload = function () { ok(); }; s.onerror = function () { ko(new Error('No pude cargar el generador de PDF (¿sin internet?).')); }; document.head.appendChild(s);
+  });
+}
+/** Una foto → JPEG enderezado y de tamaño razonable (lado mayor 2000 px): el PDF queda liviano y legible. */
+function scanImagen(p) {
+  return new Promise(function (ok, ko) {
+    var im = new Image();
+    im.onload = function () {
+      var max = 2000, k = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight)), w = Math.round(im.naturalWidth * k), h = Math.round(im.naturalHeight * k);
+      var gira = p.rot === 90 || p.rot === 270, cv = document.createElement('canvas');
+      cv.width = gira ? h : w; cv.height = gira ? w : h;
+      var c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
+      c.translate(cv.width / 2, cv.height / 2); c.rotate(p.rot * Math.PI / 180); c.drawImage(im, -w / 2, -h / 2, w, h);
+      ok({ data: cv.toDataURL('image/jpeg', 0.82), w: cv.width, h: cv.height });
+    };
+    im.onerror = function () { ko(new Error('No pude leer una de las fotos (¿formato HEIC? tómela otra vez con la cámara).')); };
+    im.src = p.url;
+  });
+}
+function scanPdf() {
+  if (!SCAN.length) return;
+  $('scanOk').disabled = true; $('scanMsg').className = 'msg'; $('scanMsg').textContent = '⏳ Armando el PDF…';
+  cargarLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf').then(function () {
+    return SCAN.reduce(function (pr, p) { return pr.then(function (l) { return scanImagen(p).then(function (x) { l.push(x); return l; }); }); }, Promise.resolve([]));
+  }).then(function (imgs) {
+    var A4 = 595.28, doc = null;
+    imgs.forEach(function (x) {
+      var w = A4, h = A4 * x.h / x.w;   // ancho A4, alto proporcional (la página es la foto entera)
+      if (!doc) doc = new window.jspdf.jsPDF({ unit: 'pt', format: [w, h], orientation: w > h ? 'l' : 'p', compress: true });
+      else doc.addPage([w, h], w > h ? 'l' : 'p');
+      doc.addImage(x.data, 'JPEG', 0, 0, w, h);
+    });
+    var blob = doc.output('blob'), d = new Date(), q = function (n) { return ('0' + n).slice(-2); };
+    var nombre = 'Voucher escaneado ' + d.getFullYear() + '-' + q(d.getMonth() + 1) + '-' + q(d.getDate()) + ' ' + q(d.getHours()) + q(d.getMinutes()) + q(d.getSeconds()) + '.pdf';
+    var f = new File([blob], nombre, { type: 'application/pdf' });
+    SUB.push({ f: f, nombre: nombre, destino: 'original', est: '📄 PDF de ' + imgs.length + ' página(s) · ' + Math.round(blob.size / 1024) + ' KB', url: '' });
+    scanCerrar(); pintarSubir(); revisarRepetidos();
+    $('subMsg').className = 'msg ok'; $('subMsg').textContent = '📄 PDF listo (' + imgs.length + ' página(s)). Revise el nombre y toque 📤 Subir.';
+  }).catch(function (e) { $('scanOk').disabled = false; $('scanMsg').className = 'msg e'; $('scanMsg').textContent = '❌ ' + e.message; });
+}
+
+/* ============================================================ 📥 pendientes */
+function cargarPendientes() {
+  $('penCont').innerHTML = '<div class="msg">⏳ Revisando las carpetas…</div>';
+  api('pendientes', {}, false).then(function (r) {
+    var tabla = function (t, l, vacio) {
+      return '<div class="card"><h3>' + t + ' <span class="chip">' + l.length + '</span></h3>' + (l.length ? '<table class="tb"><tr><th>Archivo</th><th>Subido</th><th>KB</th><th>Por</th></tr>' +
+        l.map(function (f) { return '<tr><td style="word-break:break-word">' + esc(f.nombre) + '</td><td style="white-space:nowrap">' + esc(f.fecha) + '</td><td>' + f.kb + '</td><td>' + esc(f.por || '') + '</td></tr>'; }).join('') + '</table>' : '<div style="color:var(--gr)">' + vacio + '</div>') + '</div>';
+    };
+    $('penCont').innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap"><span style="color:var(--gr);font-size:12px">Al ' + esc(r.t) + '</span><span>' +
+      (puede('subir') ? '<button onclick="procesarYa()">⚡ Procesar ahora</button> ' : '') + '<button onclick="cargarPendientes()">🔄 Actualizar</button></span></div>' +
+      tabla('📥 Originales por procesar', r.originales, 'Nada esperando ✅') + tabla('📥 Fotos por procesar', r.fotos, 'Nada esperando ✅') +
+      tabla('🗑 Descartados (últimos)', r.descartados, 'Nada descartado.');
+  }).catch(function (e) { $('penCont').innerHTML = '<div class="msg e">❌ ' + esc(e.message) + '</div>'; });
+}
+function procesarYa() { api('procesar', {}, 'Pidiendo…').then(function (r) { alerta(r.ok ? '⚡ La hoja procesará la entrada en ~1 minuto.' : '❌ ' + (r.error || 'No se pudo.')); }).catch(function (e) { alerta('❌ ' + e.message); }); }
+
+/* ============================================================ 📊 resumen */
+function pintarResumen() {
+  if (!IDX) return;
+  var F = IDX.filas, por = [0, 1].map(function (h) { return F.filter(function (x) { return x[0] === h; }); });
+  var c = function (l, fn) { return l.filter(fn).length; };
+  var dup = function (x) { return /DUPLICADO/i.test(x[4]) || (x[18] && DUPS[x[18]] > 1); };
+  var hoy = new Date(), hace = function (d) { var t = new Date(hoy.getTime() - d * 86400000); return t.getFullYear() + ('0' + (t.getMonth() + 1)).slice(-2) + ('0' + t.getDate()).slice(-2); };
+  var k = function (t, v, col, filtro) { return '<div class="kpi"' + (filtro ? ' style="cursor:pointer" onclick="irFiltro(\'' + filtro + '\')"' : '') + '><div class="t">' + t + '</div><div class="v" style="color:' + (col || 'inherit') + '">' + v.toLocaleString() + '</div></div>'; };
+  var h = '<div class="kpis">' + k('Vouchers', F.length) + k('Originales', por[0].length) + k('Fotos', por[1].length) + k('Últimos 7 días', c(F, function (x) { return x[2] >= hace(7); })) +
+    k('Sin RUC', c(F, sinRuc), 'var(--am)', 'sinruc') + k('Sin revisar', c(F, function (x) { return !x[10]; }), 'var(--am)', 'sinrev') + k('Duplicados', c(F, dup), 'var(--ro)', 'dup') + k('Por retener', c(F, function (x) { return x[11]; }), '#5B21B6', 'porret') + '</div>';
+  var meses = {}; F.forEach(function (x) { var m = (x[2] || '').slice(0, 6) || 'sin fecha'; var o = meses[m] || (meses[m] = { n: 0, pen: 0, usd: 0, o: 0, f: 0 }); o.n++; if (esUSD(x[6])) o.usd += x[7]; else o.pen += x[7]; if (x[0]) o.f++; else o.o++; });
+  h += '<div class="card"><h3>Por mes (fecha del depósito)</h3><table class="tb"><tr><th>Mes</th><th>Vouchers</th><th>Originales</th><th>Fotos</th><th style="text-align:right">S/</th><th style="text-align:right">US$</th></tr>' +
+    Object.keys(meses).sort().reverse().slice(0, 24).map(function (m) { var o = meses[m]; return '<tr><td>' + (m.length === 6 ? m.slice(4) + '/' + m.slice(0, 4) : m) + '</td><td>' + o.n + '</td><td>' + o.o + '</td><td>' + o.f + '</td><td style="text-align:right">' + fm(o.pen) + '</td><td style="text-align:right">' + fm(o.usd) + '</td></tr>'; }).join('') + '</table></div>';
+  var bancos = {}; F.forEach(function (x) { var b = String(x[5] || '—').toUpperCase(); bancos[b] = (bancos[b] || 0) + 1; });
+  h += '<div class="card"><h3>Por banco</h3>' + Object.keys(bancos).sort(function (a, b) { return bancos[b] - bancos[a]; }).map(function (b) { return '<span class="chip" style="font-size:12.5px;padding:3px 9px">' + esc(b) + ' · <b>' + bancos[b] + '</b></span>'; }).join(' ') + '</div>';
+  h += '<div style="font-size:12px;color:var(--gr)">Datos al ' + esc(IDX.t) + ' · toque un cuadro para ver esos vouchers.</div>';
+  $('resCont').innerHTML = h;
+}
+function irFiltro(m) { limpiar(); var b = document.querySelector('#marcas button[data-m="' + m + '"]'); if (b) b.classList.add('on'); ir('bus'); filtrar(); }
+
+/* ============================================================ 👥 usuarios (admin) */
+var USU = null;
+function cargarUsuarios() {
+  $('usuCont').innerHTML = '<div class="msg">⏳</div>';
+  Promise.all([api('usuarios', {}, false), api('registro', { n: 200 }, false), api('enlace', {}, false)]).then(function (r) {
+    USU = r[0];
+    var h = '<div class="card"><h3>🔗 Enlace del portal</h3>' + (r[2] ? '<input readonly style="width:100%" value="' + esc(r[2]) + '" onclick="this.select()"><div style="font-size:12px;color:var(--gr);margin-top:4px">Compártalo solo con quien tenga usuario. Sin usuario y PIN no se ve nada.</div>' : '<div style="color:var(--gr)">Se completa al publicar.</div>') + '</div>';
+    h += '<div class="card"><h3>👥 Usuarios <button style="float:right" class="p" onclick="editarUsuario(null)">➕ Nuevo</button></h3><table class="tb"><tr><th>Usuario</th><th>Nombre</th><th>Permiso</th><th>Activo</th><th>Último ingreso</th><th></th></tr>' +
+      USU.usuarios.map(function (u, i) { return '<tr><td><b>' + esc(u.usuario) + '</b>' + (u.conPin ? '' : ' <span class="chip c-r">sin PIN</span>') + '</td><td>' + esc(u.nombre) + '</td><td>' + esc(u.permiso) + '</td><td>' + (u.activo ? '✅' : '⛔') + '</td><td>' + esc(u.ultimo) + '</td><td><button onclick="editarUsuario(' + i + ')">✏️</button></td></tr>'; }).join('') + '</table>' +
+      '<div style="font-size:12px;color:var(--gr);margin-top:6px">' + USU.permisos.map(function (p) { return '<b>' + p + '</b>: ' + esc(USU.textos[p]); }).join(' · ') + '</div></div>';
+    h += '<div class="card"><h3>🧾 Registro (lo más nuevo arriba)</h3><div style="max-height:420px;overflow:auto"><table class="tb"><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr>' +
+      r[1].map(function (x) { return '<tr><td style="white-space:nowrap">' + esc(x[0]) + '</td><td>' + esc(x[1]) + '</td><td>' + esc(x[2]) + '</td><td style="font-size:12px;word-break:break-word">' + esc(x[3]) + '</td></tr>'; }).join('') + '</table></div></div>';
+    $('usuCont').innerHTML = h;
+  }).catch(function (e) { $('usuCont').innerHTML = '<div class="msg e">❌ ' + esc(e.message) + '</div>'; });
+}
+function editarUsuario(i) {
+  var u = i == null ? { usuario: '', nombre: '', permiso: 'ver', activo: true, notas: '' } : USU.usuarios[i];
+  modal('<h3>' + (i == null ? '➕ Usuario nuevo' : '✏️ ' + esc(u.usuario)) + '</h3>' +
+    '<div class="campo"><label>Usuario</label><input id="uU" value="' + esc(u.usuario) + '" ' + (i == null ? '' : 'disabled') + ' autocapitalize="none" placeholder="ej. maria"></div>' +
+    '<div class="campo"><label>Nombre</label><input id="uN" value="' + esc(u.nombre) + '"></div>' +
+    '<div class="campo"><label>Permiso</label><select id="uP">' + USU.permisos.map(function (p) { return '<option value="' + p + '"' + (p === u.permiso ? ' selected' : '') + '>' + p + ' — ' + esc(USU.textos[p]) + '</option>'; }).join('') + '</select></div>' +
+    '<div class="campo"><label>Activo</label><input type="checkbox" id="uA" style="width:auto"' + (u.activo ? ' checked' : '') + '></div>' +
+    '<div class="campo"><label>' + (i == null ? 'PIN' : 'PIN nuevo') + '</label><input id="uPin" type="password" inputmode="numeric" maxlength="8" placeholder="' + (i == null ? '4 a 8 números' : 'vacío = no cambia') + '"></div>' +
+    '<div class="campo"><label>Notas</label><input id="uNo" value="' + esc(u.notas || '') + '"></div><div id="uMsg" class="msg e" style="padding:6px 0 0"></div>',
+    [['Cancelar'], ['💾 Guardar', function () {
+      api('guardarUsuario', { usuario: $('uU').value, nombre: $('uN').value, permiso: $('uP').value, activo: $('uA').checked, pin: $('uPin').value, notas: $('uNo').value }, 'Guardando…')
+        .then(function () { cerrarModal(); cargarUsuarios(); }).catch(function (e) { abrirModal(); $('uMsg').textContent = '❌ ' + e.message; });
+      return false;
+    }, 'p']]);
+}
+
+/* ============================================================ ventanas */
+function modal(html, botones) {
+  $('modalCaja').innerHTML = html + '<div class="bot">' + botones.map(function (b, i) { return '<button id="mb' + i + '" class="' + (b[2] || '') + '">' + b[0] + '</button>'; }).join('') + '</div>';
+  botones.forEach(function (b, i) { $('mb' + i).onclick = function () { var r = b[1] ? b[1]() : null; if (r !== false) cerrarModal(); }; });
+  abrirModal();
+}
+function abrirModal() { $('modal').classList.remove('oc'); }
+function cerrarModal() { $('modal').classList.add('oc'); }
+function alerta(t) { modal('<div style="white-space:pre-wrap">' + esc(t) + '</div>', [['Aceptar', null, 'p']]); }
+$('modal').addEventListener('click', function (e) { if (e.target === $('modal')) cerrarModal(); });
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') { if (!$('modal').classList.contains('oc')) cerrarModal(); else cerrarVisor(); }
+  if (!FILA || /INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
+  if (e.key === 'ArrowLeft' && SEL > 0) abrir(SEL - 1);
+  if (e.key === 'ArrowRight' && SEL < VIS.length - 1) abrir(SEL + 1);
+});
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+</script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+# Despliegue del 🌐 Portal web de Vouchers (carpeta vouchers_portal/apps_script/)
+# ------------------------------------------------------------
+#   - crear-proyecto : crea el proyecto de Apps Script del portal (aparte de la hoja de Vouchers) y guarda su
+#                      vouchers_portal/apps_script/.clasp.json en el repo. Una sola vez.
+#   - comparar       : diferencias entre el código del proyecto y el repo.
+#   - subir          : sube el código y publica la aplicación web (siempre la MISMA dirección).
+# Al hacer push con cambios en vouchers_portal/apps_script/ se sube solo (si ya existe su .clasp.json).
+# El puente de la hoja de Vouchers (PV_Puente.js) se sube aparte con «Cambios en hoja Vouchers».
+# ------------------------------------------------------------
+
+name: Desplegar Portal de Vouchers
+
+on:
+  push:
+    branches:
+      - claude/python-codes-izve18
+    paths:
+      - 'vouchers_portal/apps_script/**'
+      - '.github/workflows/deploy-vouchers-portal.yml'
+  workflow_dispatch:
+    inputs:
+      accion:
+        description: "crear-proyecto (una vez), comparar o subir"
+        required: true
+        default: "comparar"
+        type: choice
+        options:
+          - comparar
+          - subir
+          - crear-proyecto
+
+permissions:
+  contents: write
+
+concurrency:
+  group: appsscript-vouchers-portal
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: vouchers_portal/apps_script
+    env:
+      VOUCHERS_SCRIPT_ID: 1D9dcCYU-Nqw7bgjFYPcTSUTcyrVE25AK03_zx4ZTUknId-lUieAV6J1G
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar clasp
+        run: npm install -g @google/clasp@3.3.0
+      - name: Escribir credenciales de clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then echo "::error::Falta el secret CLASPRC_JSON"; exit 1; fi
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+
+      - name: Crear el proyecto del portal
+        if: github.event_name == 'workflow_dispatch' && inputs.accion == 'crear-proyecto'
+        run: |
+          if [ -f .clasp.json ]; then echo "::error::Ya existe vouchers_portal/apps_script/.clasp.json; no se crea otro."; exit 1; fi
+          mkdir -p /tmp/nuevo && cd /tmp/nuevo
+          clasp create-script --type webapp --title "Portal de Vouchers" --rootDir .
+          test -f .clasp.json || { echo "::error::clasp no creo el proyecto"; exit 1; }
+          python3 -c "import json;c=json.load(open('.clasp.json'));print(json.dumps({'scriptId':c['scriptId'],'rootDir':'.'}))" > "$GITHUB_WORKSPACE/vouchers_portal/apps_script/.clasp.json"
+          cd "$GITHUB_WORKSPACE/vouchers_portal/apps_script"
+          clasp push --force
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .clasp.json
+          git commit -m "Portal de Vouchers: proyecto Apps Script creado [skip ci]"
+          for i in 1 2 3 4; do git push && break; git pull --rebase; sleep $((i*3)); done
+
+      - name: Comparar codigo del proyecto vs repo
+        if: hashFiles('vouchers_portal/apps_script/.clasp.json') != '' && github.event_name == 'workflow_dispatch' && inputs.accion == 'comparar'
+        run: |
+          SID=$(python3 -c "import json;print(json.load(open('.clasp.json'))['scriptId'])")
+          mkdir -p /tmp/actual
+          printf '{"scriptId":"%s","rootDir":"/tmp/actual"}' "$SID" > /tmp/actual/.clasp.json
+          (cd /tmp/actual && clasp pull) || echo "(proyecto vacio o sin acceso)"
+          for f in *.js *.html appsscript.json; do
+            r="/tmp/actual/$f"; [ -f "$r" ] || r="/tmp/actual/${f%.js}.gs"
+            if [ -f "$r" ]; then if diff -q --strip-trailing-cr "$r" "$f" >/dev/null; then echo "IGUAL      $f"; else echo "DIFERENTE  $f"; fi; else echo "NUEVO      $f"; fi
+          done
+
+      # Direcciones: la del portal (para mostrar el enlace) y la de la hoja de Vouchers (su puente). No quedan en el repo.
+      - name: Direcciones del portal y de la hoja de Vouchers
+        id: dir
+        if: hashFiles('vouchers_portal/apps_script/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir' || inputs.accion == 'crear-proyecto')
+        run: |
+          leer() { python3 -c "
+          import json,sys
+          t=sys.stdin.read()
+          try: d=json.loads(t[t.index('['):])
+          except Exception: d=[]
+          pref=sys.argv[1]
+          b=[x for x in d if (x.get('versionNumber') or (x.get('deploymentConfig') or {}).get('versionNumber')) and (not pref or (x.get('description') or (x.get('deploymentConfig') or {}).get('description') or '').startswith(pref))]
+          print(b[0]['deploymentId'] if b else '')" "$1"; }
+          PORTAL=$(clasp --json list-deployments 2>/dev/null | leer "Portal Vouchers")
+          mkdir -p /tmp/vou && printf '{"scriptId":"%s","rootDir":"/tmp/vou"}' "$VOUCHERS_SCRIPT_ID" > /tmp/vou/.clasp.json
+          HOJA=$(cd /tmp/vou && clasp --json list-deployments 2>/dev/null | leer "")
+          [ -n "$PORTAL" ] && echo "::add-mask::$PORTAL"
+          [ -n "$HOJA" ] && echo "::add-mask::$HOJA"
+          [ -z "$HOJA" ] && echo "::warning::No encontré la aplicación web de la hoja de Vouchers: 🔁 Releer y ⚡ Procesar no funcionarán en el portal."
+          echo "portal=$PORTAL" >> "$GITHUB_OUTPUT"
+          URLH=""; [ -n "$HOJA" ] && URLH="https://script.google.com/macros/s/$HOJA/exec"
+          printf "/**\n * 🌐 Direcciones de las aplicaciones web (este portal y el puente de la hoja de Vouchers).\n * Este archivo lo REESCRIBE el workflow «Desplegar Portal de Vouchers» en cada despliegue; en el repositorio queda vacío.\n */\nvar PV_URL_ = '%s';\nvar PV_PUENTE_URL_ = '%s';\n" "$PORTAL" "$URLH" > PV_Despliegue.js
+
+      - name: Subir y publicar el portal
+        if: hashFiles('vouchers_portal/apps_script/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir' || inputs.accion == 'crear-proyecto')
+        env:
+          ID: ${{ steps.dir.outputs.portal }}
+        run: |
+          clasp push --force
+          DESC="Portal Vouchers $(date -u +%Y-%m-%d)"
+          if [ -z "$ID" ]; then
+            ID=$(clasp --json create-deployment -d "$DESC" | grep -oE 'AKfy[A-Za-z0-9_-]+' | head -1)
+            [ -n "$ID" ] || { echo "::error::No se pudo crear la aplicación web del portal"; exit 1; }
+            echo "::add-mask::$ID"
+            sed -i "s#^var PV_URL_ = '.*';#var PV_URL_ = '$ID';#" PV_Despliegue.js
+            clasp push --force
+          fi
+          clasp create-deployment -i "$ID" -d "$DESC" | sed -E "s/AKfy[A-Za-z0-9_-]+/(oculto)/g"
+          SID=$(python3 -c "import json;print(json.load(open('.clasp.json'))['scriptId'])")
+          echo "::notice title=Portal publicado::El enlace lo ve el administrador en el portal (👥 Usuarios). Primera vez: abra https://script.google.com/d/$SID/edit, elija doGet y pulse Ejecutar para dar permisos."
+          N=$(clasp --json list-versions 2>/dev/null | grep -c '"versionNumber"' || true)
+          echo "Versiones del proyecto del portal: $N de 200"
+
+      - name: Limpiar credenciales
+        if: always()
+        run: rm -rf "$HOME/.clasprc.json" /tmp/nuevo /tmp/actual /tmp/vou
