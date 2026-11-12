@@ -8,6 +8,7 @@
 //   ?portal=1&k=CLAVE&op=releerEstado&id=..      -> resultado de esa lectura
 //   ?portal=1&k=CLAVE&op=releerAplicar&id=..&i=n -> reemplazar la fila con la opción n
 //   ?portal=1&k=CLAVE&op=deshacer                -> deshacer la última relectura
+//   ?portal=1&k=CLAVE&op=conexionIA              -> la conexión del 🧠 Asistente IA con Cobranzas (solo servidor a servidor)
 // Responde JSON (nunca una página: así nadie puede llamar desde aquí otras
 // funciones de la hoja). La CLAVE la genera el portal y la deja en los
 // metadatos de la hoja (no se ven en la hoja ni van al repositorio).
@@ -42,6 +43,10 @@ function PVP_get_(p) {
         r2.ok = !r2.error;
         if (r2.mensaje) r2.mensaje = r2.mensaje.replace('menú 🤖 Vouchers → ↩️ Deshacer la última relectura', 'botón ↩️ Deshacer relectura');
         return r2;
+      }
+      case 'conexionIA': {   // 🧠 la conexión de esta hoja con Cobranzas (asistente_ia/AsistenteIA.js), para que el portal use el mismo asistente
+        if (typeof VIA_llamar_ !== 'function' || typeof VIA_clave_ !== 'function') return { ok: false, error: 'Esta hoja no tiene el 🧠 Asistente IA.' };
+        return { ok: true, url: VIA_URL_, clave: VIA_clave_() };
       }
       case 'deshacer': {
         const u = RP_deshacer_();
