@@ -25,7 +25,7 @@ Las claves SOL llegan por variables de entorno (SUNAT_RUC, SUNAT_USUARIO,
 SUNAT_CLAVE) y nunca se imprimen.
 
 Uso:  DESTINO=... LLAVE=... python descargar_detracciones.py [--desde 202601] [--hasta 202609] [--ivap] [--constancias]
-      Sin --desde: los últimos 3 meses (el actual y los 2 anteriores). DESTINO=prueba: no manda nada.
+      Sin --desde: los últimos 30 días (por fecha de pago). DESTINO=prueba: no manda nada.
 """
 import argparse
 import calendar
@@ -43,6 +43,7 @@ from playwright.sync_api import sync_playwright
 PLATAFORMA = "https://e-menu.sunat.gob.pe/cl-ti-itmenu2/MenuInternetPlataforma.htm?pestana=*&agrupacion=*"
 OPCION = "55.2.1.1.4"   # Consulta de Pago de Detracciones
 API = "/detracciones/t/consultar"
+DIAS = 30   # descarga automática y «lo nuevo»: los últimos 30 días por fecha de pago
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36")
 CUENTAS = {"1": "Convencional", "2": "Especial IVAP", "3": "Ley 30737"}
@@ -221,7 +222,7 @@ def nombre_empresa(ruc):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--desde", default="", help="AAAAMM (fecha de pago); vacío = hace 2 meses")
+    ap.add_argument("--desde", default="", help="AAAAMM (fecha de pago); vacío = los últimos 30 días")
     ap.add_argument("--hasta", default="", help="AAAAMM; vacío = este mes")
     ap.add_argument("--ivap", action="store_true", help="consultar también la cuenta especial IVAP")
     ap.add_argument("--constancias", action="store_true",
@@ -236,20 +237,23 @@ def main():
                  "(menú 🏦 Detracciones) o desde el bot. Lo bajado ya no se guarda en el repositorio.")
     hoy = dt.datetime.now(dt.timezone(dt.timedelta(hours=-5))).date()
     hasta = (a.hasta or hoy.strftime("%Y%m")).strip()
+    # Sin --desde: solo los últimos DIAS días (la descarga automática y «lo nuevo»). Con --desde: meses completos.
+    inicio = None
     if a.desde.strip():
         desde = a.desde.strip()
     else:
-        m = hoy.month - 2
-        desde = f"{hoy.year + (m - 1) // 12}{(m - 1) % 12 + 1:02d}"
+        inicio = hoy - dt.timedelta(days=DIAS)
+        desde = inicio.strftime("%Y%m")
     if not re.fullmatch(r"\d{6}", desde) or not re.fullmatch(r"\d{6}", hasta):
         sys.exit("--desde/--hasta deben ser AAAAMM")
     cuentas = ["1"] + (["2"] if a.ivap else [])
     empresa = nombre_empresa(ruc)
-    print(f"Detracciones pagadas de {desde} a {hasta} · cuentas: {', '.join(CUENTAS[c] for c in cuentas)}")
+    print(f"Detracciones pagadas " + (f"de los últimos {DIAS} días (desde {inicio.strftime('%d/%m/%Y')})" if inicio else f"de {desde} a {hasta}")
+          + f" · cuentas: {', '.join(CUENTAS[c] for c in cuentas)}")
 
     fallidos, conservados = [], []
     try:
-        hoja = enviar(destino, llave, {"accion": "estado", "ruc": ruc})
+        hoja = enviar(destino, llave, {"accion": "estado", "ruc": ruc, "desde": inicio.isoformat() if inicio else ""})
         en_hoja, ya = hoja.get("meses") or {}, set(str(x) for x in hoja.get("constancias") or [])
         with sync_playwright() as p:
             nav = p.chromium.launch()
@@ -263,7 +267,9 @@ def main():
                     fin_d = min(dt.date(anio, mes, ult), hoy)
                     if fin_d < dt.date(anio, mes, 1):
                         continue
-                    ini, fin = f"01/{mes:02d}/{anio}", fin_d.strftime("%d/%m/%Y")
+                    ini_d = max(dt.date(anio, mes, 1), inicio) if inicio else dt.date(anio, mes, 1)
+                    parcial = ini_d.day > 1   # mes empezado a la mitad: en la hoja solo se reemplaza desde ese día
+                    ini, fin = ini_d.strftime("%d/%m/%Y"), fin_d.strftime("%d/%m/%Y")
                     clave_mes = f"{anio}{mes:02d}"
                     antes = int(en_hoja.get(clave_mes) or 0)
 
@@ -298,7 +304,8 @@ def main():
                         print(f"  {anio}-{mes:02d}: SUNAT volvió a responder vacío; se CONSERVAN los {antes} depósitos de la hoja")
                         conservados.append(clave_mes)
                         continue
-                    r = enviar(destino, llave, {"accion": "mes", "ruc": ruc, "periodo": clave_mes, "filas": list(filas.values())})
+                    r = enviar(destino, llave, {"accion": "mes", "ruc": ruc, "periodo": clave_mes, "filas": list(filas.values()),
+                                                "desde": ini_d.isoformat() if parcial else ""})
                     if r.get("conservado"):
                         conservados.append(clave_mes)
                     nuevas = 0

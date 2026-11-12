@@ -19,7 +19,7 @@ on:
         required: true
         default: "todas"
       desde:
-        description: "Desde qué mes de pago (AAAAMM). Vacío = los últimos 3 meses"
+        description: "Desde qué mes de pago (AAAAMM). Vacío = los últimos 30 días"
         required: false
         default: ""
       hasta:
@@ -153,7 +153,7 @@ jobs:
           # El cron de respaldo no trae inputs: baja constancias. La hoja manda SI/NO según su Config.
           CONSTANCIAS: ${{ inputs.constancias }}
         run: |
-          # Corrida automática: los últimos 3 meses (lo anterior ya está en la hoja).
+          # Corrida automática: los últimos 30 días (lo anterior ya está en la hoja).
           if [ "${{ inputs.diario }}" = "true" ]; then DESDE=""; HASTA=""; fi
           extra=""
           if [ "$IVAP" = "true" ]; then extra="--ivap"; fi

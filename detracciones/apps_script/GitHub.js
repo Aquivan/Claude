@@ -79,13 +79,13 @@ function DET_despachar_(cfg, empresa, desde, hasta) {
   if (r.getResponseCode() !== 204) throw new Error('GitHub respondió HTTP ' + r.getResponseCode() + ' (el token necesita permiso "Actions: Read and write").');
 }
 
-/** Pide a GitHub la descarga de SUNAT: todas las empresas, últimos 3 meses. */
+/** Pide a GitHub la descarga de SUNAT: todas las empresas, últimos 30 días. */
 function DET_menuPedirDescarga() {
   var ui = SpreadsheetApp.getUi();
   try {
     var cfg = DET_leerConfig_();
     DET_despachar_(cfg, 'todas', '', '');
-    ui.alert('⬇ Pedido enviado. GitHub está consultando en SUNAT los depósitos de detracciones de los últimos 3 meses de todas las empresas' +
+    ui.alert('⬇ Pedido enviado. GitHub está consultando en SUNAT los depósitos de detracciones de los últimos 30 días de todas las empresas' +
       (cfg.bajarConstancias ? ', con sus constancias.' : ' (sin constancias: Config).') + '\n\nTarda unos minutos: lo bajado llega solo a la hoja; luego use 🔄 Actualizar todo para rehacer las pestañas.');
   } catch (e) {
     ui.alert('❌ ' + e.message);

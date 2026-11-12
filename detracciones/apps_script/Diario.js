@@ -61,11 +61,11 @@ function DET_importarTrasDescarga() {
 
 /* ------------------------------------------------------------ 🔁 reintento de las empresas que fallaron */
 
-var DET_MAX_REINTENTOS_ = 2;   // por día
+var DET_MAX_REINTENTOS_ = 1;   // por día: un solo reintento
 
 /**
  * Después de la descarga diaria: las empresas que no terminaron bien (SUNAT lenta, sin respuesta, o SUNAT devolvió
- * vacío un mes que tenía depósitos) se vuelven a pedir en 1 hora, solo ellas. Hasta 2 veces por día.
+ * vacío un mes que tenía depósitos) se vuelven a pedir en 1 hora, solo ellas. Un solo reintento por día.
  */
 function DET_revisarFallas_() {
   try {
@@ -95,7 +95,7 @@ function DET_reintentar() {
   ScriptApp.newTrigger('DET_trasReintento').timeBased().after(25 * 60 * 1000).create();
 }
 
-/** 25 min después del reintento: rehace las pestañas y, si alguna sigue fallando, la vuelve a pedir (máx. 2 por día). */
+/** 25 min después del reintento: rehace las pestañas (si sigue fallando, ya no se vuelve a pedir ese día). */
 function DET_trasReintento() {
   ScriptApp.getProjectTriggers().forEach(function (x) { if (x.getHandlerFunction() === 'DET_trasReintento') ScriptApp.deleteTrigger(x); });
   try { DET_importarAhora_(); } catch (e) { console.warn(e.message); }
@@ -116,7 +116,8 @@ function DET_estadoDiario_(cfg) {
   (JSON.parse(r.getContentText()).workflow_runs || []).forEach(function (run) {
     if (run.display_title !== DET_TITULO_DIARIO_ || new Date(run.created_at).getTime() < desde) return;
     if (run.status !== 'completed') estado = 'corriendo';
-    else if (run.conclusion === 'success' && estado === 'nada' && DET_descargoDeVerdad_(cfg, run.id)) estado = 'listo';
+    // también una que terminó con error cuenta como hecha: el único reintento lo pide DET_revisarFallas_ (solo las empresas que fallaron)
+    else if ((run.conclusion === 'success' || run.conclusion === 'failure') && estado === 'nada' && DET_descargoDeVerdad_(cfg, run.id)) estado = 'listo';
   });
   return estado;
 }
@@ -128,7 +129,7 @@ function DET_descargoDeVerdad_(cfg, runId) {
     var r = UrlFetchApp.fetch(p.url, p);
     if (r.getResponseCode() !== 200) return true;
     return (JSON.parse(r.getContentText()).jobs || []).some(function (j) {
-      return /^descargar/.test(j.name) && j.conclusion === 'success';
+      return /^descargar/.test(j.name) && (j.conclusion === 'success' || j.conclusion === 'failure');
     });
   } catch (e) { return true; }
 }

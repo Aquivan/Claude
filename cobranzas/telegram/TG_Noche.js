@@ -17,7 +17,7 @@ var TGN_TAREAS_ = {
     inputs: function () { return { empresa: 'todas', desde: TG_mes_(2), diario: 'true' }; } },
   retenciones: { nombre: 'Retenciones', wf: 'retenciones-descargar.yml', titulo: /^Retenciones · diario$/,
     inputs: function () { return { empresa: 'todas', periodo: TG_mes_(1), hasta: '', diario: 'true' }; } },
-  detracciones: { nombre: 'Detracciones', wf: 'detracciones-descargar.yml', titulo: /^Detracciones · diario$/, dias: [1, 2, 3, 4, 5],   // solo de lunes a viernes
+  detracciones: { nombre: 'Detracciones', wf: 'detracciones-descargar.yml', titulo: /^Detracciones · diario$/, dias: [1, 2, 3, 4, 5], intentos: 1,   // solo de lunes a viernes; un solo pedido (si falla, la hoja de Detracciones reintenta UNA vez solo las empresas con error)
     inputs: function () { return { empresa: 'todas', desde: '', diario: 'true' }; } },
   honorarios: { nombre: 'Honorarios', wf: 'honorarios-descargar.yml', titulo: /^Honorarios · diario$/,
     inputs: function () { return { empresa: 'todas', periodo: TG_mes_(1), hasta: '', diario: 'true' }; } }
@@ -52,7 +52,7 @@ function TGN_revisar_(cfg) {
     var t = TGN_TAREAS_[k], pk = 'TGN_' + k, est = {};
     try { est = JSON.parse(props.getProperty(pk) || '{}'); } catch (e) {}
     if (est.d !== hoy) est = { d: hoy, n: 0, t: 0 };
-    if (est.listo || est.n >= 3) return;                    // ya corrió, o ya se intentó 3 veces hoy (SUNAT de madrugada a veces falla 2 horas seguidas: 2026-11-05)
+    if (est.listo || est.n >= (t.intentos || 3)) return;                    // ya corrió, o ya se intentó 3 veces hoy (SUNAT de madrugada a veces falla 2 horas seguidas: 2026-11-05)
     if (est.t && Date.now() - est.t < 45 * 60000) return;   // recién pedida: GitHub aún no la muestra
     try {
       var hoyRuns = TG_ghRuns_(cfg, 30, t.wf).filter(function (r) { return new Date(r.created_at).getTime() >= desde && t.titulo.test(r.display_title || r.name || ''); });

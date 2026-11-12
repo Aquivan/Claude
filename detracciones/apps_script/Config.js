@@ -37,7 +37,7 @@ function onOpen() {
     .addItem('🔄 Actualizar todo (datos + constancias en Drive)', 'DET_menuActualizar')
     .addItem('📄 Solo ordenar constancias en Drive', 'DET_menuConstancias')
     .addSeparator()
-    .addItem('⬇ Pedir a SUNAT lo nuevo (últimos 3 meses, GitHub)', 'DET_menuPedirDescarga')
+    .addItem('⬇ Pedir a SUNAT lo nuevo (últimos 30 días, GitHub)', 'DET_menuPedirDescarga')
     .addItem('⬇ Pedir a SUNAT: elegir meses y empresa…', 'DET_menuPedirRango')
     .addSeparator()
     .addItem('⏰ Activar actualización diaria', 'DET_activarDiario')
@@ -144,7 +144,7 @@ function DET_probarConexion() {
 function DET_activarDiario() {
   DET_desactivarDiario(true);
   ScriptApp.newTrigger('DET_actualizacionAutomatica').timeBased().everyDays(1).atHour(8).create();
-  SpreadsheetApp.getUi().alert('⏰ Listo: todos los días cerca de las 8 a. m. se piden a SUNAT los depósitos de los últimos 3 meses (con constancias si Config lo dice) y la hoja se actualiza sola.');
+  SpreadsheetApp.getUi().alert('⏰ Listo: todos los días cerca de las 8 a. m. se piden a SUNAT los depósitos de los últimos 30 días (con constancias si Config lo dice) y la hoja se actualiza sola.');
 }
 
 function DET_desactivarDiario(silencioso) {
