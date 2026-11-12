@@ -1452,8 +1452,10 @@ function rucResultado(r, cont) {
 function rucClaros(k) {
   var cl = RDAT['c' + k], sel = cl.filter(function (x, i) { return $('rc' + k + '_' + i).checked; });
   if (!sel.length) return rucMsg('rcm' + k, 'No marcó ninguno.');
-  var res = [], i = 0; rucMsg('rcm' + k, 'Escribiendo ' + sel.length + '…');
-  (function sig() { if (i >= sel.length) return rucMsg('rcm' + k, res.join(' · ')); var x = sel[i++]; ia('rucelegir', { prov: x.prov, filas: x.filas, ruc: x.ruc, det: x.nombre + ' — ' + x.como }, false).then(function (y) { res.push(x.prov + ': ' + (y.mensaje || y.error || 'listo')); sig(); }).catch(function (e) { res.push(x.prov + ': ' + e.message); sig(); }); })();
+  rucMsg('rcm' + k, '⏳ Escribiendo ' + sel.length + ' de una vez y recalculando Cobranzas una sola vez (hasta 1–2 min)…');
+  ia('rucelegirvarios', { lista: sel.map(function (x) { return { prov: x.prov, filas: x.filas, ruc: x.ruc, det: x.nombre + ' — ' + x.como }; }) }, false)
+    .then(function (y) { rucMsg('rcm' + k, y.error ? '❌ ' + y.error : (y.mensaje || 'Listo.'), !!y.error); })
+    .catch(function (e) { rucMsg('rcm' + k, '❌ ' + e.message + ' — lo ya escrito queda; puede volver a intentar.', 1); });
 }
 function rucElegirEl(k) {
   var el = RDAT['e' + k], j = Number($('re' + k).value);

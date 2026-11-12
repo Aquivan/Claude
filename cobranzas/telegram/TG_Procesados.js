@@ -1156,6 +1156,26 @@ function TGQ_rucElegirFilas_(ss, prov, filas, ruc, det) {
   return { mensaje: r.mensaje + (alias ? ' · 💾 ' + prov + ' → ' + ruc + ' quedó como alias.' : '') };
 }
 
+/**
+ * Varios RUC elegidos de una vez (✍️ Escribir los marcados de la búsqueda en SUNAT e internet): se escriben todos y
+ * Cobranzas se recalcula UNA sola vez (antes era una vez por proveedor y con 10+ tardaba varios minutos).
+ * lista: [{prov, filas:[{hoja, fila, col}], ruc, det}]
+ */
+function TGQ_rucElegirVarios_(ss, lista) {
+  var n = 0, cambios = [], malos = [], alias = [];
+  (lista || []).slice(0, 300).forEach(function (x) {
+    if (!TGQ_rucValido_(String(x.ruc))) { malos.push(x.prov + ' (' + x.ruc + ')'); return; }
+    (x.filas || []).forEach(function (f) {
+      cambios.push({ id: String(++n), hoja: f.hoja, fila: f.fila, col: f.col, encabezado: 'ID Beneficiario', actual: '', nuevo: String(x.ruc), motivo: x.prov + ' · elegido por la persona (' + (x.det || '') + ')' });
+    });
+  });
+  if (!cambios.length) return { mensaje: 'No se escribió nada' + (malos.length ? ' · RUC no válido: ' + malos.join(', ') : '') };
+  ANX_guardarPropuestos_(ss, cambios);
+  var r = ANX_aplicarDet_(ss, cambios.map(function (c) { return c.id; }), false);
+  (lista || []).forEach(function (x) { try { if (TGQ_rucValido_(String(x.ruc)) && TGQ_alias_(ss, x.prov, x.ruc)) alias.push(x.prov); } catch (e) { /* sin alias */ } });
+  return { mensaje: r.mensaje + (alias.length ? ' · 💾 ' + alias.length + ' nombre(s) quedaron como alias' : '') + (malos.length ? ' · RUC no válido: ' + malos.join(', ') : '') };
+}
+
 /** «Originales 2656-2666, Fotos 382» → ["Originales!2656", …, "Fotos!382"] */
 function TGQ_filasDeTexto_(texto) {
   var out = [], hoja = 'Originales';

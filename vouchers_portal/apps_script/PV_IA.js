@@ -10,11 +10,11 @@
 // Qué puede pedir el portal y con qué permiso (todo lo que escribe pide «editar»).
 var PV_IA_ACC_ = {
   chat: 'editar', aplicar: 'editar', deshacer: 'editar', procesados: 'editar',
-  rucfilas: 'editar', rucexternos: 'editar', rucestado: 'editar', rucotro: 'editar', rucelegir: 'editar', rucopciones: 'editar',
+  rucfilas: 'editar', rucexternos: 'editar', rucestado: 'editar', rucotro: 'editar', rucelegir: 'editar', rucelegirvarios: 'editar', rucopciones: 'editar',
   mesa: 'editar', vco_ver: 'editar', vco_copiar: 'editar', vco_deshacer: 'editar'
 };
 // Lo que deja huella en la hoja: se anota en 🌐 Registro portal.
-var PV_IA_REG_ = { aplicar: '🧠 Escribió lo propuesto por la IA', deshacer: '🧠 Deshizo lo último de la IA', rucelegir: '🔎 Eligió un RUC',
+var PV_IA_REG_ = { aplicar: '🧠 Escribió lo propuesto por la IA', deshacer: '🧠 Deshizo lo último de la IA', rucelegir: '🔎 Eligió un RUC', rucelegirvarios: '🔎 Escribió varios RUC',
   vco_copiar: '🔗 Copió de Fotos a Originales', vco_deshacer: '🔗 Deshizo la copia de Fotos', mesa: '🧩 Abrió la Mesa de conciliación' };
 
 function PV_conexionIA_(nueva) {
@@ -47,6 +47,7 @@ function PV_ia_(token, d) {
   if (PV_IA_REG_[accion] && r && !r.error) {
     var det = accion === 'aplicar' ? (cuerpo.ids || []).length + ' cambio(s) · ' + String(r.mensaje || '').slice(0, 300)
       : accion === 'rucelegir' ? String(cuerpo.prov || '') + ' → ' + String(cuerpo.ruc || '') + ' (' + (cuerpo.filas || []).map(function (f) { return f.hoja + '!' + f.fila; }).join(', ') + ')'
+      : accion === 'rucelegirvarios' ? (cuerpo.lista || []).map(function (x) { return String(x.prov || '') + ' → ' + String(x.ruc || ''); }).join('; ').slice(0, 400)
       : String(r.mensaje || '').slice(0, 300);
     PV_registrar_(s, PV_IA_REG_[accion], det);
   }
