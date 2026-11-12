@@ -723,7 +723,7 @@ function rcPintar() {
   var k = rcEsc(), w = Math.round(RC.base.width * k), h = Math.round(RC.base.height * k), dpr = window.devicePixelRatio || 1, cv = $('rcCv');
   cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = w + 'px'; cv.style.height = h + 'px';
   var c = cv.getContext('2d'); c.drawImage(RC.base, 0, 0, cv.width, cv.height);
-  if (RC.mej) { var d = c.getImageData(0, 0, cv.width, cv.height); mejorarDatos(d); c.putImageData(d, 0, 0); }
+  if (RC.mej) mejorarCanvas(cv);
   RC.k = k;
   var P = RC.pts.map(function (p) { return [p[0] * k, p[1] * k]; });
   $('rcSvg').setAttribute('width', w); $('rcSvg').setAttribute('height', h);
@@ -760,7 +760,7 @@ function rcFin(listo) {
   var R = RC; RC = null; $('rc').classList.add('oc');
   if (!listo) return R.ok(null);
   var out = enderezar(R.base, ordenar(R.pts));
-  if (R.mej) { var c = out.getContext('2d'), d = c.getImageData(0, 0, out.width, out.height); mejorarDatos(d); c.putImageData(d, 0, 0); }
+  if (R.mej) mejorarCanvas(out);
   out.toBlob(function (bl) { R.ok(bl ? { blob: bl, mejorada: R.mej } : null); }, 'image/jpeg', 0.86);
 }
 /** Las 4 esquinas en orden: arriba-izq, arriba-der, abajo-der, abajo-izq (aunque se hayan cruzado). */
@@ -843,19 +843,41 @@ function resolver(A, B) {   // Gauss con pivoteo (8×8)
   }
   return M.map(function (f, i) { return f[n] / (f[i] || 1); });
 }
-/** ✨ Mejorar: estira el contraste (el papel queda blanco y el texto más oscuro) sin quitar el color. */
-function mejorarDatos(img) {
-  var d = img.data, n = d.length / 4, hist = new Array(256).fill(0), i;
-  for (i = 0; i < n; i++) hist[(0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]) | 0]++;
-  var pct = function (q) { var a = 0; for (var v = 0; v < 256; v++) { a += hist[v]; if (a >= q * n) return v; } return 255; };
-  var lo = pct(0.02), hi = Math.max(lo + 30, pct(0.85)), esc = 255 / (hi - lo);
-  for (i = 0; i < n; i++) {
-    var k = i * 4;
-    for (var c = 0; c < 3; c++) { var v = (d[k + c] - lo) * esc; d[k + c] = v < 0 ? 0 : v > 255 ? 255 : v; }
-    var L = 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2];
-    if (L > 225) { d[k] = d[k + 1] = d[k + 2] = 255; }
-    else if (L < 110) { d[k] *= 0.82; d[k + 1] *= 0.82; d[k + 2] *= 0.82; }
+/**
+ * ✨ Mejorar, como los escáneres: estima el color del PAPEL en cada zona (quitando el texto con un filtro de máximo en una
+ * copia chica y suavizándolo) y divide la foto por ese fondo. Así el papel queda blanco parejo aunque sea celeste, amarillo
+ * o tenga sombra, y el texto queda oscuro. Después se oscurece un poco el texto y se limpia el fondo casi blanco.
+ */
+function mejorarCanvas(cv) {
+  var w = cv.width, h = cv.height, paso = Math.max(1, Math.max(w, h) / 160), sw = Math.max(4, Math.round(w / paso)), sh = Math.max(4, Math.round(h / paso));
+  var sm = document.createElement('canvas'); sm.width = sw; sm.height = sh;
+  var sc = sm.getContext('2d'); sc.imageSmoothingEnabled = true; sc.drawImage(cv, 0, 0, sw, sh);
+  var img = sc.getImageData(0, 0, sw, sh), a = img.data;
+  for (var vuelta = 0; vuelta < 2; vuelta++) {   // máximo 5×5: borra las letras y deja el papel
+    var src = new Uint8ClampedArray(a);
+    for (var y = 0; y < sh; y++) for (var x = 0; x < sw; x++) {
+      var m0 = 0, m1 = 0, m2 = 0;
+      for (var dy = -2; dy <= 2; dy++) { var yy = y + dy; if (yy < 0 || yy >= sh) continue;
+        for (var dx = -2; dx <= 2; dx++) { var xx = x + dx; if (xx < 0 || xx >= sw) continue; var q = (yy * sw + xx) * 4;
+          if (src[q] > m0) m0 = src[q]; if (src[q + 1] > m1) m1 = src[q + 1]; if (src[q + 2] > m2) m2 = src[q + 2]; } }
+      var k = (y * sw + x) * 4; a[k] = m0; a[k + 1] = m1; a[k + 2] = m2;
+    }
   }
+  sc.putImageData(img, 0, 0);
+  var bg = document.createElement('canvas'); bg.width = w; bg.height = h;
+  var bc = bg.getContext('2d'); bc.imageSmoothingEnabled = true; bc.imageSmoothingQuality = 'high'; bc.filter = 'blur(' + Math.max(2, Math.round(paso * 2)) + 'px)';
+  bc.drawImage(sm, 0, 0, w, h);
+  var B = bc.getImageData(0, 0, w, h).data, c = cv.getContext('2d'), I = c.getImageData(0, 0, w, h), D = I.data;
+  for (var i = 0; i < D.length; i += 4) {
+    var mn = 255;
+    for (var ch = 0; ch < 3; ch++) {
+      var v = D[i + ch] * 255 / Math.max(B[i + ch], 24);
+      v = 255 - (255 - v) * 1.35;   // texto más oscuro
+      v = v < 0 ? 0 : v > 255 ? 255 : v; D[i + ch] = v; if (v < mn) mn = v;
+    }
+    if (mn > 222) { D[i] = D[i + 1] = D[i + 2] = 255; }   // fondo casi blanco → blanco
+  }
+  c.putImageData(I, 0, 0);
 }
 
 /* ============================================================ 📥 pendientes */
