@@ -260,7 +260,7 @@ main{flex:1;min-height:0;overflow:auto}
       <p><b>📤 Subir</b> (permiso <i>subir</i>): <b>📷 Tomar foto</b> con la cámara, <b>📄 Escanear a PDF</b> (varias fotos con la cámara → un solo PDF, una página por foto; se pueden girar, ordenar o quitar antes) o elija fotos/PDF. Cada foto de la cámara pasa por <b>✂️ Recortar</b>: el portal busca solo los bordes del voucher (4 esquinas que se pueden mover con el dedo), la endereza y con <b>✨ Mejorar</b> aclara el fondo y oscurece el texto (en las fotos de la galería, botón ✂️). El nombre sugerido sale en gris: <b>escriba encima</b> el que quiera, sin borrar nada (si no pone extensión, se agrega sola); póngales un nombre (no se puede repetir uno que ya existe), elija <i>Original</i> (PDF o comprobante formal) o <i>Foto</i>, y suba. Con ⚡ la hoja los procesa en ~1 minuto.</p>
       <p><b>📲 Escanear con Google Drive</b> (en 📤 Subir): elija Original o Foto → se abre la app de Drive en la carpeta 📥 de entrada → <b>+ → Escanear</b> → Guardar → vuelva y toque <b>⚡ Ya escaneé: procesar ahora</b>. Necesita una cuenta de Google con acceso a esa carpeta.</p>
       <p><b>↩️ Deshacer mi última corrección</b> (en el visor): vuelve lo de antes de su último 💾 Guardar, si nadie cambió esas celdas después. <b>🗑 Quitar</b> (en 📥 Pendientes y en lo recién subido): saca de la entrada un voucher subido por error, mientras todavía no está en la hoja (va a la papelera de Drive, 30 días); quien solo sube puede quitar lo suyo.</p>
-      <p><b>🧠 IA</b> (permiso <i>editar</i>): el mismo 🧠 Asistente IA del menú de la hoja. <b>💬 Chat</b> (preguntas, fotos, PDF, Excel; lo que propone se escribe solo si usted lo marca, y ↩️ lo deshace), <b>📋 Analizar procesados</b> (a qué factura, empresa o retención corresponde cada voucher de una tanda), <b>🔎 Identificar RUC</b> (también con el botón 🔎 RUC de Buscar y en el visor), <b>🔗 Completar Originales con Fotos</b> y <b>🧩 Mesa de conciliación</b>.</p>
+      <p><b>🧠 IA</b> (permiso <i>editar</i>): el mismo 🧠 Asistente IA del menú de la hoja. <b>💬 Chat</b> (preguntas, fotos, PDF, Excel; lo que propone se escribe solo si usted lo marca, y ↩️ lo deshace), <b>📋 Analizar procesados</b> (a qué factura, empresa o retención corresponde cada voucher de una tanda), <b>🔎 Identificar RUC</b> (también con el botón 🔎 RUC de Buscar y en el visor; los vouchers con el mismo nombre salen en una sola tarjeta y el RUC elegido va a todos; cada tarjeta tiene <b>🌐 Buscar con IA en SUNAT e internet</b>), <b>🔗 Completar Originales con Fotos</b> y <b>🧩 Mesa de conciliación</b>.</p>
       <p><b>📥 Pendientes</b>: lo que espera en las carpetas de entrada (todavía no está en la hoja) y lo último descartado (duplicados, vacíos, muy pesados).</p>
       <p><b>📊 Resumen</b>: cuántos vouchers hay, cuántos sin RUC, sin revisar o duplicados, por pestaña y por mes.</p>
       <p><b>👥 Usuarios</b> (admin): crear usuarios, cambiar PIN y permiso, desactivar; y el registro de quién hizo qué.</p>
@@ -1329,11 +1329,19 @@ function rucDeTexto() {
 function rucAbrir(filas) {
   ia('rucfilas', { filas: filas }, 'Buscando el RUC de ' + filas.length + ' voucher(s)…').then(function (r) {
     if (r.error) return alerta(r.error);
-    RUC = { filas: filas, sin: (r.detalle || []).filter(function (f) { return !f.ruc; }), texto: r.texto || '' };
+    // una tarjeta por NOMBRE (y sugerencia): lo que se elige vale para todos sus vouchers
+    var G = [], porK = {};
+    (r.detalle || []).filter(function (f) { return !f.ruc; }).forEach(function (f) {
+      var k = f.prov ? rucNn(f.prov) + '|' + (f.sug || '') : '#' + f.k, g = porK[k];
+      if (!g) { g = porK[k] = { prov: f.prov, sug: f.sug, sugNombre: f.sugNombre, como: f.como, parecidos: f.parecidos || [], opciones: f.opciones || [], vs: [] }; G.push(g); }
+      g.vs.push(f);
+    });
+    RUC = { filas: filas, sin: G, texto: r.texto || '' };
     rucPintar();
   }).catch(function (e) { alerta('❌ ' + e.message); });
 }
-function rucFila(f) { return [{ hoja: f.hoja, fila: f.fila, col: f.col }]; }
+function rucNn(s) { return String(s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]+/g, ' ').trim(); }
+function rucFila(g) { return g.vs.map(function (f) { return { hoja: f.hoja, fila: f.fila, col: f.col }; }); }
 function rucPintar() {
   var S2 = RUC.sin, nSug = S2.filter(function (f) { return f.sug && !f.hecho; }).length;
   var h = '<div class="ruc"><h3>🔎 Identificar RUC · ' + RUC.filas.length + ' voucher(s)</h3><div style="display:flex;gap:6px;flex-wrap:wrap">' +
@@ -1341,16 +1349,18 @@ function rucPintar() {
     (S2.some(function (f) { return !f.hecho; }) ? '<button onclick="rucInternet()" title="Padrón de SUNAT e internet, también los que ya tienen sugerencia">🌐 Buscar con IA en SUNAT e internet</button>' : '') + '</div><div id="rMsg" class="msg"></div>';
   if (!S2.length) h += '<div class="msg ok">✅ Todos los vouchers elegidos ya tienen RUC.</div>';
   h += S2.map(function (f, i) {
-    var x = '<div class="card' + (f.hecho ? ' ok' : '') + '"><b>' + esc(f.k) + '</b> · ' + esc(f.fecha) + ' · ' + esc(f.moneda) + ' ' + fm(f.monto) + '<div>' + esc(f.prov || '(sin nombre del proveedor)') + '</div>';
+    var tot = {}; f.vs.forEach(function (v) { tot[v.moneda] = (tot[v.moneda] || 0) + v.monto; });
+    var x = '<div class="card' + (f.hecho ? ' ok' : '') + '"><b>' + esc(f.prov || '(sin nombre del proveedor)') + '</b> · ' + f.vs.length + ' voucher(s) · ' + Object.keys(tot).map(function (m) { return m + ' ' + fm(tot[m]); }).join(' + ') +
+      '<div style="font-size:11.5px;color:var(--gr);margin-left:6px">' + f.vs.map(function (v) { return esc(v.k) + ' · ' + esc(v.fecha) + ' · ' + esc(v.moneda) + ' ' + fm(v.monto); }).join('<br>') + '</div>';
     if (f.hecho) return x + '<div class="msg ok" style="padding:2px 0">' + esc(f.hecho) + '</div></div>';
     if (f.sug) x += '<div class="sug"><label><input type="checkbox" id="rk' + i + '" checked> 💡 <b>' + esc(f.sug) + '</b> — <b style="color:#1D4ED8">' + esc(f.sugNombre || '(nombre no hallado: verifíquelo en SUNAT)') + '</b><br><span style="font-size:12px;color:var(--gr)">' + esc(f.como) + '</span></label> <button class="r" style="padding:2px 8px" onclick="rucNoEs(' + i + ')">❌ No es este</button></div>';
     else if (f.opciones && f.opciones.length) x += '<div style="font-size:12px;color:var(--gr)">❓ Sin RUC claro. Posibles:</div>' + rucSelector(i, f.opciones);
-    else x += '<div style="font-size:12px;color:var(--gr)">❓ No lo encontré en vouchers, SIRE, recibos por honorarios ni retenciones.</div>';
+    else if (!f.parecidos.length) x += '<div style="font-size:12px;color:var(--gr)">❓ No lo encontré en vouchers, SIRE, recibos por honorarios ni retenciones.</div>';
     if (f.parecidos && f.parecidos.length) x += '<div style="font-size:12px;color:var(--gr);margin-top:5px">🔤 <b>Nombres parecidos</b> (compare el nombre y elija):</div>' + f.parecidos.map(function (o, j) {
       return '<div style="display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0"><span style="flex:1;font-size:12.5px"><b>' + esc(o.ruc) + '</b> — <b style="color:#1D4ED8">' + esc(o.nombre) + '</b> <span style="color:var(--gr)">' + esc(o.det) + (o.ruc === f.sug ? ' · ← sugerido' : '') + '</span></span><button class="p" style="padding:3px 8px" onclick="rucElegirP(' + i + ',' + j + ')">✅ Este</button></div>';
     }).join('');
-    return x + '<div><button style="padding:3px 9px;font-size:12.5px" onclick="rucOpciones(' + i + ')">📋 Otras opciones (SIRE, honorarios, retenciones…)</button></div>' +
-      '<input type="text" id="rq' + i + '" placeholder="RUC (11 dígitos) u otro nombre para buscar"><button style="padding:3px 9px;font-size:12.5px" onclick="rucOtro(' + i + ')">🔎 Usar RUC / buscar con IA</button>' +
+    return x + '<div><button style="padding:3px 9px;font-size:12.5px" onclick="rucOpciones(' + i + ')">📋 Otras opciones (SIRE, honorarios, retenciones…)</button>' + (f.prov ? ' <button style="padding:3px 9px;font-size:12.5px" onclick="rucIaNombre(' + i + ')" title="Busca este nombre en el padrón de SUNAT y con IA en internet">🌐 Buscar con IA en SUNAT e internet</button>' : '') + '</div>' +
+      '<input type="text" id="rq' + i + '" placeholder="RUC (11 dígitos) u otro nombre para buscar"><button style="padding:3px 9px;font-size:12.5px" onclick="rucOtro(' + i + ')">🔎 Usar este RUC / buscar otro nombre con IA</button>' +
       '<div id="ro' + i + '"></div><div id="rr' + i + '"></div><div class="msg" id="rm' + i + '" style="padding:2px 0"></div></div>';
   }).join('') + '<div id="rExt"></div><details><summary style="font-size:12px;color:var(--gr)">Resumen de la búsqueda</summary><pre>' + esc(RUC.texto) + '</pre></details></div>';
   modal(h, [['Cerrar']]);
@@ -1373,7 +1383,7 @@ function rucElegir(i, k) {
   rucMsg('rm' + i, 'Escribiendo ' + o.ruc + '…');
   ia('rucelegir', { prov: f.prov, filas: rucFila(f), ruc: o.ruc, det: o.nombre + ' — ' + o.det }, false).then(function (y) {
     if (y.error) return rucMsg('rm' + i, y.error, 1);
-    f.hecho = '✅ ' + o.ruc + ' ' + o.nombre + ' · ' + (y.mensaje || 'escrito'); f.sug = ''; rucPintar();
+    f.hecho = '✅ ' + o.ruc + ' ' + o.nombre + ' en ' + f.vs.length + ' voucher(s) · ' + (y.mensaje || 'escrito'); f.sug = ''; rucPintar();
   }).catch(function (e) { rucMsg('rm' + i, e.message, 1); });
 }
 function rucElegirP(i, j) {
@@ -1381,8 +1391,14 @@ function rucElegirP(i, j) {
   rucMsg('rm' + i, 'Escribiendo ' + o.ruc + '…');
   ia('rucelegir', { prov: f.prov, filas: rucFila(f), ruc: o.ruc, det: o.nombre + ' — ' + o.det }, false).then(function (y) {
     if (y.error) return rucMsg('rm' + i, y.error, 1);
-    f.hecho = '✅ ' + o.ruc + ' ' + o.nombre + ' · ' + (y.mensaje || 'escrito'); f.sug = ''; rucPintar();
+    f.hecho = '✅ ' + o.ruc + ' ' + o.nombre + ' en ' + f.vs.length + ' voucher(s) · ' + (y.mensaje || 'escrito'); f.sug = ''; rucPintar();
   }).catch(function (e) { rucMsg('rm' + i, e.message, 1); });
+}
+function rucIaNombre(i) {
+  var f = RUC.sin[i];
+  rucMsg('rm' + i, '⏳ Busco «' + f.prov + '» en el padrón de SUNAT y con IA en internet (3–5 min). Deje esta ventana abierta.');
+  ia('rucotro', { nombre: f.prov, filas: rucFila(f) }, false).then(function (r) { if (r.error) return rucMsg('rm' + i, r.error, 1); if (r.id) rucEsperar(r.id, 0, 'rr' + i, 'rm' + i); else rucMsg('rm' + i, r.texto || ''); })
+    .catch(function (e) { rucMsg('rm' + i, e.message, 1); });
 }
 function rucOtro(i) {
   var f = RUC.sin[i], v = String($('rq' + i).value || '').trim(), dg = v.replace(/\D/g, '');
@@ -1399,16 +1415,16 @@ function rucOtro(i) {
 }
 function rucEscribirMarcados() {
   var ids = [], cuales = [];
-  RUC.sin.forEach(function (f, i) { var c = $('rk' + i); if (f.sug && f.id && c && c.checked) { ids.push(f.id); cuales.push(f); } });
+  RUC.sin.forEach(function (f, i) { var c = $('rk' + i); if (f.sug && c && c.checked) { f.vs.forEach(function (v) { if (v.id) ids.push(v.id); }); cuales.push(f); } });
   if (!ids.length) return rucMsg('rMsg', 'No hay ninguno marcado.', 1);
   $('rW').disabled = true; rucMsg('rMsg', 'Escribiendo ' + ids.length + '…');
   ia('aplicar', { ids: ids, reemplazar: false }, false).then(function (x) {
     if (x.error) return rucMsg('rMsg', x.error, 1);
-    cuales.forEach(function (f) { f.hecho = '✅ ' + f.sug + ' escrito'; f.sug = ''; }); rucPintar(); rucMsg('rMsg', x.mensaje || 'Listo.');
+    cuales.forEach(function (f) { f.hecho = '✅ ' + f.sug + ' ' + (f.sugNombre || '') + ' escrito en ' + f.vs.length + ' voucher(s)'; f.sug = ''; }); rucPintar(); rucMsg('rMsg', x.mensaje || 'Listo.');
   }).catch(function (e) { rucMsg('rMsg', e.message, 1); });
 }
 function rucInternet() {
-  var fs = RUC.sin.filter(function (f) { return !f.hecho; }).map(function (f) { return f.k; });
+  var fs = []; RUC.sin.forEach(function (f) { if (!f.hecho) f.vs.forEach(function (v) { fs.push(v.k); }); });
   rucMsg('rMsg', '⏳ Lanzando la búsqueda en el padrón de SUNAT y con IA en internet…');
   ia('rucexternos', { filas: fs, todos: true }, false).then(function (r) { rucMsg('rMsg', r.error || r.texto || '', !!r.error); if (r.id) rucEsperar(r.id, 0, 'rExt', 'rMsg'); }).catch(function (e) { rucMsg('rMsg', e.message, 1); });
 }
