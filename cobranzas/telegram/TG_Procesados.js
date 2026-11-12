@@ -247,6 +247,16 @@ function TGQ_candidatos_(fx, nombre, refs) {
       vistos[x.ruc] = 1; return true;
     }).map(function (x) { return { ruc: x.ruc, nombre: x.nombre, fuente: x.fuente, p: q && x.nombre ? RPN_puntaje_(q, RPN_palabras_(x.nombre)) : (q ? 0 : -1) }; });
     var buenos = lista.filter(function (x) { return x.p >= 45; }).sort(function (a, b) { return b.p - a.p; });
+    // ¿El prefijo estaba mal anotado? (ej. 01_ cuando es un recibo por honorarios): si con ese tipo no coincide ningún nombre,
+    // se miran los demás tipos con el mismo número; si uno coincide en nombre, se sugiere avisando que revise «Tipo y Nº Doc.».
+    if (tipoReq && q && !buenos.length) {
+      var otros = (fx.porDoc[m[2] + '-' + Number(m[3])] || []).filter(function (x) { return x.ruc && !fx.cfg.nombreEmpresa[x.ruc] && x.tipo && x.tipo !== tipoReq && x.nombre; })
+        .map(function (x) { return { ruc: x.ruc, nombre: x.nombre, fuente: x.fuente, tipo: x.tipo, p: RPN_puntaje_(q, RPN_palabras_(x.nombre)) }; })
+        .filter(function (x) { return x.p >= 45; }).sort(function (a, b) { return b.p - a.p; });
+      if (otros.length === 1 || otros.length > 1 && otros[0].p - otros[1].p >= 8)
+        return { sug: otros[0].ruc, como: otros[0].fuente + ' ' + otros[0].tipo + '_' + m[2] + '-' + m[3] + ' de ' + otros[0].nombre + ' (el nombre coincide, ' + otros[0].p +
+          ' pts) · ⚠️ en el voucher dice ' + doc + ': revise «Tipo y Nº Doc.»', opciones: [] };
+    }
     if (q && buenos.length === 1 || q && buenos.length > 1 && buenos[0].p - buenos[1].p >= 8)
       return { sug: buenos[0].ruc, como: buenos[0].fuente + ' ' + doc + ' de ' + buenos[0].nombre + ' (el nombre coincide, ' + buenos[0].p + ' pts)', opciones: [] };
     if (!q && lista.length === 1)
