@@ -190,6 +190,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
+    ('12/11/2026', 'Identificar RUC: nombres parecidos a la vista', 'Cada voucher sin RUC muestra directamente la lista 🔤 Nombres parecidos: RUC — nombre — de dónde sale (otros vouchers, SIRE, honorarios, retenciones) y cuán parecido es, con ✅ Este en cada uno, para comparar y elegir. Si el prefijo del comprobante está mal anotado, se busca en los otros tipos por nombre y se avisa.'),
     ('12/11/2026', 'Identificar RUC: tipo de comprobante', 'El prefijo de «Tipo y Nº Doc.» se respeta (catálogo 10 SUNAT): 01_ factura, 02_ recibo por honorarios, 03_ boleta, 07_ N/C, 08_ N/D. Con 02_ solo se busca en los recibos por honorarios; con 01_ solo en facturas del SIRE.'),
     ('12/11/2026', 'Identificar RUC: siempre con su nombre', 'Cada RUC sugerido muestra la razón social o el nombre con que figura en nuestras fuentes (SIRE, honorarios, retenciones, vouchers); si no figura, lo dice para verificarlo en SUNAT. También en el texto de Telegram/WhatsApp, en la hoja de Vouchers y en el portal.'),
     ('12/11/2026', 'RUC por número de comprobante: corregido', 'Al identificar el RUC por el comprobante del voucher (ej. E001-17), antes se tomaba el emisor de cualquier comprobante con ese número (E001 lo usan miles de emisores). Ahora el nombre del emisor tiene que parecerse al del voucher; también se buscan los recibos por honorarios por su número; si el nombre no coincide queda solo como opción «⚠️ otro nombre». La sugerencia muestra el nombre del emisor.'),
