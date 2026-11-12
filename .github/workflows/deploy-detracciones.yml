@@ -103,11 +103,39 @@ jobs:
             ls "$b".* >/dev/null 2>&1 || echo "SOLO EN LA SHEET (se borraria al subir): $n"
           done
 
-      - name: Subir el codigo a Apps Script
+      - name: Subir el codigo a Apps Script y publicar su aplicación web
         if: hashFiles('detracciones/apps_script/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir')
         run: |
+          # La aplicación web recibe lo que baja el robot (ya no se guarda en el repositorio). Su ID va a DET_Despliegue.js
+          # (en el repositorio queda vacío) y no se imprime.
+          clasp --json list-deployments > /tmp/deps.json 2>/dev/null || echo '[]' > /tmp/deps.json
+          ID=$(python3 - <<'PY'
+          import json
+          txt = open('/tmp/deps.json').read()
+          try: deps = json.loads(txt[txt.index('['):])
+          except Exception: deps = []
+          app = [d for d in deps if (d.get('description') or '').startswith('Detracciones')]
+          print((app[0].get('deploymentId') if app else '') or '')
+          PY
+          )
+          [ -n "$ID" ] && echo "::add-mask::$ID"
+          escribir() {
+            printf "/**\n * Detracciones · Grupo — ID de la aplicación web de esta hoja.\n * Este archivo lo REESCRIBE el workflow \"Desplegar Detracciones (hoja)\" en cada despliegue; en el repositorio queda vacío.\n */\nvar DET_DEPLOYMENT_ID_ = '%s';\n" "$1" > DET_Despliegue.js
+          }
+          DESC="Detracciones $(date -u +%Y-%m-%d)"
+          escribir "$ID"
           clasp push --force
-          echo "Codigo subido a la Sheet."
+          if [ -z "$ID" ]; then
+            ID=$(clasp --json create-deployment -d "$DESC" | grep -oE 'AKfy[A-Za-z0-9_-]+' | head -1)
+            [ -n "$ID" ] || { echo "::error::No se pudo crear la aplicación web"; exit 1; }
+            echo "::add-mask::$ID"
+            escribir "$ID"
+            clasp push --force
+          fi
+          clasp create-deployment -i "$ID" -d "$DESC" > /dev/null
+          # deja en la hoja la dirección de su aplicación web (la usa el bot de Cobranzas para pedir descargas)
+          curl -sSL -o /dev/null "https://script.google.com/macros/s/$ID/exec?registrar=1" || echo "::warning::No se pudo registrar la dirección (se reintenta en el próximo despliegue)"
+          echo "Codigo subido a la Sheet y aplicación web publicada."
 
       - name: Limpiar credenciales
         if: always()

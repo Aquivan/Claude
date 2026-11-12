@@ -5,22 +5,27 @@ Descarga de SUNAT SOL los DEPÓSITOS DE DETRACCIONES (SPOT) de UNA empresa, mes 
 mes por fecha de pago, desde la opción de la nueva plataforma "Mis declaraciones
 y pagos" → Consultas → "Consulta de Pago de Detracciones" (menú 55.2.1.1.4).
 
-    detracciones/datos/<RUC>/<AAAA>/<MM>/detracciones.csv   un renglón por constancia
-    detracciones/datos/<RUC>/<AAAA>/<MM>/masivos.json       pagos masivos (si hay)
-    detracciones/datos/<RUC>/<AAAA>/<MM>/constancias/<N°>.html   con --constancias: la
-        Constancia de Depósito oficial de SUNAT (~5 KB; solo se bajan las que faltan)
+Lo bajado va DIRECTO a la hoja «Detracciones · Grupo» (su aplicación web), con la
+llave de un solo uso que la hoja crea al pedir la descarga (variables DESTINO y
+LLAVE). En el repositorio (público) NO se guarda nada, y el registro solo muestra
+cuántos depósitos hubo por mes (sin montos, proveedores ni números de constancia).
+
+Cuidado con SUNAT: a veces responde vacío un mes que sí tiene depósitos. Si un mes
+llega vacío y la hoja ya tenía depósitos de ese mes, se vuelve a consultar; si
+sigue vacío, NO se manda (se conservan los de la hoja) y la empresa queda «con
+error» para que la hoja la reintente más tarde.
 
 Cómo lo hace (igual que una persona, con un Chrome real): entra con la clave SOL,
 abre la consulta, pone las fechas del mes, el tipo de cuenta y "Pagos individuales"
-/ "Pagos masivos", presiona Consultar y guarda la respuesta que SUNAT le da a la
+/ "Pagos masivos", presiona Consultar y lee la respuesta que SUNAT le da a la
 página (ruta /v1/recaudacion/tributaria/declapago/detracciones/t/consultar).
 Solo LEE; no paga ni modifica nada.
 
 Las claves SOL llegan por variables de entorno (SUNAT_RUC, SUNAT_USUARIO,
 SUNAT_CLAVE) y nunca se imprimen.
 
-Uso:  python descargar_detracciones.py [--desde 202601] [--hasta 202609] [--salida detracciones/datos] [--ivap] [--constancias]
-      Sin --desde: los últimos 3 meses (el actual y los 2 anteriores).
+Uso:  DESTINO=... LLAVE=... python descargar_detracciones.py [--desde 202601] [--hasta 202609] [--ivap] [--constancias]
+      Sin --desde: los últimos 3 meses (el actual y los 2 anteriores). DESTINO=prueba: no manda nada.
 """
 import argparse
 import calendar
@@ -31,6 +36,7 @@ import os
 import re
 import sys
 import time
+import urllib.request
 
 from playwright.sync_api import sync_playwright
 
@@ -140,10 +146,6 @@ class Consulta:
                     fr.evaluate("() => { const e = document.querySelector('#periodo'); if (e && !e.disabled) e.value = ''; }")
                     fr.click("#btnConsultar")
                 r = info.value
-                if not self.url_vista:
-                    print("   ruta:", re.sub(r"\d{11}", "<RUC>", r.url.split("?")[0]),
-                          "· parámetros:", sorted(k.split("=")[0] for k in r.url.split("?", 1)[-1].split("&") if k))
-                    self.url_vista = True
                 d = r.json()
                 if str(d.get("cod")) != "200":
                     msg = str(d.get("msg") or d)[:200]
@@ -182,32 +184,56 @@ class Consulta:
                     return html
                 raise RuntimeError("el archivo no trae el número de constancia")
             except Exception as e:
-                print(f"     constancia {numero}: {str(e)[:150]}")
+                print(f"     una constancia no se pudo bajar: {re.sub(chr(92) + 'd{6,}', '#', str(e))[:150]}")
                 pag.wait_for_timeout(2000 * (intento + 1))
         return None
 
-def guardar_csv(ruta, filas):
-    os.makedirs(os.path.dirname(ruta), exist_ok=True)
-    filas.sort(key=lambda r: (r["fecha_pago"], r["constancia"]), reverse=True)
-    with open(ruta, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=COLS)
-        w.writeheader()
-        for r in filas:
-            w.writerow({k: r.get(k, "") for k in COLS})
+def enviar(destino, llave, datos, intentos=3):
+    """Manda a la hoja (aplicación web de Apps Script) y devuelve su respuesta JSON. DESTINO=prueba: no manda nada."""
+    if destino == "prueba":
+        return {"ok": True, "meses": {}, "constancias": []} if datos.get("accion") == "estado" else {"ok": True}
+    cuerpo = json.dumps(dict(datos, llave=llave), ensure_ascii=False).encode("utf-8")
+    ultimo = None
+    for i in range(intentos):
+        try:
+            req = urllib.request.Request(destino, data=cuerpo, headers={"Content-Type": "application/json"}, method="POST")
+            with urllib.request.urlopen(req, timeout=180) as r:
+                res = json.loads(r.read().decode("utf-8", "replace"))
+            if not res.get("ok"):
+                raise RuntimeError(res.get("error") or "la hoja no aceptó el envío")
+            return res
+        except Exception as e:   # noqa: BLE001
+            ultimo = e
+            time.sleep(5 * (i + 1))
+    raise RuntimeError(f"No se pudo mandar a la hoja: {re.sub(r'https?://\S+', '<hoja>', str(ultimo))[:200]}")
+
+
+def nombre_empresa(ruc):
+    try:
+        with open("empresas.json", encoding="utf-8") as fh:
+            for e in json.load(fh).get("empresas", []):
+                if str(e.get("ruc")) == ruc:
+                    return str(e.get("nombre") or ruc)
+    except Exception:   # noqa: BLE001
+        pass
+    return ruc
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--salida", default="detracciones/datos")
     ap.add_argument("--desde", default="", help="AAAAMM (fecha de pago); vacío = hace 2 meses")
     ap.add_argument("--hasta", default="", help="AAAAMM; vacío = este mes")
     ap.add_argument("--ivap", action="store_true", help="consultar también la cuenta especial IVAP")
     ap.add_argument("--constancias", action="store_true",
-                    help="bajar también la Constancia de Depósito de cada detracción (solo las que aún no están guardadas)")
+                    help="bajar también la Constancia de Depósito de cada detracción (solo las que la hoja aún no tiene)")
     a = ap.parse_args()
     ruc, usuario, clave = (os.environ.get(k, "") for k in ["SUNAT_RUC", "SUNAT_USUARIO", "SUNAT_CLAVE"])
     if not (ruc and usuario and clave):
         sys.exit("Faltan SUNAT_RUC / SUNAT_USUARIO / SUNAT_CLAVE")
+    destino, llave = os.environ.get("DESTINO", ""), os.environ.get("LLAVE", "")
+    if not (destino and (llave or destino == "prueba")):
+        sys.exit("Falta la dirección y la llave de la hoja: pida la descarga desde la hoja «Detracciones · Grupo» "
+                 "(menú 🏦 Detracciones) o desde el bot. Lo bajado ya no se guarda en el repositorio.")
     hoy = dt.datetime.now(dt.timezone(dt.timedelta(hours=-5))).date()
     hasta = (a.hasta or hoy.strftime("%Y%m")).strip()
     if a.desde.strip():
@@ -218,75 +244,111 @@ def main():
     if not re.fullmatch(r"\d{6}", desde) or not re.fullmatch(r"\d{6}", hasta):
         sys.exit("--desde/--hasta deben ser AAAAMM")
     cuentas = ["1"] + (["2"] if a.ivap else [])
-    print(f"Empresa {ruc}: detracciones pagadas de {desde} a {hasta} · cuentas: {', '.join(CUENTAS[c] for c in cuentas)}")
+    empresa = nombre_empresa(ruc)
+    print(f"Detracciones pagadas de {desde} a {hasta} · cuentas: {', '.join(CUENTAS[c] for c in cuentas)}")
 
-    with sync_playwright() as p:
-        nav = p.chromium.launch()
-        ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
-        pag = ctx.new_page()
+    fallidos, conservados = [], []
+    try:
+        hoja = enviar(destino, llave, {"accion": "estado", "ruc": ruc})
+        en_hoja, ya = hoja.get("meses") or {}, set(str(x) for x in hoja.get("constancias") or [])
+        with sync_playwright() as p:
+            nav = p.chromium.launch()
+            ctx = nav.new_context(viewport={"width": 1366, "height": 900}, locale="es-PE", user_agent=UA)
+            pag = ctx.new_page()
+            try:
+                c = Consulta(pag, ruc, usuario, clave)
+                total, fallidas = 0, 0
+                for anio, mes in meses(desde, hasta):
+                    ult = calendar.monthrange(anio, mes)[1]
+                    fin_d = min(dt.date(anio, mes, ult), hoy)
+                    if fin_d < dt.date(anio, mes, 1):
+                        continue
+                    ini, fin = f"01/{mes:02d}/{anio}", fin_d.strftime("%d/%m/%Y")
+                    clave_mes = f"{anio}{mes:02d}"
+                    antes = int(en_hoja.get(clave_mes) or 0)
+
+                    def consultar_mes():
+                        filas, crudos = {}, []
+                        for cuenta in cuentas:
+                            for tipo, nombre in TIPOS.items():
+                                res = c.consultar(ini, fin, cuenta, tipo)
+                                if tipo == "pagosIndividuales":
+                                    crudos = res
+                                for r in res:
+                                    if r.get("num_constancia"):
+                                        f = fila(r, ruc, nombre, cuenta)
+                                        filas[(f["constancia"], f["num_presentacion"])] = f
+                                time.sleep(1)
+                        return filas, crudos
+
+                    try:
+                        filas, individuales = consultar_mes()
+                        if not filas and antes:
+                            # SUNAT a veces responde vacío: se vuelve a abrir la consulta y se pregunta otra vez
+                            print(f"  {anio}-{mes:02d}: SUNAT respondió vacío y la hoja tiene {antes}; se vuelve a consultar…")
+                            time.sleep(10)
+                            c.reabrir()
+                            filas, individuales = consultar_mes()
+                    except Exception as e:   # noqa: BLE001
+                        # No se pisa lo que ya estaba en la hoja de ese mes; se sigue con los demás.
+                        print(f"  {anio}-{mes:02d}: NO se pudo consultar ({re.sub(chr(92) + 'd{6,}', '#', str(e))[:200]})")
+                        fallidos.append(clave_mes)
+                        continue
+                    if not filas and antes:
+                        print(f"  {anio}-{mes:02d}: SUNAT volvió a responder vacío; se CONSERVAN los {antes} depósitos de la hoja")
+                        conservados.append(clave_mes)
+                        continue
+                    r = enviar(destino, llave, {"accion": "mes", "ruc": ruc, "periodo": clave_mes, "filas": list(filas.values())})
+                    if r.get("conservado"):
+                        conservados.append(clave_mes)
+                    nuevas = 0
+                    if a.constancias:
+                        abierta = False
+                        porc = {f["constancia"]: f for f in filas.values()}
+                        # hay que volver a consultar «Pagos individuales» para abrir cada constancia desde su lista
+                        pendientes = [(k, str(x.get("num_constancia") or "").strip()) for k, x in enumerate(individuales)]
+                        pendientes = [(k, n) for k, n in pendientes if n and n not in ya]
+                        if pendientes:
+                            individuales = c.consultar(ini, fin, "1", "pagosIndividuales")
+                            for k, x in enumerate(individuales):
+                                num = str(x.get("num_constancia") or "").strip()
+                                if not num or num in ya:
+                                    continue
+                                html = c.constancia(num, k)
+                                abierta = True
+                                if html:
+                                    enviar(destino, llave, {"accion": "constancia", "ruc": ruc, "empresa": empresa, "periodo": clave_mes,
+                                                            "num": num, "fila": porc.get(num) or {}, "html": html})
+                                    ya.add(num)
+                                    nuevas += 1
+                                else:
+                                    fallidas += 1
+                        if abierta:
+                            c.reabrir()
+                    compras = sum(1 for f in filas.values() if f["rol"] == "COMPRA")
+                    print(f"  {anio}-{mes:02d}: {len(filas)} depósitos (como adquiriente {compras}, como proveedor {len(filas) - compras})"
+                          + (f" · constancias nuevas {nuevas}" if a.constancias else ""))
+                    total += len(filas)
+                print(f"Listo: {total} depósitos." + (f" Meses que fallaron: {', '.join(fallidos)}" if fallidos else "")
+                      + (f" Meses conservados: {', '.join(conservados)}" if conservados else "")
+                      + (f" Constancias que no se pudieron bajar: {fallidas} (se reintentan la próxima vez)" if fallidas else ""))
+            finally:
+                ctx.close()
+                nav.close()
+    except Exception as e:   # noqa: BLE001
+        msg = re.sub(r"https?://\S+", "<hoja>", str(e))[:200]
+        print(f"ERROR: {msg}")
         try:
-            c = Consulta(pag, ruc, usuario, clave)
-            total, fallidos, fallidas = 0, [], []
-            for anio, mes in meses(desde, hasta):
-                ult = calendar.monthrange(anio, mes)[1]
-                fin_d = min(dt.date(anio, mes, ult), hoy)
-                if fin_d < dt.date(anio, mes, 1):
-                    continue
-                ini, fin = f"01/{mes:02d}/{anio}", fin_d.strftime("%d/%m/%Y")
-                filas, masivos, nuevas = {}, [], 0
-                try:
-                    for cuenta in cuentas:
-                        for tipo, nombre in TIPOS.items():
-                            res = c.consultar(ini, fin, cuenta, tipo)
-                            if a.constancias and tipo == "pagosIndividuales":
-                                carpeta_c = os.path.join(a.salida, ruc, str(anio), f"{mes:02d}", "constancias")
-                                abierta = False
-                                for k, r in enumerate(res):
-                                    num = str(r.get("num_constancia") or "").strip()
-                                    ruta = os.path.join(carpeta_c, f"{num}.html")
-                                    if not num or os.path.exists(ruta):
-                                        continue
-                                    html = c.constancia(num, k)
-                                    if html:
-                                        os.makedirs(carpeta_c, exist_ok=True)
-                                        with open(ruta, "w", encoding="utf-8") as fh:
-                                            fh.write(html)
-                                        nuevas += 1
-                                    else:
-                                        fallidas.append(num)
-                                    abierta = True
-                                if abierta:
-                                    c.reabrir()
-                            for r in res:
-                                if r.get("num_constancia"):
-                                    f = fila(r, ruc, nombre, cuenta)
-                                    filas[(f["constancia"], f["num_presentacion"])] = f
-                                if tipo == "pagosMasivos":
-                                    masivos.append(r)
-                            time.sleep(1)
-                except Exception as e:
-                    # No se pisa lo que ya estaba guardado de ese mes; se sigue con los demás.
-                    print(f"  {anio}-{mes:02d}: NO se pudo consultar ({str(e)[:200]})")
-                    fallidos.append(f"{anio}{mes:02d}")
-                    continue
-                carpeta = os.path.join(a.salida, ruc, str(anio), f"{mes:02d}")
-                guardar_csv(os.path.join(carpeta, "detracciones.csv"), list(filas.values()))
-                if masivos:
-                    with open(os.path.join(carpeta, "masivos.json"), "w", encoding="utf-8") as fh:
-                        json.dump(masivos, fh, ensure_ascii=False, indent=1)
-                monto = sum(float(f["monto"] or 0) for f in filas.values())
-                compras = sum(1 for f in filas.values() if f["rol"] == "COMPRA")
-                print(f"  {anio}-{mes:02d}: {len(filas)} depósitos (como adquiriente {compras}, "
-                      f"como proveedor {len(filas) - compras}) · S/ {monto:,.2f}" + (f" · masivos {len(masivos)}" if masivos else "")
-                      + (f" · constancias nuevas {nuevas}" if a.constancias else ""))
-                total += len(filas)
-            print(f"Listo: {total} depósitos." + (f" Meses que fallaron: {', '.join(fallidos)}" if fallidos else "")
-                  + (f" Constancias que no se pudieron bajar: {len(fallidas)} (se reintentan la próxima vez)" if fallidas else ""))
-            if fallidos:
-                sys.exit(1)
-        finally:
-            ctx.close()
-            nav.close()
+            enviar(destino, llave, {"accion": "fin", "ruc": ruc, "ok": False, "error": msg})
+        except Exception:   # noqa: BLE001
+            pass
+        sys.exit(1)
+    malo = bool(fallidos or conservados)
+    enviar(destino, llave, {"accion": "fin", "ruc": ruc, "ok": not malo, "fallidos": fallidos, "conservados": conservados,
+                            "error": " · ".join(x for x in [("meses sin consultar: " + ", ".join(fallidos)) if fallidos else "",
+                                                            ("SUNAT respondió vacío: " + ", ".join(conservados)) if conservados else ""] if x)})
+    if malo:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

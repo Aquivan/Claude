@@ -76,32 +76,50 @@ function DET_mesClave_(f) { return f instanceof Date ? Utilities.formatDate(f, '
 /* ------------------------------------------------------- lectura de datos */
 
 function DET_leerDatos_(cfg) {
-  var todos = DET_listarArchivos_(cfg).map(function (a) { return a.path; });
-  var constancias = {};
-  todos.forEach(function (p) { var m = /^(\d{11})\/\d{4}\/\d{2}\/constancias\/(\d+)\.html$/.exec(p); if (m) constancias[m[1] + '|' + m[2]] = p; });
-  var rutas = todos
-    .filter(function (p) {
-      var m = /^(\d{11})\/(\d{4})\/(\d{2})\/detracciones\.csv$/.exec(p);
-      return m && (m[2] + m[3]) >= (cfg.desde || '000000');
-    });
-  var textos = DET_leerTextos_(cfg, rutas);
+  if (!SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DET_HOJA_DATOS_)) DET_migrar_(cfg);
+  var rutas = DET_rutasConstancias_();
   var empresas = {};
   DET_listarEmpresas_(cfg).forEach(function (e) { if (e.activo) empresas[e.ruc] = DET_nombreCorto_(e.nombre); });
-  var filas = [], vistos = {};
-  rutas.forEach(function (ruta) {
-    DET_csvObjetos_(textos[ruta]).forEach(function (r) {
-      var k = r.empresa_ruc + '|' + r.constancia + '|' + r.num_presentacion;
-      if (vistos[k]) return;
-      vistos[k] = 1;
-      r.empresa = empresas[r.empresa_ruc] || r.empresa_ruc;
-      r.fecha = DET_fecha_(r.fecha_pago);
-      r.monto = +r.monto || 0;
-      r.rutaConstancia = constancias[r.empresa_ruc + '|' + r.constancia] || '';
-      filas.push(r);
-    });
+  var filas = [], vistos = {}, meses = {};
+  DET_datosLeer_().forEach(function (r) {
+    var mes = r.clave.split('|')[1] || '';
+    if (mes < (cfg.desde || '000000')) return;
+    meses[r.clave] = 1;
+    var k = r.empresa_ruc + '|' + r.constancia + '|' + r.num_presentacion;
+    if (vistos[k]) return;
+    vistos[k] = 1;
+    r.empresa = empresas[r.empresa_ruc] || r.empresa_ruc;
+    r.fecha = DET_fecha_(r.fecha_pago);
+    r.monto = +r.monto || 0;
+    r.rutaConstancia = rutas[r.empresa_ruc + '|' + r.constancia] || '';
+    filas.push(r);
   });
   filas.sort(function (a, b) { return (b.fecha || 0) - (a.fecha || 0) || a.empresa.localeCompare(b.empresa) || String(b.constancia).localeCompare(String(a.constancia)); });
-  return { filas: filas, empresas: empresas, archivos: rutas.length };
+  return { filas: filas, empresas: empresas, archivos: Object.keys(meses).length };
+}
+
+/**
+ * Una sola vez: pasa a la pestaña oculta «_Datos» lo que el robot guardaba antes en el repositorio (versión fija
+ * DET_REF_LEGADO_) y anota en «_Archivos» las constancias de ahí que aún no estaban en Drive (se copian después).
+ */
+function DET_migrar_(cfg) {
+  var todos = DET_listarArchivos_(cfg, DET_REF_LEGADO_).map(function (a) { return a.path; });
+  var csv = todos.filter(function (p) { return /^\d{11}\/\d{4}\/\d{2}\/detracciones\.csv$/.test(p); });
+  var textos = DET_leerTextos_(cfg, csv, DET_REF_LEGADO_);
+  var porClave = {};
+  csv.forEach(function (ruta) {
+    var m = /^(\d{11})\/(\d{4})\/(\d{2})\//.exec(ruta);
+    porClave[m[1] + '|' + m[2] + m[3]] = DET_csvObjetos_(textos[ruta]);
+  });
+  DET_hojaDatos_();
+  DET_datosReemplazar_(porClave);
+  var ya = DET_rutasConstancias_(), pend = [];
+  todos.forEach(function (p) {
+    var m = /^(\d{11})\/\d{4}\/\d{2}\/constancias\/(\d+)\.html$/.exec(p);
+    if (m && !ya[m[1] + '|' + m[2]]) pend.push([p, '', new Date(), 'por copiar (del repositorio)']);
+  });
+  DET_guardarEnMapa_(pend);
+  console.log('Detracciones: migración desde el repositorio · ' + csv.length + ' meses · ' + pend.length + ' constancias por copiar');
 }
 
 /* ----------------------------------------------------------- escritura */

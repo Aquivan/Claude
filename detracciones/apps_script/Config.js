@@ -2,11 +2,12 @@
  * Detracciones · Grupo — Config.js
  * Menú, parámetros (pestaña "Config") y el token de GitHub.
  *
- * Cómo funciona (igual que SIRE, Retenciones, Honorarios y Notificaciones):
+ * Cómo funciona (igual que Declaraciones):
  *   1. GitHub Actions entra a SUNAT SOL de cada empresa (Mis declaraciones y pagos →
- *      Consulta de Pago de Detracciones) y guarda los depósitos de cada mes en el
- *      repositorio, en detracciones/datos/<RUC>/<AAAA>/<MM>/detracciones.csv.
- *   2. Esta hoja lee esos archivos y arma Panel, Detracciones, Por proveedor y Por mes.
+ *      Consulta de Pago de Detracciones) y manda los depósitos de cada mes y sus constancias
+ *      DIRECTO a esta hoja (aplicación web, Web.js) con una llave de un solo uso. En el
+ *      repositorio (público) no queda nada.
+ *   2. Esta hoja los guarda en «_Datos» (oculta) y arma Panel, Detracciones, Por proveedor y Por mes.
  */
 
 var DET_HOJA = {
@@ -21,7 +22,7 @@ var DET_HOJA = {
 var DET_MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
 
 var DET_PARAMETROS = [
-  ['Repositorio', 'Aquivan/Claude', 'Dueño/nombre del repositorio de GitHub donde se guardan los datos.'],
+  ['Repositorio', 'Aquivan/Claude', 'Dueño/nombre del repositorio de GitHub donde corre el robot (los datos ya no se guardan ahí: llegan directo a esta hoja).'],
   ['Rama', 'claude/python-codes-izve18', 'Rama del repositorio que se lee.'],
   ['Desde (AAAAMM)', '202601', 'Se muestran en la hoja los depósitos pagados desde este mes (fecha de pago).'],
   ['Días para "nuevo"', '7', 'Los depósitos pagados en los últimos N días se resaltan en amarillo.'],
@@ -125,11 +126,14 @@ function DET_probarConexion() {
   try {
     var cfg = DET_leerConfig_();
     var empresas = DET_listarEmpresas_(cfg);
-    var archivos = DET_listarArchivos_(cfg);
-    var meses = archivos.filter(function (a) { return /\/detracciones\.csv$/.test(a.path); }).length;
-    var cons = archivos.filter(function (a) { return /\/constancias\/\d+\.html$/.test(a.path); }).length;
+    var claves = {}; DET_datosLeer_().forEach(function (o) { claves[o.clave] = 1; });
+    var meses = Object.keys(claves).length;
+    var cons = Object.keys(DET_rutasConstancias_()).length;
+    var res = DET_resultados_(), errores = Object.keys(res).filter(function (r) { return !res[r].ok; });
     ui.alert('✅ Conexión correcta con ' + cfg.owner + '/' + cfg.repo + ' (' + cfg.rama + ').\n\n' +
-      'Empresas: ' + empresas.length + '\nMeses con datos (todas las empresas): ' + meses + '\nConstancias descargadas: ' + cons);
+      'Empresas: ' + empresas.length + '\nMeses con datos (todas las empresas): ' + meses + '\nConstancias descargadas: ' + cons +
+      '\nAplicación web de la hoja: ' + (DET_DEPLOYMENT_ID_ ? 'publicada' : '⚠️ aún no publicada') +
+      (errores.length ? '\n\n⚠️ Con error en la última descarga: ' + errores.map(function (r) { return r + ' (' + (res[r].error || 'sin respuesta') + ')'; }).join('; ') : ''));
   } catch (e) {
     ui.alert('❌ ' + e.message);
   }
@@ -145,7 +149,7 @@ function DET_activarDiario() {
 
 function DET_desactivarDiario(silencioso) {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (['DET_actualizacionAutomatica', 'DET_importarTrasDescarga', 'DET_continuarConstancias'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
+    if (['DET_actualizacionAutomatica', 'DET_importarTrasDescarga', 'DET_continuarConstancias', 'DET_reintentar', 'DET_trasReintento'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
   });
   if (silencioso !== true) SpreadsheetApp.getUi().alert('⏸ Actualización diaria desactivada.');
 }

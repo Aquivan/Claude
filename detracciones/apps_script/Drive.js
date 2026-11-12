@@ -1,7 +1,7 @@
 /**
  * Detracciones · Grupo — Drive.js
- * Convierte a PDF las Constancias de Depósito descargadas de SUNAT (HTML oficial,
- * detracciones/datos/<RUC>/<AAAA>/<MM>/constancias/<N°>.html) y las ordena en Drive:
+ * Convierte a PDF las Constancias de Depósito descargadas de SUNAT (HTML oficial; las manda el robot a la
+ * aplicación web de la hoja, Web.js; las de antes del cambio se leen del repositorio, DET_REF_LEGADO_) y las ordena en Drive:
  *   <carpeta de esta hoja>/PDF Detracciones/<RUC - Empresa>/<AAAA>/<NN_Mes>/
  *     2026-09-22 316028094 TARVOS TECNOLOGIA S.A.C.S 113.00.pdf
  * La pestaña oculta "_Archivos" recuerda qué constancia ya se copió (no se duplica).
@@ -43,6 +43,41 @@ function DET_limpiarNombre_(s) {
   return String(s || '').replace(/[\\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 }
 
+/** Todas las constancias conocidas (copiadas o por copiar): {"ruc|N°": ruta} */
+function DET_rutasConstancias_() {
+  var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DET_HOJA.ARCHIVOS), m = {};
+  if (!hoja || hoja.getLastRow() < 2) return m;
+  hoja.getRange(2, 1, hoja.getLastRow() - 1, 1).getValues().forEach(function (f) {
+    var x = /^(\d{11})\/\d{4}\/\d{2}\/constancias\/(\d+)\.html$/.exec(String(f[0]));
+    if (x) m[x[1] + '|' + x[2]] = String(f[0]);
+  });
+  return m;
+}
+
+/** Guarda una constancia como PDF en <raíz>/<RUC - Empresa>/<AAAA>/<NN_Mes>/ → fila para «_Archivos». */
+function DET_guardarPdf_(cfg, p, html, cache) {
+  var f = p.fecha instanceof Date ? p.fecha : new Date();
+  var anio = String(f.getFullYear()), mes = f.getMonth() + 1;
+  var clave = p.ruc + '|' + anio + '|' + mes;
+  if (!cache[clave]) {
+    if (!cache.raiz) {
+      var padres = DriveApp.getFileById(SpreadsheetApp.getActiveSpreadsheet().getId()).getParents();
+      cache.raiz = DET_subcarpeta_(padres.hasNext() ? padres.next() : DriveApp.getRootFolder(), cfg.carpetaPdf || 'PDF Detracciones');
+    }
+    var emp = DET_subcarpeta_(cache.raiz, DET_limpiarNombre_(p.ruc + ' - ' + p.empresa));
+    cache[clave] = DET_subcarpeta_(DET_subcarpeta_(emp, anio), DET_MESES_CARPETA[mes - 1]);
+  }
+  var nombre = DET_limpiarNombre_(Utilities.formatDate(f, 'America/Lima', 'yyyy-MM-dd') + ' ' + p.constancia + ' ' +
+    String(p.nombre || '').slice(0, 50) + ' ' + (+p.monto || 0).toFixed(2)) + '.pdf';
+  var existe = cache[clave].getFilesByName(nombre);
+  var archivo = existe.hasNext() ? existe.next() : null;
+  if (!archivo) {
+    var pdf = Utilities.newBlob(DET_htmlLimpio_(html), 'text/html', p.constancia + '.html').getAs('application/pdf').setName(nombre);
+    archivo = cache[clave].createFile(pdf);
+  }
+  return [p.ruta, archivo.getId(), new Date(), nombre];
+}
+
 /** Constancias que están en la pestaña Detracciones y todavía no se copiaron. */
 function DET_constanciasPendientes_(mapa) {
   var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DET_HOJA.DETALLE);
@@ -73,31 +108,15 @@ function DET_ordenarConstancias_() {
   var pendientes = DET_constanciasPendientes_(mapa);
   if (!pendientes.length) { DET_borrarContinuacion_(); return { nuevos: 0, pendientes: 0 }; }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var padres = DriveApp.getFileById(ss.getId()).getParents();
-  var raiz = DET_subcarpeta_(padres.hasNext() ? padres.next() : DriveApp.getRootFolder(), cfg.carpetaPdf || 'PDF Detracciones');
   var cache = {}, nuevos = [], hechos = 0;
   for (var i = 0; i < pendientes.length && Date.now() - inicio < DET_LIMITE_MS; i += 20) {
     var lote = pendientes.slice(i, i + 20);
-    var textos = DET_leerTextos_(cfg, lote.map(function (p) { return p.ruta; }));
+    // las que quedan por copiar son las de antes del cambio: están en el repositorio, versión fija
+    var textos = DET_leerTextos_(cfg, lote.map(function (p) { return p.ruta; }), DET_REF_LEGADO_);
     lote.forEach(function (p) {
       if (Date.now() - inicio > DET_LIMITE_MS || !textos[p.ruta]) return;
       try {
-        var f = p.fecha instanceof Date ? p.fecha : new Date();
-        var anio = String(f.getFullYear()), mes = f.getMonth() + 1;
-        var clave = p.ruc + '|' + anio + '|' + mes;
-        if (!cache[clave]) {
-          var emp = DET_subcarpeta_(raiz, DET_limpiarNombre_(p.ruc + ' - ' + p.empresa));
-          cache[clave] = DET_subcarpeta_(DET_subcarpeta_(emp, anio), DET_MESES_CARPETA[mes - 1]);
-        }
-        var nombre = DET_limpiarNombre_(Utilities.formatDate(f, 'America/Lima', 'yyyy-MM-dd') + ' ' + p.constancia + ' ' +
-          String(p.nombre || '').slice(0, 50) + ' ' + p.monto.toFixed(2)) + '.pdf';
-        var existe = cache[clave].getFilesByName(nombre);
-        var archivo = existe.hasNext() ? existe.next() : null;
-        if (!archivo) {
-          var pdf = Utilities.newBlob(DET_htmlLimpio_(textos[p.ruta]), 'text/html', p.constancia + '.html').getAs('application/pdf').setName(nombre);
-          archivo = cache[clave].createFile(pdf);
-        }
-        nuevos.push([p.ruta, archivo.getId(), new Date(), nombre]);
+        nuevos.push(DET_guardarPdf_(cfg, p, textos[p.ruta], cache));
         hechos++;
       } catch (e) {
         console.warn('No se pudo copiar ' + p.ruta + ': ' + e.message);
