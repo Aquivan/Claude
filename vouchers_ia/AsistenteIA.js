@@ -165,7 +165,7 @@ var VIA_RUC_HTML_ = [
   ' $("lista").innerHTML=SIN.map(function(f,i){',
   '  var h="<div class=\\"card"+(f.hecho?" ok":"")+"\\" id=\\"c"+i+"\\"><div class=\\"t\\">"+esc(f.k)+" · "+esc(f.fecha)+" · "+esc(f.moneda)+" "+fm(f.monto)+"</div><div>"+esc(f.prov||"(sin nombre del proveedor)")+"</div>";',
   '  if(f.hecho){return h+"<div class=\\"m\\">"+esc(f.hecho)+"</div></div>"}',
-  '  if(f.sug)h+="<div class=\\"sug\\"><label><input type=\\"checkbox\\" id=\\"k"+i+"\\" checked onchange=\\"pintarBarra()\\"> 💡 <b>"+esc(f.sug)+"</b> <span class=\\"s\\">"+esc(f.como)+"</span></label> <button class=\\"r\\" onclick=\\"noEs("+i+")\\">❌ No es este</button></div>";',
+  '  if(f.sug)h+="<div class=\\"sug\\"><label><input type=\\"checkbox\\" id=\\"k"+i+"\\" checked onchange=\\"pintarBarra()\\"> 💡 <b>"+esc(f.sug)+"</b> — <b style=\\"color:#1D4ED8\\">"+esc(f.sugNombre||"(nombre no hallado: verifíquelo en SUNAT)")+"</b><br><span class=\\"s\\">"+esc(f.como)+"</span></label> <button class=\\"r\\" onclick=\\"noEs("+i+")\\">❌ No es este</button></div>";',
   '  else if(f.opciones&&f.opciones.length)h+="<div class=\\"s\\">❓ Sin RUC claro. Posibles:</div>"+selector(i,f.opciones);',
   '  else h+="<div class=\\"s\\">❓ No lo encontré en los vouchers, SIRE, recibos por honorarios ni retenciones.</div>";',
   '  h+="<div><button class=\\"g\\" onclick=\\"opciones("+i+")\\">📋 Otras opciones (SIRE, honorarios, retenciones…)</button></div>";',
