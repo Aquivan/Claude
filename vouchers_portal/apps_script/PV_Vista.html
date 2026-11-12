@@ -649,9 +649,20 @@ function escanearDrive() {
   if (DRIVE) return abrir(DRIVE);
   api('drive', {}, 'Un momento…').then(abrir).catch(function (e) { alerta('❌ ' + e.message); });
 }
+/**
+ * Abre la carpeta de entrada en la APP de Google Drive. En Android se usa un enlace «intent» que obliga a usar la app
+ * (desde cualquier navegador, también incógnito, sin pedir iniciar sesión en la web); si la app no está, abre la web.
+ */
+function enlaceDrive(web) {
+  if (!/Android/i.test(navigator.userAgent)) return web;
+  return 'intent://' + web.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.google.android.apps.docs;S.browser_fallback_url=' + encodeURIComponent(web) + ';end';
+}
 function abrirDrive(tipo) {
   if (!DRIVE) return;
-  window.open(tipo === 'original' ? DRIVE.original : DRIVE.foto, '_blank');   // en el celular se abre en la app de Drive
+  var web = tipo === 'original' ? DRIVE.original : DRIVE.foto, url = enlaceDrive(web);
+  if (url === web) { window.open(web, '_blank'); return; }
+  var a = document.createElement('a'); a.href = url; a.target = '_top'; a.rel = 'noopener';   // el portal corre dentro de un marco: la app se abre desde la página de arriba
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 /* ---------- 📄 escanear a PDF (en el celular, sin subir nada hasta que se toca 📤 Subir) ---------- */
