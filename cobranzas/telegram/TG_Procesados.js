@@ -210,7 +210,7 @@ function TGQ_fuentes_(ss, cfg) {
       (porDoc[kh] = porDoc[kh] || []).push({ ruc: r, nombre: jn >= 0 ? String(f[jn] || '') : '', fuente: '🧑‍💼 recibo por honorarios' });
     });
   } catch (e) { Logger.log('RUC — honorarios por número: ' + e.message); }
-  return { cfg: cfg, porDoc: porDoc, fuentes: [
+  var fx = { cfg: cfg, porDoc: porDoc, fuentes: [
     { pool: poolVouchers, como: function (x) { return '🧾 otros vouchers de ' + x.nombre + ' ya tienen este RUC (' + x.n + ')'; } },
     { pool: [].concat.apply([], Object.keys(grupo).map(function (r) { return Object.keys(grupo[r]).filter(function (n) { return String(n).length > 2; })
         .map(function (n) { return { ruc: r, nombre: n, pal: RPN_palabras_(n) }; }); })),
@@ -219,12 +219,18 @@ function TGQ_fuentes_(ss, cfg) {
     { pool: TGQ_pool_(c, 'honorarios', 'Recibos', 'RUC emisor', /^Emisor/), como: function (x) { return '🧑‍💼 recibos por honorarios: ' + x.nombre; } },
     { pool: TGQ_pool_(c, 'retenciones', 'Emitidas', 'RUC proveedor', /^Proveedor/), como: function (x) { return '🧾 retenciones (CRE): ' + x.nombre; } },
   ] };
+  // 🏷 El nombre con que figura cada RUC en nuestras fuentes (SIRE, honorarios, retenciones, vouchers): se muestra junto a
+  // cada sugerencia para que la persona pueda corroborar que es el correcto.
+  fx.nombreDe = {};
+  fx.fuentes.forEach(function (fu) { fu.pool.forEach(function (x) { if (x.ruc && x.nombre && !fx.nombreDe[x.ruc]) fx.nombreDe[x.ruc] = x.nombre; }); });
+  Object.keys(porDoc).forEach(function (k) { porDoc[k].forEach(function (x) { if (x.ruc && x.nombre && !fx.nombreDe[x.ruc]) fx.nombreDe[x.ruc] = x.nombre; }); });
+  return fx;
 }
 
 /** Candidatos para un nombre (y su factura, si se sabe): {sug, como} si hay uno claro; si no {opciones:[{ruc, nombre, puntaje, fuente}]}. */
 function TGQ_candidatos_(fx, nombre, refs) {
   var alias = nombre && fx.cfg.aliasNombre[normNombre_(nombre)];
-  if (alias) return { sug: alias, como: '⚙️ alias confirmado (Config)', opciones: [] };
+  if (alias) return { sug: alias, como: '⚙️ alias confirmado (Config)' + (fx.nombreDe && fx.nombreDe[alias] ? ' · figura como ' + fx.nombreDe[alias] : ''), opciones: [] };
   // 📑 El comprobante que dice el voucher («Tipo y Nº Doc.», ej. E001-17): solo vale si el NOMBRE del emisor se parece al del
   // voucher (E001-17 lo tienen muchos emisores). Si no se parece, queda como opción con aviso y se sigue buscando por nombre.
   var opciones = [], m = String(refs || '').toUpperCase().match(/([A-Z]\w{3})-0*(\d+)/);
@@ -265,10 +271,10 @@ function TGQ_sugerir_(ss, cfg, tandas) {
   var fx = TGQ_fuentes_(ss, cfg);
   faltan.forEach(function (f) {
     var r = TGQ_candidatos_(fx, f.prov, f.refs);
-    if (r.sug) { f.sug = r.sug; f.como = r.como; return; }
+    if (r.sug) { f.sug = r.sug; f.como = r.como; f.sugNombre = fx.nombreDe[r.sug] || ''; return; }
     // 📄 La IA que leyó el voucher a veces ya anotó el RUC del destinatario en «idCliente» (ej. depósito a MINSA en el BN):
     // si es un RUC válido y NO es de una empresa del grupo (esas son las que pagan), se sugiere.
-    if (f.idCli && TGQ_rucValido_(f.idCli) && !cfg.nombreEmpresa[f.idCli]) { f.sug = f.idCli; f.como = '📄 el mismo voucher trae este RUC (columna idCliente)'; return; }
+    if (f.idCli && TGQ_rucValido_(f.idCli) && !cfg.nombreEmpresa[f.idCli]) { f.sug = f.idCli; f.como = '📄 el mismo voucher trae este RUC (columna idCliente)'; f.sugNombre = fx.nombreDe[f.idCli] || ''; return; }
     if (r.opciones[0]) f.posible = r.opciones[0].ruc + ' ' + r.opciones[0].nombre + ' — ' + r.opciones[0].fuente;
     f.opciones = r.opciones;
   });
@@ -745,7 +751,7 @@ function TGQ_texto_(r, html) {
     L.push('🗂 ' + b(t.nombre) + ' · ' + t.filas.length + ' voucher(s)');
     t.filas.forEach(function (f) {
       total++;
-      var estado = f.ruc ? '✅ RUC ' + f.ruc : f.sug ? (conSug++, sinRuc++, '💡 falta RUC → ' + f.sug + ' (' + f.como + ')') :
+      var estado = f.ruc ? '✅ RUC ' + f.ruc : f.sug ? (conSug++, sinRuc++, '💡 falta RUC → ' + f.sug + ' ' + (f.sugNombre || '(nombre no hallado en SIRE, honorarios ni retenciones: verifíquelo)') + ' · ' + f.como) :
         (sinRuc++, '❓ falta RUC' + (f.posible ? ' (¿' + f.posible + '?)' : '') + (f.prov ? '' : ' · sin nombre del proveedor'));
       L.push('• ' + f.hoja + '!' + f.fila + ' · ' + (f.fecha ? Utilities.formatDate(f.fecha, 'America/Lima', 'dd/MM') : '') + ' · ' + f.moneda + ' ' +
         Number(f.monto).toFixed(2) + ' · ' + e((f.prov || '(sin proveedor)').slice(0, 40)) + '\n   ' + e(estado));
@@ -1055,7 +1061,7 @@ function TGQ_rucDeFilas_(ss, filas) {
   t.tandas.forEach(function (x) {
     x.filas.forEach(function (f) {
       var k = f.hoja + '!' + f.fila;
-      detalle.push({ k: k, hoja: f.hoja, fila: f.fila, col: f.colRuc, prov: f.prov || '', ruc: f.ruc || '', sug: f.sug || '', como: f.como || '', id: idDe[k] || '',
+      detalle.push({ k: k, hoja: f.hoja, fila: f.fila, col: f.colRuc, prov: f.prov || '', ruc: f.ruc || '', sug: f.sug || '', sugNombre: f.sugNombre || '', como: f.como || '', id: idDe[k] || '',
         monto: Number(f.monto) || 0, moneda: f.moneda || '', fecha: f.fecha ? Utilities.formatDate(f.fecha, 'America/Lima', 'dd/MM/yyyy') : '',
         opciones: (f.opciones || []).map(function (o) { return { ruc: o.ruc, nombre: o.nombre, det: o.fuente + ' (' + o.puntaje + ' pts)' }; }) });
     });

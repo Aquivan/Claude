@@ -1343,7 +1343,7 @@ function rucPintar() {
   h += S2.map(function (f, i) {
     var x = '<div class="card' + (f.hecho ? ' ok' : '') + '"><b>' + esc(f.k) + '</b> · ' + esc(f.fecha) + ' · ' + esc(f.moneda) + ' ' + fm(f.monto) + '<div>' + esc(f.prov || '(sin nombre del proveedor)') + '</div>';
     if (f.hecho) return x + '<div class="msg ok" style="padding:2px 0">' + esc(f.hecho) + '</div></div>';
-    if (f.sug) x += '<div class="sug"><label><input type="checkbox" id="rk' + i + '" checked> 💡 <b>' + esc(f.sug) + '</b> <span style="font-size:12px;color:var(--gr)">' + esc(f.como) + '</span></label> <button class="r" style="padding:2px 8px" onclick="rucNoEs(' + i + ')">❌ No es este</button></div>';
+    if (f.sug) x += '<div class="sug"><label><input type="checkbox" id="rk' + i + '" checked> 💡 <b>' + esc(f.sug) + '</b> — <b style="color:#1D4ED8">' + esc(f.sugNombre || '(nombre no hallado: verifíquelo en SUNAT)') + '</b><br><span style="font-size:12px;color:var(--gr)">' + esc(f.como) + '</span></label> <button class="r" style="padding:2px 8px" onclick="rucNoEs(' + i + ')">❌ No es este</button></div>';
     else if (f.opciones && f.opciones.length) x += '<div style="font-size:12px;color:var(--gr)">❓ Sin RUC claro. Posibles:</div>' + rucSelector(i, f.opciones);
     else x += '<div style="font-size:12px;color:var(--gr)">❓ No lo encontré en vouchers, SIRE, recibos por honorarios ni retenciones.</div>';
     return x + '<div><button style="padding:3px 9px;font-size:12.5px" onclick="rucOpciones(' + i + ')">📋 Otras opciones (SIRE, honorarios, retenciones…)</button></div>' +
