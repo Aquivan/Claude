@@ -196,7 +196,9 @@ function TGQ_fuentes_(ss, cfg) {
     if (!d.emisorRuc) return;
     // el mismo número (E001-17) lo usan MUCHOS emisores (E001 es la serie del sistema gratuito de SUNAT): se guardan todos
     var kd = String(d.serie).toUpperCase() + '-' + Number(d.numero);
-    (porDoc[kd] = porDoc[kd] || []).push({ ruc: d.emisorRuc, nombre: d.emisorNombre || '', fuente: '📑 factura del SIRE' });
+    var td = normTipo_(d.tipo);
+    (porDoc[kd] = porDoc[kd] || []).push({ ruc: d.emisorRuc, nombre: d.emisorNombre || '', tipo: td,
+      fuente: '📑 ' + ({ '01': 'factura', '03': 'boleta', '07': 'nota de crédito', '08': 'nota de débito' }[td] || 'comprobante') + ' del SIRE' });
     if (d.emisorNombre && !mapa[d.emisorRuc] && !cfg.nombreEmpresa[d.emisorRuc]) mapa[d.emisorRuc] = d.emisorNombre;
   });
   var c = ANA_ctx_(ss);
@@ -207,7 +209,7 @@ function TGQ_fuentes_(ss, cfg) {
       var mm = String(f[jc] || '').toUpperCase().match(/([A-Z]\w{3})-0*(\d+)/), r = aRuc_(f[jr]);
       if (!mm || !r) return;
       var kh = mm[1] + '-' + Number(mm[2]);
-      (porDoc[kh] = porDoc[kh] || []).push({ ruc: r, nombre: jn >= 0 ? String(f[jn] || '') : '', fuente: '🧑‍💼 recibo por honorarios' });
+      (porDoc[kh] = porDoc[kh] || []).push({ ruc: r, nombre: jn >= 0 ? String(f[jn] || '') : '', tipo: '02', fuente: '🧑‍💼 recibo por honorarios' });
     });
   } catch (e) { Logger.log('RUC — honorarios por número: ' + e.message); }
   var fx = { cfg: cfg, porDoc: porDoc, fuentes: [
@@ -233,11 +235,16 @@ function TGQ_candidatos_(fx, nombre, refs) {
   if (alias) return { sug: alias, como: '⚙️ alias confirmado (Config)' + (fx.nombreDe && fx.nombreDe[alias] ? ' · figura como ' + fx.nombreDe[alias] : ''), opciones: [] };
   // 📑 El comprobante que dice el voucher («Tipo y Nº Doc.», ej. E001-17): solo vale si el NOMBRE del emisor se parece al del
   // voucher (E001-17 lo tienen muchos emisores). Si no se parece, queda como opción con aviso y se sigue buscando por nombre.
-  var opciones = [], m = String(refs || '').toUpperCase().match(/([A-Z]\w{3})-0*(\d+)/);
+  // El prefijo dice el TIPO de comprobante (catálogo 10 de SUNAT): 01_ factura · 02_ recibo por honorarios · 03_ boleta ·
+  // 07_ nota de crédito · 08_ nota de débito. Con prefijo solo se busca ese tipo (02_E001-17 nunca es una factura del SIRE).
+  var opciones = [], m = String(refs || '').toUpperCase().match(/(?:\b(\d{1,2})_)?([A-Z]\w{3})-0*(\d+)/);
   if (m) {
-    var doc = m[1] + '-' + m[2], vistos = {}, q = nombre ? RPN_palabras_(nombre) : null;
-    var lista = (fx.porDoc[m[1] + '-' + Number(m[2])] || []).filter(function (x) {
-      if (!x.ruc || fx.cfg.nombreEmpresa[x.ruc] || vistos[x.ruc]) return false; vistos[x.ruc] = 1; return true;
+    var tipoReq = m[1] ? ('0' + Number(m[1])).slice(-2) : '';
+    var doc = (tipoReq ? tipoReq + '_' : '') + m[2] + '-' + m[3], vistos = {}, q = nombre ? RPN_palabras_(nombre) : null;
+    var lista = (fx.porDoc[m[2] + '-' + Number(m[3])] || []).filter(function (x) {
+      if (!x.ruc || fx.cfg.nombreEmpresa[x.ruc] || vistos[x.ruc]) return false;
+      if (tipoReq && x.tipo && x.tipo !== tipoReq) return false;
+      vistos[x.ruc] = 1; return true;
     }).map(function (x) { return { ruc: x.ruc, nombre: x.nombre, fuente: x.fuente, p: q && x.nombre ? RPN_puntaje_(q, RPN_palabras_(x.nombre)) : (q ? 0 : -1) }; });
     var buenos = lista.filter(function (x) { return x.p >= 45; }).sort(function (a, b) { return b.p - a.p; });
     if (q && buenos.length === 1 || q && buenos.length > 1 && buenos[0].p - buenos[1].p >= 8)
