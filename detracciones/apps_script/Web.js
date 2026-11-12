@@ -90,11 +90,12 @@ function DET_datosReemplazar_(porClave) {
     .setValues(quedan.map(function (o) { return enc.map(function (c) { return o[c] || ''; }); }));
 }
 
-function DET_contarPorMes_(ruc) {
+/** Depósitos por mes de una empresa (con «desde» AAAA-MM-DD: solo los pagados desde ese día). */
+function DET_contarPorMes_(ruc, desde) {
   var n = {};
   DET_datosLeer_().forEach(function (o) {
     var p = o.clave.split('|');
-    if (p[0] === ruc) n[p[1]] = (n[p[1]] || 0) + 1;
+    if (p[0] === ruc && (!desde || String(o.fecha_pago) >= desde)) n[p[1]] = (n[p[1]] || 0) + 1;
   });
   return n;
 }
@@ -136,17 +137,25 @@ function doPost(e) {
 function DET_webEstado_(d) {
   var cons = [];
   Object.keys(DET_rutasConstancias_()).forEach(function (k) { var p = k.split('|'); if (p[0] === d.ruc) cons.push(p[1]); });
-  return { ok: true, meses: DET_contarPorMes_(d.ruc), constancias: cons };
+  return { ok: true, meses: DET_contarPorMes_(d.ruc, DET_fechaIso_(d.desde)), constancias: cons };
 }
 
-/** Un mes de una empresa. Si llega vacío y la hoja tenía depósitos de ese mes, NO se borran (SUNAT a veces responde vacío). */
+function DET_fechaIso_(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? String(s) : ''; }
+
+/**
+ * Un mes de una empresa. Si llega vacío y la hoja tenía depósitos de ese mes, NO se borran (SUNAT a veces responde vacío).
+ * Con «desde» (AAAA-MM-DD; la descarga de los últimos 30 días empieza a mitad de mes) solo se reemplaza desde ese día:
+ * los depósitos de días anteriores del mismo mes se quedan.
+ */
 function DET_webMes_(d) {
   var mes = String(d.periodo || '').replace(/\D/g, '');
   if (!/^\d{6}$/.test(mes)) return { ok: false, error: 'mes no válido' };
+  var desde = DET_fechaIso_(d.desde), clave = d.ruc + '|' + mes;
   var filas = (d.filas || []).filter(function (f) { return f && f.constancia; });
-  var antes = DET_contarPorMes_(d.ruc)[mes] || 0;
+  var antes = DET_contarPorMes_(d.ruc, desde)[mes] || 0;
   if (!filas.length && antes > 0) return { ok: true, conservado: true, antes: antes };
-  var o = {}; o[d.ruc + '|' + mes] = filas;
+  if (desde) filas = DET_datosLeer_().filter(function (o) { return o.clave === clave && String(o.fecha_pago) < desde; }).concat(filas);
+  var o = {}; o[clave] = filas;
   DET_datosReemplazar_(o);
   return { ok: true, antes: antes, ahora: filas.length };
 }
