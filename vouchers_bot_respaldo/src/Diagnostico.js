@@ -32,6 +32,9 @@
 function doGet(e) {
   const params = (e && e.parameter) || {};
 
+  // 🌐 Portal web de Vouchers (proyecto aparte): solo lo que necesita la IA de esta hoja. JSON, con su propia clave.
+  if (params.portal) return respuestaJson_(PVP_get_(params));
+
   // Instalacion de un solo uso: prepara la hoja (renombra la pestana,
   // crea cabeceras) y genera el token de diagnostico. Solo funciona la
   // PRIMERA vez -- una vez usada, se autodestruye y nunca vuelve a
