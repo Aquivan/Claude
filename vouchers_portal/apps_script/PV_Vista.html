@@ -172,6 +172,7 @@ main{flex:1;min-height:0;overflow:auto}
           <button class="p" onclick="$('fCam').click()">📷 Tomar foto</button>
           <button class="p" onclick="scanAbrir()" title="Varias fotos con la cámara → un solo PDF (una página por foto)">📄 Escanear a PDF</button>
           <button onclick="$('fArch').click()">🖼 Elegir fotos o PDF</button>
+          <button onclick="escanearDrive()" title="Usa el escáner de la app Google Drive y guarda directo en la carpeta de entrada">📲 Escanear con Google Drive</button>
         </div>
         <input type="file" id="fCam" accept="image/*" capture="environment" class="oc" onchange="camaraFoto(this.files);this.value=''">
         <input type="file" id="fArch" accept="image/*,application/pdf" multiple class="oc" onchange="agregarArchivos(this.files);this.value=''">
@@ -212,6 +213,7 @@ main{flex:1;min-height:0;overflow:auto}
       <p><b>👁 Ver un voucher</b>: arriba la <b>imagen</b> de la hoja o el <b>archivo original</b> (PDF en la página exacta, o la foto). 🔍+ / 🔍− para acercar; en el celular también con dos dedos. ◀ ▶ pasan al voucher anterior o siguiente de la lista. ⬇ descarga el original.</p>
       <p><b>✏️ Corregir</b> (permiso <i>editar</i>): cambie los datos y toque <b>💾 Guardar</b>; antes se muestra qué cambia. Queda una nota en la hoja con quién y qué cambió. <b>🔁 Releer con IA</b> vuelve a leer la página con la IA de la hoja y muestra ANTES / AHORA para elegir; <b>↩️ Deshacer relectura</b> lo devuelve.</p>
       <p><b>📤 Subir</b> (permiso <i>subir</i>): <b>📷 Tomar foto</b> con la cámara, <b>📄 Escanear a PDF</b> (varias fotos con la cámara → un solo PDF, una página por foto; se pueden girar, ordenar o quitar antes) o elija fotos/PDF. Cada foto de la cámara pasa por <b>✂️ Recortar</b>: el portal busca solo los bordes del voucher (4 esquinas que se pueden mover con el dedo), la endereza y con <b>✨ Mejorar</b> aclara el fondo y oscurece el texto (en las fotos de la galería, botón ✂️). El nombre sugerido sale en gris: <b>escriba encima</b> el que quiera, sin borrar nada (si no pone extensión, se agrega sola); póngales un nombre (no se puede repetir uno que ya existe), elija <i>Original</i> (PDF o comprobante formal) o <i>Foto</i>, y suba. Con ⚡ la hoja los procesa en ~1 minuto.</p>
+      <p><b>📲 Escanear con Google Drive</b> (en 📤 Subir): elija Original o Foto → se abre la app de Drive en la carpeta 📥 de entrada → <b>+ → Escanear</b> → Guardar → vuelva y toque <b>⚡ Ya escaneé: procesar ahora</b>. Necesita una cuenta de Google con acceso a esa carpeta.</p>
       <p><b>📥 Pendientes</b>: lo que espera en las carpetas de entrada (todavía no está en la hoja) y lo último descartado (duplicados, vacíos, muy pesados).</p>
       <p><b>📊 Resumen</b>: cuántos vouchers hay, cuántos sin RUC, sin revisar o duplicados, por pestaña y por mes.</p>
       <p><b>👥 Usuarios</b> (admin): crear usuarios, cambiar PIN y permiso, desactivar; y el registro de quién hizo qué.</p>
@@ -622,6 +624,34 @@ function subirTodo() {
     }).catch(function (e) { s.error = true; s.est = '❌ ' + e.message; pintarSubir(); sig(); });
   };
   sig();
+}
+
+/* ---------- 📲 escanear con la app de Google Drive (guarda directo en la carpeta de entrada) ---------- */
+var DRIVE = null;
+function escanearDrive() {
+  var abrir = function (r) {
+    DRIVE = r;
+    modal('<h3>📲 Escanear con Google Drive</h3>' +
+      '<p style="margin:0 0 8px">¿Qué va a escanear?</p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="p" onclick="abrirDrive(\'original\')">📄 Original (comprobante / PDF)</button><button class="p" onclick="abrirDrive(\'foto\')">📸 Foto del voucher</button></div>' +
+      '<ol style="padding-left:18px;margin:6px 0;line-height:1.6">' +
+      '<li>Se abre <b>Google Drive</b> en la carpeta 📥 de entrada.</li>' +
+      '<li>Toque <b>+</b> (abajo a la derecha) → <b>Escanear</b>. Tome la foto (puede agregar más páginas con +), revise y toque <b>Guardar</b>. Póngale un nombre que no se repita; la carpeta ya es la correcta.</li>' +
+      '<li>Vuelva aquí y toque <b>⚡ Ya escaneé: procesar ahora</b>.</li></ol>' +
+      '<div style="font-size:12px;color:var(--gr)">Necesita la app de Google Drive con una cuenta que tenga acceso a la carpeta de entrada (pídale al administrador que se la comparta). Atajo: en la pantalla de inicio agregue el widget <b>«Escanear»</b> de Drive y elija esa carpeta una vez.</div>',
+      [['Cerrar'], ['⚡ Ya escaneé: procesar ahora', function () {
+        api('procesar', {}, 'Pidiendo que se procese…').then(function (x) {
+          $('subMsg').className = x.ok ? 'msg ok' : 'msg e';
+          $('subMsg').textContent = x.ok ? '⚡ La hoja procesa la carpeta de entrada en ~1 minuto. Vea su escaneo en 📥 Pendientes y luego en 🔎 Buscar.' : '❌ ' + (x.error || 'No se pudo pedir el proceso.');
+        }).catch(function (e) { $('subMsg').className = 'msg e'; $('subMsg').textContent = '❌ ' + e.message; });
+      }, 'p']]);
+  };
+  if (DRIVE) return abrir(DRIVE);
+  api('drive', {}, 'Un momento…').then(abrir).catch(function (e) { alerta('❌ ' + e.message); });
+}
+function abrirDrive(tipo) {
+  if (!DRIVE) return;
+  window.open(tipo === 'original' ? DRIVE.original : DRIVE.foto, '_blank');   // en el celular se abre en la app de Drive
 }
 
 /* ---------- 📄 escanear a PDF (en el celular, sin subir nada hasta que se toca 📤 Subir) ---------- */
