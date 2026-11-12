@@ -190,6 +190,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
+    ('12/11/2026', 'Portal de Vouchers: deshacer y quitar', '↩️ Deshacer mi última corrección (vuelve lo de antes de su último 💾 Guardar, solo si nadie cambió esas celdas después; nota en la hoja y registro) y 🗑 Quitar un voucher subido por error mientras sigue en la entrada (en 📥 Pendientes y en lo recién subido; va a la papelera de Drive 30 días; quien solo sube quita lo suyo).'),
     ('12/11/2026', 'Portal de Vouchers: Drive siempre en la app', 'En Android, 📲 Escanear con Google Drive abre la carpeta de entrada directo en la app de Drive (enlace intent), también desde incógnito u otro navegador, sin pedir iniciar sesión en la web; si la app no está, abre la web.'),
     ('12/11/2026', 'Portal de Vouchers: 📲 Escanear con Google Drive', 'Botón en 📤 Subir: elige Original o Foto y abre la app de Google Drive en la carpeta 📥 de entrada correspondiente para usar su escáner (+ → Escanear → Guardar); luego ⚡ Ya escaneé: procesar ahora. Requiere una cuenta de Google con acceso a la carpeta.'),
     ('12/11/2026', 'Mesa: filtros combinables en la lista', 'En 💳 Vouchers, botones que se combinan: 💳 Vouchers · 🧾 Retenciones · 🏦 Detracciones · ✍️ Manuales · 📄 N/C. La lista muestra juntos los tipos elegidos (por fecha o monto), cada uno con su color y su línea a la factura; las retenciones se pueden pasar a otra factura desde ahí (tocar la retención y luego la factura); detracciones, manuales y N/C abren la ficha de su factura.'),

@@ -31,6 +31,9 @@ function PV_api(token, accion, d) {
     }
 
     case 'guardar': s = PV_sesion_(token, 'editar'); return PV_guardar_(s, d.hoja, d.fila, d.clave, d.cambios);
+    case 'verDeshacer': s = PV_sesion_(token, 'editar'); return PV_verDeshacer_(s);
+    case 'deshacerCorreccion': s = PV_sesion_(token, 'editar'); return PV_deshacerCorreccion_(s);
+    case 'quitarPendiente': s = PV_sesion_(token, 'subir'); return PV_quitarPendiente_(s, d.id);
     case 'releer': {
       s = PV_sesion_(token, 'editar');
       PV_hoja_(d.hoja);
