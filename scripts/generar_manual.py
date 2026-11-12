@@ -190,6 +190,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
+    ('12/11/2026', 'Identificar RUC: tipo de comprobante', 'El prefijo de «Tipo y Nº Doc.» se respeta (catálogo 10 SUNAT): 01_ factura, 02_ recibo por honorarios, 03_ boleta, 07_ N/C, 08_ N/D. Con 02_ solo se busca en los recibos por honorarios; con 01_ solo en facturas del SIRE.'),
     ('12/11/2026', 'Identificar RUC: siempre con su nombre', 'Cada RUC sugerido muestra la razón social o el nombre con que figura en nuestras fuentes (SIRE, honorarios, retenciones, vouchers); si no figura, lo dice para verificarlo en SUNAT. También en el texto de Telegram/WhatsApp, en la hoja de Vouchers y en el portal.'),
     ('12/11/2026', 'RUC por número de comprobante: corregido', 'Al identificar el RUC por el comprobante del voucher (ej. E001-17), antes se tomaba el emisor de cualquier comprobante con ese número (E001 lo usan miles de emisores). Ahora el nombre del emisor tiene que parecerse al del voucher; también se buscan los recibos por honorarios por su número; si el nombre no coincide queda solo como opción «⚠️ otro nombre». La sugerencia muestra el nombre del emisor.'),
     ('12/11/2026', 'Mesa: 📝 nota en el documento para enviar', 'En 📨 Para enviar, botón 📝 Nota: se escribe cualquier detalle y sale dentro del estado de cuenta o del análisis (arriba, debajo del encabezado, o abajo, antes de la firma), en el PDF, la imagen, la impresión, el texto copiado y el Excel. Se recuerda por proveedor o cliente y empresa en ese navegador.'),
