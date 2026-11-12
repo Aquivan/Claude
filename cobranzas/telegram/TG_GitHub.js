@@ -290,7 +290,8 @@ function TG_confirmarDescarga_(ctx, acc, op) {
   var p = TG_PROYECTOS_[acc.proyecto];
   var inputs = p.inputs(acc);
   try {
-    TG_gh_(cfg, '/actions/workflows/' + p.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: inputs });
+    if (acc.proyecto === 'detracciones') TG_detPedir_(inputs);   // va por la hoja de Detracciones (pone la llave)
+    else TG_gh_(cfg, '/actions/workflows/' + p.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: inputs });
   } catch (e) {
     return TG_enviar_(ctx.chatId, '⚠️ No se pudo pedir la descarga: ' + TG_esc_(e.message));
   }
@@ -356,4 +357,29 @@ function TG_seguirDescargas() {
   props.setProperty('TG_SEGUIR', JSON.stringify(quedan));
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TG_seguirDescargas') ScriptApp.deleteTrigger(t); });
   if (quedan.length) TG_programarSeguimiento_(5);
+}
+
+/**
+ * 🏦 Detracciones: el robot ya no guarda en el repositorio (es público); manda lo bajado directo a la hoja de
+ * Detracciones con una llave que pone esa hoja. Por eso la descarga se le pide a ELLA (?pedir=1, con la clave del
+ * puente que esta hoja deja en los metadatos de la de Detracciones; detracciones/apps_script/Web.js).
+ */
+function TG_detPedir_(inputs) {
+  var id = leerConfig_(ssPrincipal_()).idDetracciones;
+  if (!id) throw new Error('falta el ID de la hoja de Detracciones en ⚙️ Config');
+  var libro = SpreadsheetApp.openById(id);
+  var w = libro.createDeveloperMetadataFinder().withKey('DET_WEB').find();
+  if (!w.length) throw new Error('la hoja de Detracciones aún no registró su aplicación web (se registra al publicarla)');
+  var m = libro.createDeveloperMetadataFinder().withKey('DET_PUENTE').find(), k = m.length ? String(m[0].getValue() || '') : '';
+  if (k.length < 40) {
+    k = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+    m.forEach(function (x) { try { x.remove(); } catch (e) {} });
+    libro.addDeveloperMetadata('DET_PUENTE', k, SpreadsheetApp.DeveloperMetadataVisibility.DOCUMENT);
+  }
+  var q = { pedir: '1', k: k, empresa: inputs.empresa || 'todas', desde: inputs.desde || '', hasta: inputs.hasta || '', diario: inputs.diario || '' };
+  var url = 'https://script.google.com/macros/s/' + w[0].getValue() + '/exec?' + Object.keys(q).map(function (x) { return x + '=' + encodeURIComponent(q[x]); }).join('&');
+  var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true }), j;
+  try { j = JSON.parse(r.getContentText()); } catch (e) { throw new Error('la hoja de Detracciones respondió raro (HTTP ' + r.getResponseCode() + ')'); }
+  if (!j.ok) throw new Error('hoja de Detracciones: ' + (j.error || '?'));
+  return j;
 }

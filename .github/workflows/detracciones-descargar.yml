@@ -1,23 +1,21 @@
 # Proyecto "Detracciones · Grupo" (carpeta detracciones/). Descarga de SUNAT SOL
 # (Mis declaraciones y pagos → Consulta de Pago de Detracciones) los depósitos de
 # detracciones de una empresa o de todas las activas de empresas.json, mes a mes.
-# Solo escribe en detracciones/datos/. No toca ningún otro proyecto.
+# Lo bajado va DIRECTO a la hoja (su aplicación web, con la llave de un solo uso que la
+# hoja manda en «destino» y «llave»): en el repositorio (público) NO se guarda nada y el
+# registro no muestra montos. Por eso solo la pide la hoja (o el bot a través de la hoja).
 # Nunca imprime claves. Solo LEE en SUNAT (no paga nada).
 
 name: Detracciones - descargar depósitos (SUNAT SOL)
-# La corrida diaria la pide la hoja (puntual); el cron de GitHub es solo respaldo.
-# Ambas se llaman igual para no repetirlas.
-run-name: ${{ (github.event_name == 'schedule' || inputs.diario) && 'Detracciones · diario' || 'Detracciones - descargar depósitos (SUNAT SOL)' }}
+# La corrida diaria la pide la hoja (o el bot, a través de la hoja).
+run-name: ${{ (inputs.diario) && 'Detracciones · diario' || 'Detracciones - descargar depósitos (SUNAT SOL)' }}
 
 on:
-  # Una vez al día, de LUNES A VIERNES, todas las empresas, los últimos 3 meses.
-  # Sábado y domingo no corre sola (a mano, desde la hoja o el bot, sí se puede).
-  schedule:
-    - cron: '7 10 * * 1-5'   # respaldo: 5:07 a.m. Perú, lunes a viernes (el bot la pide a las 3 a.m.; si ya corrió, no se repite)
+  # Ya no hay corrida programada de GitHub: sin la llave de la hoja no tendría a dónde mandar lo bajado.
   workflow_dispatch:
     inputs:
       empresa:
-        description: "RUC de una empresa, o 'todas' (las activas de empresas.json)"
+        description: "RUC de una empresa (o varios separados por comas), o 'todas' (las activas de empresas.json)"
         required: true
         default: "todas"
       desde:
@@ -36,21 +34,25 @@ on:
         description: "Bajar también la Constancia de Depósito de cada detracción (solo las que faltan, ~5 KB c/u)"
         type: boolean
         default: true
-      guardar:
-        description: "Guardar en el repositorio (detracciones/datos/)"
-        type: boolean
-        default: true
+      destino:
+        description: "Lo pone la hoja (dirección de su aplicación web). No lo escriba a mano."
+        required: false
+        default: ""
+      llave:
+        description: "Lo pone la hoja (llave de un solo uso). No lo escriba a mano."
+        required: false
+        default: ""
       diario:
         description: "Corrida diaria automática (la pide la hoja a su hora). No hace falta marcarlo a mano."
         type: boolean
         default: false
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 concurrency:
-  group: ${{ (github.event_name == 'schedule' || inputs.diario) && 'detracciones-diario' || format('detracciones-descargar-{0}', github.run_id) }}
+  group: ${{ (inputs.diario) && 'detracciones-diario' || format('detracciones-descargar-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
@@ -67,7 +69,7 @@ jobs:
           sparse-checkout-cone-mode: false
       - name: ¿Ya corrió la descarga diaria? (para no repetirla)
         id: hoy
-        if: github.event_name == 'schedule' || inputs.diario
+        if: inputs.diario
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -102,7 +104,7 @@ jobs:
               print("lista=[]")
               raise SystemExit
           emp = [e for e in json.load(open("empresas.json"))["empresas"] if e.get("activo")]
-          rucs = [e["ruc"] for e in emp] if sel.lower() == "todas" else [sel]
+          rucs = [e["ruc"] for e in emp] if sel.lower() == "todas" else [r.strip() for r in sel.split(",") if r.strip()]
           print("lista=" + json.dumps(rucs))
           PY
           cat "$GITHUB_OUTPUT"
@@ -119,7 +121,18 @@ jobs:
         ruc: ${{ fromJson(needs.empresas.outputs.lista) }}
     environment: ${{ matrix.ruc }}
     steps:
+      - name: Tapar la dirección y la llave de la hoja (antes de todo)
+        run: |
+          D=$(jq -r '.inputs.destino // ""' "$GITHUB_EVENT_PATH"); L=$(jq -r '.inputs.llave // ""' "$GITHUB_EVENT_PATH")
+          [ -n "$D" ] && echo "::add-mask::$D"; [ -n "$L" ] && echo "::add-mask::$L"
+          { echo "DESTINO=$D"; echo "LLAVE=$L"; } >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            detracciones/scripts
+            scripts/por_empresa.py
+            empresas.json
+          sparse-checkout-cone-mode: false
 
       - uses: actions/setup-python@v5   # Python fijo: el servidor ya trae 3.14 y playwright 1.47 no instala ahí
         with:
@@ -138,33 +151,15 @@ jobs:
           HASTA: ${{ inputs.hasta }}
           IVAP: ${{ inputs.ivap }}
           # El cron de respaldo no trae inputs: baja constancias. La hoja manda SI/NO según su Config.
-          CONSTANCIAS: ${{ github.event_name == 'schedule' || inputs.constancias }}
+          CONSTANCIAS: ${{ inputs.constancias }}
         run: |
-          # Corrida automática: los últimos 3 meses (lo anterior ya quedó guardado).
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.diario }}" = "true" ]; then DESDE=""; HASTA=""; fi
+          # Corrida automática: los últimos 3 meses (lo anterior ya está en la hoja).
+          if [ "${{ inputs.diario }}" = "true" ]; then DESDE=""; HASTA=""; fi
           extra=""
           if [ "$IVAP" = "true" ]; then extra="--ivap"; fi
           if [ "$CONSTANCIAS" = "true" ]; then extra="$extra --constancias"; fi
-          python detracciones/scripts/descargar_detracciones.py --salida detracciones/datos --desde "$DESDE" --hasta "$HASTA" $extra
+          python detracciones/scripts/descargar_detracciones.py --desde "$DESDE" --hasta "$HASTA" $extra
 
-      - name: Guardar en el repositorio
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.diario || inputs.guardar) }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          [ -d detracciones/datos ] || { echo "Sin datos para guardar."; exit 0; }
-          git add detracciones/datos
-          git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
-          git commit -m "Detracciones ${{ matrix.ruc }} [skip ci]"
-          logrado=0
-          for intento in 1 2 3 4 5 6 7 8; do
-            if git push; then logrado=1; break; fi
-            echo "Push rechazado, reintentando con rebase (intento $intento)..."
-            git fetch origin "$GITHUB_REF_NAME"
-            git rebase "origin/$GITHUB_REF_NAME"
-            sleep $((intento * 2 + RANDOM % 5))
-          done
-          [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir detracciones/datos"; exit 1; }
 
   # Todas las empresas una tras otra en UNA máquina (GitHub cobra cada máquina aparte, mínimo 1 min).
   # Se usa cuando existe el secreto del repositorio SUNAT_CLAVES (una línea por empresa: RUC USUARIO CLAVE);
@@ -176,7 +171,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
+      - name: Tapar la dirección y la llave de la hoja (antes de todo)
+        run: |
+          D=$(jq -r '.inputs.destino // ""' "$GITHUB_EVENT_PATH"); L=$(jq -r '.inputs.llave // ""' "$GITHUB_EVENT_PATH")
+          [ -n "$D" ] && echo "::add-mask::$D"; [ -n "$L" ] && echo "::add-mask::$L"
+          { echo "DESTINO=$D"; echo "LLAVE=$L"; } >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            detracciones/scripts
+            scripts/por_empresa.py
+            empresas.json
+          sparse-checkout-cone-mode: false
 
       - uses: actions/setup-python@v5   # Python fijo: el servidor ya trae 3.14 y playwright 1.47 no instala ahí
         with:
@@ -193,29 +199,11 @@ jobs:
           DESDE: ${{ inputs.desde }}
           HASTA: ${{ inputs.hasta }}
           IVAP: ${{ inputs.ivap }}
-          CONSTANCIAS: ${{ github.event_name == 'schedule' || inputs.constancias }}
+          CONSTANCIAS: ${{ inputs.constancias }}
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.diario }}" = "true" ]; then DESDE=""; HASTA=""; fi
+          if [ "${{ inputs.diario }}" = "true" ]; then DESDE=""; HASTA=""; fi
           extra=""
           if [ "$IVAP" = "true" ]; then extra="--ivap"; fi
           if [ "$CONSTANCIAS" = "true" ]; then extra="$extra --constancias"; fi
-          python scripts/por_empresa.py --rucs "$LISTA" --minutos 40 -- python detracciones/scripts/descargar_detracciones.py --salida detracciones/datos --desde "$DESDE" --hasta "$HASTA" $extra
+          python scripts/por_empresa.py --rucs "$LISTA" --minutos 40 -- python detracciones/scripts/descargar_detracciones.py --desde "$DESDE" --hasta "$HASTA" $extra
 
-      - name: Guardar en el repositorio
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.diario || inputs.guardar) }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          [ -d detracciones/datos ] || { echo "Sin datos para guardar."; exit 0; }
-          git add detracciones/datos
-          git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
-          git commit -m "Detracciones todas [skip ci]"
-          logrado=0
-          for intento in 1 2 3 4 5 6 7 8; do
-            if git push; then logrado=1; break; fi
-            echo "Push rechazado, reintentando con rebase (intento $intento)..."
-            git fetch origin "$GITHUB_REF_NAME"
-            git rebase "origin/$GITHUB_REF_NAME"
-            sleep $((intento * 2 + RANDOM % 5))
-          done
-          [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir detracciones/datos"; exit 1; }

@@ -1,3 +1,0 @@
-empresa_ruc,rol,consulta,tipo_cuenta,num_cuenta,fecha_pago,periodo,tipo_comprobante,serie,numero,constancia,ruc_proveedor,proveedor,tipo_doc_adquiriente,doc_adquiriente,adquiriente,tipo_operacion,tipo_bien,monto,npd,origen,num_presentacion,usuario_sol
-20447623669,COMPRA,Individual,Convencional,00000709905,2026-11-04,202611,01,FF01,00049058,319845974,20100773628,COMPAÑIA BERFRANZ S.A.C.,06,20447623669,PROCESOS ALIMENTARIOS M&D EIRL,05,035,238.0,,WEB SUNAT,7857556719,COBR0001
-20447623669,COMPRA,Individual,Convencional,00000359068,2026-11-02,202610,01,F005,00109689,319618455,10082420822,PAINO SCARPATI JOSE ALFREDO,06,20447623669,PROCESOS ALIMENTARIOS M&D EIRL,01,022,584.0,,WEB SUNAT,7857088178,P1LHGRUZ

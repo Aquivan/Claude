@@ -1,11 +1,13 @@
 /**
  * Detracciones · Grupo — GitHub.js
- * Lee del repositorio los archivos que deja el workflow
- * "Detracciones - descargar depósitos (SUNAT SOL)":
- *   detracciones/datos/<RUC>/<AAAA>/<MM>/detracciones.csv
+ * Pide a GitHub la descarga (workflow "Detracciones - descargar depósitos (SUNAT SOL)"). El robot manda lo bajado
+ * DIRECTO a esta hoja (Web.js); ya no guarda nada en el repositorio, que es público.
+ * Lo que se guardó en el repositorio ANTES de este cambio se lee una sola vez (migración) de la versión fija
+ * DET_REF_LEGADO_ (detracciones/datos/<RUC>/<AAAA>/<MM>/detracciones.csv y sus constancias).
  */
 
 var DET_RUTA_DATOS = 'detracciones/datos';
+var DET_REF_LEGADO_ = 'a34fa7cda07aaf591fd63710a7ff915647c69f64';   // última versión con detracciones/datos en el repositorio
 
 function DET_api_(cfg, ruta, crudo) {
   if (!cfg.token) throw new Error('Falta el token de GitHub: menú 🏦 Detracciones → 🔑 Guardar token de GitHub.');
@@ -31,8 +33,8 @@ function DET_pedir_(cfg, ruta, crudo) {
 }
 
 /** Lista todos los archivos de detracciones/datos: [{path, sha, size}] (path relativo a datos/). */
-function DET_listarArchivos_(cfg) {
-  var r = DET_pedir_(cfg, '/contents/detracciones?ref=' + encodeURIComponent(cfg.rama));
+function DET_listarArchivos_(cfg, ref) {
+  var r = DET_pedir_(cfg, '/contents/detracciones?ref=' + encodeURIComponent(ref || cfg.rama));
   if (!r) throw new Error('No se encontró la carpeta detracciones/ en la rama ' + cfg.rama + '.');
   var datos = JSON.parse(r.getContentText()).filter(function (x) { return x.name === 'datos' && x.type === 'dir'; })[0];
   if (!datos) return [];  // todavía no se descargó nada
@@ -42,12 +44,12 @@ function DET_listarArchivos_(cfg) {
 }
 
 /** Descarga varios archivos de texto a la vez. rutas: relativas a detracciones/datos/. */
-function DET_leerTextos_(cfg, rutas) {
+function DET_leerTextos_(cfg, rutas, ref) {
   var res = {};
   for (var i = 0; i < rutas.length; i += 20) {
     var lote = rutas.slice(i, i + 20);
     var pedidos = lote.map(function (ruta) {
-      var p = DET_api_(cfg, '/contents/' + DET_RUTA_DATOS + '/' + ruta + '?ref=' + encodeURIComponent(cfg.rama), true);
+      var p = DET_api_(cfg, '/contents/' + DET_RUTA_DATOS + '/' + ruta + '?ref=' + encodeURIComponent(ref || cfg.rama), true);
       return { url: p.url, headers: p.headers, muteHttpExceptions: true };
     });
     UrlFetchApp.fetchAll(pedidos).forEach(function (r, k) {
@@ -71,7 +73,8 @@ function DET_despachar_(cfg, empresa, desde, hasta) {
   var p = DET_api_(cfg, '/actions/workflows/detracciones-descargar.yml/dispatches');
   p.method = 'post';
   p.contentType = 'application/json';
-  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: empresa, desde: desde || '', hasta: hasta || '', constancias: cfg.bajarConstancias ? 'true' : 'false' } });
+  var w = DET_nuevaLlave_();   // el robot manda lo bajado a esta hoja con esta llave (Web.js)
+  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: empresa, desde: desde || '', hasta: hasta || '', constancias: cfg.bajarConstancias ? 'true' : 'false', destino: w.destino, llave: w.llave } });
   var r = UrlFetchApp.fetch(p.url, p);
   if (r.getResponseCode() !== 204) throw new Error('GitHub respondió HTTP ' + r.getResponseCode() + ' (el token necesita permiso "Actions: Read and write").');
 }
@@ -83,7 +86,7 @@ function DET_menuPedirDescarga() {
     var cfg = DET_leerConfig_();
     DET_despachar_(cfg, 'todas', '', '');
     ui.alert('⬇ Pedido enviado. GitHub está consultando en SUNAT los depósitos de detracciones de los últimos 3 meses de todas las empresas' +
-      (cfg.bajarConstancias ? ', con sus constancias.' : ' (sin constancias: Config).') + '\n\nTarda unos minutos. Luego use 🔄 Actualizar todo.');
+      (cfg.bajarConstancias ? ', con sus constancias.' : ' (sin constancias: Config).') + '\n\nTarda unos minutos: lo bajado llega solo a la hoja; luego use 🔄 Actualizar todo para rehacer las pestañas.');
   } catch (e) {
     ui.alert('❌ ' + e.message);
   }

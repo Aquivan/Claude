@@ -24,9 +24,11 @@ Ojo: la opción antigua del menú SOL (12.4.1.1.2 "Consulta de detracciones") di
 | Qué | Dónde |
 |---|---|
 | Descargador (Chrome real, solo lee) | `scripts/descargar_detracciones.py` |
-| Descarga multiempresa | workflow `detracciones-descargar.yml`: una vez al día, **de lunes a viernes** (el bot la pide a las 3 a. m., la hoja a las 8 a. m. si aún no corrió y el cron es respaldo; sábado y domingo no corre sola), últimos 3 meses; a mano: empresa, desde/hasta (AAAAMM), IVAP |
-| Datos | `datos/<RUC>/<AAAA>/<MM>/detracciones.csv` (mes = fecha de pago) y `masivos.json` si hubo pagos masivos |
-| Constancias (opcional) | `datos/<RUC>/<AAAA>/<MM>/constancias/<N°>.html`: la **Constancia de Depósito oficial** de SUNAT (~5 KB c/u). Se baja como una persona: clic en el número de constancia y botón "Guardar". Solo se bajan las que faltan. Se activa/desactiva en la hoja (Config → *Descargar constancias de SUNAT* SI/NO) o en el workflow (casilla *constancias*) |
+| Descarga multiempresa | workflow `detracciones-descargar.yml`: una vez al día, **de lunes a viernes** (el bot la pide a las 3 a. m. y la hoja a las 8 a. m. si aún no corrió; sábado y domingo no corre sola), últimos 3 meses; a mano desde la hoja o el bot: empresa(s), desde/hasta (AAAAMM). **Solo la pide la hoja** (o el bot a través de la hoja): la hoja pone la dirección de su aplicación web y una llave de un solo uso (6 h) |
+| Datos | **Ya no van al repositorio** (es público). El robot los manda directo a la hoja (`apps_script/Web.js`): cada mes de cada empresa se guarda en la pestaña oculta **_Datos**. El registro de GitHub solo dice cuántos depósitos hubo por mes (sin montos, proveedores ni números de constancia). Lo que había en `datos/` hasta el 12/11/2026 se pasó a la hoja una sola vez desde esa versión del repositorio (`DET_REF_LEGADO_`); la carpeta se quitó, pero sigue en el historial de git |
+| Constancias (opcional) | La **Constancia de Depósito oficial** de SUNAT (HTML ~5 KB): el robot la manda a la hoja y la hoja la guarda como PDF en Drive. Solo se bajan las que la hoja aún no tiene. Config → *Descargar constancias de SUNAT* SI/NO |
+| 🛡 SUNAT respondió vacío | Si un mes llega vacío y la hoja ya tenía depósitos de ese mes, el robot vuelve a consultar; si sigue vacío **no se borra nada** (y la hoja tampoco acepta un mes vacío encima de uno con datos). La empresa queda «con error» |
+| 🔁 Reintento | Después de la descarga diaria, las empresas con error (SUNAT lenta, sin respuesta, o mes vacío) se vuelven a pedir **en 1 hora, solo ellas**, hasta 2 veces por día. 🔌 Probar conexión muestra las que fallaron |
 | Hoja | `apps_script/` → pestañas **Panel**, **Detracciones** (detalle), **Por proveedor**, **Por mes**, **Config** |
 | Subir la hoja | workflow `deploy-detracciones.yml` (solo con cambios en `apps_script/`) |
 | Explorador (para ubicar pantallas nuevas) | `scripts/explorar.py` + workflow `detracciones-explorar.yml` (modos `menu`, `opcion`, `portal`, `plataforma`) |
@@ -47,7 +49,7 @@ pagos individuales y masivos (cuenta convencional; IVAP opcional).
 
 ## Menú de la hoja (🏦 Detracciones)
 
-- 🔄 Actualizar todo (lee lo ya descargado de GitHub y pasa las constancias a PDF en Drive:
+- 🔄 Actualizar todo (rehace las pestañas con lo que llegó del robot y pasa a PDF las constancias que faltaban en Drive:
   `PDF Detracciones/<RUC - Empresa>/<AAAA>/<NN_Mes>/`, con enlace "📄 Ver constancia" al final de cada fila).
 - 📄 Solo ordenar constancias en Drive.
 - Config: *Descargar constancias de SUNAT* y *Copiar constancias a Drive* (SI/NO cada una).
@@ -55,4 +57,5 @@ pagos individuales y masivos (cuenta convencional; IVAP opcional).
 - ⏰ Actualización diaria (8 a. m.: de lunes a viernes pide la descarga si aún no corrió, espera y actualiza; sábado y domingo solo actualiza la hoja).
 - 🔑 Token de GitHub (el mismo de las otras hojas) y 🔌 Probar conexión.
 
-Las claves SOL están en los Environments de GitHub (uno por RUC) y nunca se imprimen.
+Las claves SOL están en los Environments de GitHub (uno por RUC) o en el secreto `SUNAT_CLAVES`, y nunca se imprimen.
+La dirección de la aplicación web y la llave se tapan en el registro antes de usarse.

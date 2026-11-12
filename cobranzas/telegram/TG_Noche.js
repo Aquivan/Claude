@@ -59,7 +59,8 @@ function TGN_revisar_(cfg) {
       if (hoyRuns.some(function (r) { return r.conclusion === 'success'; })) { est.listo = true; props.setProperty(pk, JSON.stringify(est)); return; }
       // Una que sigue corriendo todavía puede fallar: se espera a que termine (antes se daba por lista y no se reintentaba).
       if (hoyRuns.some(function (r) { return r.status !== 'completed'; })) return;
-      TG_gh_(cfg, '/actions/workflows/' + t.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: t.inputs() });
+      if (k === 'detracciones') TG_detPedir_(t.inputs());   // va por la hoja de Detracciones (pone la llave)
+      else TG_gh_(cfg, '/actions/workflows/' + t.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: t.inputs() });
       est.n++; est.t = Date.now();
       props.setProperty(pk, JSON.stringify(est));
       console.log('🌙 Descarga de madrugada pedida: ' + t.nombre + ' (intento ' + est.n + ')');
