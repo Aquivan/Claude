@@ -241,7 +241,7 @@ main{flex:1;min-height:0;overflow:auto}
       <div id="iaRuc" class="oc"><div class="card"><h3>🔎 Identificar RUC de los proveedores</h3>
         <p style="margin-top:0">Busca el RUC (ID Beneficiario) en alias, SIRE, otros vouchers, recibos por honorarios y retenciones, y si falta, con IA en el padrón de SUNAT e internet. También desde 🔎 Buscar (botón 🔎 RUC) o desde el visor de un voucher.</p>
         <input id="rucTxt" style="width:100%" placeholder="Filas. Ej.: Originales 2656-2666, Fotos 382, 383">
-        <div style="margin-top:8px"><button class="p" onclick="rucDeTexto()">🔎 Buscar RUC</button></div></div></div>
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="p" onclick="rucDeTexto()">🔎 Buscar RUC</button><button onclick="rucUltimas(true)" title="Vuelve a abrir los resultados de las búsquedas en SUNAT e internet de las últimas 6 horas, aunque haya cerrado la ventana">📂 Ver la última búsqueda</button></div></div></div>
       <div id="iaVco" class="oc"><div class="card"><h3>🔗 Completar Originales con lo trabajado en Fotos</h3><div id="vcoCont"></div></div></div>
       <div id="iaMesa" class="oc"><div class="card"><h3>🧩 Mesa de conciliación</h3>
         <p style="margin-top:0">Facturas del SIRE a un lado y vouchers al otro, para cruzarlos con líneas; también retenciones, estado de cuenta y análisis. Lo que guarde se escribe en la hoja de vouchers.</p>
@@ -260,7 +260,7 @@ main{flex:1;min-height:0;overflow:auto}
       <p><b>📤 Subir</b> (permiso <i>subir</i>): <b>📷 Tomar foto</b> con la cámara, <b>📄 Escanear a PDF</b> (varias fotos con la cámara → un solo PDF, una página por foto; se pueden girar, ordenar o quitar antes) o elija fotos/PDF. Cada foto de la cámara pasa por <b>✂️ Recortar</b>: el portal busca solo los bordes del voucher (4 esquinas que se pueden mover con el dedo), la endereza y con <b>✨ Mejorar</b> aclara el fondo y oscurece el texto (en las fotos de la galería, botón ✂️). El nombre sugerido sale en gris: <b>escriba encima</b> el que quiera, sin borrar nada (si no pone extensión, se agrega sola); póngales un nombre (no se puede repetir uno que ya existe), elija <i>Original</i> (PDF o comprobante formal) o <i>Foto</i>, y suba. Con ⚡ la hoja los procesa en ~1 minuto.</p>
       <p><b>📲 Escanear con Google Drive</b> (en 📤 Subir): elija Original o Foto → se abre la app de Drive en la carpeta 📥 de entrada → <b>+ → Escanear</b> → Guardar → vuelva y toque <b>⚡ Ya escaneé: procesar ahora</b>. Necesita una cuenta de Google con acceso a esa carpeta.</p>
       <p><b>↩️ Deshacer mi última corrección</b> (en el visor): vuelve lo de antes de su último 💾 Guardar, si nadie cambió esas celdas después. <b>🗑 Quitar</b> (en 📥 Pendientes y en lo recién subido): saca de la entrada un voucher subido por error, mientras todavía no está en la hoja (va a la papelera de Drive, 30 días); quien solo sube puede quitar lo suyo.</p>
-      <p><b>🧠 IA</b> (permiso <i>editar</i>): el mismo 🧠 Asistente IA del menú de la hoja. <b>💬 Chat</b> (preguntas, fotos, PDF, Excel; lo que propone se escribe solo si usted lo marca, y ↩️ lo deshace), <b>📋 Analizar procesados</b> (a qué factura, empresa o retención corresponde cada voucher de una tanda), <b>🔎 Identificar RUC</b> (también con el botón 🔎 RUC de Buscar y en el visor; los vouchers con el mismo nombre salen en una sola tarjeta y el RUC elegido va a todos; cada tarjeta tiene <b>🌐 Buscar con IA en SUNAT e internet</b>), <b>🔗 Completar Originales con Fotos</b> y <b>🧩 Mesa de conciliación</b>.</p>
+      <p><b>🧠 IA</b> (permiso <i>editar</i>): el mismo 🧠 Asistente IA del menú de la hoja. <b>💬 Chat</b> (preguntas, fotos, PDF, Excel; lo que propone se escribe solo si usted lo marca, y ↩️ lo deshace), <b>📋 Analizar procesados</b> (a qué factura, empresa o retención corresponde cada voucher de una tanda), <b>🔎 Identificar RUC</b> (también con el botón 🔎 RUC de Buscar y en el visor; los vouchers con el mismo nombre salen en una sola tarjeta y el RUC elegido va a todos; cada tarjeta tiene <b>🌐 Buscar con IA en SUNAT e internet</b>; con <b>📂 Ver la última búsqueda</b> se vuelven a abrir los resultados de las últimas 6 horas aunque haya cerrado la ventana), <b>🔗 Completar Originales con Fotos</b> y <b>🧩 Mesa de conciliación</b>.</p>
       <p><b>📥 Pendientes</b>: lo que espera en las carpetas de entrada (todavía no está en la hoja) y lo último descartado (duplicados, vacíos, muy pesados).</p>
       <p><b>📊 Resumen</b>: cuántos vouchers hay, cuántos sin RUC, sin revisar o duplicados, por pestaña y por mes.</p>
       <p><b>👥 Usuarios</b> (admin): crear usuarios, cambiar PIN y permiso, desactivar; y el registro de quién hizo qué.</p>
@@ -1346,7 +1346,7 @@ function rucPintar() {
   var S2 = RUC.sin, nSug = S2.filter(function (f) { return f.sug && !f.hecho; }).length;
   var h = '<div class="ruc"><h3>🔎 Identificar RUC · ' + RUC.filas.length + ' voucher(s)</h3><div style="display:flex;gap:6px;flex-wrap:wrap">' +
     (nSug ? '<button class="p" id="rW" onclick="rucEscribirMarcados()">✍️ Escribir los RUC marcados</button>' : '') +
-    (S2.some(function (f) { return !f.hecho; }) ? '<button onclick="rucInternet()" title="Padrón de SUNAT e internet, también los que ya tienen sugerencia">🌐 Buscar con IA en SUNAT e internet</button>' : '') + '</div><div id="rMsg" class="msg"></div>';
+    (S2.some(function (f) { return !f.hecho; }) ? '<button onclick="rucInternet()" title="Padrón de SUNAT e internet, también los que ya tienen sugerencia">🌐 Buscar con IA en SUNAT e internet</button>' : '') + '<button onclick="rucUltimas()" title="Resultados de las búsquedas en SUNAT e internet de las últimas 6 horas">📂 Ver la última búsqueda</button></div><div id="rMsg" class="msg"></div>';
   if (!S2.length) h += '<div class="msg ok">✅ Todos los vouchers elegidos ya tienen RUC.</div>';
   h += S2.map(function (f, i) {
     var tot = {}; f.vs.forEach(function (v) { tot[v.moneda] = (tot[v.moneda] || 0) + v.monto; });
@@ -1427,6 +1427,29 @@ function rucInternet() {
   var fs = []; RUC.sin.forEach(function (f) { if (!f.hecho) f.vs.forEach(function (v) { fs.push(v.k); }); });
   rucMsg('rMsg', '⏳ Lanzando la búsqueda en el padrón de SUNAT y con IA en internet…');
   ia('rucexternos', { filas: fs, todos: true }, false).then(function (r) { rucMsg('rMsg', r.error || r.texto || '', !!r.error); if (r.id) rucEsperar(r.id, 0, 'rExt', 'rMsg'); }).catch(function (e) { rucMsg('rMsg', e.message, 1); });
+}
+/* 📂 búsquedas anteriores en SUNAT e internet (Cobranzas las guarda 6 horas) */
+function rucUltimas(nueva) {
+  ia('rucultimas', {}, 'Buscando las búsquedas anteriores…').then(function (r) {
+    if (r.error) return alerta(r.error);
+    var l = r.lista || [];
+    if (!l.length) return alerta('No hay búsquedas en SUNAT e internet de las últimas 6 horas.');
+    var h = '<div class="card"><b>📂 Búsquedas anteriores (últimas 6 horas)</b>' + l.map(function (x) {
+      return '<div style="display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0"><span style="flex:1;font-size:12.5px">' + esc(x.cuando) + ' · ' + esc(x.que) + ' <span style="color:var(--gr)">' +
+        (x.listo ? '✅ lista · ' + x.claros + ' encontrado(s), ' + x.elecciones + ' por elegir' : '⏳ todavía buscando') + '</span></span><button style="padding:3px 8px" onclick="rucVerBusq(\'' + esc(x.id) + '\',this)">Ver</button></div>';
+    }).join('') + '</div>';
+    if (nueva || !$('rExt')) { modal('<div class="ruc"><h3>📂 Búsquedas de RUC anteriores</h3>' + h + '<div id="rExt"></div></div>', [['Cerrar']]); $('modalCaja').style.maxWidth = '760px'; }
+    else { var d = document.createElement('div'); d.innerHTML = h; $('rExt').insertBefore(d, $('rExt').firstChild); d.scrollIntoView(); }
+  }).catch(function (e) { alerta('❌ ' + e.message); });
+}
+function rucVerBusq(id, b) {
+  b.disabled = true; var k = ++RK, c = document.createElement('div');
+  c.innerHTML = '<div class="msg" id="rvm' + k + '"></div><div id="rvc' + k + '"></div>'; b.parentNode.parentNode.appendChild(c);
+  rucMsg('rvm' + k, 'Abriendo…');
+  ia('rucestado', { id: id }, false).then(function (r) {
+    if (r.error) return rucMsg('rvm' + k, r.error, 1);
+    if (r.listo) { rucMsg('rvm' + k, ''); rucResultado(r, 'rvc' + k); } else rucEsperar(id, 0, 'rvc' + k, 'rvm' + k);
+  }).catch(function (e) { rucMsg('rvm' + k, e.message, 1); });
 }
 function rucEsperar(id, n, cont, m) {
   setTimeout(function () {
