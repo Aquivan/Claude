@@ -117,6 +117,10 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 .ana .n{text-align:right}.ana tr.apv td{background:#DBE5F1;font-weight:bold;color:#1F3A5F;font-size:12px;padding-top:6px}
 .ana tr.adc td{background:#F8FAFF}.ana tr.adc .adoc{color:#1D4ED8;font-weight:bold}.ana tr.aam td{color:#334155}.ana tr.aam td:first-child{padding-left:16px}
 .ana td:last-child{max-width:260px;overflow:hidden;text-overflow:ellipsis}.ana tr.atp td{background:#EEF2F7;font-weight:bold;border-top:1px solid #94A3B8}.ana tr.atg td{background:#1F3A5F;color:#fff;font-weight:bold;font-size:12px}
+.ana tr.adc td{border-top:2px solid #64748B}.ana tr.z1 td{background:#F4F7FB}.ana tr.adc.z1 td{background:#EBF1FA}
+.ana td.sc{color:#94A3B8;font-weight:normal}
+.ana tr.asf td{background:#E8EEF8;font-weight:bold;color:#1F3A5F;border-bottom:2px solid #64748B;padding-top:4px;padding-bottom:4px}.ana tr.asf.z1 td{background:#DFE7F3}
+.ana tr.asf .est{font-weight:normal;font-size:10.5px;color:#334155;margin-left:6px}.ana tr.asf td.n b{font-size:12.5px}
 .ana .neg{color:#047857}.ana .pos{color:#B91C1C}.ana tr.atg .neg,.ana tr.atg .pos{color:#fff}.ana .tg2{display:inline-block;padding:0 6px;border-radius:8px;font-size:9.5px;font-weight:bold;color:#fff}
 @media print{.ana{font-size:9px}.ana th{position:static}}
 #ecHoja.ancha{width:1180px;max-width:none}#ecHoja .ana{font-size:9.5px}#ecHoja .ana th{position:static;font-size:9px;padding:3px 4px}#ecHoja .ana th.g{background:#2C5282;text-align:center}#ecHoja .ana td{padding:2px 4px;white-space:nowrap;vertical-align:middle}#ecHoja .ana td:last-child{max-width:200px;overflow:hidden;text-overflow:ellipsis}
@@ -2141,7 +2145,7 @@ function ayudaCompleta() {
     '<li>En el estado de cuenta: <b>💾 Guardado</b> (lo que está hoy), <b>✏️ Con mis cambios</b> (cómo quedará si guarda: saldo antes tachado → después, líneas 🆕) y <b>⚖️ Comparar</b> (solo lo que cambia). Desde ahí mismo puede 💾 Guardar.</li>' +
     '<li><b>🧮 Calculadora</b> (botón arriba o F2): flotante y movible; IGV, retención 3%, detracción, memoria e historial. <b>Alt+clic</b> en cualquier monto de la pantalla lo pasa a la calculadora.</li>' +
     '<li><b>🧹 Quitar cruces</b>: deja en blanco los cruces del proveedor / empresa filtrados (y, si lo marca, las reasignaciones de retención y las devoluciones) para volver a cruzar desde cero. Nada se escribe hasta 💾 Guardar; ↶ lo vuelve todo de una vez.</li>' +
-    '<li><b>📒 Análisis</b> (en 📊 Estado de cuenta, junto a Detallado): el análisis de cuenta de los sistemas contables (como Contasis): por proveedor o cliente, cada documento con su <b>compromiso</b>, cada <b>amortización</b> (pago, retención, detracción, N/C, efectivo) con su documento y fecha, el <b>saldo</b> que va quedando y el <b>mes en que se canceló</b>; total por proveedor y total general en S/ y US$. <b>Detalle</b> o <b>Resumir</b> (una línea por documento); moneda <b>soles y dólares / solo soles / solo dólares</b> (convierte con el tipo de cambio del documento del SIRE o, si no lo tiene, el del día más cercano). <b>⬇ Excel</b>, 📋 Copiar y 🖨 Imprimir. Respeta los filtros de arriba. También está en <b>📨 Para enviar</b> (botón «📒 Análisis»): el análisis de un proveedor con encabezado formal y conformidad, para mandar en PDF (sale horizontal), imagen, texto o Excel.</li>' +
+    '<li><b>📒 Análisis</b> (en 📊 Estado de cuenta, junto a Detallado): el análisis de cuenta de los sistemas contables (como Contasis): por proveedor o cliente, cada documento con su <b>compromiso</b>, cada <b>amortización</b> (pago, retención, detracción, N/C, efectivo) con su documento y fecha, el <b>saldo</b> que va quedando y el <b>mes en que se canceló</b>; total por proveedor y total general en S/ y US$. <b>Detalle</b> (cada factura en su bloque, con la línea 🧾 <b>Saldo de la factura</b> al final: compromiso − amortización = saldo, y su estado) o <b>Resumir</b> (una línea por documento); moneda <b>soles y dólares / solo soles / solo dólares</b> (convierte con el tipo de cambio del documento del SIRE o, si no lo tiene, el del día más cercano). <b>⬇ Excel</b>, 📋 Copiar y 🖨 Imprimir. Respeta los filtros de arriba. También está en <b>📨 Para enviar</b> (botón «📒 Análisis»): el análisis de un proveedor con encabezado formal y conformidad, para mandar en PDF (sale horizontal), imagen, texto o Excel.</li>' +
     '<li><b>📨 Estado de cuenta para enviar</b> (en 📊 Estado de cuenta: botón «📨 Para enviar» arriba o en cada proveedor): el formato de los sistemas contables, listo para mandar al proveedor o cliente. Encabezado (empresa, proveedor, periodo, moneda), <b>resumen del periodo</b> (saldo inicial + facturas − N/C − retenciones − detracciones − pagos + devoluciones = saldo final), <b>antigüedad de saldos</b> (por vencer, 1–30, 31–60, 61–90, +90), <b>facturas pendientes</b> y, en «Detallado», los <b>movimientos</b> con saldo acumulado (cada pago en una línea con las facturas que canceló). Elija desde/hasta (vacío = desde el inicio), resumido o detallado y si lleva conformidad (firma). <b>🖨 Imprimir / PDF</b>, <b>🖼 Imagen</b> (para WhatsApp) o <b>📋 Copiar</b> (Excel o correo).</li>' +
     '<li><b>📄 Comprobantes</b>: en la 🔍 ficha de una factura, cada retención tiene «📄 ver comprobante de retención» y cada detracción «📄 ver constancia de detracción»; se abren en el visor con sus datos (fecha, monto retenido, facturas). También en 🧾 Retenciones al tocar un comprobante o su línea. Salen de las hojas de Retenciones y Detracciones (el PDF tiene que estar copiado a Drive).</li>' +
     '<li><b>↩️ Devoluciones</b>: toque la devolución y luego el <b>depósito</b> que le devuelven (los posibles se marcan en café; también puede arrastrar un voucher sobre el otro), la <b>factura pagada de más</b>, o elija la <b>N/C</b> en la lista. Se dibuja una línea rosada y se guarda como «DEVOLUCION op 5344» / «DEVOLUCION 01_FN01-19» / «DEVOLUCION 07_FC01-12». A cualquier voucher sin facturas se le puede marcar «↩️ Es una devolución del proveedor».</li>' +
@@ -2175,7 +2179,7 @@ function analisisE(lista, agr, opc) {
   var monV = opc.mon || $('eAnaMon').value, res = opc.res != null ? opc.res : segV('eAnaRes') === 'res', pagar = S.lado === 'Por pagar';
   var conPen = monV !== 'usd', conUsd = monV !== 'pen';
   var eq = function (d, x, tc) { return { pen: d.mon === 'USD' ? (tc ? x * tc : 0) : x, usd: d.mon === 'USD' ? x : (tc ? x / tc : 0) }; };
-  var filas = [], TG = { pen: [0, 0, 0], usd: [0, 0, 0] }, NAT = {}, sinTc = 0, descuadre = 0;
+  var filas = [], TG = { pen: [0, 0, 0], usd: [0, 0, 0] }, NAT = {}, sinTc = 0, descuadre = 0, nBlq = 0;
   var mes = function (f) { return f ? f.slice(5, 7) + '/' + f.slice(0, 4) : ''; };
   // agrupar por proveedor (o cliente) aunque el reporte esté por empresa
   var porC = {};
@@ -2198,6 +2202,7 @@ function analisisE(lista, agr, opc) {
       (exDoc[ks[ks.length - 1]] = exDoc[ks[ks.length - 1]] || []).push({ v: v, exc: exc, devs: S.devDe[v.id] || [] });
     });
     P.docs.sort(function (a, b) { return a.f < b.f ? -1 : a.f > b.f ? 1 : cmpNum(a, b); }).forEach(function (d) {
+      var desde = filas.length;   // filas de esta factura (se pintan como un bloque)
       var tc = tcDe(d); if (!tc && ((d.mon === 'USD' && conPen) || (d.mon !== 'USD' && conUsd))) sinTc++;
       var ex = exDoc[d.k] || [], excT = 0, devT = 0, porV = {};
       ex.forEach(function (x) { excT += x.exc; x.devs.forEach(function (q) { devT += q.m; }); porV[x.v.id] = x; });
@@ -2207,7 +2212,17 @@ function analisisE(lista, agr, opc) {
       var ms = (EV.movK[d.k] || []).slice().sort(function (a, b) { return (a.f || '') < (b.f || '') ? -1 : 1; });
       var s = d.tot, cancel = '';
       ms.forEach(function (m) { s += m.mod === 'N/D' ? m.m : -m.m; if (!cancel && s <= 0.05) cancel = mes(m.f); });   // ↩️ devolución: llega en negativo → suma
-      var compT = r2(d.tot + devT), amTot = r2(compT - salF);
+      // compromiso y amortización = la suma EXACTA de las líneas del detalle (cargos y abonos), y su diferencia = el saldo
+      var car = 0, abo = 0, usados = {};
+      ms.forEach(function (m) {
+        var c0 = cat(m), dl = c0.g === 'nd' ? m.m : -m.m;
+        if (m.mod === 'Pago' && porV[m.id] && !usados[m.id]) { usados[m.id] = 1; dl -= porV[m.id].exc; }
+        if (dl > 0) car += dl; else abo -= dl;
+      });
+      ex.forEach(function (x) { if (!usados[x.v.id]) abo += x.exc; x.devs.forEach(function (q) { car += q.m; }); });
+      var dif0 = r2(d.tot + car - abo - salF);
+      if (dif0 > 0.05) abo += dif0; else if (dif0 < -0.05) car -= dif0;   // la línea «Ajuste»
+      var compT = r2(d.tot + car), amTot = r2(abo);
       var linea = function (tipo, cls, campos, comp, amor, saldo) {
         var e1 = eq(d, comp, tc), e2 = eq(d, amor, tc), e3 = eq(d, saldo, tc);
         return Object.assign({ t: cls, tipo: tipo, mon: d.mon, tc: tc, pen: [e1.pen, e2.pen, e3.pen], usd: [e1.usd, e2.usd, e3.usd] }, campos);
@@ -2239,7 +2254,13 @@ function analisisE(lista, agr, opc) {
         // cuadre de la línea: el saldo acumulado debe terminar igual al saldo del documento en Cobranzas
         var dif = r2(sal - salF);
         if (Math.abs(dif) > 0.05) { descuadre++; filas.push(linea('Ajuste', 'am', { doc: d.doc, adoc: '', afec: '', glosa: 'Diferencia con el saldo de Cobranzas (otros descuentos o movimientos sin fecha)' }, dif < 0 ? -dif : 0, dif > 0 ? dif : 0, salF)); }
+        // 🧾 línea de saldo de la factura: total del compromiso, de lo amortizado y lo que queda
+        var hoyA = new Date().toISOString().slice(0, 10);
+        var est = salF > 0.05 ? (d.ve && d.ve < hoyA ? '🔴 vencida · por ' + (pagar ? 'pagar' : 'cobrar') : '⚪ pendiente') : salF < -0.05 ? '💰 pagado de más (a favor)' : '✅ cancelada' + (base.cancel ? ' en ' + base.cancel : '');
+        filas.push(linea('', 'sf', { txt: 'Saldo de ' + d.doc, est: est, doc: d.doc }, compT, amTot, salF));
       }
+      for (var z = desde; z < filas.length; z++) filas[z].blq = nBlq % 2;
+      nBlq++;
       [0, 1, 2].forEach(function (i) { var e = eq(d, [compT, amTot, salF][i], tc); TP.pen[i] += e.pen; TP.usd[i] += e.usd; });
     });
     // pagos a cuenta sin factura (saldo a favor) del proveedor
@@ -2271,13 +2292,17 @@ function analisisE(lista, agr, opc) {
   var sub = function (x) { return '<th class="n">Compromiso</th><th class="n">Amortización</th><th class="n">Saldo</th>'; };
   var h = '<div' + (opc.envio ? '' : ' style="overflow:auto;max-height:calc(100vh - 330px)"') + '><table class="ana"><thead><tr><th colspan="' + nPre + '"></th>' + gr + '<th></th></tr><tr>' + cols + (conPen ? sub() : '') + (conUsd ? sub() : '') + '<th>Glosa</th></tr></thead><tbody>';
   var N = function (v, sal) { if (Math.abs(v) < 0.005) return '<span style="color:#CBD5E1">–</span>'; return sal ? '<span class="' + (v > 0.05 ? 'pos' : 'neg') + '">' + fm(v) + '</span>' : fm(v); };
-  var montos = function (f) { return (conPen ? '<td class="n">' + N(f.pen[0]) + '</td><td class="n">' + N(f.pen[1]) + '</td><td class="n"><b>' + N(f.pen[2], 1) + '</b></td>' : '') + (conUsd ? '<td class="n">' + N(f.usd[0]) + '</td><td class="n">' + N(f.usd[1]) + '</td><td class="n"><b>' + N(f.usd[2], 1) + '</b></td>' : ''); };
+  // saldo: en las líneas de movimiento es el «saldo que va quedando» (gris); el que manda es el de la línea 🧾 Saldo de la factura
+  var corrido = function (f) { return !res && (f.t === 'am' || f.t === 'dc'); };
+  var S3 = function (v, f) { return corrido(f) ? '<td class="n sc">' + (Math.abs(v) < 0.005 ? '0.00' : fm(v)) + '</td>' : '<td class="n"><b>' + N(v, 1) + '</b></td>'; };
+  var montos = function (f) { return (conPen ? '<td class="n">' + N(f.pen[0]) + '</td><td class="n">' + N(f.pen[1]) + '</td>' + S3(f.pen[2], f) : '') + (conUsd ? '<td class="n">' + N(f.usd[0]) + '</td><td class="n">' + N(f.usd[1]) + '</td>' + S3(f.usd[2], f) : ''); };
   var colT = { Factura: '#1D4ED8', 'N/D': '#1E40AF', 'N/C': '#C2410C', Pago: '#15803D', 'Pago manual': '#166534', Retención: '#7C3AED', Detracción: '#0E7490', Devolución: '#BE185D', 'A cuenta': '#047857', Ajuste: '#B45309', Otro: '#475569' };
   var ncol = nPre + (conPen ? 3 : 0) + (conUsd ? 3 : 0) + 1;
   filas.forEach(function (f) {
     if (f.t === 'pv') { h += '<tr class="apv"><td colspan="' + ncol + '">' + esc(f.txt) + '</td></tr>'; return; }
     if (f.t === 'tp' || f.t === 'tg') { h += '<tr class="a' + f.t + '"><td colspan="' + nPre + '">' + esc(f.txt) + '</td>' + montos(f) + '<td></td></tr>'; return; }
-    h += '<tr class="a' + f.t + '"><td class="adoc">' + (f.t === 'am' ? '' : esc(f.doc)) + '</td>' + (conEmp ? '<td>' + esc(f.emp || '') + '</td>' : '') + '<td>' + (f.t === 'dc' ? ff(f.fdoc) : '') + '</td><td>' + (f.t === 'dc' ? ff(f.fven) : '') + '</td><td>' + esc(f.cancel || '') + '</td>' +
+    if (f.t === 'sf') { h += '<tr class="asf' + (f.blq ? ' z1' : '') + '"><td colspan="' + nPre + '">🧾 ' + esc(f.txt) + ' <span class="est">' + esc(f.est) + '</span></td>' + montos(f) + '<td></td></tr>'; return; }
+    h += '<tr class="a' + f.t + (f.blq ? ' z1' : '') + '"><td class="adoc">' + (f.t === 'am' ? '' : esc(f.doc)) + '</td>' + (conEmp ? '<td>' + esc(f.emp || '') + '</td>' : '') + '<td>' + (f.t === 'dc' ? ff(f.fdoc) : '') + '</td><td>' + (f.t === 'dc' ? ff(f.fven) : '') + '</td><td>' + esc(f.cancel || '') + '</td>' +
       '<td><span class="tg2" style="background:' + (colT[f.tipo] || '#475569') + '">' + esc(f.tipo) + '</span></td><td>' + esc(f.adoc || '') + '</td><td>' + (f.afec ? ff(f.afec) : '') + '</td><td>' + (f.mon === 'USD' ? 'US$' : 'S/') + '</td><td class="n">' + (f.tc ? Number(f.tc).toFixed(3) : '') + '</td>' + montos(f) + '<td style="color:var(--gr)">' + esc(f.glosa || '') + '</td></tr>';
   });
   h += '</tbody></table></div><div style="display:flex;gap:18px;justify-content:flex-end;padding:8px 4px;font-size:13px"><span>Total registros: <b>' + filas.filter(function (f) { return f.t === 'dc' || f.t === 'am'; }).length + '</b></span>' +
@@ -2303,7 +2328,7 @@ function anaExcel() {
     var mont = function (f) { return (A.conPen ? f.pen.map(r2n) : []).concat(A.conUsd ? f.usd.map(r2n) : []); };
     A.filas.forEach(function (f) {
       if (f.t === 'pv') { rows.push([f.txt]); return; }
-      if (f.t === 'tp' || f.t === 'tg') { var r = [f.txt]; while (r.length < cab.length - (A.conPen ? 3 : 0) - (A.conUsd ? 3 : 0) - 1) r.push(''); rows.push(r.concat(mont(f), [''])); return; }
+      if (f.t === 'tp' || f.t === 'tg' || f.t === 'sf') { var r = [f.t === 'sf' ? '   ' + f.txt + ' · ' + f.est : f.txt]; while (r.length < cab.length - (A.conPen ? 3 : 0) - (A.conUsd ? 3 : 0) - 1) r.push(''); rows.push(r.concat(mont(f), [''])); return; }
       rows.push([f.t === 'am' ? '   ' + f.doc : f.doc].concat(A.conEmp ? [f.emp || ''] : [], [f.t === 'dc' ? ff(f.fdoc) : '', f.t === 'dc' ? ff(f.fven) : '', f.cancel || '', f.tipo, f.adoc || '', f.afec ? ff(f.afec) : '', f.mon === 'USD' ? 'US$' : 'S/', f.tc ? Number(Number(f.tc).toFixed(3)) : ''], mont(f), [f.glosa || '']));
     });
     var ws = XLSX.utils.aoa_to_sheet(rows), wb = XLSX.utils.book_new();
@@ -2502,7 +2527,7 @@ function anaCopiarTxt() {
   L.push(['Documento', 'F. doc.', 'F. venc.', 'Mes cancel.', 'Tipo', A.res ? 'Amortizaciones' : 'Doc. amortización', 'Fecha', 'Moneda', 'T.C.'].concat(A.conPen ? ['Compromiso S/', 'Amortización S/', 'Saldo S/'] : [], A.conUsd ? ['Compromiso US$', 'Amortización US$', 'Saldo US$'] : [], ['Glosa']).join('\t'));
   A.filas.forEach(function (f) {
     if (f.t === 'pv') return L.push(f.txt);
-    if (f.t === 'tp' || f.t === 'tg') return L.push([f.txt, '', '', '', '', '', '', '', ''].concat(mont(f)).join('\t'));
+    if (f.t === 'tp' || f.t === 'tg' || f.t === 'sf') return L.push([f.t === 'sf' ? f.txt + ' · ' + f.est : f.txt, '', '', '', '', '', '', '', ''].concat(mont(f)).join('\t'));
     L.push([f.t === 'am' ? '' : f.doc, f.t === 'dc' ? ff(f.fdoc) : '', f.t === 'dc' ? ff(f.fven) : '', f.cancel || '', f.tipo, f.adoc || '', f.afec ? ff(f.afec) : '', f.mon === 'USD' ? 'US$' : 'S/', f.tc ? Number(f.tc).toFixed(3) : ''].concat(mont(f), [f.glosa || '']).join('\t'));
   });
   return L.join('\n');
