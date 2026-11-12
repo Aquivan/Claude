@@ -268,11 +268,12 @@ function leerConfig_(ss) {
     idPadrones: String(v[11] || '').trim(),
     idDetracciones: String(v[12] || '').trim(),
     grupo: emp.map(function (r) { return aRuc_(r[0]); }),
-    nombreEmpresa: {}, aliasEmpresa: {}, aliasNombre: {}, diasPorRuc: {},
+    nombreEmpresa: {}, razonEmpresa: {}, aliasEmpresa: {}, aliasNombre: {}, diasPorRuc: {},
   };
   emp.forEach(function (r) {
     var ruc = aRuc_(r[0]);
     cfg.nombreEmpresa[ruc] = r[1] || r[2] || ruc;
+    if (r[2]) cfg.razonEmpresa[ruc] = String(r[2]).trim();   // razón social completa (para documentos que se envían)
     if (r[1]) cfg.aliasEmpresa[normHeader_(r[1])] = ruc;
     if (r[2]) cfg.aliasEmpresa[normHeader_(r[2])] = ruc;
   });

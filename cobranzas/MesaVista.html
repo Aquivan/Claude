@@ -638,6 +638,8 @@ function clicRMix(el) { cerrarPop(); var u = el.dataset.u; S.act = ''; S.selV = 
 function cmpFecha(a, b) { return a.f > b.f ? 1 : a.f < b.f ? -1 : 0; }
 function numDoc(d) { var m = String(d.doc).match(/^(\d+)_([A-Z0-9]+)-(\d+)$/i); return m ? [m[2], Number(m[3])] : [d.doc, 0]; }
 function cmpNum(a, b) { var x = numDoc(a), y = numDoc(b); return x[0].localeCompare(y[0]) || (x[1] - y[1]); }
+/** Razón social completa (⚙️ Config de Cobranzas) para los documentos que se envían; si no está, el nombre corto. */
+function razonEmp(r) { var e = (S.data.empresas || []).filter(function (x) { return x.ruc === r; })[0]; return e ? (e.razon || e.nombre) : (r || '¿?'); }
 function nomEmp(r) { var e = (S.data.empresas || []).filter(function (x) { return x.ruc === r; })[0]; return e ? e.nombre : (r || '¿?'); }
 function selResumen() {
   var ks = Object.keys(S.selF); if (!ks.length) return '';
@@ -2395,7 +2397,7 @@ function anaExcel() {
   var hacer = function () {
     var A = ANA, cab = ['Documento'].concat(A.conEmp ? ['Empresa'] : [], ['F. doc.', 'F. venc.', 'Mes cancel.', 'Tipo', A.res ? 'Amortizaciones' : 'Doc. amortización', 'Fecha', 'Moneda', 'T.C.'],
       A.conPen ? ['Compromiso S/', 'Amortización S/', 'Saldo S/'] : [], A.conUsd ? ['Compromiso US$', 'Amortización US$', 'Saldo US$'] : [], ['Glosa']);
-    var rows = [['ANÁLISIS DE CUENTA · ' + (A.pagar ? 'CUENTAS POR PAGAR' : 'CUENTAS POR COBRAR') + ' · ' + ($('fEmp').value ? nomEmp($('fEmp').value) : 'Grupo')], ['Generado el ' + ff(new Date().toISOString().slice(0, 10))], [], cab];
+    var rows = [['ANÁLISIS DE CUENTA · ' + (A.pagar ? 'CUENTAS POR PAGAR' : 'CUENTAS POR COBRAR') + ' · ' + ($('fEmp').value ? razonEmp($('fEmp').value) : 'Grupo')], ['Generado el ' + ff(new Date().toISOString().slice(0, 10))], [], cab];
     var r2n = function (v) { return Math.round(v * 100) / 100; };
     var mont = function (f) { return (A.conPen ? f.pen.map(r2n) : []).concat(A.conUsd ? f.usd.map(r2n) : []); };
     A.filas.forEach(function (f) {
@@ -2487,7 +2489,7 @@ function ecPintar() {
   var x = ecDatos(cr, er, mon), sim = mon === 'USD' ? 'US$' : 'S/';
   var d0 = x.docs[0] || {}, nomC = d0.cn || (S.V && Object.keys(S.V).map(function (i) { return S.V[i]; }).filter(function (v) { return (pagar ? v.br : v.pr) === cr; }).map(function (v) { return v.bn; })[0]) || cr;
   var emp = er ? (S.data.empresas || []).filter(function (e) { return e.ruc === er; })[0] : null;
-  var nomE = emp ? emp.nombre : 'Grupo (todas las empresas)';
+  var nomE = emp ? (emp.razon || emp.nombre) : 'Grupo (todas las empresas)';
   // saldo inicial y periodo
   var ini = 0, per = [], fin = 0, R = { fac: 0, nd: 0, dev: 0, nc: 0, ret: 0, det: 0, pago: 0, otr: 0 };
   x.L.forEach(function (l) {
@@ -2561,7 +2563,7 @@ function ecPintar() {
 function ecAnalisis(cr, er, de, ha) {
   var pagar = S.lado === 'Por pagar', hoy = new Date().toISOString().slice(0, 10);
   var docs = EV.docs.filter(function (d) { return d.cr === cr && (!er || d.er === er) && d.f <= ha && (!de || d.f >= de); });
-  var nomC = (docs[0] || {}).cn || cr, emp = er ? (S.data.empresas || []).filter(function (e) { return e.ruc === er; })[0] : null, nomE = emp ? emp.nombre : 'Grupo (todas las empresas)';
+  var nomC = (docs[0] || {}).cn || cr, emp = er ? (S.data.empresas || []).filter(function (e) { return e.ruc === er; })[0] : null, nomE = emp ? (emp.razon || emp.nombre) : 'Grupo (todas las empresas)';
   var guard = $('eSinEmp') ? $('eSinEmp').value : 'todos'; if ($('eSinEmp')) $('eSinEmp').value = $('ecSinEmp').value;   // pagos a cuenta según el selector de aquí
   var fav = []; try { fav = vouchersDe(cr, er).filter(function (v) { return !v.dev && v.m - v._apl > 0.05 && v.f <= ha && (!de || v.f >= de); }); } finally { if ($('eSinEmp')) $('eSinEmp').value = guard; }
   // cruce con el estado de cuenta (mismo proveedor, empresa y corte): el saldo de cada moneda debe ser el mismo
