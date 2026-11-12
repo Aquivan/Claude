@@ -143,7 +143,7 @@ function VIA_rucUltimas() { try { return VIA_llamar_('rucultimas', {}); } catch 
 function VIA_rucEstado(id) { try { return VIA_llamar_('rucestado', { id: id }); } catch (e) { return { error: e.message }; } }
 function VIA_rucOtro(nombre, filas) { try { return VIA_llamar_('rucotro', { nombre: nombre, filas: filas }); } catch (e) { return { error: e.message }; } }
 function VIA_rucElegirVarios(lista) { try { return VIA_llamar_('rucelegirvarios', { lista: lista }); } catch (e) { return { error: e.message }; } }
-function VIA_rucElegir(prov, filas, ruc, det) { try { return VIA_llamar_('rucelegir', { prov: prov, filas: filas, ruc: ruc, det: det }); } catch (e) { return { error: e.message }; } }
+function VIA_rucElegir(prov, filas, ruc, det, reemplazarAlias) { try { return VIA_llamar_('rucelegir', { prov: prov, filas: filas, ruc: ruc, det: det, reemplazarAlias: !!reemplazarAlias }); } catch (e) { return { error: e.message }; } }
 
 var VIA_RUC_HTML_ = [
   '<!doctype html><html><head><meta charset="utf-8"><style>',
@@ -161,7 +161,7 @@ var VIA_RUC_HTML_ = [
   'function nn(s){return String(s||"").toUpperCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").replace(/[^A-Z0-9]+/g," ").trim()}',
   '$("txt").textContent=D.texto;',
   '/* una tarjeta por NOMBRE (y sugerencia): lo que se elige vale para todos sus vouchers */',
-  'var G=[],porK={};D.detalle.filter(function(f){return !f.ruc}).forEach(function(f){var k=nn(f.prov)+"|"+(f.sug||"");if(!f.prov)k="#"+f.k;var g=porK[k];if(!g){g=porK[k]={prov:f.prov,sug:f.sug,sugNombre:f.sugNombre,como:f.como,parecidos:f.parecidos||[],opciones:f.opciones||[],filas:[]};G.push(g)}g.filas.push(f)});',
+  'var G=[],porK={};D.detalle.filter(function(f){return !f.ruc}).forEach(function(f){var k=nn(f.prov)+"|"+(f.sug||"");if(!f.prov)k="#"+f.k;var g=porK[k];if(!g){g=porK[k]={prov:f.prov,sug:f.sug,sugNombre:f.sugNombre,como:f.como,parecidos:f.parecidos||[],opciones:f.opciones||[],alias:f.alias||"",aliasNombre:f.aliasNombre||"",aliasRaro:!!f.aliasRaro,filas:[]};G.push(g)}g.filas.push(f)});',
   'function filasDe(g){return g.filas.map(function(f){return{hoja:f.hoja,fila:f.fila,col:f.col}})}',
   'function falla(i){return function(e){msg("❌ "+(e&&e.message||e),$("m"+i),1)}}',
   'function pintar(){',
@@ -175,9 +175,10 @@ var VIA_RUC_HTML_ = [
   '  var h="<div class=\\"card"+(g.hecho?" ok":"")+"\\"><div class=\\"t\\">"+esc(g.prov||"(sin nombre del proveedor)")+" · "+g.filas.length+" voucher(s) · "+Object.keys(tot).map(function(m){return m+" "+fm(tot[m])}).join(" + ")+"</div>";',
   '  h+="<div class=\\"vs\\">"+g.filas.map(function(f){return esc(f.k)+" · "+esc(f.fecha)+" · "+esc(f.moneda)+" "+fm(f.monto)}).join("<br>")+"</div>";',
   '  if(g.hecho)return h+"<div class=\\"m\\">"+esc(g.hecho)+"</div></div>";',
-  '  if(g.sug)h+="<div class=\\"sug\\"><label><input type=\\"checkbox\\" id=\\"k"+i+"\\" checked> 💡 <b>"+esc(g.sug)+"</b> — <b style=\\"color:#1D4ED8\\">"+esc(g.sugNombre||"(nombre no hallado: verifíquelo en SUNAT)")+"</b><br><span class=\\"s\\">"+esc(g.como)+"</span></label> <button class=\\"r\\" onclick=\\"noEs("+i+")\\">❌ No es este</button></div>";',
+  '  if(g.sug)h+="<div class=\\"sug\\"><label><input type=\\"checkbox\\" id=\\"k"+i+"\\""+(g.aliasRaro&&g.sug===g.alias?"":" checked")+"> 💡 <b>"+esc(g.sug)+"</b> — <b style=\\"color:#1D4ED8\\">"+esc(g.sugNombre||"(nombre no hallado: verifíquelo en SUNAT)")+"</b><br><span class=\\"s\\">"+esc(g.como)+"</span></label> <button class=\\"r\\" onclick=\\"noEs("+i+")\\">❌ No es este</button></div>";',
   '  else if(g.opciones.length)h+="<div class=\\"s\\">❓ Sin RUC claro. Posibles:</div>"+selector(i,g.opciones);',
   '  else if(!g.parecidos.length)h+="<div class=\\"s\\">❓ No lo encontré en los vouchers, SIRE, recibos por honorarios ni retenciones.</div>";',
+  '  if(g.alias)h+=(g.aliasRaro?"<div class=\\"sug\\" style=\\"background:#FEF2F2;border-color:#FCA5A5\\">⚠️ <b>Ojo:</b> el alias guardado para este nombre es <b>"+esc(g.alias)+"</b> — <b>"+esc(g.aliasNombre)+"</b>, un nombre muy distinto. Revise el voucher: puede ser correcto (se le pagó en nombre de esa empresa) o un alias equivocado.</div>":"")+"<label class=\\"s\\" style=\\"display:block;margin:4px 0\\"><input type=\\"checkbox\\" id=\\"a"+i+"\\" checked> 🔁 Si elijo otro RUC, actualizar el alias de este nombre (hoy: "+esc(g.alias)+(g.aliasNombre?" "+esc(g.aliasNombre):"")+")</label>";',
   '  if(g.parecidos.length)h+=parec(i,g);',
   '  h+="<div><button class=\\"g\\" onclick=\\"opciones("+i+")\\">📋 Más opciones (SIRE, honorarios, retenciones…)</button>"+(g.prov?" <button onclick=\\"iaNombre("+i+")\\" title=\\"Busca este nombre en el padrón de SUNAT y con IA en internet\\">🌐 Buscar con IA en SUNAT e internet</button>":"")+"</div>";',
   '  h+="<div><input type=\\"text\\" id=\\"q"+i+"\\" placeholder=\\"RUC (11 dígitos) u otro nombre para buscar\\"> <button onclick=\\"otro("+i+")\\">🔎 Usar este RUC / buscar otro nombre con IA</button></div>";',
@@ -185,8 +186,10 @@ var VIA_RUC_HTML_ = [
   'function parec(i,g){return "<div class=\\"s\\" style=\\"margin-top:5px\\">🔤 <b>Nombres parecidos</b> (compare el nombre y elija):</div>"+g.parecidos.map(function(o,j){return "<div style=\\"display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0\\"><span style=\\"flex:1\\"><b>"+esc(o.ruc)+"</b> — <b style=\\"color:#1D4ED8\\">"+esc(o.nombre)+"</b> <span class=\\"s\\">"+esc(o.det)+(o.ruc===g.sug?" · ← sugerido":"")+"</span></span><button class=\\"v\\" style=\\"padding:3px 8px\\" onclick=\\"elegirP("+i+","+j+")\\">✅ Este</button></div>"}).join("")}',
   'function selector(i,ops){var k=++K;DAT["s"+k]=ops;return "<select id=\\"s"+k+"\\">"+ops.map(function(o,j){return "<option value=\\""+j+"\\">"+esc(o.ruc+" "+o.nombre+" — "+o.det)+"</option>"}).join("")+"</select> <button class=\\"v\\" onclick=\\"elegir("+i+","+k+")\\">✅ Es este</button>"}',
   'function hecho(i,ruc,nom,y){var g=G[i];g.hecho="✅ "+ruc+" "+(nom||"")+" en "+g.filas.length+" voucher(s) · "+((y&&y.mensaje)||"escrito");g.sug="";pintar()}',
+  'function reemp(i){var c=$("a"+i);return !!(c&&c.checked)}',
+  'function reempProv(p){var r=false;G.forEach(function(g,i){if(nn(g.prov)===nn(p)&&reemp(i))r=true});return r}',
   'function escribirRuc(i,ruc,nom,det){var g=G[i];msg("Escribiendo "+ruc+" en "+g.filas.length+" voucher(s)…",$("m"+i));',
-  ' google.script.run.withFailureHandler(falla(i)).withSuccessHandler(function(y){y=y||{};if(y.error){msg(y.error,$("m"+i),1);return}hecho(i,ruc,nom,y)}).VIA_rucElegir(g.prov,filasDe(g),ruc,det)}',
+  ' google.script.run.withFailureHandler(falla(i)).withSuccessHandler(function(y){y=y||{};if(y.error){msg(y.error,$("m"+i),1);return}hecho(i,ruc,nom,y)}).VIA_rucElegir(g.prov,filasDe(g),ruc,det,reemp(i))}',
   'function elegirP(i,j){var o=G[i].parecidos[j];escribirRuc(i,o.ruc,o.nombre,o.nombre+" — "+o.det)}',
   'function elegir(i,k){var o=DAT["s"+k][Number($("s"+k).value)];escribirRuc(i,o.ruc,o.nombre,o.nombre+" — "+o.det)}',
   'function noEs(i){var g=G[i];g.rechazado=g.sug;g.sug="";pintar();msg("Quité la sugerencia "+g.rechazado+". Compare los nombres parecidos o busque otro.",$("m"+i))}',
@@ -228,9 +231,9 @@ var VIA_RUC_HTML_ = [
   ' if(!sel.length){msg("No marcó ninguno: no escribí nada.",m);return}var b=document.querySelector("#mc"+k).previousElementSibling;if(b)b.disabled=true;',
   ' msg("⏳ Escribiendo "+sel.length+" de una vez y recalculando Cobranzas una sola vez (hasta 1–2 min)…",m);',
   ' google.script.run.withFailureHandler(function(e){if(b)b.disabled=false;msg("❌ "+(e&&e.message||e)+" — revise la hoja: lo ya escrito queda; puede volver a intentar.",m,1)}).withSuccessHandler(function(y){y=y||{};msg(y.error?"❌ "+y.error:(y.mensaje||"Listo."),m,!!y.error)})',
-  '  .VIA_rucElegirVarios(sel.map(function(x){return{prov:x.prov,filas:x.filas,ruc:x.ruc,det:x.nombre+" — "+x.como}}))}',
+  '  .VIA_rucElegirVarios(sel.map(function(x){return{prov:x.prov,filas:x.filas,ruc:x.ruc,det:x.nombre+" — "+x.como,reemplazarAlias:reempProv(x.prov)}}))}',
   'function elegirEl(k){var el=DAT["e"+k],j=Number($("es"+k).value),m=$("me"+k);if(j<0){msg("No escribí nada para "+el.prov+".",m);return}',
-  ' var o=el.opciones[j];msg("Escribiendo "+o.ruc+"…",m);google.script.run.withFailureHandler(function(e){msg("❌ "+(e&&e.message||e),m,1)}).withSuccessHandler(function(y){msg((y&&(y.mensaje||y.error))||"Listo.",m)}).VIA_rucElegir(el.prov,el.filas,o.ruc,o.nombre+" — "+o.det)}',
+  ' var o=el.opciones[j];msg("Escribiendo "+o.ruc+"…",m);google.script.run.withFailureHandler(function(e){msg("❌ "+(e&&e.message||e),m,1)}).withSuccessHandler(function(y){msg((y&&(y.mensaje||y.error))||"Listo.",m)}).VIA_rucElegir(el.prov,el.filas,o.ruc,o.nombre+" — "+o.det,reempProv(el.prov))}',
   'function ultimas(){var c=$("ext");msg("Buscando las búsquedas anteriores…");google.script.run.withFailureHandler(function(e){msg("❌ "+(e&&e.message||e),null,1)}).withSuccessHandler(function(r){r=r||{};if(r.error){msg(r.error,null,1);return}var l=r.lista||[];',
   ' if(!l.length){msg("No hay búsquedas en SUNAT e internet de las últimas 6 horas.");return}msg("");',
   ' var d=document.createElement("div");d.className="card";d.innerHTML="<b>📂 Búsquedas anteriores (últimas 6 horas)</b>"+l.map(function(x){return "<div style=\\"display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0\\"><span style=\\"flex:1\\">"+esc(x.cuando)+" · "+esc(x.que)+" <span class=\\"s\\">"+(x.listo?"✅ lista · "+x.claros+" encontrado(s), "+x.elecciones+" por elegir":"⏳ todavía buscando")+"</span></span><button style=\\"padding:3px 8px\\" onclick=\\"verBusq(\'"+esc(x.id)+"\',this)\\">Ver</button></div>"}).join("");c.insertBefore(d,c.firstChild);d.scrollIntoView()}).VIA_rucUltimas()}',

@@ -46,7 +46,7 @@ function VCH_doPost_(e) {
       case 'rucestado': return TGW_json_(TGQ_rucEstado_(String(q.id || '')));
       case 'rucultimas': return TGW_json_(TGQ_rucUltimas_());   // 📂 búsquedas anteriores (6 h)
       case 'rucotro': return TGW_json_(TGQ_rucOtroNombre_(ss, q.nombre, q.filas));   // 🔎 buscar con otro nombre
-      case 'rucelegir': return TGW_json_(TGQ_rucElegirFilas_(ss, q.prov, q.filas, q.ruc, q.det));
+      case 'rucelegir': return TGW_json_(TGQ_rucElegirFilas_(ss, q.prov, q.filas, q.ruc, q.det, q.reemplazarAlias));
       case 'rucelegirvarios': return TGW_json_(TGQ_rucElegirVarios_(ss, q.lista));   // ✍️ varios de una vez, un solo recálculo
       case 'mesa':   // 🧩 Mesa de conciliación abierta desde la hoja de Vouchers (Mesa.js): enlace con llave temporal
         return TGW_json_({ url: MESA_enlace_('Vouchers · ' + String(q.quien || '').slice(0, 60)) });
