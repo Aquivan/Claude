@@ -140,7 +140,7 @@ function PV_guardar_(s, hoja, fila, clave, cambios) {
   fila = Number(fila);
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) throw new Error('Otra persona está guardando: intente de nuevo en unos segundos.');
-  var hechos = [];
+  var hechos = [], antesU = {}, despuesU = {};   // para ↩️ deshacer: lo de antes y lo que se escribió, por columna
   try {
     var nCol = Math.max(13, sh.getLastColumn()), ver = sh.getRange(fila, 1, 1, nCol).getDisplayValues()[0];
     var tit = sh.getRange(1, 1, 1, nCol).getDisplayValues()[0];
@@ -153,11 +153,12 @@ function PV_guardar_(s, hoja, fila, clave, cambios) {
       var celda = sh.getRange(fila, col);
       if (celda.getFormula()) return;   // las fórmulas no se tocan
       var v = cambios[k], antes = celda.getValue(), m;
-      if (v === true || v === false) { celda.setValue(v); hechos.push((tit[col - 1] || 'Col ' + col) + ': ' + ver[col - 1] + ' → ' + v); return; }
+      antesU[col] = PV_ser_(antes);
+      if (v === true || v === false) { celda.setValue(v); despuesU[col] = PV_ser_(v); hechos.push((tit[col - 1] || 'Col ' + col) + ': ' + ver[col - 1] + ' → ' + v); return; }
       v = String(v == null ? '' : v).trim();
       if (antes instanceof Date && (m = v.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/))) v = new Date(Number(m[3].length === 2 ? '20' + m[3] : m[3]), Number(m[2]) - 1, Number(m[1]));
       else if (typeof antes === 'number' && v !== '' && !isNaN(Number(v.replace(/,/g, '')))) v = Number(v.replace(/,/g, ''));
-      celda.setValue(v);
+      celda.setValue(v); despuesU[col] = PV_ser_(v);
       hechos.push((tit[col - 1] || 'Col ' + col) + ': «' + ver[col - 1] + '» → «' + (v instanceof Date ? Utilities.formatDate(v, PV_TZ_, 'dd/MM/yyyy') : v) + '»');
     });
     if (hechos.length) {
@@ -168,8 +169,57 @@ function PV_guardar_(s, hoja, fila, clave, cambios) {
       SpreadsheetApp.flush();
     }
   } finally { lock.releaseLock(); }
-  if (hechos.length) PV_registrar_(s, '✏️ Corrigió ' + hoja + ' fila ' + fila, hechos.join(' · '));
+  if (hechos.length) {
+    PV_registrar_(s, '✏️ Corrigió ' + hoja + ' fila ' + fila, hechos.join(' · '));
+    var vd = sh.getRange(fila, 1, 1, 11).getDisplayValues()[0];
+    PropertiesService.getScriptProperties().setProperty('PV_DESH_' + s.u, JSON.stringify({ hoja: hoja, fila: fila, antes: antesU, despues: despuesU,
+      clave: { b: String(vd[1]), k: String(vd[10]) }, resumen: hechos.join(' · ').slice(0, 600), t: PV_hoy_() }));
+  }
   return PV_fila_(hoja, fila, true);
+}
+
+/** Un valor de celda guardable en JSON (las fechas como número). */
+function PV_ser_(v) { return v instanceof Date ? { d: v.getTime() } : v; }
+function PV_cmp_(v) { return v && typeof v === 'object' && v.d != null ? 'F' + Utilities.formatDate(new Date(v.d), PV_TZ_, 'yyyyMMdd') : JSON.stringify(v); }
+function PV_des_(v) { return v && typeof v === 'object' && v.d != null ? new Date(v.d) : v; }
+
+/** Qué deshace ↩️ (la última corrección de esta persona), sin tocar nada. */
+function PV_verDeshacer_(s) {
+  var u = JSON.parse(PropertiesService.getScriptProperties().getProperty('PV_DESH_' + s.u) || 'null');
+  return u ? { hoja: u.hoja, fila: u.fila, resumen: u.resumen, t: u.t } : null;
+}
+
+/**
+ * ↩️ Deshacer MI última corrección: vuelve a poner lo de antes, solo si la fila sigue siendo el mismo voucher y nadie
+ * cambió esas celdas después (si no, no toca nada y lo dice).
+ */
+function PV_deshacerCorreccion_(s) {
+  var props = PropertiesService.getScriptProperties(), u = JSON.parse(props.getProperty('PV_DESH_' + s.u) || 'null');
+  if (!u) throw new Error('No tiene ninguna corrección para deshacer.');
+  var sh = PV_hoja_(u.hoja), lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw new Error('Otra persona está guardando: intente de nuevo en unos segundos.');
+  var hechos = [];
+  try {
+    var vd = sh.getRange(u.fila, 1, 1, 11).getDisplayValues()[0];
+    if (String(vd[1]) !== u.clave.b || String(vd[10]) !== u.clave.k) throw new Error('La fila ' + u.fila + ' ya no es el mismo voucher (¿se ordenó la hoja?). No deshice nada: corrija a mano con la nota de la columna B.');
+    var tit = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0], cambiadas = [];
+    Object.keys(u.despues).forEach(function (c) {
+      if (PV_cmp_(PV_ser_(sh.getRange(u.fila, Number(c)).getValue())) !== PV_cmp_(u.despues[c])) cambiadas.push(tit[Number(c) - 1] || 'Col ' + c);
+    });
+    if (cambiadas.length) throw new Error('Alguien cambió después «' + cambiadas.join(', ') + '» en esa fila. No deshice nada para no pisar su cambio.');
+    Object.keys(u.antes).forEach(function (c) {
+      sh.getRange(u.fila, Number(c)).setValue(PV_des_(u.antes[c]));
+      hechos.push(tit[Number(c) - 1] || 'Col ' + c);
+    });
+    try {
+      var nota = sh.getRange(u.fila, 2).getNote();
+      sh.getRange(u.fila, 2).setNote(('↩️ Deshecho en el portal por ' + s.u + ' ' + PV_hoy_() + ' (vuelve lo de antes de: ' + u.resumen + ')' + (nota ? '\n\n' + nota : '')).slice(0, 4000));
+    } catch (e) {}
+    SpreadsheetApp.flush();
+    props.deleteProperty('PV_DESH_' + s.u);
+  } finally { lock.releaseLock(); }
+  PV_registrar_(s, '↩️ Deshizo su corrección en ' + u.hoja + ' fila ' + u.fila, hechos.join(', '));
+  return { hoja: u.hoja, fila: u.fila, mensaje: '↩️ ' + u.hoja + ' fila ' + u.fila + ': volvió lo de antes en ' + hechos.join(', ') + '.' };
 }
 
 /* ============================================================ subir */
@@ -201,8 +251,26 @@ function PV_subir_(s, a) {
     var f = DriveApp.getFolderById(dest.id).createFile(Utilities.newBlob(bytes, mime, nombre));
     f.setDescription('Subido desde el 🌐 portal por ' + s.u + ' el ' + PV_hoy_());
     PV_registrar_(s, '📤 Subió un voucher', nombre + ' → ' + dest.t + ' (' + Math.round(bytes.length / 1024) + ' KB)');
-    return { ok: true, nombre: f.getName(), destino: dest.t };
+    return { ok: true, nombre: f.getName(), destino: dest.t, id: f.getId() };
   } finally { lock.releaseLock(); }
+}
+
+/**
+ * 🗑 Quitar un voucher subido por error MIENTRAS sigue en la carpeta de entrada (aún no está en la hoja). Va a la papelera
+ * de Drive (se recupera 30 días). Quien solo sube puede quitar lo suyo; editar y admin, cualquiera.
+ */
+function PV_quitarPendiente_(s, id) {
+  var f;
+  try { f = DriveApp.getFileById(String(id || '')); } catch (e) { throw new Error('Ese archivo ya no está (¿ya se procesó o lo quitaron?).'); }
+  var enEntrada = false, ps = f.getParents();
+  while (ps.hasNext()) { var pid = ps.next().getId(); if (pid === PV_CARP_.oe.id || pid === PV_CARP_.fe.id) enEntrada = true; }
+  if (!enEntrada || f.isTrashed()) throw new Error('«' + f.getName() + '» ya no está esperando en la entrada (¿ya se procesó?). Si ya está en la hoja, bórrelo allí.');
+  var por = String(f.getDescription() || '').replace(/^Subido desde el 🌐 portal por /, '').split(' el ')[0];
+  if (PV_nivel_(s.p) < PV_nivel_('editar') && por !== s.u) throw new Error('Solo puede quitar lo que usted subió (este lo subió ' + (por || 'otra persona') + ').');
+  var nombre = f.getName();
+  f.setTrashed(true);
+  PV_registrar_(s, '🗑 Quitó un voucher de la entrada', nombre + ' (queda 30 días en la papelera de Drive)');
+  return { ok: true, mensaje: '🗑 «' + nombre + '» quitado de la entrada (se puede recuperar 30 días desde la papelera de Drive).' };
 }
 
 /* ============================================================ carpetas */
@@ -215,7 +283,7 @@ function PV_pendientes_() {
       var it = DriveApp.getFolderById(PV_CARP_[k].id).getFiles();
       while (it.hasNext() && out.length < 400) {
         var f = it.next();
-        out.push({ nombre: f.getName(), t: f.getDateCreated().getTime(), fecha: Utilities.formatDate(f.getDateCreated(), PV_TZ_, 'dd/MM/yyyy HH:mm'),
+        out.push({ id: f.getId(), nombre: f.getName(), t: f.getDateCreated().getTime(), fecha: Utilities.formatDate(f.getDateCreated(), PV_TZ_, 'dd/MM/yyyy HH:mm'),
           kb: Math.round(f.getSize() / 1024), mime: f.getMimeType(), por: String(f.getDescription() || '').replace(/^Subido desde el 🌐 portal por /, '').split(' el ')[0] });
       }
     } catch (e) { out.push({ nombre: '⚠️ ' + e.message, t: 0, fecha: '', kb: 0 }); }

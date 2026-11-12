@@ -214,6 +214,7 @@ main{flex:1;min-height:0;overflow:auto}
       <p><b>✏️ Corregir</b> (permiso <i>editar</i>): cambie los datos y toque <b>💾 Guardar</b>; antes se muestra qué cambia. Queda una nota en la hoja con quién y qué cambió. <b>🔁 Releer con IA</b> vuelve a leer la página con la IA de la hoja y muestra ANTES / AHORA para elegir; <b>↩️ Deshacer relectura</b> lo devuelve.</p>
       <p><b>📤 Subir</b> (permiso <i>subir</i>): <b>📷 Tomar foto</b> con la cámara, <b>📄 Escanear a PDF</b> (varias fotos con la cámara → un solo PDF, una página por foto; se pueden girar, ordenar o quitar antes) o elija fotos/PDF. Cada foto de la cámara pasa por <b>✂️ Recortar</b>: el portal busca solo los bordes del voucher (4 esquinas que se pueden mover con el dedo), la endereza y con <b>✨ Mejorar</b> aclara el fondo y oscurece el texto (en las fotos de la galería, botón ✂️). El nombre sugerido sale en gris: <b>escriba encima</b> el que quiera, sin borrar nada (si no pone extensión, se agrega sola); póngales un nombre (no se puede repetir uno que ya existe), elija <i>Original</i> (PDF o comprobante formal) o <i>Foto</i>, y suba. Con ⚡ la hoja los procesa en ~1 minuto.</p>
       <p><b>📲 Escanear con Google Drive</b> (en 📤 Subir): elija Original o Foto → se abre la app de Drive en la carpeta 📥 de entrada → <b>+ → Escanear</b> → Guardar → vuelva y toque <b>⚡ Ya escaneé: procesar ahora</b>. Necesita una cuenta de Google con acceso a esa carpeta.</p>
+      <p><b>↩️ Deshacer mi última corrección</b> (en el visor): vuelve lo de antes de su último 💾 Guardar, si nadie cambió esas celdas después. <b>🗑 Quitar</b> (en 📥 Pendientes y en lo recién subido): saca de la entrada un voucher subido por error, mientras todavía no está en la hoja (va a la papelera de Drive, 30 días); quien solo sube puede quitar lo suyo.</p>
       <p><b>📥 Pendientes</b>: lo que espera en las carpetas de entrada (todavía no está en la hoja) y lo último descartado (duplicados, vacíos, muy pesados).</p>
       <p><b>📊 Resumen</b>: cuántos vouchers hay, cuántos sin RUC, sin revisar o duplicados, por pestaña y por mes.</p>
       <p><b>👥 Usuarios</b> (admin): crear usuarios, cambiar PIN y permiso, desactivar; y el registro de quién hizo qué.</p>
@@ -394,7 +395,7 @@ function pintarVisor() {
     else inp = '<input id="' + id + '" value="' + esc(v) + '" oninput="marcado(this)"' + (c.tipo === 'numero' ? ' inputmode="decimal"' : '') + (c.tipo === 'fecha' ? ' placeholder="dd/mm/aaaa"' : '') + '>';
     return '<div class="campo" data-c="' + c.c + '"><label title="' + esc(c.t) + '">' + esc(c.t) + '</label>' + inp + '</div>';
   }).join('');
-  var acc = d.editar ? '<button class="p" id="bGuardar" onclick="guardar()" disabled>💾 Guardar</button>' +
+  var acc = d.editar ? '<button class="p" id="bGuardar" onclick="guardar()" disabled>💾 Guardar</button><button onclick="deshacerCorreccion()" title="Vuelve lo de antes de su último 💾 Guardar (en cualquier voucher)">↩️ Deshacer mi última corrección</button>' +
     (YO.puente ? '<button onclick="releer()" title="Volver a leer la página con la IA de la hoja">🔁 Releer con IA</button><button onclick="deshacer()">↩️ Deshacer relectura</button>' : '') : '';
   $('vis').innerHTML = '<div class="vbar"><button class="solo-movil" onclick="cerrarVisor()">✖</button><span class="t">' + esc(d.hoja) + ' · fila ' + d.fila + ' · ' + esc(x[8] || '') + '</span>' +
     '<button onclick="abrir(SEL-1)" ' + (SEL > 0 ? '' : 'disabled') + '>◀</button><button onclick="abrir(SEL+1)" ' + (SEL < VIS.length - 1 ? '' : 'disabled') + '>▶</button>' +
@@ -520,6 +521,27 @@ function releer() {
     preguntar();
   }).catch(function (e) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + e.message; });
 }
+/** ↩️ Deshacer MI última corrección (de cualquier voucher): primero muestra qué vuelve. */
+function deshacerCorreccion() {
+  api('verDeshacer', {}, 'Un momento…').then(function (u) {
+    if (!u) return alerta('No tiene ninguna corrección para deshacer (solo se puede deshacer la última que usted guardó).');
+    modal('<h3>↩️ Deshacer su última corrección</h3><p><b>' + esc(u.hoja) + ' fila ' + u.fila + '</b> · guardada el ' + esc(u.t) + '</p><p style="font-size:13px">' + esc(u.resumen) + '</p>' +
+      '<p style="font-size:12px;color:var(--gr)">Vuelven los valores de antes. Si alguien cambió esas celdas después, no se toca nada.</p>',
+      [['Cancelar'], ['↩️ Deshacer', function () {
+        api('deshacerCorreccion', {}, 'Deshaciendo…').then(function (r) {
+          if (FILA && FILA.hoja === r.hoja && FILA.fila === r.fila) api('fila', { hoja: r.hoja, fila: r.fila }, false).then(function (d) { FILA = d; pintarVisor(); $('vMsg').className = 'msg ok'; $('vMsg').textContent = r.mensaje; if (VIS[SEL]) actualizarIdx(VIS[SEL], d); });
+          else alerta(r.mensaje + '\nToque 🔄 en Buscar para ver la lista al día.');
+        }).catch(function (e) { alerta('❌ ' + e.message); });
+      }, 'p']]);
+  }).catch(function (e) { alerta('❌ ' + e.message); });
+}
+/** 🗑 Quitar de la entrada un voucher subido por error (va a la papelera de Drive). */
+function quitarPendiente(id, nombre, luego) {
+  modal('<h3>🗑 Quitar «' + esc(nombre) + '»</h3><p>Se quita de la carpeta de entrada (todavía no está en la hoja) y va a la papelera de Drive: se puede recuperar 30 días.</p>',
+    [['Cancelar'], ['🗑 Quitar', function () {
+      api('quitarPendiente', { id: id }, 'Quitando…').then(function (r) { if (luego) luego(r); else alerta(r.mensaje); }).catch(function (e) { alerta('❌ ' + e.message); });
+    }, 'r']]);
+}
 function deshacer() {
   modal('<h3>↩️ Deshacer la última relectura</h3><p>Devuelve la última fila releída con IA (de cualquier persona) a como estaba antes. La imagen queda la de la página releída.</p>',
     [['Cancelar'], ['↩️ Deshacer', function () {
@@ -558,11 +580,15 @@ function pintarSubir() {
       '<div><div class="n"><input value="' + esc(s.nombre) + '" placeholder="' + esc(s.sug) + '" title="Escriba encima el nombre que quiera (vacío = el gris)" onfocus="this.select()" oninput="SUB[' + i + '].nombre=this.value;SUB[' + i + '].est=\'\'" onchange="revisarRepetidos()" ' + (s.hecho ? 'disabled' : '') + '>' +
       '<select onchange="SUB[' + i + '].destino=this.value" ' + (s.hecho ? 'disabled' : '') + '><option value="foto"' + (s.destino === 'foto' ? ' selected' : '') + '>📸 Foto</option><option value="original"' + (s.destino === 'original' ? ' selected' : '') + '>📄 Original</option></select></div>' +
       '<div class="est" style="color:' + (s.hecho ? 'var(--ve)' : s.error ? 'var(--ro)' : 'var(--gr)') + '">' + esc(s.est || (Math.round(s.f.size / 1024) + ' KB')) + '</div></div>' +
-      (s.hecho ? '<span>✅</span>' : '<span style="display:flex;flex-direction:column;gap:4px">' + (s.url ? '<button onclick="subRecortar(' + i + ')" title="Recortar / enderezar / mejorar">✂️</button>' : '') + '<button onclick="SUB.splice(' + i + ',1);pintarSubir()">✖</button></span>') + '</div>';
+      (s.hecho ? (s.quitado ? '<span>🗑</span>' : '<span style="display:flex;flex-direction:column;gap:4px;align-items:center">✅' + (s.idDrive ? '<button class="r" style="padding:2px 7px;font-size:12px" title="Subido por error: quitarlo de la entrada" onclick="quitarSubido(' + i + ')">🗑</button>' : '') + '</span>') : '<span style="display:flex;flex-direction:column;gap:4px">' + (s.url ? '<button onclick="subRecortar(' + i + ')" title="Recortar / enderezar / mejorar">✂️</button>' : '') + '<button onclick="SUB.splice(' + i + ',1);pintarSubir()">✖</button></span>') + '</div>';
   }).join('');
   $('subBot').classList.toggle('oc', !SUB.length);
 }
 /** El nombre con que se sube: lo escrito encima, o el sugerido (gris). Si no le pone extensión, se agrega sola. */
+function quitarSubido(i) {
+  var s = SUB[i]; if (!s || !s.idDrive) return;
+  quitarPendiente(s.idDrive, s.nomDrive, function (r) { s.quitado = true; s.est = r.mensaje; pintarSubir(); });
+}
 function nombreDe(s) {
   var n = String(s.nombre || '').trim();
   if (!n) return s.sug;
@@ -619,7 +645,7 @@ function subirTodo() {
     }
     var s = pend[i++]; s.est = '⏳ Subiendo…'; s.error = false; pintarSubir();
     leerB64(s.f).then(function (b64) { return api('subir', { nombre: nombreDe(s), mime: s.f.type || 'image/jpeg', datos: b64, destino: s.destino }, false); }).then(function (r) {
-      if (r.ok) { s.hecho = true; s.est = '✅ ' + r.nombre + ' → ' + r.destino; bien++; } else { s.error = true; s.est = '❌ ' + r.error; }
+      if (r.ok) { s.hecho = true; s.idDrive = r.id; s.nomDrive = r.nombre; s.est = '✅ ' + r.nombre + ' → ' + r.destino; bien++; } else { s.error = true; s.est = '❌ ' + r.error; }
       pintarSubir(); sig();
     }).catch(function (e) { s.error = true; s.est = '❌ ' + e.message; pintarSubir(); sig(); });
   };
@@ -1045,12 +1071,20 @@ function mejorarCanvas(cv) {
 }
 
 /* ============================================================ 📥 pendientes */
+var PENL = [];
+function quitarPenN(n) { var f = PENL[n]; if (f) quitarPendiente(f.id, f.nombre, function (r) { alerta(r.mensaje); cargarPendientes(); }); }
 function cargarPendientes() {
+  PENL = [];
   $('penCont').innerHTML = '<div class="msg">⏳ Revisando las carpetas…</div>';
   api('pendientes', {}, false).then(function (r) {
     var tabla = function (t, l, vacio) {
-      return '<div class="card"><h3>' + t + ' <span class="chip">' + l.length + '</span></h3>' + (l.length ? '<table class="tb"><tr><th>Archivo</th><th>Subido</th><th>KB</th><th>Por</th></tr>' +
-        l.map(function (f) { return '<tr><td style="word-break:break-word">' + esc(f.nombre) + '</td><td style="white-space:nowrap">' + esc(f.fecha) + '</td><td>' + f.kb + '</td><td>' + esc(f.por || '') + '</td></tr>'; }).join('') + '</table>' : '<div style="color:var(--gr)">' + vacio + '</div>') + '</div>';
+      var entrada = /por procesar/.test(t);
+      return '<div class="card"><h3>' + t + ' <span class="chip">' + l.length + '</span></h3>' + (l.length ? '<table class="tb"><tr><th>Archivo</th><th>Subido</th><th>KB</th><th>Por</th>' + (entrada ? '<th></th>' : '') + '</tr>' +
+        l.map(function (f) {
+          var puedeQuitar = entrada && f.id && (puede('editar') || (puede('subir') && f.por === YO.usuario));
+          return '<tr><td style="word-break:break-word">' + esc(f.nombre) + '</td><td style="white-space:nowrap">' + esc(f.fecha) + '</td><td>' + f.kb + '</td><td>' + esc(f.por || '') + '</td>' +
+            (entrada ? '<td>' + (puedeQuitar ? '<button class="r" style="padding:3px 8px" title="Quitar (subido por error)" onclick="quitarPenN(' + (PENL.push(f) - 1) + ')">🗑</button>' : '') + '</td>' : '') + '</tr>';
+        }).join('') + '</table>' : '<div style="color:var(--gr)">' + vacio + '</div>') + '</div>';
     };
     $('penCont').innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap"><span style="color:var(--gr);font-size:12px">Al ' + esc(r.t) + '</span><span>' +
       (puede('subir') ? '<button onclick="procesarYa()">⚡ Procesar ahora</button> ' : '') + '<button onclick="cargarPendientes()">🔄 Actualizar</button></span></div>' +
