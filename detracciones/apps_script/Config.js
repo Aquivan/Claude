@@ -149,7 +149,7 @@ function DET_activarDiario() {
 
 function DET_desactivarDiario(silencioso) {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (['DET_actualizacionAutomatica', 'DET_importarTrasDescarga', 'DET_continuarConstancias', 'DET_reintentar', 'DET_trasReintento'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
+    if (['DET_actualizacionAutomatica', 'DET_importarTrasDescarga', 'DET_continuarConstancias', 'DET_reintentar', 'DET_trasReintento', 'DET_trasDescarga'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
   });
   if (silencioso !== true) SpreadsheetApp.getUi().alert('⏸ Actualización diaria desactivada.');
 }
