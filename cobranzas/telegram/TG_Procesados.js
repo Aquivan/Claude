@@ -194,10 +194,22 @@ function TGQ_fuentes_(ss, cfg) {
   docs.forEach(function (d) {
     if (d.emisorRuc && cfg.nombreEmpresa[d.emisorRuc] && d.emisorNombre) grupo[d.emisorRuc][d.emisorNombre] = 1;
     if (!d.emisorRuc) return;
-    porDoc[String(d.serie).toUpperCase() + '-' + Number(d.numero)] = d.emisorRuc;
+    // el mismo número (E001-17) lo usan MUCHOS emisores (E001 es la serie del sistema gratuito de SUNAT): se guardan todos
+    var kd = String(d.serie).toUpperCase() + '-' + Number(d.numero);
+    (porDoc[kd] = porDoc[kd] || []).push({ ruc: d.emisorRuc, nombre: d.emisorNombre || '', fuente: '📑 factura del SIRE' });
     if (d.emisorNombre && !mapa[d.emisorRuc] && !cfg.nombreEmpresa[d.emisorRuc]) mapa[d.emisorRuc] = d.emisorNombre;
   });
   var c = ANA_ctx_(ss);
+  // 🧑‍💼 También los recibos por honorarios por su número (un «E001-17» de una persona suele ser su recibo)
+  try {
+    var th = TG_tablaLibro_(c, 'honorarios', 'Recibos'), jc = TG_col_(th.columnas, 'Comprobante'), jr = TG_col_(th.columnas, 'RUC emisor'), jn = TG_col_(th.columnas, /^Emisor/);
+    if (jc >= 0 && jr >= 0) th.filas.forEach(function (f) {
+      var mm = String(f[jc] || '').toUpperCase().match(/([A-Z]\w{3})-0*(\d+)/), r = aRuc_(f[jr]);
+      if (!mm || !r) return;
+      var kh = mm[1] + '-' + Number(mm[2]);
+      (porDoc[kh] = porDoc[kh] || []).push({ ruc: r, nombre: jn >= 0 ? String(f[jn] || '') : '', fuente: '🧑‍💼 recibo por honorarios' });
+    });
+  } catch (e) { Logger.log('RUC — honorarios por número: ' + e.message); }
   return { cfg: cfg, porDoc: porDoc, fuentes: [
     { pool: poolVouchers, como: function (x) { return '🧾 otros vouchers de ' + x.nombre + ' ya tienen este RUC (' + x.n + ')'; } },
     { pool: [].concat.apply([], Object.keys(grupo).map(function (r) { return Object.keys(grupo[r]).filter(function (n) { return String(n).length > 2; })
@@ -213,9 +225,23 @@ function TGQ_fuentes_(ss, cfg) {
 function TGQ_candidatos_(fx, nombre, refs) {
   var alias = nombre && fx.cfg.aliasNombre[normNombre_(nombre)];
   if (alias) return { sug: alias, como: '⚙️ alias confirmado (Config)', opciones: [] };
-  var m = String(refs || '').toUpperCase().match(/([A-Z]\w{3})-0*(\d+)/), r = m && fx.porDoc[m[1] + '-' + Number(m[2])];
-  if (r && !fx.cfg.nombreEmpresa[r]) return { sug: r, como: '📑 emisor de su factura ' + m[1] + '-' + m[2] + ' en el SIRE', opciones: [] };
-  var opciones = [];
+  // 📑 El comprobante que dice el voucher («Tipo y Nº Doc.», ej. E001-17): solo vale si el NOMBRE del emisor se parece al del
+  // voucher (E001-17 lo tienen muchos emisores). Si no se parece, queda como opción con aviso y se sigue buscando por nombre.
+  var opciones = [], m = String(refs || '').toUpperCase().match(/([A-Z]\w{3})-0*(\d+)/);
+  if (m) {
+    var doc = m[1] + '-' + m[2], vistos = {}, q = nombre ? RPN_palabras_(nombre) : null;
+    var lista = (fx.porDoc[m[1] + '-' + Number(m[2])] || []).filter(function (x) {
+      if (!x.ruc || fx.cfg.nombreEmpresa[x.ruc] || vistos[x.ruc]) return false; vistos[x.ruc] = 1; return true;
+    }).map(function (x) { return { ruc: x.ruc, nombre: x.nombre, fuente: x.fuente, p: q && x.nombre ? RPN_puntaje_(q, RPN_palabras_(x.nombre)) : (q ? 0 : -1) }; });
+    var buenos = lista.filter(function (x) { return x.p >= 45; }).sort(function (a, b) { return b.p - a.p; });
+    if (q && buenos.length === 1 || q && buenos.length > 1 && buenos[0].p - buenos[1].p >= 8)
+      return { sug: buenos[0].ruc, como: buenos[0].fuente + ' ' + doc + ' de ' + buenos[0].nombre + ' (el nombre coincide, ' + buenos[0].p + ' pts)', opciones: [] };
+    if (!q && lista.length === 1)
+      return { sug: lista[0].ruc, como: lista[0].fuente + ' ' + doc + (lista[0].nombre ? ' de ' + lista[0].nombre : '') + ' (el voucher no trae nombre: revíselo)', opciones: [] };
+    lista.forEach(function (x) {
+      opciones.push({ ruc: x.ruc, nombre: x.nombre, puntaje: Math.max(0, x.p), fuente: (x.p >= 45 ? '' : '⚠️ otro nombre · ') + x.fuente + ' ' + doc });
+    });
+  }
   if (!nombre) return { opciones: opciones };
   for (var i = 0; i < fx.fuentes.length; i++) {
     var cands = RPN_buscarPropios_(fx.fuentes[i].pool, nombre);
@@ -228,7 +254,7 @@ function TGQ_candidatos_(fx, nombre, refs) {
       opciones.push({ ruc: cd.ruc, nombre: cd.nombre, puntaje: cd.puntaje, fuente: fx.fuentes[i].como(y).split(':')[0] });
     });
   }
-  return { opciones: opciones.sort(function (a, b) { return b.puntaje - a.puntaje; }).slice(0, 4) };
+  return { opciones: opciones.sort(function (a, b) { return b.puntaje - a.puntaje; }).slice(0, 5) };
 }
 
 /** RUC sugerido para cada voucher sin RUC de las tandas (todas las fuentes de TGQ_fuentes_). */
