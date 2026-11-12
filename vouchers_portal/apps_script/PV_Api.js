@@ -17,6 +17,11 @@ function PV_api(token, accion, d) {
     case 'pendientes': PV_sesion_(token, 'ver'); return PV_pendientes_();
 
     case 'repetidos': PV_sesion_(token, 'subir'); return PV_repetidos_(d.nombres);
+    case 'drive': {   // 📷 Escanear con Google Drive: enlaces a las carpetas de entrada (se abren en la app de Drive)
+      PV_sesion_(token, 'subir');
+      var u = function (k) { return 'https://drive.google.com/drive/folders/' + PV_CARP_[k].id; };
+      return { original: u('oe'), foto: u('fe') };
+    }
     case 'subir': s = PV_sesion_(token, 'subir'); return PV_subir_(s, d);
     case 'procesar': {
       s = PV_sesion_(token, 'subir');
