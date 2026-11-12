@@ -232,7 +232,7 @@ function TGQ_fuentes_(ss, cfg) {
 /** Candidatos para un nombre (y su factura, si se sabe): {sug, como} si hay uno claro; si no {opciones:[{ruc, nombre, puntaje, fuente}]}. */
 function TGQ_candidatos_(fx, nombre, refs) {
   var alias = nombre && fx.cfg.aliasNombre[normNombre_(nombre)];
-  if (alias) return { sug: alias, como: '⚙️ alias confirmado (Config)' + (fx.nombreDe && fx.nombreDe[alias] ? ' · figura como ' + fx.nombreDe[alias] : ''), opciones: [] };
+  if (alias) return { sug: alias, como: '⚙️ alias confirmado (Config)' + (fx.nombreDe && fx.nombreDe[alias] ? ' · figura como ' + fx.nombreDe[alias] : '') + TGQ_aliasRaro_(fx, nombre, alias), opciones: [] };
   // 📑 El comprobante que dice el voucher («Tipo y Nº Doc.», ej. E001-17): solo vale si el NOMBRE del emisor se parece al del
   // voucher (E001-17 lo tienen muchos emisores). Si no se parece, queda como opción con aviso y se sigue buscando por nombre.
   // El prefijo dice el TIPO de comprobante (catálogo 10 de SUNAT): 01_ factura · 02_ recibo por honorarios · 03_ boleta ·
@@ -442,16 +442,43 @@ function TGQ_elegir_(acc, op, clave) {
   return r.mensaje + (alias ? '\n💾 ' + acc.prov + ' → ' + o.ruc + ' quedó como alias (⚙️ Config): la próxima vez sale solo.' : '');
 }
 
-/** Agrega nombre → RUC a la tabla de alias de ⚙️ Config (columnas I:J) si no estaba. */
-function TGQ_alias_(ss, nombre, ruc) {
+/**
+ * ⚠️ El alias apunta a un RUC cuyo nombre (SIRE, vouchers, honorarios, retenciones) no se parece al del voucher: puede
+ * ser correcto (se le pagó a la persona en nombre de su empresa) o un alias equivocado. → texto del aviso o ''.
+ */
+function TGQ_aliasRaro_(fx, nombre, ruc) {
+  var otro = fx && fx.nombreDe && fx.nombreDe[ruc];
+  if (!otro || !nombre) return '';
+  var p = Math.max(RPN_puntaje_(RPN_palabras_(nombre), RPN_palabras_(otro)), RPN_puntaje_(RPN_palabras_(otro), RPN_palabras_(nombre)));
+  return p >= 45 ? '' : ' · ⚠️ OJO: ese RUC es de «' + otro + '», un nombre muy distinto. Si no es correcto, pulse ❌ No es este y elija otro: el alias se actualiza.';
+}
+
+/**
+ * Agrega nombre → RUC a la tabla de alias de ⚙️ Config (columnas I:J) si no estaba. Con «reemplazar», si el nombre ya
+ * tenía OTRO RUC, lo cambia. → '' (nada), 'nuevo', o 'antes:RUC' (se reemplazó). (Antes devolvía true/false: sigue
+ * sirviendo como verdadero / falso.)
+ */
+function TGQ_alias_(ss, nombre, ruc, reemplazar) {
   var cfgSh = ss.getSheetByName(HOJA.CONFIG);
-  if (!cfgSh || !nombre) return false;
-  var ult = Math.max(cfgSh.getLastRow(), 3), col = cfgSh.getRange(3, 9, ult - 2, 1).getValues(), fila = 3;
-  for (var i = 0; i < col.length; i++) if (normNombre_(col[i][0]) === normNombre_(nombre)) return false;
+  if (!cfgSh || !nombre) return '';
+  var ult = Math.max(cfgSh.getLastRow(), 3), col = cfgSh.getRange(3, 9, ult - 2, 2).getValues(), fila = 3;
+  for (var i = 0; i < col.length; i++) if (normNombre_(col[i][0]) === normNombre_(nombre)) {
+    var antes = aRuc_(col[i][1]);
+    if (!reemplazar || antes === String(ruc)) return '';
+    cfgSh.getRange(i + 3, 10).setNumberFormat('@').setValue(String(ruc));
+    try { cfgSh.getRange(i + 3, 10).setNote('🔁 ' + Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm') + ': antes ' + antes); } catch (e) { /* sin nota */ }
+    return 'antes:' + antes;
+  }
   for (var k = col.length - 1; k >= 0; k--) if (String(col[k][0]).trim()) { fila = k + 4; break; }
   cfgSh.getRange(fila, 10).setNumberFormat('@');
   cfgSh.getRange(fila, 9, 1, 2).setValues([[String(nombre), String(ruc)]]);
-  return true;
+  return 'nuevo';
+}
+/** Texto del resultado de TGQ_alias_ para mostrar. */
+function TGQ_aliasTxt_(a, prov, ruc) {
+  if (!a) return '';
+  if (a === 'nuevo') return '💾 ' + prov + ' → ' + ruc + ' quedó como alias.';
+  return '🔁 Alias actualizado: ' + prov + ' → ' + ruc + ' (antes ' + a.slice(6) + ').';
 }
 
 function TGQ_eligeTG_(ctx, datos, op) {
@@ -1079,7 +1106,9 @@ function TGQ_rucDeFilas_(ss, filas) {
   t.tandas.forEach(function (x) {
     x.filas.forEach(function (f) {
       var k = f.hoja + '!' + f.fila;
+      var fxA = TGQ_FX_ || null, aliasRuc = fxA && f.prov ? fxA.cfg.aliasNombre[normNombre_(f.prov)] || '' : '';
       detalle.push({ k: k, hoja: f.hoja, fila: f.fila, col: f.colRuc, prov: f.prov || '', ruc: f.ruc || '', sug: f.sug || '', sugNombre: f.sugNombre || '', como: f.como || '', id: idDe[k] || '',
+        alias: aliasRuc, aliasNombre: aliasRuc && fxA.nombreDe[aliasRuc] || '', aliasRaro: !!(aliasRuc && TGQ_aliasRaro_(fxA, f.prov, aliasRuc)),
         monto: Number(f.monto) || 0, moneda: f.moneda || '', fecha: f.fecha ? Utilities.formatDate(f.fecha, 'America/Lima', 'dd/MM/yyyy') : '',
         opciones: (f.opciones || []).map(function (o) { return { ruc: o.ruc, nombre: o.nombre, det: o.fuente + ' (' + o.puntaje + ' pts)' }; }),
         parecidos: !f.ruc && f.prov && String(f.prov).trim().length >= 3 ? TGQ_parecidos_(TGQ_FX_ || TGQ_fuentes_(ss, leerConfig_(ss)), f.prov).slice(0, 6) : [] });
@@ -1103,7 +1132,7 @@ function TGQ_rucOpciones_(ss, nombre) {
 function TGQ_parecidos_(fx, nombre) {
   var op = [], vistos = {};
   var alias = fx.cfg.aliasNombre[normNombre_(nombre)];
-  if (alias) { op.push({ ruc: alias, nombre: nombre, det: '⚙️ alias guardado (Config)', puntaje: 999 }); vistos[alias] = 1; }
+  if (alias) { op.push({ ruc: alias, nombre: fx.nombreDe && fx.nombreDe[alias] || '(nombre no hallado: verifíquelo en SUNAT)', det: '⚙️ alias guardado (Config) para «' + nombre + '»' + (TGQ_aliasRaro_(fx, nombre, alias) ? ' · ⚠️ nombre muy distinto' : ''), puntaje: 999 }); vistos[alias] = 1; }
   fx.fuentes.forEach(function (fu) {
     RPN_buscarPropios_(fu.pool, nombre).slice(0, 4).forEach(function (cd) {
       if (vistos[cd.ruc] || fx.cfg.nombreEmpresa[cd.ruc] && !/empresa del grupo/.test(fu.como({ nombre: '' }))) return;
@@ -1169,15 +1198,15 @@ function TGQ_rucEstado_(id) {
 }
 
 /** Escribe el RUC elegido en las filas de ese proveedor y lo guarda como alias. */
-function TGQ_rucElegirFilas_(ss, prov, filas, ruc, det) {
+function TGQ_rucElegirFilas_(ss, prov, filas, ruc, det, reemplazarAlias) {
   if (!TGQ_rucValido_(String(ruc))) return { mensaje: 'RUC no válido: ' + ruc };
   var n = 0, cambios = (filas || []).map(function (f) {
     return { id: String(++n), hoja: f.hoja, fila: f.fila, col: f.col, encabezado: 'ID Beneficiario', actual: '', nuevo: String(ruc), motivo: prov + ' · elegido por la persona (' + (det || '') + ')' };
   });
   ANX_guardarPropuestos_(ss, cambios);
   var r = ANX_aplicarDet_(ss, cambios.map(function (x) { return x.id; }), false);
-  var alias = TGQ_alias_(ss, prov, ruc);
-  return { mensaje: r.mensaje + (alias ? ' · 💾 ' + prov + ' → ' + ruc + ' quedó como alias.' : '') };
+  var alias = TGQ_alias_(ss, prov, ruc, !!reemplazarAlias);
+  return { mensaje: r.mensaje + (alias ? ' · ' + TGQ_aliasTxt_(alias, prov, ruc) : '') };
 }
 
 /**
@@ -1196,8 +1225,15 @@ function TGQ_rucElegirVarios_(ss, lista) {
   if (!cambios.length) return { mensaje: 'No se escribió nada' + (malos.length ? ' · RUC no válido: ' + malos.join(', ') : '') };
   ANX_guardarPropuestos_(ss, cambios);
   var r = ANX_aplicarDet_(ss, cambios.map(function (c) { return c.id; }), false);
-  (lista || []).forEach(function (x) { try { if (TGQ_rucValido_(String(x.ruc)) && TGQ_alias_(ss, x.prov, x.ruc)) alias.push(x.prov); } catch (e) { /* sin alias */ } });
-  return { mensaje: r.mensaje + (alias.length ? ' · 💾 ' + alias.length + ' nombre(s) quedaron como alias' : '') + (malos.length ? ' · RUC no válido: ' + malos.join(', ') : '') };
+  var cambiados = [];
+  (lista || []).forEach(function (x) {
+    try {
+      if (!TGQ_rucValido_(String(x.ruc))) return;
+      var a = TGQ_alias_(ss, x.prov, x.ruc, !!x.reemplazarAlias);
+      if (a === 'nuevo') alias.push(x.prov); else if (a) cambiados.push(TGQ_aliasTxt_(a, x.prov, x.ruc));
+    } catch (e) { /* sin alias */ }
+  });
+  return { mensaje: r.mensaje + (alias.length ? ' · 💾 ' + alias.length + ' nombre(s) quedaron como alias' : '') + (cambiados.length ? ' · ' + cambiados.join(' ') : '') + (malos.length ? ' · RUC no válido: ' + malos.join(', ') : '') };
 }
 
 /** «Originales 2656-2666, Fotos 382» → ["Originales!2656", …, "Fotos!382"] */
