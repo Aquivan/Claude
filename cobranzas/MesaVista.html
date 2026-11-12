@@ -296,7 +296,13 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <select id="ecSinEmp" onchange="ecPintar()" title="Pagos a cuenta que se incluyen"><option value="todos">Vouchers con y sin empresa</option><option value="con">Solo con empresa</option><option value="sin">Solo sin empresa</option></select>
   <span style="flex:1"></span>
   <button onclick="ecPdf()" title="Descarga el PDF directo (sin la ventana de impresión)">⬇ PDF</button><button onclick="ecImprimir()">🖨 Imprimir</button><button onclick="ecImagen()" title="Descarga la imagen (PNG)">🖼 Imagen</button><button onclick="ecCopiarImagen()" title="Copia la imagen para pegarla en WhatsApp, correo o Word (Ctrl+V)">📋 Copiar imagen</button><button onclick="ecCopiar()" title="Copia el texto (para Excel o correo)">📋 Copiar texto</button><button onclick="ecCerrar()">✖ Cerrar</button>
-  <span id="ecMsg" style="color:var(--gr)"></span></div>
+  <button onclick="ecNotaVer()" id="bNota" title="Escribir una nota que sale en el documento (PDF, imagen, impresión, texto y Excel)">📝 Nota</button>
+  <span id="ecMsg" style="color:var(--gr)"></span>
+  <div id="ecNotaBox" style="display:none;width:100%;gap:6px;align-items:flex-start;flex-wrap:wrap">
+    <textarea id="ecNota" rows="2" style="flex:1 1 420px;min-width:220px;font:13px Arial;padding:5px" placeholder="📝 Escriba aquí lo que quiera decir (ej.: «Favor confirmar el saldo a favor de S/ 185.40 o devolverlo a la cuenta BCP…»). Sale en el documento." oninput="ecNotaCambio()"></textarea>
+    <select id="ecNotaPos" onchange="ecNotaCambio()" title="Dónde sale la nota"><option value="arriba">Arriba (debajo del encabezado)</option><option value="abajo">Abajo (antes de la firma)</option></select>
+    <button onclick="$('ecNota').value='';ecNotaCambio()" title="Borrar la nota">🗑</button>
+  </div></div>
   <div id="ecScroll"><div id="ecHoja"></div></div></div>
 
 <script>
@@ -2400,7 +2406,7 @@ function anaExcel() {
   var hacer = function () {
     var A = ANA, cab = ['Documento'].concat(A.conEmp ? ['Empresa'] : [], ['F. doc.', 'F. venc.', 'Mes cancel.', 'Tipo', A.res ? 'Amortizaciones' : 'Doc. amortización', 'Fecha', 'Moneda', 'T.C.'],
       A.conPen ? ['Compromiso S/', 'Amortización S/', 'Saldo S/'] : [], A.conUsd ? ['Compromiso US$', 'Amortización US$', 'Saldo US$'] : [], A.glosa ? ['Glosa'] : []);
-    var rows = [['ANÁLISIS DE CUENTA · ' + (A.pagar ? 'CUENTAS POR PAGAR' : 'CUENTAS POR COBRAR') + ' · ' + ($('fEmp').value ? razonEmp($('fEmp').value) : 'Grupo')], ['Generado el ' + ff(new Date().toISOString().slice(0, 10))], [], cab];
+    var rows = [['ANÁLISIS DE CUENTA · ' + (A.pagar ? 'CUENTAS POR PAGAR' : 'CUENTAS POR COBRAR') + ' · ' + ($('fEmp').value ? razonEmp($('fEmp').value) : 'Grupo')], ['Generado el ' + ff(new Date().toISOString().slice(0, 10))]].concat($('ec').className === 'on' && ecNotaTexto() ? [['Nota: ' + ecNotaTexto().replace(/\s*\n\s*/g, ' · ')]] : [], [[], cab]);
     var r2n = function (v) { return Math.round(v * 100) / 100; };
     var mont = function (f) { return (A.conPen ? f.pen.map(r2n) : []).concat(A.conUsd ? f.usd.map(r2n) : []); };
     A.filas.forEach(function (f) {
@@ -2410,7 +2416,7 @@ function anaExcel() {
     });
     var ws = XLSX.utils.aoa_to_sheet(rows), wb = XLSX.utils.book_new();
     ws['!cols'] = cab.map(function (c, i) { return { wch: i === 0 ? 18 : /Glosa/.test(c) ? 40 : /Amortizaciones|Doc\. amort/.test(c) ? 18 : 13 }; });
-    ws['!freeze'] = { xSplit: 1, ySplit: 4 };
+    ws['!freeze'] = { xSplit: 1, ySplit: rows.indexOf(cab) + 1 };
     XLSX.utils.book_append_sheet(wb, ws, 'Análisis');
     XLSX.writeFile(wb, 'Analisis ' + (A.nombre ? A.nombre.replace(/[\\/:*?"<>|]/g, '') : A.pagar ? 'cuentas por pagar' : 'cuentas por cobrar') + ' ' + new Date().toISOString().slice(0, 10) + '.xlsx');
   };
@@ -2441,9 +2447,31 @@ function ecAbrir(cr, er) {
   $('ecDe').value = $('fDe').value || ''; $('ecHa').value = $('fHa').value || new Date().toISOString().slice(0, 10);
   $('ecSinEmp').value = modoEmp();
   EC = { cr: cr, er: er };
+  ecNotaCargar();
   $('ec').className = 'on'; ecPintar();
 }
 function ecCerrar() { $('ec').className = ''; }
+/* 📝 Nota del documento para enviar: se recuerda por proveedor (o cliente) y empresa, en este navegador. */
+var NOTA_T = 0;
+function ecNotaClave() { return 'ecNota|' + S.lado + '|' + (EC ? EC.cr + '|' + (EC.er || '') : ''); }
+function ecNotaCargar() {
+  var g = null; try { g = JSON.parse(localStorage.getItem(ecNotaClave()) || 'null'); } catch (e) {}
+  $('ecNota').value = g ? g.t || '' : ''; $('ecNotaPos').value = g && g.p === 'abajo' ? 'abajo' : 'arriba';
+  $('ecNotaBox').style.display = $('ecNota').value ? 'flex' : 'none'; ecNotaBoton();
+}
+function ecNotaVer() { var b = $('ecNotaBox'); b.style.display = b.style.display === 'none' ? 'flex' : 'none'; if (b.style.display === 'flex') $('ecNota').focus(); }
+function ecNotaBoton() { $('bNota').textContent = $('ecNota').value.trim() ? '📝 Nota ✓' : '📝 Nota'; }
+function ecNotaCambio() {
+  try { var v = $('ecNota').value; if (v.trim()) localStorage.setItem(ecNotaClave(), JSON.stringify({ t: v, p: $('ecNotaPos').value })); else localStorage.removeItem(ecNotaClave()); } catch (e) {}
+  ecNotaBoton(); clearTimeout(NOTA_T); NOTA_T = setTimeout(ecPintar, 250);
+}
+/** La nota como bloque del documento ('' si no hay o si va en la otra posición). */
+function ecNotaHtml(pos) {
+  var v = ($('ecNota') && $('ecNota').value || '').trim();
+  if (!v || $('ecNotaPos').value !== pos) return '';
+  return '<div style="border:1px solid #CBD5E1;border-left:4px solid #1F3A5F;background:#F8FAFC;border-radius:4px;padding:8px 10px;margin:12px 0;white-space:pre-wrap"><div class="et" style="margin-bottom:3px">📝 Nota</div>' + esc(v) + '</div>';
+}
+function ecNotaTexto() { return ($('ecNota') && $('ecNota').value || '').trim(); }
 function dias(a, b) { return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000); }
 /** Arma los movimientos de ese proveedor/cliente y empresa en una moneda: cargos (facturas, N/D, devoluciones) y abonos (pagos, N/C, retenciones, detracciones…). */
 function ecDatos(cr, er, mon) {
@@ -2522,6 +2550,7 @@ function ecPintar() {
     '<div class="caja"><div class="et">Periodo</div><div><b>' + (de ? ff(de) : 'Desde el inicio') + '</b> al <b>' + ff(ha) + '</b></div><div class="et" style="margin-top:4px">Moneda</div><div>' + (mon === 'USD' ? 'Dólares americanos (US$)' : 'Soles (S/)') + '</div></div>' +
     '<div class="caja" style="background:#F1F5F9"><div class="et">Saldo al ' + ff(ha) + '</div><div style="font-size:17px;font-weight:bold;color:' + (fin > 0.05 ? '#B91C1C' : '#065F46') + '">' + sim + ' ' + fm(Math.abs(fin)) + '</div><div class="sub">' + (fin > 0.05 ? (pagar ? 'pendiente de pago a ' + esc(nomC) : 'pendiente de cobro') : fin < -0.05 ? (pagar ? 'a favor de ' + esc(nomE) + ' (pagos a cuenta / en exceso)' : 'a favor del cliente') : 'cuenta cancelada') + '</div></div></div>';
   // resumen
+  h += ecNotaHtml('arriba');
   h += '<h2>Resumen del periodo</h2><table><tr><th>Concepto</th><th class="n">' + sim + '</th></tr>' +
     '<tr class="ini"><td>Saldo inicial' + (de ? ' al ' + ff(de) : '') + '</td><td class="n">' + M(ini) + '</td></tr>' +
     [['(+) Facturas emitidas', R.fac, 'fac'], ['(+) Notas de débito', R.nd, 'nd'], ['(−) Notas de crédito', -R.nc, 'nc'], ['(−) Retenciones del IGV (3%)', -R.ret, 'ret'], ['(−) Detracciones (SPOT)', -R.det, 'det'], ['(−) ' + (pagar ? 'Pagos realizados' : 'Cobros recibidos'), -R.pago, 'pago'], ['(−) Otros descuentos y compensaciones', -R.otr, 'otr'], ['(+) Devoluciones ' + (pagar ? 'recibidas' : 'hechas'), R.dev, 'dev']]
@@ -2555,6 +2584,7 @@ function ecPintar() {
       }).join('') +
       '<tr class="tot"><td colspan="4">Totales del periodo</td><td class="n">' + fm(per.reduce(function (t, l) { return t + l.cargo; }, 0)) + '</td><td class="n">' + fm(per.reduce(function (t, l) { return t + l.abono; }, 0)) + '</td><td class="n ' + (fin > 0.05 ? 'deb' : fin < -0.05 ? 'fav' : '') + '">' + M(fin) + '</td></tr></table>';
   }
+  h += ecNotaHtml('abajo');
   h += '<p class="sub" style="margin-top:14px">Saldos en ' + (mon === 'USD' ? 'dólares' : 'soles') + '; los paréntesis indican saldo a favor de ' + esc(pagar ? nomE : nomC) + '. Las retenciones del IGV se sustentan con los comprobantes de retención electrónicos y las detracciones con sus constancias de depósito. ' +
     'Le agradeceremos revisar este estado de cuenta y comunicarnos cualquier diferencia dentro de los 10 días de recibido; de no recibir observaciones, se considerará conforme.</p>';
   if ($('ecConf').checked) h += '<div class="firma"><div>' + esc(nomE) + '<br>Firma y sello</div><div>Conformidad de ' + esc(nomC) + '<br>Nombre, firma, sello y fecha</div></div>';
@@ -2591,7 +2621,7 @@ function ecAnalisis(cr, er, de, ha) {
     '<div style="text-align:right"><h1>ANÁLISIS DE CUENTA</h1><div class="sub">' + (pagar ? 'Cuentas por pagar · Proveedor' : 'Cuentas por cobrar · Cliente') + ' · análisis de documentos</div><div style="margin-top:4px">Fecha de emisión: <b>' + ff(hoy) + '</b></div></div></div>' +
     '<div style="display:flex;gap:10px;margin-top:12px"><div class="caja"><div class="et">' + (pagar ? 'Proveedor' : 'Cliente') + '</div><div style="font-weight:bold;font-size:13px">' + esc(nomC) + '</div><div>RUC ' + esc(cr) + '</div></div>' +
     '<div class="caja"><div class="et">Documentos emitidos</div><div><b>' + (de ? ff(de) : 'Desde el inicio') + '</b> al <b>' + ff(ha) + '</b></div><div class="et" style="margin-top:4px">Moneda</div><div>' + { ambas: 'Soles y dólares', pen: 'Soles (S/)', usd: 'Dólares (US$)' }[$('ecAnaMon').value] + '</div></div></div>' +
-    '<h2>Análisis de documentos</h2>' + tabla.replace(/ style="color:var\(--gr\)"/g, ' style="color:#64748B"');
+    ecNotaHtml('arriba') + '<h2>Análisis de documentos</h2>' + tabla.replace(/ style="color:var\(--gr\)"/g, ' style="color:#64748B"') + ecNotaHtml('abajo');
   if ($('ecConf').checked) h += '<div class="firma"><div>' + esc(nomE) + '<br>Firma y sello</div><div>Conformidad de ' + esc(nomC) + '<br>Nombre, firma, sello y fecha</div></div>';
   h += '<div class="sub" style="margin-top:16px;text-align:center">Generado el ' + ff(hoy) + ' · Cuentas por Cobrar y Pagar · Grupo</div>';
   $('ecHoja').innerHTML = h;
@@ -2599,7 +2629,7 @@ function ecAnalisis(cr, er, de, ha) {
 }
 /** 📋 Copiar el análisis (texto con tabulaciones para Excel o correo). */
 function anaCopiarTxt() {
-  var A = ANA, L = [], n = function (v) { return Math.abs(v) < 0.005 ? '' : v.toFixed(2); };
+  var A = ANA, L = $('ec').className === 'on' && ecNotaTexto() ? ['Nota:\t' + ecNotaTexto().replace(/\s*\n\s*/g, ' · '), ''] : [], n = function (v) { return Math.abs(v) < 0.005 ? '' : v.toFixed(2); };
   var mont = function (f) { return (A.conPen ? f.pen.map(n) : []).concat(A.conUsd ? f.usd.map(n) : []); };
   L.push(['Documento', 'F. doc.', 'F. venc.', 'Mes cancel.', 'Tipo', A.res ? 'Amortizaciones' : 'Doc. amortización', 'Fecha', 'Moneda', 'T.C.'].concat(A.conPen ? ['Compromiso S/', 'Amortización S/', 'Saldo S/'] : [], A.conUsd ? ['Compromiso US$', 'Amortización US$', 'Saldo US$'] : [], A.glosa ? ['Glosa'] : []).join('\t'));
   A.filas.forEach(function (f) {
@@ -2680,7 +2710,7 @@ function ecCopiar() {
   if (c.ana) { var tx = anaCopiarTxt(); return (navigator.clipboard ? navigator.clipboard.writeText(tx) : Promise.reject()).then(function () { $('ecMsg').textContent = '📋 Copiado: péguelo en Excel, Sheets o un correo.'; }, function () { prompt('Copie el texto:', tx); }); }
   var T = function (a) { return a.join('\t'); }, n = function (x) { return x.toFixed(2); }, L = [];
   L.push('ESTADO DE CUENTA'); L.push(T([S.lado === 'Por pagar' ? 'Proveedor' : 'Cliente', c.nomC, 'RUC ' + c.cr])); L.push(T(['Empresa', c.nomE, c.er ? 'RUC ' + c.er : '']));
-  L.push(T(['Periodo', c.de ? ff(c.de) : 'Desde el inicio', ff(c.ha), c.mon])); L.push('');
+  L.push(T(['Periodo', c.de ? ff(c.de) : 'Desde el inicio', ff(c.ha), c.mon])); if (ecNotaTexto()) L.push(T(['Nota', ecNotaTexto().replace(/\s*\n\s*/g, ' · ')])); L.push('');
   L.push(T(['Fecha', 'Documento', 'Concepto', 'Cargos', 'Abonos', 'Saldo'])); L.push(T(['', '', 'Saldo inicial', '', '', n(c.ini)]));
   var s = c.ini; c.per.forEach(function (l) { s = r2(s + l.cargo - l.abono); L.push(T([ff(l.f), l.doc, l.con, l.cargo ? n(l.cargo) : '', l.abono ? n(l.abono) : '', n(s)])); });
   L.push(T(['', '', 'SALDO FINAL', '', '', n(c.fin)])); L.push('');
