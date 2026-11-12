@@ -168,7 +168,19 @@ function DET_webFin_(d) {
   var res = DET_resultados_();
   res[d.ruc] = { ok: !!d.ok, t: Date.now(), error: String(d.error || '').slice(0, 200), conservados: (d.conservados || []).slice(0, 12), fallidos: (d.fallidos || []).slice(0, 12) };
   PropertiesService.getScriptProperties().setProperty('DET_RESULTADOS', JSON.stringify(res));
+  // en 3 minutos (cuando terminen las demás empresas) se rehacen las pestañas solas
+  try {
+    ScriptApp.getProjectTriggers().forEach(function (x) { if (x.getHandlerFunction() === 'DET_trasDescarga') ScriptApp.deleteTrigger(x); });
+    ScriptApp.newTrigger('DET_trasDescarga').timeBased().after(3 * 60 * 1000).create();
+  } catch (e) { console.warn('No se pudo programar la actualización: ' + e.message); }
   return { ok: true };
+}
+
+/** Después de que el robot mandó lo bajado: rehace Panel, Detracciones, Por proveedor y Por mes, y reintenta las que fallaron. */
+function DET_trasDescarga() {
+  ScriptApp.getProjectTriggers().forEach(function (x) { if (x.getHandlerFunction() === 'DET_trasDescarga') ScriptApp.deleteTrigger(x); });
+  try { DET_importarAhora_(); } catch (e) { console.warn('Detracciones (actualizar tras descarga): ' + e.message); }
+  DET_revisarFallas_();
 }
 
 function DET_resultados_() {
