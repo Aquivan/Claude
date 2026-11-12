@@ -1346,6 +1346,9 @@ function rucPintar() {
     if (f.sug) x += '<div class="sug"><label><input type="checkbox" id="rk' + i + '" checked> 💡 <b>' + esc(f.sug) + '</b> — <b style="color:#1D4ED8">' + esc(f.sugNombre || '(nombre no hallado: verifíquelo en SUNAT)') + '</b><br><span style="font-size:12px;color:var(--gr)">' + esc(f.como) + '</span></label> <button class="r" style="padding:2px 8px" onclick="rucNoEs(' + i + ')">❌ No es este</button></div>';
     else if (f.opciones && f.opciones.length) x += '<div style="font-size:12px;color:var(--gr)">❓ Sin RUC claro. Posibles:</div>' + rucSelector(i, f.opciones);
     else x += '<div style="font-size:12px;color:var(--gr)">❓ No lo encontré en vouchers, SIRE, recibos por honorarios ni retenciones.</div>';
+    if (f.parecidos && f.parecidos.length) x += '<div style="font-size:12px;color:var(--gr);margin-top:5px">🔤 <b>Nombres parecidos</b> (compare el nombre y elija):</div>' + f.parecidos.map(function (o, j) {
+      return '<div style="display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0"><span style="flex:1;font-size:12.5px"><b>' + esc(o.ruc) + '</b> — <b style="color:#1D4ED8">' + esc(o.nombre) + '</b> <span style="color:var(--gr)">' + esc(o.det) + (o.ruc === f.sug ? ' · ← sugerido' : '') + '</span></span><button class="p" style="padding:3px 8px" onclick="rucElegirP(' + i + ',' + j + ')">✅ Este</button></div>';
+    }).join('');
     return x + '<div><button style="padding:3px 9px;font-size:12.5px" onclick="rucOpciones(' + i + ')">📋 Otras opciones (SIRE, honorarios, retenciones…)</button></div>' +
       '<input type="text" id="rq' + i + '" placeholder="RUC (11 dígitos) u otro nombre para buscar"><button style="padding:3px 9px;font-size:12.5px" onclick="rucOtro(' + i + ')">🔎 Usar RUC / buscar con IA</button>' +
       '<div id="ro' + i + '"></div><div id="rr' + i + '"></div><div class="msg" id="rm' + i + '" style="padding:2px 0"></div></div>';
@@ -1367,6 +1370,14 @@ function rucOpciones(i) {
 }
 function rucElegir(i, k) {
   var f = RUC.sin[i], o = RDAT['s' + k][Number($('rs' + k).value)];
+  rucMsg('rm' + i, 'Escribiendo ' + o.ruc + '…');
+  ia('rucelegir', { prov: f.prov, filas: rucFila(f), ruc: o.ruc, det: o.nombre + ' — ' + o.det }, false).then(function (y) {
+    if (y.error) return rucMsg('rm' + i, y.error, 1);
+    f.hecho = '✅ ' + o.ruc + ' ' + o.nombre + ' · ' + (y.mensaje || 'escrito'); f.sug = ''; rucPintar();
+  }).catch(function (e) { rucMsg('rm' + i, e.message, 1); });
+}
+function rucElegirP(i, j) {
+  var f = RUC.sin[i], o = f.parecidos[j];
   rucMsg('rm' + i, 'Escribiendo ' + o.ruc + '…');
   ia('rucelegir', { prov: f.prov, filas: rucFila(f), ruc: o.ruc, det: o.nombre + ' — ' + o.det }, false).then(function (y) {
     if (y.error) return rucMsg('rm' + i, y.error, 1);

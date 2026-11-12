@@ -281,11 +281,12 @@ function TGQ_candidatos_(fx, nombre, refs) {
 }
 
 /** RUC sugerido para cada voucher sin RUC de las tandas (todas las fuentes de TGQ_fuentes_). */
+var TGQ_FX_ = null;   // fuentes de la última búsqueda en esta ejecución
 function TGQ_sugerir_(ss, cfg, tandas) {
   var faltan = [];
   tandas.forEach(function (t) { t.filas.forEach(function (f) { if (!f.ruc) faltan.push(f); }); });
   if (!faltan.length) return;
-  var fx = TGQ_fuentes_(ss, cfg);
+  var fx = TGQ_FX_ = TGQ_fuentes_(ss, cfg);
   faltan.forEach(function (f) {
     var r = TGQ_candidatos_(fx, f.prov, f.refs);
     if (r.sug) { f.sug = r.sug; f.como = r.como; f.sugNombre = fx.nombreDe[r.sug] || ''; return; }
@@ -1080,7 +1081,8 @@ function TGQ_rucDeFilas_(ss, filas) {
       var k = f.hoja + '!' + f.fila;
       detalle.push({ k: k, hoja: f.hoja, fila: f.fila, col: f.colRuc, prov: f.prov || '', ruc: f.ruc || '', sug: f.sug || '', sugNombre: f.sugNombre || '', como: f.como || '', id: idDe[k] || '',
         monto: Number(f.monto) || 0, moneda: f.moneda || '', fecha: f.fecha ? Utilities.formatDate(f.fecha, 'America/Lima', 'dd/MM/yyyy') : '',
-        opciones: (f.opciones || []).map(function (o) { return { ruc: o.ruc, nombre: o.nombre, det: o.fuente + ' (' + o.puntaje + ' pts)' }; }) });
+        opciones: (f.opciones || []).map(function (o) { return { ruc: o.ruc, nombre: o.nombre, det: o.fuente + ' (' + o.puntaje + ' pts)' }; }),
+        parecidos: !f.ruc && f.prov && String(f.prov).trim().length >= 3 ? TGQ_parecidos_(TGQ_FX_ || TGQ_fuentes_(ss, leerConfig_(ss)), f.prov).slice(0, 6) : [] });
     });
   });
   return { texto: TGQ_texto_(t, false).replace(/\*/g, ''), cambios: cambios, faltan: faltan, detalle: detalle };
@@ -1093,7 +1095,13 @@ function TGQ_rucDeFilas_(ss, filas) {
 function TGQ_rucOpciones_(ss, nombre) {
   nombre = String(nombre || '').trim();
   if (nombre.length < 3) return { opciones: [], texto: 'Escriba un nombre de al menos 3 letras.' };
-  var fx = TGQ_fuentes_(ss, leerConfig_(ss)), op = [], vistos = {};
+  var op = TGQ_parecidos_(TGQ_FX_ || TGQ_fuentes_(ss, leerConfig_(ss)), nombre);
+  return { opciones: op.slice(0, 10), texto: op.length ? '' : 'No encontré «' + nombre + '» en los vouchers, el SIRE, los recibos por honorarios ni las retenciones. Pruebe 🔎 buscar en SUNAT e internet.' };
+}
+
+/** 🔤 Nombres parecidos a «nombre» en todas las fuentes propias, con su RUC, de dónde salen y qué tan parecidos son (pts). */
+function TGQ_parecidos_(fx, nombre) {
+  var op = [], vistos = {};
   var alias = fx.cfg.aliasNombre[normNombre_(nombre)];
   if (alias) { op.push({ ruc: alias, nombre: nombre, det: '⚙️ alias guardado (Config)', puntaje: 999 }); vistos[alias] = 1; }
   fx.fuentes.forEach(function (fu) {
@@ -1105,7 +1113,7 @@ function TGQ_rucOpciones_(ss, nombre) {
     });
   });
   op.sort(function (a, b) { return b.puntaje - a.puntaje; });
-  return { opciones: op.slice(0, 10), texto: op.length ? '' : 'No encontré «' + nombre + '» en los vouchers, el SIRE, los recibos por honorarios ni las retenciones. Pruebe 🔎 buscar en SUNAT e internet.' };
+  return op;
 }
 
 /** 🏛 Los que siguieron sin RUC: padrón de SUNAT (robot, 3–5 min) y, si no queda claro, IA en internet. → {id, texto} */
