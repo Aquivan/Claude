@@ -108,7 +108,7 @@ function MESA_datos_(tk, lado) {
   var ss = ssPrincipal_(), cfg = leerConfig_(ss);
   var rucDeNombre = {};
   cfg.grupo.forEach(function (r) { rucDeNombre[cfg.nombreEmpresa[r] || r] = r; });
-  var empresas = cfg.grupo.map(function (r) { return { ruc: r, nombre: cfg.nombreEmpresa[r] || r }; });
+  var empresas = cfg.grupo.map(function (r) { return { ruc: r, nombre: cfg.nombreEmpresa[r] || r, razon: cfg.razonEmpresa[r] || '' }; });
 
   // ---- 📋 Documentos
   var docs = [], porClave = {};
@@ -138,6 +138,10 @@ function MESA_datos_(tk, lado) {
       if (lado === 'Por pagar') { d.emi = cr; d.rec = er; } else { d.emi = er; d.rec = cr; }
       docs.push(d); porClave[d.k] = d;
     });
+    // Razón social completa de las empresas del grupo que no la tienen en ⚙️ Config: la de sus facturas entre empresas del grupo
+    var razonDocs = {};
+    docs.forEach(function (d) { if (d.cr && rucDeNombre && cfg.grupo.indexOf(d.cr) >= 0 && d.cn && !razonDocs[d.cr]) razonDocs[d.cr] = d.cn; });
+    empresas.forEach(function (e) { if (!e.razon && razonDocs[e.ruc]) e.razon = razonDocs[e.ruc]; });
   }
 
   // ---- Vouchers (una vez cada uno: Originales manda, como en el motor)
