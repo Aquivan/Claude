@@ -1022,12 +1022,48 @@ function TGQ_rucDeFilas_(ss, filas) {
   var t = TGQ_buscar_(ss, 'procesados', filas);
   var faltan = 0;
   t.tandas.forEach(function (x) { x.filas.forEach(function (f) { if (!f.ruc && !f.sug) faltan++; }); });
-  return { texto: TGQ_texto_(t, false).replace(/\*/g, ''), cambios: TGQ_cambios_(ss, t.tandas), faltan: faltan };
+  var cambios = TGQ_cambios_(ss, t.tandas), idDe = {};
+  cambios.forEach(function (c) { idDe[c.fila] = c.id; });
+  // cada fila por separado, para que la ventana deje aceptar, rechazar, cambiar o buscar otro RUC en cada una
+  var detalle = [];
+  t.tandas.forEach(function (x) {
+    x.filas.forEach(function (f) {
+      var k = f.hoja + '!' + f.fila;
+      detalle.push({ k: k, hoja: f.hoja, fila: f.fila, col: f.colRuc, prov: f.prov || '', ruc: f.ruc || '', sug: f.sug || '', como: f.como || '', id: idDe[k] || '',
+        monto: Number(f.monto) || 0, moneda: f.moneda || '', fecha: f.fecha ? Utilities.formatDate(f.fecha, 'America/Lima', 'dd/MM/yyyy') : '',
+        opciones: (f.opciones || []).map(function (o) { return { ruc: o.ruc, nombre: o.nombre, det: o.fuente + ' (' + o.puntaje + ' pts)' }; }) });
+    });
+  });
+  return { texto: TGQ_texto_(t, false).replace(/\*/g, ''), cambios: cambios, faltan: faltan, detalle: detalle };
+}
+
+/**
+ * 📋 Otras opciones de RUC para un nombre en TODAS las fuentes propias (otros vouchers, empresas del grupo, facturas del
+ * SIRE, 🧑‍💼 recibos por honorarios, 🧾 retenciones), aunque ya haya una sugerencia (p. ej. la persona dice «ese no es»).
+ */
+function TGQ_rucOpciones_(ss, nombre) {
+  nombre = String(nombre || '').trim();
+  if (nombre.length < 3) return { opciones: [], texto: 'Escriba un nombre de al menos 3 letras.' };
+  var fx = TGQ_fuentes_(ss, leerConfig_(ss)), op = [], vistos = {};
+  var alias = fx.cfg.aliasNombre[normNombre_(nombre)];
+  if (alias) { op.push({ ruc: alias, nombre: nombre, det: '⚙️ alias guardado (Config)', puntaje: 999 }); vistos[alias] = 1; }
+  fx.fuentes.forEach(function (fu) {
+    RPN_buscarPropios_(fu.pool, nombre).slice(0, 4).forEach(function (cd) {
+      if (vistos[cd.ruc] || fx.cfg.nombreEmpresa[cd.ruc] && !/empresa del grupo/.test(fu.como({ nombre: '' }))) return;
+      vistos[cd.ruc] = 1;
+      var y = fu.pool.filter(function (p) { return p.ruc === cd.ruc; })[0] || cd;
+      op.push({ ruc: cd.ruc, nombre: cd.nombre, det: fu.como(y).split(':')[0] + ' (' + cd.puntaje + ' pts)', puntaje: cd.puntaje });
+    });
+  });
+  op.sort(function (a, b) { return b.puntaje - a.puntaje; });
+  return { opciones: op.slice(0, 10), texto: op.length ? '' : 'No encontré «' + nombre + '» en los vouchers, el SIRE, los recibos por honorarios ni las retenciones. Pruebe 🔎 buscar en SUNAT e internet.' };
 }
 
 /** 🏛 Los que siguieron sin RUC: padrón de SUNAT (robot, 3–5 min) y, si no queda claro, IA en internet. → {id, texto} */
-function TGQ_rucExternos_(ss, filas) {
+function TGQ_rucExternos_(ss, filas, todos) {
   var t = TGQ_buscar_(ss, 'procesados', filas), id = Utilities.getUuid().slice(0, 8);
+  // «todos»: también las filas que ya tenían un RUC sugerido (la persona no está segura de la sugerencia)
+  if (todos) t.tandas.forEach(function (x) { x.filas.forEach(function (f) { if (!f.ruc) f.sug = ''; }); });
   var msg = TGQ_externos_(ss, t.tandas, 'vch', id);
   if (!msg) return { texto: 'No queda ningún proveedor sin RUC (o sin nombre) en esas filas.' };
   if (/^⏳/.test(msg)) CacheService.getScriptCache().put('vchruc_' + id, JSON.stringify({ listo: false }), 21600);
