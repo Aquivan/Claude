@@ -35,6 +35,9 @@ El repositorio es **público**, así que el robot **no guarda nada** en él. Cad
 - Revisa los **últimos 3 meses**, así también recoge las rectificatorias hechas después.
 - Solo baja lo que la hoja aún no tiene.
 
+## 📅 Antes de los avisos de vencimiento
+Los avisos de vencimientos SUNAT (bot de Telegram de Cobranzas) piden a esta hoja, **solo los días en que toca avisar** y ~2 horas antes del aviso, bajar **el periodo que vence** de **las empresas que aún no lo tienen** (`DEC_Previo.js`). Así, a la hora del aviso, el IGV-Renta (621) y el PLAME (601) ya presentados se marcan solos y no se avisan. Un mismo pedido no se repite en 10 horas. La dirección de esta hoja la registra el workflow al publicarla (`?registrar=1`) y la clave queda en sus metadatos (no se ven ni van al repositorio).
+
 ## Pestañas
 | Pestaña | Qué tiene |
 |---|---|

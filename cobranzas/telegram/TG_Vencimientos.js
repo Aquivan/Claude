@@ -8,7 +8,11 @@
  *   a qué hora, qué empresas y qué obligaciones.
  * - Lo ya presentado se anota en "📅 Presentaciones": el SIRE se marca solo cuando llega al
  *   Buzón SUNAT el mensaje "Generación de Registro RVIE Y RCE del período AAAAMM"; el IGV-Renta
- *   (y PLAME, misma fecha) se marca con el botón "✅ Ya presenté" o en la hoja.
+ *   (PDT 621) y el PLAME (PDT 601, misma fecha, por separado) se marcan solos cuando están en la hoja
+ *   «Declaraciones · Grupo» (constancias bajadas de SUNAT SOL), o con el botón "✅ Ya presenté".
+ * - Los días en que toca avisar, ~2 horas antes, se pide a esa hoja bajar de SUNAT solo el periodo que
+ *   vence y solo de las empresas pendientes (DEC_Previo.js); a la hora del aviso, lo ya presentado no se avisa.
+ * - El PLAME solo se pide a las empresas que lo presentaron en los últimos 12 meses (según esa hoja).
  * - Un aviso se repite (según los días elegidos) y, si vence sin marcarse, cada día hasta 5 días después.
  */
 
@@ -16,9 +20,12 @@ var TGV_HOJA_ = '📅 Vencimientos';
 var TGV_HOJA_PRES_ = '📅 Presentaciones';
 var TGV_GRUPOS_ = ['0', '1', '2-3', '4-5', '6-7', '8-9', 'BC'];
 var TGV_OBLIG_ = {
-  igv: { nombre: 'IGV-Renta y PLAME (PDT 621 / 601)', corto: 'IGV-Renta/PLAME' },
-  sire: { nombre: 'SIRE: registros de ventas y compras (RVIE/RCE)', corto: 'SIRE' },
+  igv: { nombre: 'IGV-Renta (PDT 621)', corto: 'IGV-Renta', boton: 'IGV' },
+  plame: { nombre: 'PLAME (PDT 601)', corto: 'PLAME', boton: 'PLAME' },
+  sire: { nombre: 'SIRE: registros de ventas y compras (RVIE/RCE)', corto: 'SIRE', boton: 'SIRE' },
 };
+var TGV_SEPARADO_ = '20261113';   // desde aquí el PLAME va aparte: un «✅ Ya presenté» de IGV anterior valía también para el PLAME
+var TGV_DEC_NOMBRE_ = 'Declaraciones · Grupo';
 var TGV_PARAM_ = [
   ['Avisar IGV-Renta/PLAME (días antes)', '5, 2, 0', 'Días antes del vencimiento en que llega el aviso (0 = el mismo día). Ej.: 7, 3, 1, 0'],
   ['Avisar SIRE (días antes)', '5, 2, 0', 'Igual, para el SIRE (RVIE/RCE).'],
@@ -118,7 +125,7 @@ function TGV_param_(ss) {
   };
   var p = TGV_PARAM_;
   return {
-    dias: { igv: dias(m[p[0][0]], p[0][1]), sire: dias(m[p[1][0]], p[1][1]) },
+    dias: { igv: dias(m[p[0][0]], p[0][1]), plame: dias(m[p[0][0]], p[0][1]), sire: dias(m[p[1][0]], p[1][1]) },
     hora: Math.max(0, Math.min(23, parseInt(m[p[2][0]] || '8', 10) || 0)),
     despues: Math.max(0, parseInt(m[p[3][0]] || '5', 10) || 0),
     empresas: (m[p[4][0]] || '').split(/[,;]+/).map(function (s) { return s.trim(); }).filter(String),
@@ -276,6 +283,114 @@ function TGV_detectarSire_(ss, c) {
   return n;
 }
 
+function TGV_estaPresentado_(pres, ruc, per, ob) {
+  if (pres[ruc + '|' + per + '|' + ob]) return true;
+  if (ob !== 'plame') return false;
+  var igv = pres[ruc + '|' + per + '|igv'];   // antes IGV y PLAME iban juntos: lo marcado antes del cambio vale para los dos
+  return !!(igv && !/Declaraciones/.test(String(igv.como)) && igv.fecha instanceof Date && Utilities.formatDate(igv.fecha, 'America/Lima', 'yyyyMMdd') < TGV_SEPARADO_);
+}
+
+/* ============================================================ 📑 hoja «Declaraciones · Grupo» */
+
+/** La hoja de Declaraciones (se busca por nombre en Drive la primera vez y se recuerda su ID). */
+function TGV_decLibro_() {
+  var p = PropertiesService.getScriptProperties(), id = p.getProperty('TGV_DEC_ID');
+  if (id) { try { return SpreadsheetApp.openById(id); } catch (e) { p.deleteProperty('TGV_DEC_ID'); } }
+  var it = DriveApp.getFilesByName(TGV_DEC_NOMBRE_);
+  while (it.hasNext()) {
+    var f = it.next();
+    if (!f.isTrashed() && f.getMimeType() === MimeType.GOOGLE_SHEETS) { p.setProperty('TGV_DEC_ID', f.getId()); return SpreadsheetApp.openById(f.getId()); }
+  }
+  return null;
+}
+
+var TGV_DEC_ = null;   // lo leído en esta ejecución (false = no hay hoja)
+/** {libro, pres: {"ruc|periodo|igv|plame": fecha}, plame: {ruc: true si presentó PLAME en los últimos 12 meses}} o null si no hay hoja. */
+function TGV_decLeer_(ss) {
+  if (TGV_DEC_ !== null) return TGV_DEC_ || null;
+  TGV_DEC_ = false;
+  var libro;
+  try { libro = TGV_decLibro_(); } catch (e) { return null; }
+  var sh = libro && libro.getSheetByName('📄 Declaraciones');
+  if (!sh) return null;
+  var out = { libro: libro, pres: {}, plame: {} }, n = sh.getLastRow() - 1;
+  var desde = TGV_periodoMenos_(TGV_hoyLima_(), 13);
+  if (n > 0) sh.getRange(2, 1, n, 9).getValues().forEach(function (r) {
+    var ruc = String(r[1]).replace(/\D/g, ''), per = String(r[2]).replace(/\D/g, ''), form = String(r[3]).replace(/\D/g, '').replace(/^0+/, '');
+    var ob = form === '621' ? 'igv' : form === '601' ? 'plame' : '';
+    if (!ob || !/^\d{11}$/.test(ruc) || !/^\d{6}$/.test(per)) return;
+    out.pres[ruc + '|' + per + '|' + ob] = true;
+    if (ob === 'plame' && per >= desde) out.plame[ruc] = true;
+  });
+  return TGV_DEC_ = out;
+}
+
+/** Marca como presentado lo que ya está en la hoja de Declaraciones (de los periodos que se avisan). */
+function TGV_detectarDecl_(ss, dec) {
+  if (!dec) return 0;
+  var hoy = TGV_hoyLima_(), per = [TGV_periodoMenos_(hoy, 2), TGV_periodoMenos_(hoy, 1), TGV_periodoMenos_(hoy, 0)];
+  var pres = TGV_presentaciones_(ss), n = 0;
+  Object.keys(dec.pres).forEach(function (k) {
+    var x = k.split('|');
+    if (per.indexOf(x[1]) < 0 || pres[k]) return;
+    if (TGV_marcar_(ss, x[0], x[1], x[2], 'SUNAT · hoja Declaraciones (automático)')) n++;
+  });
+  return n;
+}
+
+/** Pide a la hoja de Declaraciones bajar de SUNAT ese periodo de esas empresas (DEC_Previo.js). → texto */
+function TGV_decPedir_(rucs, periodo) {
+  var libro = TGV_decLibro_();
+  if (!libro) return 'no encontré la hoja «' + TGV_DEC_NOMBRE_ + '»';
+  var w = libro.createDeveloperMetadataFinder().withKey('DEC_WEB').find();
+  if (!w.length) return 'la hoja de Declaraciones aún no registró su dirección (se registra al publicarla)';
+  var m = libro.createDeveloperMetadataFinder().withKey('DEC_PUENTE').find(), k = m.length ? String(m[0].getValue() || '') : '';
+  if (k.length < 40) {
+    k = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+    m.forEach(function (x) { try { x.remove(); } catch (e) {} });
+    libro.addDeveloperMetadata('DEC_PUENTE', k, SpreadsheetApp.DeveloperMetadataVisibility.DOCUMENT);
+  }
+  var url = 'https://script.google.com/macros/s/' + w[0].getValue() + '/exec?previo=1&k=' + encodeURIComponent(k) +
+    '&periodo=' + periodo + '&rucs=' + encodeURIComponent(rucs.join(','));
+  var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+  try { var j = JSON.parse(r.getContentText()); return j.ok ? (j.mensaje || 'pedido') : 'error: ' + (j.error || '?'); }
+  catch (e) { return 'respuesta rara de la hoja de Declaraciones (HTTP ' + r.getResponseCode() + ')'; }
+}
+
+/** Lo que toca avisar hoy (según los días elegidos). */
+function TGV_deHoy_(lista, prm) {
+  return lista.filter(function (x) {
+    if (x.sinCronograma || x.presentado) return false;
+    return x.faltan >= 0 ? prm.dias[x.ob].indexOf(x.faltan) >= 0 : -x.faltan <= prm.despues;
+  });
+}
+
+/**
+ * 📅 ~2 horas antes del aviso, SOLO los días en que toca avisar IGV-Renta o PLAME: pide a la hoja de Declaraciones
+ * bajar de SUNAT el periodo que vence, solo de las empresas pendientes. Una vez por día.
+ */
+function TGV_previo_(ss) {
+  var prm = TGV_param_(ss);
+  var hora = Number(Utilities.formatDate(new Date(), 'America/Lima', 'H'));
+  var hoyTxt = Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd'), props = PropertiesService.getScriptProperties();
+  if (prm.hora < 2 || hora < prm.hora - 2 || hora >= prm.hora || props.getProperty('TGV_PREVIO') === hoyTxt) return;
+  props.setProperty('TGV_PREVIO', hoyTxt);
+  var porPer = {};
+  TGV_deHoy_(TGV_lista_(ss, null), prm).forEach(function (x) {
+    if (x.ob !== 'igv' && x.ob !== 'plame') return;
+    (porPer[x.periodo] = porPer[x.periodo] || {})[x.ruc] = true;
+  });
+  var res = Object.keys(porPer).map(function (per) {
+    var rucs = Object.keys(porPer[per]);
+    var t; try { t = TGV_decPedir_(rucs, per); } catch (e) { t = 'error: ' + e.message; }
+    return per + ' (' + rucs.length + ' empresa(s)): ' + t;
+  });
+  if (res.length) {
+    props.setProperty('TGV_PREVIO_RES', Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' · ' + res.join(' · '));
+    console.log('Vencimientos, descarga previa: ' + res.join(' · '));
+  }
+}
+
 /**
  * Lista de obligaciones de los periodos recientes con su vencimiento y estado.
  * [{ruc, nombre, periodo, ob, vence: Date, faltan, presentado, sinCronograma}]
@@ -285,18 +400,21 @@ function TGV_lista_(ss, c) {
   var crono = TGV_leerCronograma_(TGV_hoja_(ss));
   var hoy = TGV_hoyLima_();
   if (c) TGV_detectarSire_(ss, c);
+  var dec = TGV_decLeer_(ss);
+  try { TGV_detectarDecl_(ss, dec); } catch (e) { console.warn('Declaraciones: ' + e.message); }
   var pres = TGV_presentaciones_(ss);
   var out = [];
   var periodos = [TGV_periodoMenos_(hoy, 2), TGV_periodoMenos_(hoy, 1), TGV_periodoMenos_(hoy, 0)];
   TGV_empresas_(ss, prm).forEach(function (e) {
     periodos.forEach(function (per) {
       Object.keys(TGV_OBLIG_).forEach(function (ob) {
+        if (ob === 'plame' && dec && !dec.plame[e.ruc]) return;   // esa empresa no presenta PLAME (ninguno en 12 meses)
         var fila = crono[per];
         var vence = fila ? TGV_vence_(fila.fechas, TGV_columna_(e.ruc, e.bc), ob) : null;
         if (!vence) { if (per === TGV_periodoMenos_(hoy, 1)) out.push({ ruc: e.ruc, nombre: e.nombre, periodo: per, ob: ob, sinCronograma: true }); return; }
         var faltan = TGV_dias_(hoy, vence);
         if (faltan > 40 || faltan < -Math.max(prm.despues, 10)) return;
-        out.push({ ruc: e.ruc, nombre: e.nombre, bc: e.bc, periodo: per, ob: ob, vence: vence, faltan: faltan, presentado: !!pres[e.ruc + '|' + per + '|' + ob] });
+        out.push({ ruc: e.ruc, nombre: e.nombre, bc: e.bc, periodo: per, ob: ob, vence: vence, faltan: faltan, presentado: TGV_estaPresentado_(pres, e.ruc, per, ob) });
       });
     });
   });
@@ -320,6 +438,7 @@ function TGV_linea_(x) {
 
 /** Una vez al día, a la hora elegida: avisa lo que corresponde según los días configurados. */
 function TGV_avisar_(ss, destinos) {
+  try { TGV_previo_(ss); } catch (e) { console.warn('Vencimientos (descarga previa): ' + e.message); }
   var prm = TGV_param_(ss);
   var props = PropertiesService.getScriptProperties();
   var hoyTxt = Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd');
@@ -328,10 +447,7 @@ function TGV_avisar_(ss, destinos) {
   props.setProperty('TGV_DIA', hoyTxt);
   TGV_cronogramaAlDia_(ss);
   var lista = TGV_lista_(ss, TG_ctxDatos_(ss));
-  var hoy = lista.filter(function (x) {
-    if (x.sinCronograma || x.presentado) return false;
-    return x.faltan >= 0 ? prm.dias[x.ob].indexOf(x.faltan) >= 0 : -x.faltan <= prm.despues;
-  });
+  var hoy = TGV_deHoy_(lista, prm);
   var faltaCrono = lista.filter(function (x) { return x.sinCronograma; });
   if (!hoy.length && !faltaCrono.length) return;
   var html = '📅 <b>Vencimientos SUNAT</b>\n' + hoy.map(TGV_linea_).join('\n') +
@@ -341,8 +457,8 @@ function TGV_avisar_(ss, destinos) {
 }
 
 function TGV_botones_(items) {
-  var t = items.filter(function (x) { return !x.presentado && !x.sinCronograma && x.ob === 'igv'; }).slice(0, 8).map(function (x) {
-    return [{ text: '✅ Ya presenté ' + x.nombre.slice(0, 18) + ' ' + x.periodo.slice(4) + '/' + x.periodo.slice(2, 4),
+  var t = items.filter(function (x) { return !x.presentado && !x.sinCronograma && (x.ob === 'igv' || x.ob === 'plame'); }).slice(0, 10).map(function (x) {
+    return [{ text: '✅ Ya presenté ' + TGV_OBLIG_[x.ob].boton + ' ' + x.nombre.slice(0, 16) + ' ' + x.periodo.slice(4) + '/' + x.periodo.slice(2, 4),
       callback_data: 'k:' + TG_guardarBoton_({ t: 'venc', ruc: x.ruc, periodo: x.periodo, ob: x.ob }) }];
   });
   t.push([{ text: '📅 Ver todos', callback_data: 'c:vencimientos' }, { text: '⚙️ Cambiar avisos', callback_data: 'c:vencimientos ajustes' }]);
@@ -384,17 +500,17 @@ function TGV_comando_(ctx, arg) {
   var lista = TGV_lista_(ss, TG_ctxDatos_(ss)).filter(function (x) { return !x.sinCronograma; });
   var pend = lista.filter(function (x) { return !x.presentado && x.faltan >= -15; });
   var hechos = lista.filter(function (x) { return x.presentado && x.faltan >= -15; });
-  var html = '📅 <b>Vencimientos SUNAT</b> (IGV-Renta/PLAME y SIRE)\n\n' +
+  var html = '📅 <b>Vencimientos SUNAT</b> (IGV-Renta, PLAME y SIRE)\n\n' +
     (pend.length ? '<b>Pendientes</b>\n' + pend.map(TGV_linea_).join('\n') : '✅ No hay nada pendiente.') +
     (hechos.length ? '\n\n<b>Ya presentado</b>\n' + hechos.slice(-10).map(TGV_linea_).join('\n') : '') +
-    '\n\n<i>El SIRE (RVIE/RCE) vence 1 día hábil antes que el IGV (R.S. 281-2022, Anexo II). El SIRE se marca solo con el mensaje del Buzón SUNAT; el IGV con el botón ✅. Ajustes: /vencimientos ajustes</i>';
+    '\n\n<i>El SIRE (RVIE/RCE) vence 1 día hábil antes que el IGV (R.S. 281-2022, Anexo II). El SIRE se marca solo con el mensaje del Buzón SUNAT; el IGV-Renta (621) y el PLAME (601) se marcan solos cuando su constancia está en la hoja Declaraciones (se baja de SUNAT antes de cada aviso), o con el botón ✅. Ajustes: /vencimientos ajustes</i>';
   TG_enviar_(ctx.chatId, html, TGV_botones_(pend));
 }
 
 function TGV_enviarAjustes_(ctx) {
   var p = TGV_param_(ctx.ss);
   TG_enviar_(ctx.chatId, '⚙️ <b>Avisos de vencimientos</b>\n' +
-    '• IGV-Renta/PLAME: <b>' + p.dias.igv.join(', ') + '</b> días antes\n' +
+    '• IGV-Renta y PLAME: <b>' + p.dias.igv.join(', ') + '</b> días antes\n' +
     '• SIRE: <b>' + p.dias.sire.join(', ') + '</b> días antes\n' +
     '• Hora: <b>' + p.hora + ':00</b> · después de vencido: <b>' + p.despues + '</b> días\n' +
     '• Empresas: <b>' + (p.empresas.length ? TG_esc_(p.empresas.join(', ')) : 'todas') + '</b>\n\n' +
