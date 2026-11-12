@@ -44,6 +44,7 @@ function VCH_doPost_(e) {
       case 'rucexternos': return TGW_json_(TGQ_rucExternos_(ss, (q.filas || []).slice(0, 2000), !!q.todos));   // 🏛 padrón + internet
       case 'rucopciones': return TGW_json_(TGQ_rucOpciones_(ss, q.nombre));   // 📋 otras opciones en las fuentes propias
       case 'rucestado': return TGW_json_(TGQ_rucEstado_(String(q.id || '')));
+      case 'rucaliasborrar': return TGW_json_(TGQ_aliasBorrar_(ss, q.prov));   // 🗑 borrar el alias de un nombre
       case 'rucultimas': return TGW_json_(TGQ_rucUltimas_());   // 📂 búsquedas anteriores (6 h)
       case 'rucotro': return TGW_json_(TGQ_rucOtroNombre_(ss, q.nombre, q.filas));   // 🔎 buscar con otro nombre
       case 'rucelegir': return TGW_json_(TGQ_rucElegirFilas_(ss, q.prov, q.filas, q.ruc, q.det, q.reemplazarAlias));

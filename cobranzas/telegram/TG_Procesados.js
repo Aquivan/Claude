@@ -474,6 +474,19 @@ function TGQ_alias_(ss, nombre, ruc, reemplazar) {
   cfgSh.getRange(fila, 9, 1, 2).setValues([[String(nombre), String(ruc)]]);
   return 'nuevo';
 }
+/** 🗑 Borra el alias de ese nombre en ⚙️ Config (todas las filas con ese nombre, escrito igual o con otras tildes/espacios). */
+function TGQ_aliasBorrar_(ss, nombre) {
+  var cfgSh = ss.getSheetByName(HOJA.CONFIG);
+  if (!cfgSh || !String(nombre || '').trim()) return { error: 'Falta el nombre.' };
+  var ult = Math.max(cfgSh.getLastRow(), 3), col = cfgSh.getRange(3, 9, ult - 2, 2).getValues(), borrados = [];
+  for (var i = 0; i < col.length; i++) if (String(col[i][0]).trim() && normNombre_(col[i][0]) === normNombre_(nombre)) {
+    borrados.push(String(col[i][0]) + ' → ' + aRuc_(col[i][1]));
+    cfgSh.getRange(i + 3, 9, 1, 2).clearContent();
+    try { cfgSh.getRange(i + 3, 10).setNote('🗑 ' + Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm') + ': se borró el alias ' + borrados[borrados.length - 1]); } catch (e) { /* sin nota */ }
+  }
+  return { ok: true, borrados: borrados.length, mensaje: borrados.length ? '🗑 Alias borrado: ' + borrados.join('; ') + '. Ya no se sugiere solo.' : 'Ese nombre no tenía alias en ⚙️ Config.' };
+}
+
 /** Texto del resultado de TGQ_alias_ para mostrar. */
 function TGQ_aliasTxt_(a, prov, ruc) {
   if (!a) return '';
