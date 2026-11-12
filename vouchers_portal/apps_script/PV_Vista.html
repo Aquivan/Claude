@@ -771,41 +771,162 @@ function ordenar(P) {
   return s.slice(i0).concat(s.slice(0, i0));
 }
 /**
- * 🎯 Bordes automáticos: en una copia chica, separa claro/oscuro (Otsu), toma como voucher la mancha más grande del tono
- * que NO domina el borde de la foto, y sus 4 puntas (mín/máx de x+y y x−y). Si no es confiable, devuelve null.
+ * 🎯 Bordes automáticos. En una copia chica prueba varias «vistas» de la foto (gris, qué tan blanco/claro es, qué tan
+ * azul vs. rojo/café, saturación) porque un papel celeste sobre madera se separa mejor por color que por brillo. En cada
+ * vista: umbral de Otsu, el voucher es el tono que NO domina el borde de la foto, se separan uniones finas (erosión), se toma
+ * la mancha más grande y sus 4 puntas. Gana la vista cuya mancha llena mejor su cuadrilátero (forma de papel). Si ninguna
+ * convence, devuelve null y se ajusta a mano.
  */
-function esquinasAuto(base) {
-  var k = 320 / Math.max(base.width, base.height), w = Math.max(8, Math.round(base.width * k)), h = Math.max(8, Math.round(base.height * k));
+function esquinasAuto(base) { return esquinasCentro(base) || esquinasVistas(base); }
+/**
+ * 🎯 Método principal (como los escáneres): el voucher casi siempre está al centro de la foto. Se toma el color del PAPEL
+ * en el centro (los tonos más claros, para no tomar las letras), y se hace crecer la zona de ese color hasta sus bordes
+ * con varias tolerancias; las letras quedan como huecos que se rellenan. Gana la tolerancia cuya zona tiene mejor forma de
+ * papel (llena su cuadrilátero y no se escapa hasta el borde de la foto).
+ */
+function esquinasCentro(base) {
+  var k = 360 / Math.max(base.width, base.height), w = Math.max(8, Math.round(base.width * k)), h = Math.max(8, Math.round(base.height * k)), N = w * h, i, j;
   var c = document.createElement('canvas'); c.width = w; c.height = h; var x = c.getContext('2d'); x.drawImage(base, 0, 0, w, h);
-  var d = x.getImageData(0, 0, w, h).data, g = new Float32Array(w * h), i, j;
-  for (i = 0; i < w * h; i++) g[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
-  var b = new Float32Array(w * h);   // suavizado 3×3
-  for (j = 0; j < h; j++) for (i = 0; i < w; i++) { var s = 0, n = 0; for (var dj = -1; dj <= 1; dj++) for (var di = -1; di <= 1; di++) { var a = i + di, e = j + dj; if (a >= 0 && a < w && e >= 0 && e < h) { s += g[e * w + a]; n++; } } b[j * w + i] = s / n; }
-  var hist = new Array(256).fill(0); for (i = 0; i < w * h; i++) hist[Math.min(255, b[i] | 0)]++;
-  var tot = w * h, sum = 0; for (i = 0; i < 256; i++) sum += i * hist[i];
-  var sB = 0, wB = 0, mejor = 0, th = 127;
-  for (i = 0; i < 256; i++) { wB += hist[i]; if (!wB) continue; var wF = tot - wB; if (!wF) break; sB += i * hist[i]; var mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF); if (v > mejor) { mejor = v; th = i; } }
-  var claro = new Uint8Array(w * h); for (i = 0; i < w * h; i++) claro[i] = b[i] > th ? 1 : 0;
-  var bc = 0, bn = 0; for (i = 0; i < w; i++) { bc += claro[i] + claro[(h - 1) * w + i]; bn += 2; } for (j = 0; j < h; j++) { bc += claro[j * w] + claro[j * w + w - 1]; bn += 2; }
-  var fg = bc / bn > 0.5 ? 0 : 1;   // el voucher es el tono que no está en el borde
-  var vis = new Uint8Array(w * h), mejorC = null, pila = [];
-  for (i = 0; i < w * h; i++) {
-    if (vis[i] || claro[i] !== fg) continue;
-    var comp = { n: 0, a: [1e9, 0], b: [-1e9, 0], cc: [1e9, 0], dd: [-1e9, 0] }; pila.push(i); vis[i] = 1;
-    while (pila.length) {
-      var p = pila.pop(), px = p % w, py = (p / w) | 0; comp.n++;
-      if (px + py < comp.a[0]) comp.a = [px + py, p]; if (px + py > comp.b[0]) comp.b = [px + py, p];
-      if (px - py < comp.cc[0]) comp.cc = [px - py, p]; if (px - py > comp.dd[0]) comp.dd = [px - py, p];
-      [p - 1, p + 1, p - w, p + w].forEach(function (q, z) { if (q < 0 || q >= w * h || vis[q] || claro[q] !== fg) return; if ((z === 0 && px === 0) || (z === 1 && px === w - 1)) return; vis[q] = 1; pila.push(q); });
-    }
-    if (!mejorC || comp.n > mejorC.n) mejorC = comp;
+  var d = x.getImageData(0, 0, w, h).data, C = [new Float32Array(N), new Float32Array(N), new Float32Array(N)];
+  for (var ch = 0; ch < 3; ch++) {   // suavizado 5×5 separable
+    var tmp = new Float32Array(N), out = C[ch];
+    for (j = 0; j < h; j++) for (i = 0; i < w; i++) { var s = 0, n = 0; for (var di = -2; di <= 2; di++) { var a = i + di; if (a >= 0 && a < w) { s += d[(j * w + a) * 4 + ch]; n++; } } tmp[j * w + i] = s / n; }
+    for (j = 0; j < h; j++) for (i = 0; i < w; i++) { var s2 = 0, n2 = 0; for (var dj = -2; dj <= 2; dj++) { var e = j + dj; if (e >= 0 && e < h) { s2 += tmp[e * w + i]; n2++; } } out[j * w + i] = s2 / n2; }
   }
-  if (!mejorC || mejorC.n < 0.12 * w * h || mejorC.n > 0.97 * w * h) return null;
-  var pt = function (p) { return [(p % w + 0.5) / k, (((p / w) | 0) + 0.5) / k]; };
-  var Q = [pt(mejorC.a[1]), pt(mejorC.dd[1]), pt(mejorC.b[1]), pt(mejorC.cc[1])];   // TL, TR, BR, BL
+  var x0 = Math.round(w * 0.35), x1 = Math.round(w * 0.65), y0 = Math.round(h * 0.35), y1 = Math.round(h * 0.65), cen = [];
+  for (j = y0; j < y1; j++) for (i = x0; i < x1; i++) { var p = j * w + i; cen.push([C[0][p], C[1][p], C[2][p], C[0][p] + C[1][p] + C[2][p]]); }
+  cen.sort(function (a, b) { return a[3] - b[3]; });
+  var P = [0, 0, 0], desde = Math.floor(cen.length * 0.6);
+  for (i = desde; i < cen.length; i++) { P[0] += cen[i][0]; P[1] += cen[i][1]; P[2] += cen[i][2]; }
+  P = P.map(function (v) { return v / (cen.length - desde); });
+  var dist = new Float32Array(N);
+  for (i = 0; i < N; i++) dist[i] = Math.hypot(C[0][i] - P[0], C[1][i] - P[1], C[2][i] - P[2]);
+  // morfología binaria con sumas de ventana (r = radio)
+  var caja = function (m, r) {
+    var sh = new Float32Array(N), sv = new Float32Array(N), ii, jj;
+    for (jj = 0; jj < h; jj++) { var acc = 0; for (ii = -r; ii < w; ii++) { if (ii + r < w) acc += m[jj * w + ii + r]; if (ii - r - 1 >= 0) acc -= m[jj * w + ii - r - 1]; if (ii >= 0) sh[jj * w + ii] = acc; } }
+    for (ii = 0; ii < w; ii++) { var ac2 = 0; for (jj = -r; jj < h; jj++) { if (jj + r < h) ac2 += sh[(jj + r) * w + ii]; if (jj - r - 1 >= 0) ac2 -= sh[(jj - r - 1) * w + ii]; if (jj >= 0) sv[jj * w + ii] = ac2; } }
+    return sv;
+  };
+  var dilatar = function (m, r) { var s = caja(m, r), o = new Uint8Array(N); for (var q = 0; q < N; q++) o[q] = s[q] > 0 ? 1 : 0; return o; };
+  var erosionar = function (m, r) { var s = caja(m, r), o = new Uint8Array(N), lleno = (2 * r + 1) * (2 * r + 1); for (var q = 0; q < N; q++) { var qx = q % w, qy = (q / w) | 0; o[q] = qx >= r && qy >= r && qx < w - r && qy < h - r && s[q] >= lleno ? 1 : 0; } return o; };
+  var mejor = null;
+  [20, 28, 36, 45, 55, 70, 90].forEach(function (T) {
+    var m = new Uint8Array(N); for (var q = 0; q < N; q++) m[q] = dist[q] < T ? 1 : 0;
+    m = erosionar(dilatar(m, 2), 2);   // cierre: tapa las letras
+    m = dilatar(erosionar(m, 1), 1);   // apertura: corta hilos con la mesa
+    // la zona que más ocupa el centro
+    var lab = new Int32Array(N), nl = 0, mejorL = 0, mejorC = 0, pila = [];
+    for (var yy = y0; yy < y1; yy++) for (var xx = x0; xx < x1; xx++) {
+      var p0 = yy * w + xx; if (!m[p0] || lab[p0]) continue;
+      nl++; lab[p0] = nl; pila.push(p0); var enC = 0;
+      while (pila.length) {
+        var pp = pila.pop(), px = pp % w, py = (pp / w) | 0;
+        if (px >= x0 && px < x1 && py >= y0 && py < y1) enC++;
+        if (px > 0 && m[pp - 1] && !lab[pp - 1]) { lab[pp - 1] = nl; pila.push(pp - 1); }
+        if (px < w - 1 && m[pp + 1] && !lab[pp + 1]) { lab[pp + 1] = nl; pila.push(pp + 1); }
+        if (py > 0 && m[pp - w] && !lab[pp - w]) { lab[pp - w] = nl; pila.push(pp - w); }
+        if (py < h - 1 && m[pp + w] && !lab[pp + w]) { lab[pp + w] = nl; pila.push(pp + w); }
+      }
+      if (enC > mejorC) { mejorC = enC; mejorL = nl; }
+    }
+    if (!mejorL) return;
+    // rellenar huecos: lo que no se alcanza desde el borde sin pasar por la zona
+    var fuera = new Uint8Array(N); pila = [];
+    for (var b0 = 0; b0 < w; b0++) { [b0, (h - 1) * w + b0].forEach(function (q) { if (lab[q] !== mejorL && !fuera[q]) { fuera[q] = 1; pila.push(q); } }); }
+    for (var b1 = 0; b1 < h; b1++) { [b1 * w, b1 * w + w - 1].forEach(function (q) { if (lab[q] !== mejorL && !fuera[q]) { fuera[q] = 1; pila.push(q); } }); }
+    while (pila.length) {
+      var f0 = pila.pop(), fx = f0 % w, fy = (f0 / w) | 0;
+      [fx > 0 ? f0 - 1 : -1, fx < w - 1 ? f0 + 1 : -1, fy > 0 ? f0 - w : -1, fy < h - 1 ? f0 + w : -1].forEach(function (q) { if (q >= 0 && !fuera[q] && lab[q] !== mejorL) { fuera[q] = 1; pila.push(q); } });
+    }
+    var n1 = 0, toca = 0, A = [1e9, 0], B = [-1e9, 0], Cc = [1e9, 0], D = [-1e9, 0];
+    for (var q2 = 0; q2 < N; q2++) {
+      if (fuera[q2]) continue;
+      var qx = q2 % w, qy = (q2 / w) | 0; n1++;
+      if (qx <= 1 || qy <= 1 || qx >= w - 2 || qy >= h - 2) toca++;
+      if (qx + qy < A[0]) A = [qx + qy, q2]; if (qx + qy > B[0]) B = [qx + qy, q2];
+      if (qx - qy < Cc[0]) Cc = [qx - qy, q2]; if (qx - qy > D[0]) D = [qx - qy, q2];
+    }
+    var frac = n1 / N;
+    if (frac < 0.06 || frac > 0.95) return;
+    var pt = function (q) { return [q % w + 0.5, ((q / w) | 0) + 0.5]; };
+    var Q = [pt(A[1]), pt(D[1]), pt(B[1]), pt(Cc[1])], area = 0;
+    for (var z = 0; z < 4; z++) { var p1 = Q[z], p2 = Q[(z + 1) % 4]; area += p1[0] * p2[1] - p2[0] * p1[1]; }
+    area = Math.abs(area) / 2;
+    var punt = Math.min(1, n1 / Math.max(1, area)) - Math.min(0.4, 2 * toca / (Math.sqrt(n1) * 4));
+    if (!mejor || punt > mejor.punt + 0.01) mejor = { punt: punt, q: Q };
+  });
+  if (!mejor || mejor.punt < 0.8) return null;
+  return mejor.q.map(function (p) { return [p[0] / k, p[1] / k]; });
+}
+/** 🎯 Método de respaldo: separar por brillo / color en toda la foto (para cuando el voucher no está al centro). */
+function esquinasVistas(base) {
+  var k = 360 / Math.max(base.width, base.height), w = Math.max(8, Math.round(base.width * k)), h = Math.max(8, Math.round(base.height * k)), N = w * h;
+  var c = document.createElement('canvas'); c.width = w; c.height = h; var x = c.getContext('2d'); x.drawImage(base, 0, 0, w, h);
+  var d = x.getImageData(0, 0, w, h).data, i;
+  var vistas = [new Float32Array(N), new Float32Array(N), new Float32Array(N), new Float32Array(N)];
+  for (i = 0; i < N; i++) {
+    var R = d[i * 4], G = d[i * 4 + 1], B = d[i * 4 + 2], mx = Math.max(R, G, B), mn = Math.min(R, G, B);
+    vistas[0][i] = 0.299 * R + 0.587 * G + 0.114 * B;           // brillo
+    vistas[1][i] = mn;                                          // «blancura» (papel claro de cualquier color pastel)
+    vistas[2][i] = 128 + (B - R) / 2;                           // azul vs. rojo/café (papel celeste sobre madera)
+    vistas[3][i] = 255 - (mx ? (mx - mn) * 255 / mx : 0);       // poco saturado (papel blanco sobre mesa de color)
+  }
+  var mejor = null;
+  vistas.forEach(function (g, vi) {
+    var r = esquinasDeVista(g, w, h);
+    if (r && (!mejor || r.puntaje > mejor.puntaje)) { mejor = r; mejor.vista = vi; }
+  });
+  if (!mejor || mejor.puntaje < 0.72) return null;
+  return mejor.q.map(function (p) { return [p[0] / k, p[1] / k]; });
+}
+function esquinasDeVista(g0, w, h) {
+  var N = w * h, i, j, g = new Float32Array(N);
+  for (j = 0; j < h; j++) for (i = 0; i < w; i++) {   // suavizado 5×5 (borra letras y vetas finas)
+    var s = 0, n = 0;
+    for (var dj = -2; dj <= 2; dj++) { var e = j + dj; if (e < 0 || e >= h) continue; for (var di = -2; di <= 2; di++) { var a = i + di; if (a < 0 || a >= w) continue; s += g0[e * w + a]; n++; } }
+    g[j * w + i] = s / n;
+  }
+  var lo = 1e9, hi = -1e9; for (i = 0; i < N; i++) { if (g[i] < lo) lo = g[i]; if (g[i] > hi) hi = g[i]; }
+  if (hi - lo < 12) return null;   // esta vista no separa nada
+  var hist = new Array(256).fill(0), q = function (v) { return Math.min(255, Math.max(0, Math.round((v - lo) * 255 / (hi - lo)))); };
+  for (i = 0; i < N; i++) hist[q(g[i])]++;
+  var sum = 0; for (i = 0; i < 256; i++) sum += i * hist[i];
+  var sB = 0, wB = 0, mv = 0, th = 127;
+  for (i = 0; i < 256; i++) { wB += hist[i]; if (!wB) continue; var wF = N - wB; if (!wF) break; sB += i * hist[i]; var mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF); if (v > mv) { mv = v; th = i; } }
+  var m = new Uint8Array(N); for (i = 0; i < N; i++) m[i] = q(g[i]) > th ? 1 : 0;
+  var bc = 0, bn = 0; for (i = 0; i < w; i++) { bc += m[i] + m[(h - 1) * w + i]; bn += 2; } for (j = 0; j < h; j++) { bc += m[j * w] + m[j * w + w - 1]; bn += 2; }
+  var fg = bc / bn > 0.5 ? 0 : 1;
+  for (i = 0; i < N; i++) m[i] = m[i] === fg ? 1 : 0;
+  var er = new Uint8Array(N);   // erosión 3×3: corta uniones finas con la mesa
+  for (j = 1; j < h - 1; j++) for (i = 1; i < w - 1; i++) { var p = j * w + i; er[p] = m[p] && m[p - 1] && m[p + 1] && m[p - w] && m[p + w] && m[p - w - 1] && m[p - w + 1] && m[p + w - 1] && m[p + w + 1] ? 1 : 0; }
+  var vis = new Uint8Array(N), pila = [], best = null;
+  for (i = 0; i < N; i++) {
+    if (vis[i] || !er[i]) continue;
+    var cp = { n: 0, a: [1e9, 0], b: [-1e9, 0], c: [1e9, 0], d: [-1e9, 0], borde: 0 }; pila.push(i); vis[i] = 1;
+    while (pila.length) {
+      var pp = pila.pop(), px = pp % w, py = (pp / w) | 0; cp.n++;
+      if (px <= 1 || py <= 1 || px >= w - 2 || py >= h - 2) cp.borde++;
+      if (px + py < cp.a[0]) cp.a = [px + py, pp]; if (px + py > cp.b[0]) cp.b = [px + py, pp];
+      if (px - py < cp.c[0]) cp.c = [px - py, pp]; if (px - py > cp.d[0]) cp.d = [px - py, pp];
+      if (px > 0 && !vis[pp - 1] && er[pp - 1]) { vis[pp - 1] = 1; pila.push(pp - 1); }
+      if (px < w - 1 && !vis[pp + 1] && er[pp + 1]) { vis[pp + 1] = 1; pila.push(pp + 1); }
+      if (pp >= w && !vis[pp - w] && er[pp - w]) { vis[pp - w] = 1; pila.push(pp - w); }
+      if (pp < N - w && !vis[pp + w] && er[pp + w]) { vis[pp + w] = 1; pila.push(pp + w); }
+    }
+    if (!best || cp.n > best.n) best = cp;
+  }
+  if (!best || best.n < 0.08 * N || best.n > 0.95 * N) return null;
+  var pt = function (pp) { return [pp % w + 0.5, ((pp / w) | 0) + 0.5]; };
+  var Q = [pt(best.a[1]), pt(best.d[1]), pt(best.b[1]), pt(best.c[1])];   // arriba-izq, arriba-der, abajo-der, abajo-izq
   var area = 0; for (i = 0; i < 4; i++) { var p1 = Q[i], p2 = Q[(i + 1) % 4]; area += p1[0] * p2[1] - p2[0] * p1[1]; }
-  if (Math.abs(area) / 2 < 0.1 * base.width * base.height) return null;
-  return Q;
+  area = Math.abs(area) / 2;
+  if (area < 0.08 * N) return null;
+  // la erosión achicó 1 px: se devuelve ese píxel hacia afuera
+  var cx = (Q[0][0] + Q[1][0] + Q[2][0] + Q[3][0]) / 4, cy = (Q[0][1] + Q[1][1] + Q[2][1] + Q[3][1]) / 4;
+  Q = Q.map(function (p) { var dx = p[0] - cx, dy = p[1] - cy, L = Math.hypot(dx, dy) || 1; return [p[0] + dx / L * 1.2, p[1] + dy / L * 1.2]; });
+  var llenado = Math.min(1, best.n / area), toca = best.borde / Math.max(1, Math.sqrt(best.n) * 4);
+  return { q: Q, puntaje: llenado - Math.min(0.4, toca) };
 }
 /** Endereza el cuadrilátero a un rectángulo (perspectiva) con el tamaño natural de sus lados (máx. 2000 px). */
 function enderezar(base, P) {
@@ -871,11 +992,13 @@ function mejorarCanvas(cv) {
   for (var i = 0; i < D.length; i += 4) {
     var mn = 255;
     for (var ch = 0; ch < 3; ch++) {
-      var v = D[i + ch] * 255 / Math.max(B[i + ch], 24);
-      v = 255 - (255 - v) * 1.35;   // texto más oscuro
-      v = v < 0 ? 0 : v > 255 ? 255 : v; D[i + ch] = v; if (v < mn) mn = v;
+      var v = D[i + ch] * 255 / Math.max(B[i + ch], 24);   // 255 = papel
+      // niveles: lo muy claro (lo impreso al reverso que se transparenta, manchas) → blanco; el texto → bien oscuro
+      v = (v - 70) * 255 / (205 - 70);
+      v = v < 0 ? 0 : v > 255 ? 255 : 255 * Math.pow(v / 255, 1.25);
+      D[i + ch] = v; if (v < mn) mn = v;
     }
-    if (mn > 222) { D[i] = D[i + 1] = D[i + 2] = 255; }   // fondo casi blanco → blanco
+    if (mn > 215) { D[i] = D[i + 1] = D[i + 2] = 255; }   // fondo casi blanco → blanco
   }
   c.putImageData(I, 0, 0);
 }
