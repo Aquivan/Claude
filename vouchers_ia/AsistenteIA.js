@@ -95,14 +95,16 @@ function VIA_menuProcesados() {
  */
 function VIA_menuIdentificarRuc() {
   var ui = SpreadsheetApp.getUi(), sh = SpreadsheetApp.getActiveSheet(), nombre = sh.getName();
-  if (!/^(originales|fotos)$/i.test(nombre)) return ui.alert('🔎 Identificar RUC', 'Seleccione las filas en la pestaña Originales o Fotos.', ui.ButtonSet.OK);
   var filas = [], vistas = {};
-  (sh.getActiveRangeList() ? sh.getActiveRangeList().getRanges() : [sh.getActiveRange()]).forEach(function (rg) {
+  if (/^(originales|fotos)$/i.test(nombre)) (sh.getActiveRangeList() ? sh.getActiveRangeList().getRanges() : [sh.getActiveRange()]).forEach(function (rg) {
     for (var i = rg.getRow(); i < rg.getRow() + rg.getNumRows() && filas.length < 2000; i++) {
       if (i >= 2 && !vistas[i]) { vistas[i] = 1; filas.push(nombre + '!' + i); }
     }
   });
-  if (!filas.length) return ui.alert('🔎 Identificar RUC', 'Seleccione una o varias filas de vouchers (no el encabezado).', ui.ButtonSet.OK);
+  if (!filas.length) {   // sin filas elegidas: la ventana igual se abre, para ver 📂 las búsquedas anteriores
+    var vacio = JSON.stringify({ filas: [], texto: '', ids: [], faltan: 0, detalle: [], sinFilas: true });
+    return ui.showModalDialog(HtmlService.createHtmlOutput(VIA_RUC_HTML_.replace('__DATOS__', vacio)).setWidth(680).setHeight(580), '🔎 Identificar RUC de los proveedores');
+  }
   SpreadsheetApp.getActiveSpreadsheet().toast('Buscando el RUC de ' + filas.length + ' fila(s)…', '🔎 Identificar RUC', 30);
   var r = VIA_llamar_('rucfilas', { filas: filas });
   if (r.error) return ui.alert(r.error);
@@ -137,6 +139,7 @@ function VIA_vcoDeshacer() { return VIA_llamar_('vco_deshacer', { quien: VIA_qui
 function VIA_rucEscribir(ids) { try { return VIA_aplicar(ids, false); } catch (e) { return { error: e.message }; } }
 function VIA_rucExternos(filas, todos) { try { return VIA_llamar_('rucexternos', { filas: filas, todos: !!todos }); } catch (e) { return { error: e.message }; } }
 function VIA_rucOpciones(nombre) { try { return VIA_llamar_('rucopciones', { nombre: nombre }); } catch (e) { return { error: e.message }; } }
+function VIA_rucUltimas() { try { return VIA_llamar_('rucultimas', {}); } catch (e) { return { error: e.message }; } }
 function VIA_rucEstado(id) { try { return VIA_llamar_('rucestado', { id: id }); } catch (e) { return { error: e.message }; } }
 function VIA_rucOtro(nombre, filas) { try { return VIA_llamar_('rucotro', { nombre: nombre, filas: filas }); } catch (e) { return { error: e.message }; } }
 function VIA_rucElegirVarios(lista) { try { return VIA_llamar_('rucelegirvarios', { lista: lista }); } catch (e) { return { error: e.message }; } }
@@ -165,8 +168,8 @@ var VIA_RUC_HTML_ = [
   ' var nSug=G.filter(function(g){return g.sug&&!g.hecho}).length;',
   ' $("bar").innerHTML=(nSug?"<button class=\\"v\\" id=\\"w\\" onclick=\\"escribirMarcados()\\">✍️ Escribir los RUC marcados</button>":"")+',
   '  (G.some(function(g){return !g.hecho})?"<button onclick=\\"internetTodos()\\" title=\\"Busca en el padrón de SUNAT y con IA en internet, también los que ya tienen sugerencia\\">🌐 Buscar con IA en SUNAT e internet ("+G.filter(function(g){return !g.hecho}).length+" nombre(s))</button>":"")+',
-  '  "<button class=\\"g\\" onclick=\\"google.script.host.close()\\">Cerrar</button>";',
-  ' if(!G.length){$("lista").innerHTML="<div class=\\"m\\">✅ Todas las filas elegidas ya tienen RUC.</div>";return}',
+  '  "<button class=\\"g\\" onclick=\\"ultimas()\\" title=\\"Vuelve a abrir los resultados de las búsquedas en SUNAT e internet de las últimas 6 horas, aunque haya cerrado la ventana\\">📂 Ver la última búsqueda</button><button class=\\"g\\" onclick=\\"google.script.host.close()\\">Cerrar</button>";',
+  ' if(!G.length){$("lista").innerHTML=D.sinFilas?"<div class=\\"s\\">Para buscar RUC: cierre, seleccione las filas en Originales o Fotos y vuelva a abrir 🔎 Identificar RUC. Con 📂 puede ver las búsquedas anteriores.</div>":"<div class=\\"m\\">✅ Todas las filas elegidas ya tienen RUC.</div>";return}',
   ' $("lista").innerHTML=G.map(function(g,i){',
   '  var tot={};g.filas.forEach(function(f){tot[f.moneda]=(tot[f.moneda]||0)+f.monto});',
   '  var h="<div class=\\"card"+(g.hecho?" ok":"")+"\\"><div class=\\"t\\">"+esc(g.prov||"(sin nombre del proveedor)")+" · "+g.filas.length+" voucher(s) · "+Object.keys(tot).map(function(m){return m+" "+fm(tot[m])}).join(" + ")+"</div>";',
@@ -228,6 +231,11 @@ var VIA_RUC_HTML_ = [
   '  .VIA_rucElegirVarios(sel.map(function(x){return{prov:x.prov,filas:x.filas,ruc:x.ruc,det:x.nombre+" — "+x.como}}))}',
   'function elegirEl(k){var el=DAT["e"+k],j=Number($("es"+k).value),m=$("me"+k);if(j<0){msg("No escribí nada para "+el.prov+".",m);return}',
   ' var o=el.opciones[j];msg("Escribiendo "+o.ruc+"…",m);google.script.run.withFailureHandler(function(e){msg("❌ "+(e&&e.message||e),m,1)}).withSuccessHandler(function(y){msg((y&&(y.mensaje||y.error))||"Listo.",m)}).VIA_rucElegir(el.prov,el.filas,o.ruc,o.nombre+" — "+o.det)}',
+  'function ultimas(){var c=$("ext");msg("Buscando las búsquedas anteriores…");google.script.run.withFailureHandler(function(e){msg("❌ "+(e&&e.message||e),null,1)}).withSuccessHandler(function(r){r=r||{};if(r.error){msg(r.error,null,1);return}var l=r.lista||[];',
+  ' if(!l.length){msg("No hay búsquedas en SUNAT e internet de las últimas 6 horas.");return}msg("");',
+  ' var d=document.createElement("div");d.className="card";d.innerHTML="<b>📂 Búsquedas anteriores (últimas 6 horas)</b>"+l.map(function(x){return "<div style=\\"display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0\\"><span style=\\"flex:1\\">"+esc(x.cuando)+" · "+esc(x.que)+" <span class=\\"s\\">"+(x.listo?"✅ lista · "+x.claros+" encontrado(s), "+x.elecciones+" por elegir":"⏳ todavía buscando")+"</span></span><button style=\\"padding:3px 8px\\" onclick=\\"verBusq(\'"+esc(x.id)+"\',this)\\">Ver</button></div>"}).join("");c.insertBefore(d,c.firstChild);d.scrollIntoView()}).VIA_rucUltimas()}',
+  'function verBusq(id,b){b.disabled=true;var c=document.createElement("div"),m=document.createElement("div");m.className="m";c.appendChild(m);b.parentNode.parentNode.appendChild(c);msg("Abriendo…",m);',
+  ' google.script.run.withFailureHandler(function(e){msg("❌ "+(e&&e.message||e),m,1)}).withSuccessHandler(function(r){r=r||{};if(r.error){msg(r.error,m,1);return}if(r.listo){msg("",m);mostrar(r,c)}else esperar(id,0,c,m)}).VIA_rucEstado(id)}',
   'pintar();',
   '</script></body></html>'
 ].join('\n');

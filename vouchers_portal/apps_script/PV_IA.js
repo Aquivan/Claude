@@ -10,7 +10,7 @@
 // Qué puede pedir el portal y con qué permiso (todo lo que escribe pide «editar»).
 var PV_IA_ACC_ = {
   chat: 'editar', aplicar: 'editar', deshacer: 'editar', procesados: 'editar',
-  rucfilas: 'editar', rucexternos: 'editar', rucestado: 'editar', rucotro: 'editar', rucelegir: 'editar', rucelegirvarios: 'editar', rucopciones: 'editar',
+  rucfilas: 'editar', rucexternos: 'editar', rucestado: 'editar', rucultimas: 'editar', rucotro: 'editar', rucelegir: 'editar', rucelegirvarios: 'editar', rucopciones: 'editar',
   mesa: 'editar', vco_ver: 'editar', vco_copiar: 'editar', vco_deshacer: 'editar'
 };
 // Lo que deja huella en la hoja: se anota en 🌐 Registro portal.

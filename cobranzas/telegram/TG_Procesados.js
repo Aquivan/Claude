@@ -1123,7 +1123,7 @@ function TGQ_rucExternos_(ss, filas, todos) {
   if (todos) t.tandas.forEach(function (x) { x.filas.forEach(function (f) { if (!f.ruc) f.sug = ''; }); });
   var msg = TGQ_externos_(ss, t.tandas, 'vch', id);
   if (!msg) return { texto: 'No queda ningún proveedor sin RUC (o sin nombre) en esas filas.' };
-  if (/^⏳/.test(msg)) CacheService.getScriptCache().put('vchruc_' + id, JSON.stringify({ listo: false }), 21600);
+  if (/^⏳/.test(msg)) { CacheService.getScriptCache().put('vchruc_' + id, JSON.stringify({ listo: false }), 21600); TGQ_rucRecordar_(id, 'SUNAT e internet · ' + TGQ_filasCorto_(filas)); }
   return { id: /^⏳/.test(msg) ? id : '', texto: msg.replace(/Le aviso aquí en 3–5 minutos\./, 'Deje esta ventana abierta: el resultado aparece aquí en 3–5 minutos.') };
 }
 
@@ -1136,7 +1136,31 @@ function TGQ_rucOtroNombre_(ss, nombre, filas) {
   var err = RPN_lanzar_(ss, [{ q: nombre }], { origen: 'vch', chat: id, procesados: procesados });
   if (err) return { texto: err };
   CacheService.getScriptCache().put('vchruc_' + id, JSON.stringify({ listo: false }), 21600);
+  TGQ_rucRecordar_(id, '«' + nombre + '» · ' + TGQ_filasCorto_((filas || []).map(function (f) { return f.hoja + '!' + f.fila; })));
   return { id: id, texto: '⏳ Busco «' + nombre + '» en el padrón de SUNAT e internet…' };
+}
+
+/** 📂 Últimas búsquedas en SUNAT e internet (las 10 más recientes; duran 6 horas, como sus resultados). */
+function TGQ_rucRecordar_(id, que) {
+  try {
+    var c = CacheService.getScriptCache(), l = JSON.parse(c.get('vchruc_ult') || '[]');
+    l = l.filter(function (x) { return x.id !== id; });
+    l.unshift({ id: id, que: String(que || '').slice(0, 160), cuando: Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') });
+    c.put('vchruc_ult', JSON.stringify(l.slice(0, 10)), 21600);
+  } catch (e) { /* sin historial */ }
+}
+function TGQ_filasCorto_(filas) {
+  filas = filas || [];
+  return filas.length + ' voucher(s): ' + filas.slice(0, 4).join(', ') + (filas.length > 4 ? '…' : '');
+}
+function TGQ_rucUltimas_() {
+  var c = CacheService.getScriptCache(), l = [];
+  try { l = JSON.parse(c.get('vchruc_ult') || '[]'); } catch (e) { l = []; }
+  var est = c.getAll(l.map(function (x) { return 'vchruc_' + x.id; }));
+  return { lista: l.filter(function (x) { return est['vchruc_' + x.id]; }).map(function (x) {
+    var s = {}; try { s = JSON.parse(est['vchruc_' + x.id]); } catch (e) { /* */ }
+    return { id: x.id, que: x.que, cuando: x.cuando, listo: !!s.listo, claros: (s.claros || []).length, elecciones: (s.elecciones || []).length };
+  }) };
 }
 
 function TGQ_rucEstado_(id) {
