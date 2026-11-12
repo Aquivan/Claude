@@ -139,6 +139,7 @@ function VIA_rucExternos(filas, todos) { try { return VIA_llamar_('rucexternos',
 function VIA_rucOpciones(nombre) { try { return VIA_llamar_('rucopciones', { nombre: nombre }); } catch (e) { return { error: e.message }; } }
 function VIA_rucEstado(id) { try { return VIA_llamar_('rucestado', { id: id }); } catch (e) { return { error: e.message }; } }
 function VIA_rucOtro(nombre, filas) { try { return VIA_llamar_('rucotro', { nombre: nombre, filas: filas }); } catch (e) { return { error: e.message }; } }
+function VIA_rucElegirVarios(lista) { try { return VIA_llamar_('rucelegirvarios', { lista: lista }); } catch (e) { return { error: e.message }; } }
 function VIA_rucElegir(prov, filas, ruc, det) { try { return VIA_llamar_('rucelegir', { prov: prov, filas: filas, ruc: ruc, det: det }); } catch (e) { return { error: e.message }; } }
 
 var VIA_RUC_HTML_ = [
@@ -221,10 +222,12 @@ var VIA_RUC_HTML_ = [
   '  h+="<div id=\\"me"+k+"\\" class=\\"m\\"></div></div>"});',
   ' var d=document.createElement("div");d.innerHTML=h;cont.appendChild(d)}',
   'function claros(k){var cl=DAT["c"+k],sel=cl.filter(function(x,i){return $("c"+k+"_"+i).checked}),m=$("mc"+k);',
-  ' if(!sel.length){msg("No marcó ninguno: no escribí nada.",m);return}var res=[],i=0;msg("Escribiendo "+sel.length+"…",m);',
-  ' (function sig(){if(i>=sel.length){msg(res.join(" · "),m);return}var x=sel[i++];google.script.run.withSuccessHandler(function(y){res.push(x.prov+": "+((y&&(y.mensaje||y.error))||"listo"));sig()}).VIA_rucElegir(x.prov,x.filas,x.ruc,x.nombre+" — "+x.como)})()}',
+  ' if(!sel.length){msg("No marcó ninguno: no escribí nada.",m);return}var b=document.querySelector("#mc"+k).previousElementSibling;if(b)b.disabled=true;',
+  ' msg("⏳ Escribiendo "+sel.length+" de una vez y recalculando Cobranzas una sola vez (hasta 1–2 min)…",m);',
+  ' google.script.run.withFailureHandler(function(e){if(b)b.disabled=false;msg("❌ "+(e&&e.message||e)+" — revise la hoja: lo ya escrito queda; puede volver a intentar.",m,1)}).withSuccessHandler(function(y){y=y||{};msg(y.error?"❌ "+y.error:(y.mensaje||"Listo."),m,!!y.error)})',
+  '  .VIA_rucElegirVarios(sel.map(function(x){return{prov:x.prov,filas:x.filas,ruc:x.ruc,det:x.nombre+" — "+x.como}}))}',
   'function elegirEl(k){var el=DAT["e"+k],j=Number($("es"+k).value),m=$("me"+k);if(j<0){msg("No escribí nada para "+el.prov+".",m);return}',
-  ' var o=el.opciones[j];msg("Escribiendo "+o.ruc+"…",m);google.script.run.withSuccessHandler(function(y){msg((y&&(y.mensaje||y.error))||"Listo.",m)}).VIA_rucElegir(el.prov,el.filas,o.ruc,o.nombre+" — "+o.det)}',
+  ' var o=el.opciones[j];msg("Escribiendo "+o.ruc+"…",m);google.script.run.withFailureHandler(function(e){msg("❌ "+(e&&e.message||e),m,1)}).withSuccessHandler(function(y){msg((y&&(y.mensaje||y.error))||"Listo.",m)}).VIA_rucElegir(el.prov,el.filas,o.ruc,o.nombre+" — "+o.det)}',
   'pintar();',
   '</script></body></html>'
 ].join('\n');
