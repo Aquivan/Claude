@@ -209,6 +209,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
     <span id="anaOpc" style="display:none;gap:4px;align-items:center">
       <select id="eAnaMon" onchange="pintarE()" title="En qué moneda se ven los montos (se convierte con el tipo de cambio del documento)"><option value="ambas">Soles y dólares</option><option value="pen">Solo soles (S/)</option><option value="usd">Solo dólares (US$)</option></select>
       <span class="seg" id="eAnaRes"><button data-v="det" class="on" onclick="segOn('eAnaRes',this.dataset.v);pintarE()" title="Cada documento con sus pagos, retenciones, detracciones y N/C">Detalle</button><button data-v="res" onclick="segOn('eAnaRes',this.dataset.v);pintarE()" title="Una línea por documento: compromiso, amortización y saldo">Resumir</button></span>
+      <label title="Mostrar u ocultar la columna Glosa"><input type="checkbox" id="eAnaGlosa" checked onchange="pintarE()"> Glosa</label>
       <button onclick="anaExcel()" title="Descargar el análisis en Excel (.xlsx)">⬇ Excel</button>
     </span>
     <select id="eSinEmp" onchange="pintarE()" title="Pagos (vouchers) que se suman al saldo a favor: los que dicen qué empresa del grupo pagó, los que no, o ambos"><option value="todos">Vouchers con y sin empresa</option><option value="con">Solo vouchers con empresa</option><option value="sin">Solo vouchers sin empresa</option></select>
@@ -288,12 +289,13 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <span class="seg" id="ecNiv"><button data-v="res" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">📋 Resumido</button><button data-v="det" class="on" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">🔎 Detallado</button><button data-v="ana" onclick="segOn('ecNiv',this.dataset.v);ecPintar()" title="Análisis de documentos (como Contasis): cada documento con su compromiso, amortizaciones y saldo, en soles y/o dólares">📒 Análisis</button></span>
   <span id="ecAnaOpc" style="display:none;gap:4px;align-items:center"><select id="ecAnaMon" onchange="ecPintar()"><option value="ambas">Soles y dólares</option><option value="pen">Solo soles (S/)</option><option value="usd">Solo dólares (US$)</option></select>
   <span class="seg" id="ecAnaRes"><button data-v="det" class="on" onclick="segOn('ecAnaRes',this.dataset.v);ecPintar()">Detalle</button><button data-v="res" onclick="segOn('ecAnaRes',this.dataset.v);ecPintar()">Resumir</button></span>
+  <label title="Mostrar u ocultar la columna Glosa"><input type="checkbox" id="ecAnaGlosa" checked onchange="ecPintar()"> Glosa</label>
   <button onclick="anaExcel()" title="Descargar este análisis en Excel (.xlsx)">⬇ Excel</button></span>
   <select id="ecMon" onchange="ecPintar()"></select>
   <label><input type="checkbox" id="ecConf" checked onchange="ecPintar()"> con conformidad (firma)</label>
   <select id="ecSinEmp" onchange="ecPintar()" title="Pagos a cuenta que se incluyen"><option value="todos">Vouchers con y sin empresa</option><option value="con">Solo con empresa</option><option value="sin">Solo sin empresa</option></select>
   <span style="flex:1"></span>
-  <button onclick="ecImprimir()">🖨 Imprimir / PDF</button><button onclick="ecImagen()">🖼 Imagen</button><button onclick="ecCopiar()">📋 Copiar</button><button onclick="ecCerrar()">✖ Cerrar</button>
+  <button onclick="ecPdf()" title="Descarga el PDF directo (sin la ventana de impresión)">⬇ PDF</button><button onclick="ecImprimir()">🖨 Imprimir</button><button onclick="ecImagen()" title="Descarga la imagen (PNG)">🖼 Imagen</button><button onclick="ecCopiarImagen()" title="Copia la imagen para pegarla en WhatsApp, correo o Word (Ctrl+V)">📋 Copiar imagen</button><button onclick="ecCopiar()" title="Copia el texto (para Excel o correo)">📋 Copiar texto</button><button onclick="ecCerrar()">✖ Cerrar</button>
   <span id="ecMsg" style="color:var(--gr)"></span></div>
   <div id="ecScroll"><div id="ecHoja"></div></div></div>
 
@@ -2250,6 +2252,7 @@ function tcDe(d) {
 }
 function analisisE(lista, agr, opc) {
   opc = opc || {};
+  var conG = opc.glosa != null ? !!opc.glosa : (!$('eAnaGlosa') || $('eAnaGlosa').checked);
   var monV = opc.mon || $('eAnaMon').value, res = opc.res != null ? opc.res : segV('eAnaRes') === 'res', pagar = S.lado === 'Por pagar';
   var conPen = monV !== 'usd', conUsd = monV !== 'pen';
   var eq = function (d, x, tc) { return { pen: d.mon === 'USD' ? (tc ? x * tc : 0) : x, usd: d.mon === 'USD' ? x : (tc ? x / tc : 0) }; };
@@ -2358,26 +2361,26 @@ function analisisE(lista, agr, opc) {
     [0, 1, 2].forEach(function (i) { TG.pen[i] += TP.pen[i]; TG.usd[i] += TP.usd[i]; });
   });
   if (!(opc.envio && claves.length === 1)) filas.push({ t: 'tg', txt: 'TOTAL GENERAL · ' + claves.length + ' ' + (pagar ? 'proveedor(es)' : 'cliente(s)'), pen: TG.pen, usd: TG.usd });
-  ANA = { nat: NAT, sinTc: sinTc, descuadre: descuadre, filas: filas, conPen: conPen, conUsd: conUsd, conEmp: conEmp, res: res, pagar: pagar, nombre: opc.nombre || '' };
+  ANA = { glosa: conG, nat: NAT, sinTc: sinTc, descuadre: descuadre, filas: filas, conPen: conPen, conUsd: conUsd, conEmp: conEmp, res: res, pagar: pagar, nombre: opc.nombre || '' };
   // tabla
   var cols = '<th>Documento</th>' + (conEmp ? '<th>Empresa</th>' : '') + '<th>F. doc.</th><th>F. venc.</th><th>Mes cancel.</th><th>Tipo</th><th>' + (res ? 'Amortizaciones' : 'Doc. amortización') + '</th><th>Fecha</th><th>Mon.</th><th class="n">T.C.</th>';
   var nPre = conEmp ? 10 : 9;
   var gr = (conPen ? '<th class="g" colspan="3">SOLES (S/)</th>' : '') + (conUsd ? '<th class="g" colspan="3">DÓLARES (US$)</th>' : '');
   var sub = function (x) { return '<th class="n">Compromiso</th><th class="n">Amortización</th><th class="n">Saldo</th>'; };
-  var h = '<div' + (opc.envio ? '' : ' style="overflow:auto;max-height:calc(100vh - 330px)"') + '><table class="ana"><thead><tr><th colspan="' + nPre + '"></th>' + gr + '<th></th></tr><tr>' + cols + (conPen ? sub() : '') + (conUsd ? sub() : '') + '<th>Glosa</th></tr></thead><tbody>';
+  var h = '<div' + (opc.envio ? '' : ' style="overflow:auto;max-height:calc(100vh - 330px)"') + '><table class="ana"><thead><tr><th colspan="' + nPre + '"></th>' + gr + (conG ? '<th></th>' : '') + '</tr><tr>' + cols + (conPen ? sub() : '') + (conUsd ? sub() : '') + (conG ? '<th>Glosa</th>' : '') + '</tr></thead><tbody>';
   var N = function (v, sal) { if (Math.abs(v) < 0.005) return '<span style="color:#CBD5E1">–</span>'; return sal ? '<span class="' + (v > 0.05 ? 'pos' : 'neg') + '">' + fm(v) + '</span>' : fm(v); };
   // saldo: en las líneas de movimiento es el «saldo que va quedando» (gris); el que manda es el de la línea 🧾 Saldo de la factura
   var corrido = function (f) { return !res && (f.t === 'am' || f.t === 'dc'); };
   var S3 = function (v, f) { return corrido(f) ? '<td class="n sc">' + (Math.abs(v) < 0.005 ? '0.00' : fm(v)) + '</td>' : '<td class="n"><b>' + N(v, 1) + '</b></td>'; };
   var montos = function (f) { return (conPen ? '<td class="n">' + N(f.pen[0]) + '</td><td class="n">' + N(f.pen[1]) + '</td>' + S3(f.pen[2], f) : '') + (conUsd ? '<td class="n">' + N(f.usd[0]) + '</td><td class="n">' + N(f.usd[1]) + '</td>' + S3(f.usd[2], f) : ''); };
   var colT = { Factura: '#1D4ED8', 'N/D': '#1E40AF', 'N/C': '#C2410C', Pago: '#15803D', 'Pago manual': '#166534', Retención: '#7C3AED', Detracción: '#0E7490', Devolución: '#BE185D', 'A cuenta': '#047857', Ajuste: '#B45309', Otro: '#475569' };
-  var ncol = nPre + (conPen ? 3 : 0) + (conUsd ? 3 : 0) + 1;
+  var ncol = nPre + (conPen ? 3 : 0) + (conUsd ? 3 : 0) + (conG ? 1 : 0);
   filas.forEach(function (f) {
     if (f.t === 'pv') { h += '<tr class="apv"><td colspan="' + ncol + '">' + esc(f.txt) + '</td></tr>'; return; }
-    if (f.t === 'tp' || f.t === 'tg') { h += '<tr class="a' + f.t + '"><td colspan="' + nPre + '">' + esc(f.txt) + '</td>' + montos(f) + '<td></td></tr>'; return; }
-    if (f.t === 'sf') { h += '<tr class="asf' + (f.blq ? ' z1' : '') + '"><td colspan="' + nPre + '">🧾 ' + esc(f.txt) + ' <span class="est">' + esc(f.est) + '</span></td>' + montos(f) + '<td></td></tr>'; return; }
+    if (f.t === 'tp' || f.t === 'tg') { h += '<tr class="a' + f.t + '"><td colspan="' + nPre + '">' + esc(f.txt) + '</td>' + montos(f) + (conG ? '<td></td>' : '') + '</tr>'; return; }
+    if (f.t === 'sf') { h += '<tr class="asf' + (f.blq ? ' z1' : '') + '"><td colspan="' + nPre + '">🧾 ' + esc(f.txt) + ' <span class="est">' + esc(f.est) + '</span></td>' + montos(f) + (conG ? '<td></td>' : '') + '</tr>'; return; }
     h += '<tr class="a' + f.t + (f.blq ? ' z1' : '') + '"><td class="adoc">' + (f.t === 'am' ? '' : esc(f.doc)) + '</td>' + (conEmp ? '<td>' + esc(f.emp || '') + '</td>' : '') + '<td>' + (f.t === 'dc' ? ff(f.fdoc) : '') + '</td><td>' + (f.t === 'dc' ? ff(f.fven) : '') + '</td><td>' + esc(f.cancel || '') + '</td>' +
-      '<td><span class="tg2" style="background:' + (colT[f.tipo] || '#475569') + '">' + esc(f.tipo) + '</span></td><td>' + esc(f.adoc || '') + '</td><td>' + (f.afec ? ff(f.afec) : '') + '</td><td>' + (f.mon === 'USD' ? 'US$' : 'S/') + '</td><td class="n">' + (f.tc ? Number(f.tc).toFixed(3) : '') + '</td>' + montos(f) + '<td style="color:var(--gr)">' + esc(f.glosa || '') + '</td></tr>';
+      '<td><span class="tg2" style="background:' + (colT[f.tipo] || '#475569') + '">' + esc(f.tipo) + '</span></td><td>' + esc(f.adoc || '') + '</td><td>' + (f.afec ? ff(f.afec) : '') + '</td><td>' + (f.mon === 'USD' ? 'US$' : 'S/') + '</td><td class="n">' + (f.tc ? Number(f.tc).toFixed(3) : '') + '</td>' + montos(f) + (conG ? '<td style="color:var(--gr)">' + esc(f.glosa || '') + '</td>' : '') + '</tr>';
   });
   h += '</tbody></table></div><div style="display:flex;gap:18px;justify-content:flex-end;padding:8px 4px;font-size:13px"><span>Total registros: <b>' + filas.filter(function (f) { return f.t === 'dc' || f.t === 'am'; }).length + '</b></span>' +
     (conPen ? '<span>Total saldo S/: <b class="' + (TG.pen[2] > 0.05 ? 'pos' : 'neg') + '" style="color:' + (TG.pen[2] > 0.05 ? '#B91C1C' : '#047857') + '">' + fm(TG.pen[2]) + '</b></span>' : '') +
@@ -2396,14 +2399,14 @@ function anaExcel() {
   if (!ANA) return;
   var hacer = function () {
     var A = ANA, cab = ['Documento'].concat(A.conEmp ? ['Empresa'] : [], ['F. doc.', 'F. venc.', 'Mes cancel.', 'Tipo', A.res ? 'Amortizaciones' : 'Doc. amortización', 'Fecha', 'Moneda', 'T.C.'],
-      A.conPen ? ['Compromiso S/', 'Amortización S/', 'Saldo S/'] : [], A.conUsd ? ['Compromiso US$', 'Amortización US$', 'Saldo US$'] : [], ['Glosa']);
+      A.conPen ? ['Compromiso S/', 'Amortización S/', 'Saldo S/'] : [], A.conUsd ? ['Compromiso US$', 'Amortización US$', 'Saldo US$'] : [], A.glosa ? ['Glosa'] : []);
     var rows = [['ANÁLISIS DE CUENTA · ' + (A.pagar ? 'CUENTAS POR PAGAR' : 'CUENTAS POR COBRAR') + ' · ' + ($('fEmp').value ? razonEmp($('fEmp').value) : 'Grupo')], ['Generado el ' + ff(new Date().toISOString().slice(0, 10))], [], cab];
     var r2n = function (v) { return Math.round(v * 100) / 100; };
     var mont = function (f) { return (A.conPen ? f.pen.map(r2n) : []).concat(A.conUsd ? f.usd.map(r2n) : []); };
     A.filas.forEach(function (f) {
       if (f.t === 'pv') { rows.push([f.txt]); return; }
-      if (f.t === 'tp' || f.t === 'tg' || f.t === 'sf') { var r = [f.t === 'sf' ? '   ' + f.txt + ' · ' + f.est : f.txt]; while (r.length < cab.length - (A.conPen ? 3 : 0) - (A.conUsd ? 3 : 0) - 1) r.push(''); rows.push(r.concat(mont(f), [''])); return; }
-      rows.push([f.t === 'am' ? '   ' + f.doc : f.doc].concat(A.conEmp ? [f.emp || ''] : [], [f.t === 'dc' ? ff(f.fdoc) : '', f.t === 'dc' ? ff(f.fven) : '', f.cancel || '', f.tipo, f.adoc || '', f.afec ? ff(f.afec) : '', f.mon === 'USD' ? 'US$' : 'S/', f.tc ? Number(Number(f.tc).toFixed(3)) : ''], mont(f), [f.glosa || '']));
+      if (f.t === 'tp' || f.t === 'tg' || f.t === 'sf') { var r = [f.t === 'sf' ? '   ' + f.txt + ' · ' + f.est : f.txt]; while (r.length < cab.length - (A.conPen ? 3 : 0) - (A.conUsd ? 3 : 0) - (A.glosa ? 1 : 0)) r.push(''); rows.push(r.concat(mont(f), A.glosa ? [''] : [])); return; }
+      rows.push([f.t === 'am' ? '   ' + f.doc : f.doc].concat(A.conEmp ? [f.emp || ''] : [], [f.t === 'dc' ? ff(f.fdoc) : '', f.t === 'dc' ? ff(f.fven) : '', f.cancel || '', f.tipo, f.adoc || '', f.afec ? ff(f.afec) : '', f.mon === 'USD' ? 'US$' : 'S/', f.tc ? Number(Number(f.tc).toFixed(3)) : ''], mont(f), A.glosa ? [f.glosa || ''] : []));
     });
     var ws = XLSX.utils.aoa_to_sheet(rows), wb = XLSX.utils.book_new();
     ws['!cols'] = cab.map(function (c, i) { return { wch: i === 0 ? 18 : /Glosa/.test(c) ? 40 : /Amortizaciones|Doc\. amort/.test(c) ? 18 : 13 }; });
@@ -2576,7 +2579,7 @@ function ecAnalisis(cr, er, de, ha) {
     });
     extra = '<!--CRUCE-->' + JSON.stringify(cruce);
   }
-  var tabla = analisisE([{ ruc: cr, nombre: nomC, subs: [{ ruc: cr, nombre: nomC, docs: docs, fav: fav }] }], 'ep', { mon: $('ecAnaMon').value, res: segV('ecAnaRes') === 'res', docs: docs, envio: true, nombre: nomC, extra: '<span id="anaCruce"></span>' });
+  var tabla = analisisE([{ ruc: cr, nombre: nomC, subs: [{ ruc: cr, nombre: nomC, docs: docs, fav: fav }] }], 'ep', { mon: $('ecAnaMon').value, res: segV('ecAnaRes') === 'res', glosa: $('ecAnaGlosa').checked, docs: docs, envio: true, nombre: nomC, extra: '<span id="anaCruce"></span>' });
   if (extra) {
     var cr2 = JSON.parse(extra.replace('<!--CRUCE-->', ''));
     tabla = tabla.replace('<span id="anaCruce"></span>', cr2.map(function (c) {
@@ -2598,15 +2601,67 @@ function ecAnalisis(cr, er, de, ha) {
 function anaCopiarTxt() {
   var A = ANA, L = [], n = function (v) { return Math.abs(v) < 0.005 ? '' : v.toFixed(2); };
   var mont = function (f) { return (A.conPen ? f.pen.map(n) : []).concat(A.conUsd ? f.usd.map(n) : []); };
-  L.push(['Documento', 'F. doc.', 'F. venc.', 'Mes cancel.', 'Tipo', A.res ? 'Amortizaciones' : 'Doc. amortización', 'Fecha', 'Moneda', 'T.C.'].concat(A.conPen ? ['Compromiso S/', 'Amortización S/', 'Saldo S/'] : [], A.conUsd ? ['Compromiso US$', 'Amortización US$', 'Saldo US$'] : [], ['Glosa']).join('\t'));
+  L.push(['Documento', 'F. doc.', 'F. venc.', 'Mes cancel.', 'Tipo', A.res ? 'Amortizaciones' : 'Doc. amortización', 'Fecha', 'Moneda', 'T.C.'].concat(A.conPen ? ['Compromiso S/', 'Amortización S/', 'Saldo S/'] : [], A.conUsd ? ['Compromiso US$', 'Amortización US$', 'Saldo US$'] : [], A.glosa ? ['Glosa'] : []).join('\t'));
   A.filas.forEach(function (f) {
     if (f.t === 'pv') return L.push(f.txt);
     if (f.t === 'tp' || f.t === 'tg' || f.t === 'sf') return L.push([f.t === 'sf' ? f.txt + ' · ' + f.est : f.txt, '', '', '', '', '', '', '', ''].concat(mont(f)).join('\t'));
-    L.push([f.t === 'am' ? '' : f.doc, f.t === 'dc' ? ff(f.fdoc) : '', f.t === 'dc' ? ff(f.fven) : '', f.cancel || '', f.tipo, f.adoc || '', f.afec ? ff(f.afec) : '', f.mon === 'USD' ? 'US$' : 'S/', f.tc ? Number(f.tc).toFixed(3) : ''].concat(mont(f), [f.glosa || '']).join('\t'));
+    L.push([f.t === 'am' ? '' : f.doc, f.t === 'dc' ? ff(f.fdoc) : '', f.t === 'dc' ? ff(f.fven) : '', f.cancel || '', f.tipo, f.adoc || '', f.afec ? ff(f.afec) : '', f.mon === 'USD' ? 'US$' : 'S/', f.tc ? Number(f.tc).toFixed(3) : ''].concat(mont(f), A.glosa ? [f.glosa || ''] : []).join('\t'));
   });
   return L.join('\n');
 }
 function ecImprimir() { var pg = $('ecPag') || document.head.appendChild(Object.assign(document.createElement('style'), { id: 'ecPag' })); pg.textContent = $('ecHoja').classList.contains('ancha') ? '@media print{@page{size:A4 landscape;margin:8mm}}' : ''; document.body.classList.add('ecImp'); setTimeout(function () { window.print(); setTimeout(function () { document.body.classList.remove('ecImp'); }, 500); }, 100); }
+function cargarJS(url, global) {
+  return new Promise(function (ok, ko) {
+    if (window[global]) return ok();
+    var sc = document.createElement('script'); sc.src = url; sc.onload = function () { ok(); }; sc.onerror = function () { ko(new Error('No se pudo cargar ' + global + ' (¿sin internet?).')); }; document.head.appendChild(sc);
+  });
+}
+function ecNombreArchivo(ext) {
+  var c = EC.copiar || {};
+  return ((c.ana ? 'Analisis de cuenta ' : 'Estado de cuenta ') + (c.nomC || '') + ' ' + (c.ha || '')).replace(/[\\/:*?"<>|]/g, '').trim() + '.' + ext;
+}
+/** La hoja como imagen (html2canvas, en este navegador). */
+function ecLienzo() {
+  return cargarJS('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'html2canvas').then(function () {
+    return window.html2canvas($('ecHoja'), { scale: 2, backgroundColor: '#ffffff' });
+  });
+}
+/** ⬇ PDF directo: la hoja en páginas A4 (horizontal para el análisis), sin la ventana de impresión. */
+function ecPdf() {
+  $('ecMsg').textContent = '⏳ Armando el PDF…';
+  Promise.all([ecLienzo(), cargarJS('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf')]).then(function (r) {
+    var cv = r[0], hor = $('ecHoja').classList.contains('ancha') || cv.width > cv.height * 1.1;
+    var pdf = new window.jspdf.jsPDF({ orientation: hor ? 'l' : 'p', unit: 'mm', format: 'a4', compress: true });
+    var pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight(), m = 8, aw = pw - 2 * m, ah = ph - 2 * m;
+    var pxmm = cv.width / aw, altoPag = Math.floor(ah * pxmm), y = 0, n = 0;
+    while (y < cv.height) {
+      var alto = Math.min(altoPag, cv.height - y), pc = document.createElement('canvas'); pc.width = cv.width; pc.height = alto;
+      var cx = pc.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, pc.width, alto); cx.drawImage(cv, 0, y, cv.width, alto, 0, 0, cv.width, alto);
+      if (n++) pdf.addPage();
+      pdf.addImage(pc.toDataURL('image/jpeg', 0.92), 'JPEG', m, m, aw, alto / pxmm);
+      y += alto;
+    }
+    pdf.save(ecNombreArchivo('pdf'));
+    $('ecMsg').textContent = '⬇ PDF descargado (' + n + ' página' + (n > 1 ? 's' : '') + ').';
+  }).catch(function (e) { $('ecMsg').textContent = '❌ ' + e.message + ' · Use 🖨 Imprimir → Guardar como PDF.'; });
+}
+/** 📋 Copiar imagen: queda en el portapapeles para pegarla con Ctrl+V (WhatsApp Web, correo, Word). */
+function ecCopiarImagen() {
+  $('ecMsg').textContent = '⏳ Preparando la imagen…';
+  var blob = ecLienzo().then(function (cv) { return new Promise(function (ok) { cv.toBlob(ok, 'image/png'); }); });
+  var falla = function (e) {
+    blob.then(function (b) {
+      var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = ecNombreArchivo('png'); document.body.appendChild(a); a.click(); a.remove();
+      $('ecMsg').textContent = '⚠️ Este navegador no deja copiar imágenes desde aquí: la descargué como archivo (' + ecNombreArchivo('png') + '). Puede adjuntarla o arrastrarla al chat.';
+    }).catch(function (e2) { $('ecMsg').textContent = '❌ ' + (e2 && e2.message || e && e.message || 'No se pudo.'); });
+  };
+  try {
+    if (!navigator.clipboard || !window.ClipboardItem) throw new Error('sin portapapeles');
+    navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(function () {
+      $('ecMsg').textContent = '📋 Imagen copiada: péguela con Ctrl+V en WhatsApp, el correo o Word.';
+    }).catch(falla);
+  } catch (e) { falla(e); }
+}
 function ecImagen() {
   var hacer = function () {
     $('ecMsg').textContent = '⏳ Generando imagen…';
