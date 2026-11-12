@@ -45,7 +45,7 @@ var TG_AVISOS_ = [
   ['hon', '🧑‍💼 Recibos por honorarios nuevos'],
   ['vou', '💳 Vouchers nuevos registrados'],
   ['venc', '⏰ Facturas por vencer y vencidas'],
-  ['oblig', '📅 Vencimientos SUNAT (IGV-Renta/PLAME, SIRE)'],
+  ['oblig', '📅 Vencimientos SUNAT (IGV-Renta, PLAME, SIRE)'],
   ['err', '❌ Descargas automáticas con error'],
   ['resumen', '☀️ Resumen de la mañana'],
 ];

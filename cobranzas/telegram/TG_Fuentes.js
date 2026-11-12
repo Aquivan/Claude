@@ -158,7 +158,7 @@ var TGH_ = {
     return { columnas: ['empresa', 'ruc', 'obligacion', 'periodo', 'vence', 'dias_que_faltan', 'estado', 'buen_contribuyente'],
       filas: lista.map(function (x) { return [x.nombre, x.ruc, TGV_OBLIG_[x.ob].corto, x.periodo, x.vence, x.faltan, x.presentado ? 'presentado' : (x.faltan < 0 ? 'VENCIDO sin marcar' : 'pendiente'), x.bc ? 'sí' : 'no']; }),
       nota: 'Cronograma SUNAT por último dígito del RUC (pestaña ' + TGV_HOJA_ + '). Avisos: IGV ' + p.dias.igv.join(',') + ' y SIRE ' + p.dias.sire.join(',') + ' días antes, a las ' + p.hora + ':00. ' +
-        'El SIRE se marca presentado solo con el mensaje del Buzón; el IGV-Renta/PLAME con el botón o con marcar_presentado.' };
+        'El SIRE se marca presentado solo con el mensaje del Buzón; el IGV-Renta (621) y el PLAME (601) van por separado y se marcan solos cuando su constancia está en la hoja Declaraciones (se baja de SUNAT antes de cada aviso), o con el botón o marcar_presentado.' };
   },
 
   marcar_presentado: function (c, a) {
@@ -166,7 +166,7 @@ var TGH_ = {
     if (!/^\d{11}$/.test(String(ruc))) throw new Error('no reconozco la empresa "' + a.empresa + '"');
     var per = String(a.periodo || '').replace(/\D/g, '').slice(0, 6);
     if (!/^\d{6}$/.test(per)) throw new Error('periodo debe ser AAAAMM');
-    var ob = /sire|rvie|rce|regis/i.test(a.obligacion || '') ? 'sire' : 'igv';
+    var ob = /sire|rvie|rce|regis/i.test(a.obligacion || '') ? 'sire' : /plame|601|planilla/i.test(a.obligacion || '') ? 'plame' : 'igv';
     var nuevo = TGV_marcar_(c.ss, ruc, per, ob, 'chat con la IA');
     return { columnas: ['resultado'], filas: [[(nuevo ? 'Anotado como presentado: ' : 'Ya estaba anotado: ') + TGV_OBLIG_[ob].corto + ' ' + per + ' de ' + ruc]] };
   },

@@ -124,6 +124,8 @@ jobs:
             clasp push --force
           fi
           clasp create-deployment -i "$ID" -d "$DESC"
+          # 📅 deja en la hoja la dirección de su aplicación web (la usan los avisos de vencimientos de Cobranzas: DEC_Previo.js)
+          curl -sSL -o /dev/null "https://script.google.com/macros/s/$ID/exec?registrar=1" || echo "::warning::No se pudo registrar la dirección (se reintenta en el próximo despliegue)"
           echo "================================================================"
           echo "Hoja:            https://docs.google.com/spreadsheets/d/$HOJA/edit"
           echo "Aplicación web:  publicada (la usa el robot Declaraciones - descargar)"

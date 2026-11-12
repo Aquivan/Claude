@@ -6,7 +6,11 @@
  *   fin     → terminó una empresa: se marcan vigentes / respaldo y se rehacen los reportes.
  */
 
-function doGet() {
+function doGet(e) {
+  var p = (e && e.parameter) || {};
+  var json = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
+  if (p.registrar) { try { DEC_registrarWeb_(); } catch (x) { console.warn(x); } return json({ ok: true }); }   // DEC_Previo.js
+  if (p.previo) { try { return json(DEC_previo_(p)); } catch (x) { return json({ ok: false, error: String(x.message || x).slice(0, 300) }); } }
   return ContentService.createTextOutput('Declaraciones · Grupo: aplicación web activa.');
 }
 
