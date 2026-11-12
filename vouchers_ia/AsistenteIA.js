@@ -139,6 +139,25 @@ function VIA_vcoDeshacer() { return VIA_llamar_('vco_deshacer', { quien: VIA_qui
 function VIA_rucEscribir(ids) { try { return VIA_aplicar(ids, false); } catch (e) { return { error: e.message }; } }
 function VIA_rucExternos(filas, todos) { try { return VIA_llamar_('rucexternos', { filas: filas, todos: !!todos }); } catch (e) { return { error: e.message }; } }
 function VIA_rucOpciones(nombre) { try { return VIA_llamar_('rucopciones', { nombre: nombre }); } catch (e) { return { error: e.message }; } }
+function VIA_rucAliasBorrar(prov) { try { return VIA_llamar_('rucaliasborrar', { prov: prov }); } catch (e) { return { error: e.message }; } }
+/** 🔍 Leer el voucher con IA (la misma lectura de 🔁 Releer con IA, pero NO cambia la fila): para comparar el nombre escrito con el del voucher. */
+function VIA_rucLeer(hoja, fila) {
+  try {
+    if (['Originales', 'Fotos'].indexOf(String(hoja)) === -1) throw new Error('Pestaña no válida.');
+    return { id: RP_visorIniciar(String(hoja), Number(fila)) };
+  } catch (e) { return { error: e.message }; }
+}
+/** Resultado de la lectura + RUC posibles para el nombre leído (fuentes propias de Cobranzas). Nunca escribe. */
+function VIA_rucLeerEstado(id) {
+  try {
+    var r = RP_visorEstado(String(id));
+    if (!r.listo) return { listo: false };
+    if (r.error) return { listo: true, error: r.error };
+    var v = (r.leidos || [])[0] || {}, prov = String(v.proveedor || '').trim(), ops = [];
+    if (prov.length >= 3) { var o = VIA_llamar_('rucopciones', { nombre: prov }); ops = (o && o.opciones) || []; }
+    return { listo: true, proveedor: prov, idv: String(v.idCliente || '').replace(/\D/g, ''), linea: (r.lineas || [])[0] || '', antes: r.antes || '', opciones: ops.slice(0, 8) };
+  } catch (e) { return { listo: true, error: e.message }; }
+}
 function VIA_rucUltimas() { try { return VIA_llamar_('rucultimas', {}); } catch (e) { return { error: e.message }; } }
 function VIA_rucEstado(id) { try { return VIA_llamar_('rucestado', { id: id }); } catch (e) { return { error: e.message }; } }
 function VIA_rucOtro(nombre, filas) { try { return VIA_llamar_('rucotro', { nombre: nombre, filas: filas }); } catch (e) { return { error: e.message }; } }
@@ -178,11 +197,11 @@ var VIA_RUC_HTML_ = [
   '  if(g.sug)h+="<div class=\\"sug\\"><label><input type=\\"checkbox\\" id=\\"k"+i+"\\""+(g.aliasRaro&&g.sug===g.alias?"":" checked")+"> 💡 <b>"+esc(g.sug)+"</b> — <b style=\\"color:#1D4ED8\\">"+esc(g.sugNombre||"(nombre no hallado: verifíquelo en SUNAT)")+"</b><br><span class=\\"s\\">"+esc(g.como)+"</span></label> <button class=\\"r\\" onclick=\\"noEs("+i+")\\">❌ No es este</button></div>";',
   '  else if(g.opciones.length)h+="<div class=\\"s\\">❓ Sin RUC claro. Posibles:</div>"+selector(i,g.opciones);',
   '  else if(!g.parecidos.length)h+="<div class=\\"s\\">❓ No lo encontré en los vouchers, SIRE, recibos por honorarios ni retenciones.</div>";',
-  '  if(g.alias)h+=(g.aliasRaro?"<div class=\\"sug\\" style=\\"background:#FEF2F2;border-color:#FCA5A5\\">⚠️ <b>Ojo:</b> el alias guardado para este nombre es <b>"+esc(g.alias)+"</b> — <b>"+esc(g.aliasNombre)+"</b>, un nombre muy distinto. Revise el voucher: puede ser correcto (se le pagó en nombre de esa empresa) o un alias equivocado.</div>":"")+"<label class=\\"s\\" style=\\"display:block;margin:4px 0\\"><input type=\\"checkbox\\" id=\\"a"+i+"\\" checked> 🔁 Si elijo otro RUC, actualizar el alias de este nombre (hoy: "+esc(g.alias)+(g.aliasNombre?" "+esc(g.aliasNombre):"")+")</label>";',
+  '  if(g.alias)h+=(g.aliasRaro?"<div class=\\"sug\\" style=\\"background:#FEF2F2;border-color:#FCA5A5\\">⚠️ <b>Ojo:</b> el alias guardado para este nombre es <b>"+esc(g.alias)+"</b> — <b>"+esc(g.aliasNombre)+"</b>, un nombre muy distinto. Revise el voucher: puede ser correcto (se le pagó en nombre de esa empresa) o un alias equivocado.</div>":"")+"<label class=\\"s\\" style=\\"display:block;margin:4px 0\\"><input type=\\"checkbox\\" id=\\"a"+i+"\\" checked> 🔁 Si elijo otro RUC, actualizar el alias de este nombre (hoy: "+esc(g.alias)+(g.aliasNombre?" "+esc(g.aliasNombre):"")+")</label><button class=\\"r\\" style=\\"padding:2px 8px\\" onclick=\\"borrarAlias("+i+")\\" title=\\"Quita el alias de este nombre en Cobranzas → Config: ya no se sugerirá solo\\">🗑 Borrar este alias</button>";',
   '  if(g.parecidos.length)h+=parec(i,g);',
-  '  h+="<div><button class=\\"g\\" onclick=\\"opciones("+i+")\\">📋 Más opciones (SIRE, honorarios, retenciones…)</button>"+(g.prov?" <button onclick=\\"iaNombre("+i+")\\" title=\\"Busca este nombre en el padrón de SUNAT y con IA en internet\\">🌐 Buscar con IA en SUNAT e internet</button>":"")+"</div>";',
+  '  h+="<div><button class=\\"g\\" onclick=\\"opciones("+i+")\\">📋 Más opciones (SIRE, honorarios, retenciones…)</button>"+(g.prov?" <button onclick=\\"iaNombre("+i+")\\" title=\\"Busca este nombre en el padrón de SUNAT y con IA en internet\\">🌐 Buscar con IA en SUNAT e internet</button>":"")+" <button class=\\"g\\" onclick=\\"leer("+i+")\\" title=\\"La IA lee la imagen del voucher (no cambia la fila) y busca el RUC del nombre que trae\\">🔍 Leer el voucher con IA</button></div>";',
   '  h+="<div><input type=\\"text\\" id=\\"q"+i+"\\" placeholder=\\"RUC (11 dígitos) u otro nombre para buscar\\"> <button onclick=\\"otro("+i+")\\">🔎 Usar este RUC / buscar otro nombre con IA</button></div>";',
-  '  return h+"<div id=\\"o"+i+"\\"></div><div id=\\"r"+i+"\\"></div><div class=\\"m\\" id=\\"m"+i+"\\"></div></div>"}).join("")}',
+  '  return h+"<div id=\\"l"+i+"\\"></div><div id=\\"o"+i+"\\"></div><div id=\\"r"+i+"\\"></div><div class=\\"m\\" id=\\"m"+i+"\\"></div></div>"}).join("")}',
   'function parec(i,g){return "<div class=\\"s\\" style=\\"margin-top:5px\\">🔤 <b>Nombres parecidos</b> (compare el nombre y elija):</div>"+g.parecidos.map(function(o,j){return "<div style=\\"display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0\\"><span style=\\"flex:1\\"><b>"+esc(o.ruc)+"</b> — <b style=\\"color:#1D4ED8\\">"+esc(o.nombre)+"</b> <span class=\\"s\\">"+esc(o.det)+(o.ruc===g.sug?" · ← sugerido":"")+"</span></span><button class=\\"v\\" style=\\"padding:3px 8px\\" onclick=\\"elegirP("+i+","+j+")\\">✅ Este</button></div>"}).join("")}',
   'function selector(i,ops){var k=++K;DAT["s"+k]=ops;return "<select id=\\"s"+k+"\\">"+ops.map(function(o,j){return "<option value=\\""+j+"\\">"+esc(o.ruc+" "+o.nombre+" — "+o.det)+"</option>"}).join("")+"</select> <button class=\\"v\\" onclick=\\"elegir("+i+","+k+")\\">✅ Es este</button>"}',
   'function hecho(i,ruc,nom,y){var g=G[i];g.hecho="✅ "+ruc+" "+(nom||"")+" en "+g.filas.length+" voucher(s) · "+((y&&y.mensaje)||"escrito");g.sug="";pintar()}',
@@ -234,6 +253,25 @@ var VIA_RUC_HTML_ = [
   '  .VIA_rucElegirVarios(sel.map(function(x){return{prov:x.prov,filas:x.filas,ruc:x.ruc,det:x.nombre+" — "+x.como,reemplazarAlias:reempProv(x.prov)}}))}',
   'function elegirEl(k){var el=DAT["e"+k],j=Number($("es"+k).value),m=$("me"+k);if(j<0){msg("No escribí nada para "+el.prov+".",m);return}',
   ' var o=el.opciones[j];msg("Escribiendo "+o.ruc+"…",m);google.script.run.withFailureHandler(function(e){msg("❌ "+(e&&e.message||e),m,1)}).withSuccessHandler(function(y){msg((y&&(y.mensaje||y.error))||"Listo.",m)}).VIA_rucElegir(el.prov,el.filas,o.ruc,o.nombre+" — "+o.det,reempProv(el.prov))}',
+  'function nucleo(s){return nn(s).replace(/ /g,"").replace(/(EIRL|SAC|SRL|SAA|SCRL|SA)$/,"")}',
+  'function nombreDistinto(a,b){var x=nucleo(a),y=nucleo(b);return !(x&&y&&(x.indexOf(y)>=0||y.indexOf(x)>=0))}',
+  'function borrarAlias(i){var g=G[i],m=$("m"+i);if(!confirm("¿Borrar el alias de «"+g.prov+"» ("+g.alias+")? Ya no se sugerirá solo."))return;msg("Borrando el alias…",m);',
+  ' google.script.run.withFailureHandler(falla(i)).withSuccessHandler(function(r){r=r||{};if(r.error){msg(r.error,m,1);return}var viejo=g.alias;g.alias="";g.aliasRaro=false;if(g.sug===viejo){g.sug="";g.sugNombre=""}g.parecidos=g.parecidos.filter(function(o){return o.ruc!==viejo});pintar();msg(r.mensaje||"Listo.",$("m"+i))}).VIA_rucAliasBorrar(g.prov)}',
+  'function leer(i){var g=G[i],f=g.filas[0],m=$("m"+i);msg("🔍 La IA está leyendo el voucher "+f.k+(g.filas.length>1?" (el primero de "+g.filas.length+")":"")+"… (20–60 s)",m);',
+  ' google.script.run.withFailureHandler(falla(i)).withSuccessHandler(function(r){r=r||{};if(r.error){msg(r.error,m,1);return}leerEsperar(i,r.id,0)}).VIA_rucLeer(f.hoja,f.fila)}',
+  'function leerEsperar(i,id,n){var m=$("m"+i);setTimeout(function(){google.script.run.withFailureHandler(falla(i)).withSuccessHandler(function(r){r=r||{};',
+  ' if(!r.listo){if(n>=45){msg("⚠️ La lectura tardó demasiado. Inténtelo de nuevo.",m,1);return}msg("🔍 Leyendo el voucher… ("+((n+1)*4)+" s)",m);leerEsperar(i,id,n+1);return}',
+  ' if(r.error){msg("❌ "+r.error,m,1);return}msg("",m);leido(i,r)}).VIA_rucLeerEstado(id)},4000)}',
+  'function leido(i,r){var g=G[i],k=++K;DAT["l"+k]=r.opciones||[];var dif=r.proveedor&&nombreDistinto(r.proveedor,g.prov);',
+  ' var h="<div class=\\"sug\\" style=\\"background:#EFF6FF;border-color:#BFDBFE\\">📄 <b>La IA leyó en el voucher:</b> beneficiario <b>"+esc(r.proveedor||"(no se lee)")+"</b><br><span class=\\"s\\">"+esc(r.linea)+(r.idv?" · RUC/DNI que aparece en el voucher: "+esc(r.idv)+" (verifique de quién es)":"")+"</span>";',
+  ' if(dif)h+="<div class=\\"e\\" style=\\"margin-top:3px\\">⚠️ En la hoja dice «"+esc(g.prov)+"». Si el voucher es de otro, corrija la fila con 🔁 Releer con IA (visor del voucher) o a mano.</div>";',
+  ' if(DAT["l"+k].length)h+="<div class=\\"s\\" style=\\"margin-top:4px\\">RUC posibles para «"+esc(r.proveedor)+"»:</div>"+DAT["l"+k].map(function(o,j){return "<div style=\\"display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0\\"><span style=\\"flex:1\\"><b>"+esc(o.ruc)+"</b> — <b style=\\"color:#1D4ED8\\">"+esc(o.nombre)+"</b> <span class=\\"s\\">"+esc(o.det)+"</span></span><button class=\\"v\\" style=\\"padding:3px 8px\\" onclick=\\"elegirL("+i+","+k+","+j+")\\">✅ Este</button></div>"}).join("");',
+  ' else if(r.proveedor)h+="<div class=\\"s\\">No encontré «"+esc(r.proveedor)+"» en vouchers, SIRE, honorarios ni retenciones.</div>";',
+  ' if(r.proveedor){DAT["n"+k]=r.proveedor;h+="<button onclick=\\"iaLeido("+i+","+k+")\\">🌐 Buscar «"+esc(r.proveedor)+"» con IA en SUNAT e internet</button>"}',
+  ' $("l"+i).innerHTML=h+"</div>"}',
+  'function elegirL(i,k,j){var o=DAT["l"+k][j];escribirRuc(i,o.ruc,o.nombre,o.nombre+" — "+o.det+" · leído en el voucher")}',
+  'function iaLeido(i,k){var g=G[i],v=DAT["n"+k],m=$("m"+i);msg("⏳ Busco «"+v+"» en el padrón de SUNAT y con IA en internet (3–5 min). Deje la ventana abierta.",m);',
+  ' google.script.run.withFailureHandler(falla(i)).withSuccessHandler(function(r){r=r||{};if(r.error){msg(r.error,m,1);return}if(r.id)esperar(r.id,0,$("r"+i),m);else msg(r.texto||"",m)}).VIA_rucOtro(v,filasDe(g))}',
   'function ultimas(){var c=$("ext");msg("Buscando las búsquedas anteriores…");google.script.run.withFailureHandler(function(e){msg("❌ "+(e&&e.message||e),null,1)}).withSuccessHandler(function(r){r=r||{};if(r.error){msg(r.error,null,1);return}var l=r.lista||[];',
   ' if(!l.length){msg("No hay búsquedas en SUNAT e internet de las últimas 6 horas.");return}msg("");',
   ' var d=document.createElement("div");d.className="card";d.innerHTML="<b>📂 Búsquedas anteriores (últimas 6 horas)</b>"+l.map(function(x){return "<div style=\\"display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0\\"><span style=\\"flex:1\\">"+esc(x.cuando)+" · "+esc(x.que)+" <span class=\\"s\\">"+(x.listo?"✅ lista · "+x.claros+" encontrado(s), "+x.elecciones+" por elegir":"⏳ todavía buscando")+"</span></span><button style=\\"padding:3px 8px\\" onclick=\\"verBusq(\'"+esc(x.id)+"\',this)\\">Ver</button></div>"}).join("");c.insertBefore(d,c.firstChild);d.scrollIntoView()}).VIA_rucUltimas()}',

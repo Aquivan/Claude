@@ -260,7 +260,7 @@ main{flex:1;min-height:0;overflow:auto}
       <p><b>📤 Subir</b> (permiso <i>subir</i>): <b>📷 Tomar foto</b> con la cámara, <b>📄 Escanear a PDF</b> (varias fotos con la cámara → un solo PDF, una página por foto; se pueden girar, ordenar o quitar antes) o elija fotos/PDF. Cada foto de la cámara pasa por <b>✂️ Recortar</b>: el portal busca solo los bordes del voucher (4 esquinas que se pueden mover con el dedo), la endereza y con <b>✨ Mejorar</b> aclara el fondo y oscurece el texto (en las fotos de la galería, botón ✂️). El nombre sugerido sale en gris: <b>escriba encima</b> el que quiera, sin borrar nada (si no pone extensión, se agrega sola); póngales un nombre (no se puede repetir uno que ya existe), elija <i>Original</i> (PDF o comprobante formal) o <i>Foto</i>, y suba. Con ⚡ la hoja los procesa en ~1 minuto.</p>
       <p><b>📲 Escanear con Google Drive</b> (en 📤 Subir): elija Original o Foto → se abre la app de Drive en la carpeta 📥 de entrada → <b>+ → Escanear</b> → Guardar → vuelva y toque <b>⚡ Ya escaneé: procesar ahora</b>. Necesita una cuenta de Google con acceso a esa carpeta.</p>
       <p><b>↩️ Deshacer mi última corrección</b> (en el visor): vuelve lo de antes de su último 💾 Guardar, si nadie cambió esas celdas después. <b>🗑 Quitar</b> (en 📥 Pendientes y en lo recién subido): saca de la entrada un voucher subido por error, mientras todavía no está en la hoja (va a la papelera de Drive, 30 días); quien solo sube puede quitar lo suyo.</p>
-      <p><b>🧠 IA</b> (permiso <i>editar</i>): el mismo 🧠 Asistente IA del menú de la hoja. <b>💬 Chat</b> (preguntas, fotos, PDF, Excel; lo que propone se escribe solo si usted lo marca, y ↩️ lo deshace), <b>📋 Analizar procesados</b> (a qué factura, empresa o retención corresponde cada voucher de una tanda), <b>🔎 Identificar RUC</b> (también con el botón 🔎 RUC de Buscar y en el visor; los vouchers con el mismo nombre salen en una sola tarjeta y el RUC elegido va a todos; cada tarjeta tiene <b>🌐 Buscar con IA en SUNAT e internet</b>; con <b>📂 Ver la última búsqueda</b> se vuelven a abrir los resultados de las últimas 6 horas aunque haya cerrado la ventana), <b>🔗 Completar Originales con Fotos</b> y <b>🧩 Mesa de conciliación</b>.</p>
+      <p><b>🧠 IA</b> (permiso <i>editar</i>): el mismo 🧠 Asistente IA del menú de la hoja. <b>💬 Chat</b> (preguntas, fotos, PDF, Excel; lo que propone se escribe solo si usted lo marca, y ↩️ lo deshace), <b>📋 Analizar procesados</b> (a qué factura, empresa o retención corresponde cada voucher de una tanda), <b>🔎 Identificar RUC</b> (también con el botón 🔎 RUC de Buscar y en el visor; los vouchers con el mismo nombre salen en una sola tarjeta y el RUC elegido va a todos; cada tarjeta tiene <b>🌐 Buscar con IA en SUNAT e internet</b>; con <b>📂 Ver la última búsqueda</b> se vuelven a abrir los resultados de las últimas 6 horas aunque haya cerrado la ventana; <b>🔍 Leer el voucher con IA</b> compara el nombre escrito con el que trae el voucher; <b>🗑 Borrar este alias</b> quita un alias equivocado), <b>🔗 Completar Originales con Fotos</b> y <b>🧩 Mesa de conciliación</b>.</p>
       <p><b>📥 Pendientes</b>: lo que espera en las carpetas de entrada (todavía no está en la hoja) y lo último descartado (duplicados, vacíos, muy pesados).</p>
       <p><b>📊 Resumen</b>: cuántos vouchers hay, cuántos sin RUC, sin revisar o duplicados, por pestaña y por mes.</p>
       <p><b>👥 Usuarios</b> (admin): crear usuarios, cambiar PIN y permiso, desactivar; y el registro de quién hizo qué.</p>
@@ -1357,19 +1357,79 @@ function rucPintar() {
     else if (f.opciones && f.opciones.length) x += '<div style="font-size:12px;color:var(--gr)">❓ Sin RUC claro. Posibles:</div>' + rucSelector(i, f.opciones);
     else if (!f.parecidos.length) x += '<div style="font-size:12px;color:var(--gr)">❓ No lo encontré en vouchers, SIRE, recibos por honorarios ni retenciones.</div>';
     if (f.alias) x += (f.aliasRaro ? '<div class="sug" style="background:#FEF2F2;border-color:#FCA5A5">⚠️ <b>Ojo:</b> el alias guardado para este nombre es <b>' + esc(f.alias) + '</b> — <b>' + esc(f.aliasNombre) + '</b>, un nombre muy distinto. Revise el voucher: puede ser correcto (se le pagó en nombre de esa empresa) o un alias equivocado.</div>' : '') +
-      '<label style="display:block;margin:4px 0;font-size:12px;color:var(--gr)"><input type="checkbox" id="ra' + i + '" checked> 🔁 Si elijo otro RUC, actualizar el alias de este nombre (hoy: ' + esc(f.alias) + (f.aliasNombre ? ' ' + esc(f.aliasNombre) : '') + ')</label>';
+      '<label style="display:block;margin:4px 0;font-size:12px;color:var(--gr)"><input type="checkbox" id="ra' + i + '" checked> 🔁 Si elijo otro RUC, actualizar el alias de este nombre (hoy: ' + esc(f.alias) + (f.aliasNombre ? ' ' + esc(f.aliasNombre) : '') + ')</label>' +
+      '<button class="r" style="padding:2px 8px" onclick="rucBorrarAlias(' + i + ')" title="Quita el alias de este nombre en Cobranzas → Config: ya no se sugerirá solo">🗑 Borrar este alias</button>';
     if (f.parecidos && f.parecidos.length) x += '<div style="font-size:12px;color:var(--gr);margin-top:5px">🔤 <b>Nombres parecidos</b> (compare el nombre y elija):</div>' + f.parecidos.map(function (o, j) {
       return '<div style="display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0"><span style="flex:1;font-size:12.5px"><b>' + esc(o.ruc) + '</b> — <b style="color:#1D4ED8">' + esc(o.nombre) + '</b> <span style="color:var(--gr)">' + esc(o.det) + (o.ruc === f.sug ? ' · ← sugerido' : '') + '</span></span><button class="p" style="padding:3px 8px" onclick="rucElegirP(' + i + ',' + j + ')">✅ Este</button></div>';
     }).join('');
-    return x + '<div><button style="padding:3px 9px;font-size:12.5px" onclick="rucOpciones(' + i + ')">📋 Otras opciones (SIRE, honorarios, retenciones…)</button>' + (f.prov ? ' <button style="padding:3px 9px;font-size:12.5px" onclick="rucIaNombre(' + i + ')" title="Busca este nombre en el padrón de SUNAT y con IA en internet">🌐 Buscar con IA en SUNAT e internet</button>' : '') + '</div>' +
+    return x + '<div><button style="padding:3px 9px;font-size:12.5px" onclick="rucOpciones(' + i + ')">📋 Otras opciones (SIRE, honorarios, retenciones…)</button>' + (f.prov ? ' <button style="padding:3px 9px;font-size:12.5px" onclick="rucIaNombre(' + i + ')" title="Busca este nombre en el padrón de SUNAT y con IA en internet">🌐 Buscar con IA en SUNAT e internet</button>' : '') + ' <button style="padding:3px 9px;font-size:12.5px" onclick="rucLeer(' + i + ')" title="La IA lee la imagen del voucher (no cambia la fila) y busca el RUC del nombre que trae">🔍 Leer el voucher con IA</button></div>' +
       '<input type="text" id="rq' + i + '" placeholder="RUC (11 dígitos) u otro nombre para buscar"><button style="padding:3px 9px;font-size:12.5px" onclick="rucOtro(' + i + ')">🔎 Usar este RUC / buscar otro nombre con IA</button>' +
-      '<div id="ro' + i + '"></div><div id="rr' + i + '"></div><div class="msg" id="rm' + i + '" style="padding:2px 0"></div></div>';
+      '<div id="rl' + i + '"></div><div id="ro' + i + '"></div><div id="rr' + i + '"></div><div class="msg" id="rm' + i + '" style="padding:2px 0"></div></div>';
   }).join('') + '<div id="rExt"></div><details><summary style="font-size:12px;color:var(--gr)">Resumen de la búsqueda</summary><pre>' + esc(RUC.texto) + '</pre></details></div>';
   modal(h, [['Cerrar']]);
   $('modalCaja').style.maxWidth = '760px';
 }
 function rucReemp(i) { var c = $('ra' + i); return !!(c && c.checked); }
 function rucReempProv(p) { var r = false; ((RUC && RUC.sin) || []).forEach(function (g, i) { if (rucNn(g.prov) === rucNn(p) && rucReemp(i)) r = true; }); return r; }
+function rucNucleo(s) { return rucNn(s).replace(/ /g, '').replace(/(EIRL|SAC|SRL|SAA|SCRL|SA)$/, ''); }
+function rucNombreDistinto(a, b) { var x = rucNucleo(a), y = rucNucleo(b); return !(x && y && (x.indexOf(y) >= 0 || y.indexOf(x) >= 0)); }
+/* 🗑 borrar el alias de un nombre (Cobranzas → Config) */
+function rucBorrarAlias(i) {
+  var g = RUC.sin[i];
+  modal('<h3>🗑 Borrar el alias</h3><p>¿Borrar el alias de «' + esc(g.prov) + '» → ' + esc(g.alias) + (g.aliasNombre ? ' ' + esc(g.aliasNombre) : '') + '? Ya no se sugerirá solo para ese nombre.</p>', [['Cancelar', function () { rucPintar(); }], ['🗑 Borrar', function () {
+    ia('rucaliasborrar', { prov: g.prov }, 'Borrando el alias…').then(function (r) {
+      if (r.error) { rucPintar(); return rucMsg('rm' + i, r.error, 1); }
+      var viejo = g.alias; g.alias = ''; g.aliasRaro = false; if (g.sug === viejo) { g.sug = ''; g.sugNombre = ''; }
+      g.parecidos = g.parecidos.filter(function (o) { return o.ruc !== viejo; });
+      rucPintar(); rucMsg('rm' + i, r.mensaje || 'Listo.');
+    }).catch(function (e) { rucPintar(); rucMsg('rm' + i, e.message, 1); });
+  }, 'p']]);
+}
+/* 🔍 leer el voucher con IA (no cambia la fila) y buscar el RUC del nombre que trae */
+function rucLeer(i) {
+  var g = RUC.sin[i], f = g.vs[0];
+  rucMsg('rm' + i, '🔍 La IA está leyendo el voucher ' + f.k + (g.vs.length > 1 ? ' (el primero de ' + g.vs.length + ')' : '') + '… (20–60 s)');
+  api('releer', { hoja: f.hoja, fila: f.fila }, false).then(function (r) {
+    if (!r.ok) throw new Error(r.error || 'No se pudo leer.');
+    var n = 0, preguntar = function () {
+      api('releerEstado', { id: r.id }, false).then(function (e) {
+        if (!e.listo && n++ < 40) { rucMsg('rm' + i, '🔍 Leyendo el voucher… (' + n * 3 + ' s)'); return setTimeout(preguntar, 3000); }
+        if (!e.listo) throw new Error('La IA tardó demasiado: intente de nuevo.');
+        if (e.error) throw new Error(e.error);
+        var v = (e.leidos || [])[0] || {}, prov = String(v.proveedor || '').trim();
+        var listo = function (ops) { rucMsg('rm' + i, ''); rucLeido(i, { proveedor: prov, idv: String(v.idCliente || '').replace(/\D/g, ''), linea: (e.lineas || [])[0] || '', opciones: ops }); };
+        if (prov.length < 3) return listo([]);
+        ia('rucopciones', { nombre: prov }, false).then(function (o) { listo((o.opciones || []).slice(0, 8)); }).catch(function () { listo([]); });
+      }).catch(function (x) { rucMsg('rm' + i, '❌ ' + x.message, 1); });
+    };
+    preguntar();
+  }).catch(function (x) { rucMsg('rm' + i, '❌ ' + x.message, 1); });
+}
+function rucLeido(i, r) {
+  var g = RUC.sin[i], k = ++RK; RDAT['l' + k] = r.opciones; RDAT['n' + k] = r.proveedor;
+  var h = '<div class="sug" style="background:#EFF6FF;border-color:#BFDBFE">📄 <b>La IA leyó en el voucher:</b> beneficiario <b>' + esc(r.proveedor || '(no se lee)') + '</b><br><span style="font-size:12px;color:var(--gr)">' + esc(r.linea) + (r.idv ? ' · RUC/DNI que aparece en el voucher: ' + esc(r.idv) + ' (verifique de quién es)' : '') + '</span>';
+  if (r.proveedor && rucNombreDistinto(r.proveedor, g.prov)) h += '<div style="color:var(--ro);margin-top:3px">⚠️ En la hoja dice «' + esc(g.prov) + '». Si el voucher es de otro, corrija la fila con 🔁 Releer con IA (visor del voucher) o a mano.</div>';
+  if (r.opciones.length) h += '<div style="font-size:12px;color:var(--gr);margin-top:4px">RUC posibles para «' + esc(r.proveedor) + '»:</div>' + r.opciones.map(function (o, j) {
+    return '<div style="display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0"><span style="flex:1;font-size:12.5px"><b>' + esc(o.ruc) + '</b> — <b style="color:#1D4ED8">' + esc(o.nombre) + '</b> <span style="color:var(--gr)">' + esc(o.det) + '</span></span><button class="p" style="padding:3px 8px" onclick="rucElegirL(' + i + ',' + k + ',' + j + ')">✅ Este</button></div>';
+  }).join('');
+  else if (r.proveedor) h += '<div style="font-size:12px;color:var(--gr)">No encontré «' + esc(r.proveedor) + '» en vouchers, SIRE, honorarios ni retenciones.</div>';
+  if (r.proveedor) h += '<button style="padding:3px 9px;font-size:12.5px" onclick="rucIaLeido(' + i + ',' + k + ')">🌐 Buscar «' + esc(r.proveedor) + '» con IA en SUNAT e internet</button>';
+  $('rl' + i).innerHTML = h + '</div>';
+}
+function rucElegirL(i, k, j) {
+  var f = RUC.sin[i], o = RDAT['l' + k][j];
+  rucMsg('rm' + i, 'Escribiendo ' + o.ruc + '…');
+  ia('rucelegir', { prov: f.prov, filas: rucFila(f), ruc: o.ruc, det: o.nombre + ' — ' + o.det + ' · leído en el voucher', reemplazarAlias: rucReemp(i) }, false).then(function (y) {
+    if (y.error) return rucMsg('rm' + i, y.error, 1);
+    f.hecho = '✅ ' + o.ruc + ' ' + o.nombre + ' en ' + f.vs.length + ' voucher(s) · ' + (y.mensaje || 'escrito'); f.sug = ''; rucPintar();
+  }).catch(function (e) { rucMsg('rm' + i, e.message, 1); });
+}
+function rucIaLeido(i, k) {
+  var f = RUC.sin[i], v = RDAT['n' + k];
+  rucMsg('rm' + i, '⏳ Busco «' + v + '» en el padrón de SUNAT y con IA en internet (3–5 min). Deje esta ventana abierta.');
+  ia('rucotro', { nombre: v, filas: rucFila(f) }, false).then(function (r) { if (r.error) return rucMsg('rm' + i, r.error, 1); if (r.id) rucEsperar(r.id, 0, 'rr' + i, 'rm' + i); else rucMsg('rm' + i, r.texto || ''); })
+    .catch(function (e) { rucMsg('rm' + i, e.message, 1); });
+}
 function rucMsg(id, t, e) { var el = $(id); if (el) { el.className = 'msg' + (e ? ' e' : ''); el.textContent = t || ''; } }
 function rucSelector(i, ops) { var k = ++RK; RDAT['s' + k] = ops; return '<select id="rs' + k + '" style="max-width:100%">' + ops.map(function (o, j) { return '<option value="' + j + '">' + esc(o.ruc + ' ' + o.nombre + ' — ' + o.det) + '</option>'; }).join('') + '</select> <button class="p" style="padding:3px 9px" onclick="rucElegir(' + i + ',' + k + ')">✅ Es este</button>'; }
 function rucNoEs(i) { var f = RUC.sin[i]; f.rechazado = f.sug; f.sug = ''; rucPintar(); rucMsg('rm' + i, 'Quité la sugerencia ' + f.rechazado + '. Busco otras opciones…'); rucOpciones(i); }
