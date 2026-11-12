@@ -55,6 +55,7 @@ function PV_api(token, accion, d) {
       return r3;
     }
 
+    case 'ia': return PV_ia_(token, d);   // 🧠 Asistente IA (PV_IA.js): revisa el permiso de cada acción
     case 'usuarios': PV_sesion_(token, 'admin'); return { usuarios: PV_listaUsuarios_(), permisos: PV_PERMISOS_, textos: PV_PERM_TXT_ };
     case 'guardarUsuario': s = PV_sesion_(token, 'admin'); return PV_guardarUsuario_(s, d);
     case 'registro': PV_sesion_(token, 'admin'); return PV_leerRegistro_(Number(d.n) || 300);
