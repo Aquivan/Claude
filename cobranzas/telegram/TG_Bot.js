@@ -173,7 +173,7 @@ function TG_tecladoFijo_() {
  * En el chat privado se abre como Mini App (dentro de Telegram, botón web_app); en un grupo, como enlace normal.
  */
 function TG_urlPortal_() {
-  var c = CacheService.getScriptCache(), u = c.get('TG_URL_PORTAL');
+  var c = CacheService.getScriptCache(), u = c.get('TG_URL_PORTAL2');
   if (u) return u === '-' ? '' : u;
   u = '';
   try {
@@ -188,7 +188,7 @@ function TG_urlPortal_() {
       if (rm.getResponseCode() === 200 && /PV_MINI/.test(rm.getContentText())) u = mi[0].getValue();
     }
   } catch (e) { console.warn('Portal de Vouchers: ' + e.message); }
-  c.put('TG_URL_PORTAL', u || '-', u && /github\.io/.test(u) ? 21600 : 900);
+  c.put('TG_URL_PORTAL2', u || '-', u && /github\.io/.test(u) ? 21600 : 900);
   return u;
 }
 function TG_botonPortal_(chatId) {
