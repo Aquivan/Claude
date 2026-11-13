@@ -442,6 +442,7 @@ function TG_alBoton_(ss, q) {
   var usuario = TG_usuario_(ss, String(q.from.id)) || TG_usuario_(ss, chatId);
   if (!usuario || !usuario.activo) { TG_responderBoton_(q.id, '🔒 No autorizado', true); return; }
   if (TG_yaVisto_('b' + q.id)) return;
+  TG_CB_ = { msgId: q.message && q.message.message_id, data: d, rm: q.message && q.message.reply_markup };   // ☑️ para dejar los botones grises (TG_Api.js)
   var ctx = { ss: ss, chatId: chatId, usuario: usuario, nombre: q.from.first_name || '', msgId: q.message && q.message.message_id, esBoton: true,
     grupo: !!(q.message && q.message.chat && q.message.chat.type !== 'private'), deId: q.from.id, botonId: q.id,
     efimeroMsg: q.message && q.message.ephemeral_message_id };   // 👻 botón tocado dentro de un mensaje efímero

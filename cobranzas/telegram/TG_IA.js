@@ -122,7 +122,18 @@ function TG_preguntar_(ctx, texto, adjs) {
   var ses = TG_sesion_(chatId);
   var t0 = Date.now();
   TG_accion_(chatId, 'typing');
-  var estadoId = TG_enviar_(chatId, '⏳ <i>' + (adjs && adjs.length ? 'Leyendo ' + (adjs.length > 1 ? adjs.length + ' archivos' : 'el archivo') + '…' : 'Pensando…') + '</i>', null, { silencioso: true });
+  var txt0 = '⏳ <i>' + (adjs && adjs.length ? 'Leyendo ' + (adjs.length > 1 ? adjs.length + ' archivos' : 'el archivo') + '…' : 'Pensando…') + '</i>';
+  // ✍️ En el chat privado, el avance va como BORRADOR en vivo (sendMessageDraft, Bot API 9.5): se ve mientras la IA trabaja y
+  // desaparece solo cuando llega la respuesta (no queda un mensaje «Pensando…» que haya que borrar). Si no se puede, como antes.
+  var draftId = 0, estadoId = 0;
+  var borrador = function (txt) {
+    if (!draftId) return false;
+    var rd = TG_llamar_('sendMessageDraft', { chat_id: Number(chatId), draft_id: draftId, text: txt, parse_mode: 'HTML' });
+    if (!rd.ok) draftId = 0;
+    return rd.ok;
+  };
+  if (/^\d+$/.test(String(chatId)) && !ctx.efimeroMsg) { draftId = 1 + Math.floor(Math.random() * 2000000000); borrador(txt0); }
+  if (!draftId) estadoId = TG_enviar_(chatId, txt0, null, { silencioso: true });
   var ultimoAviso = Date.now();
   var cfg;
   try { cfg = TG_cfg_(ctx.ss); } catch (e) { cfg = {}; }
@@ -133,7 +144,7 @@ function TG_preguntar_(ctx, texto, adjs) {
       if (Date.now() - ultimoAviso < 4000) return;
       ultimoAviso = Date.now();
       var ult = pasos.slice(-3).map(function (p) { return '• ' + TG_esc_(TG_pasoLegible_(p)); }).join('\n');
-      TG_editar_(chatId, estadoId, '⏳ <i>Revisando…</i>\n' + ult);
+      if (!borrador('⏳ <i>Revisando…</i>\n' + ult) && estadoId) TG_editar_(chatId, estadoId, '⏳ <i>Revisando…</i>\n' + ult);
       TG_accion_(chatId, 'typing');
     },
   };
@@ -143,7 +154,7 @@ function TG_preguntar_(ctx, texto, adjs) {
   var pregunta = ctx.citado ? TG_conCita_(texto, ctx.citado) : texto || (adjs && adjs.length ? 'Analiza el/los archivo(s) adjunto(s) que acabo de mandar: qué son, si ya están registrados en la hoja de vouchers, ' +
     'si corresponden a alguna factura (¿ya se pagó?, ¿tiene N/C, retención o detracción?) y qué falta registrar.' : '');
   var r = CHAT_enviarEn_(ctx.ss, { texto: pregunta, nuevos: [], anteriores: todos, historial: ses.hist || [] }, op);
-  TG_borrar_(chatId, estadoId);
+  if (estadoId) TG_borrar_(chatId, estadoId);
   if (r.error) {
     TG_enviar_(chatId, TG_esc_(r.error), [[{ text: '🔁 Reintentar', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: texto || 'Analiza los archivos adjuntos' }) }]]);
     return;
