@@ -140,7 +140,82 @@ function MESA_fecha_(d) { return d instanceof Date && !isNaN(d.getTime()) ? Util
  * Todo lo que necesita la pantalla para un lado («Por pagar» o «Por cobrar»):
  * {empresas, docs, vouchers, links, sug, ultima}
  */
-function MESA_datos(tk, lado) { var a = arguments; return MESA_reintentar_(function () { return MESA_datos_.apply(null, a); }); }
+function MESA_datos(tk, lado, completo) {
+  MESA_ok_(tk);
+  lado = lado === 'Por cobrar' ? 'Por cobrar' : 'Por pagar';
+  var modo = completo ? 'todo' : 'liviano';
+  // ⚡ Memoria: lo ya armado se reutiliza mientras no cambie nada (recalculo de Cobranzas, hojas, guardados de la Mesa).
+  var huella = MESA_huella_(lado, modo), r = huella ? MESA_cacheLeer_(huella) : null;
+  if (!r) {
+    r = MESA_reintentar_(function () { return MESA_datos_(tk, lado); });
+    if (!completo) r = MESA_liviano_(r);
+    if (huella) MESA_cacheGuardar_(huella, r);
+  } else r.deMemoria = true;
+  r.recalculando = !!PropertiesService.getScriptProperties().getProperty('MESA_PEDIDO');
+  return r;
+}
+
+/* ------------------------------------------------ ⚡ memoria (caché) de los datos de la Mesa */
+
+/** Cambia cuando cambia algo que la Mesa muestra: recalculo de Cobranzas, la hoja de Vouchers, la de Cobranzas o un guardado de la Mesa. */
+function MESA_huella_(lado, modo) {
+  try {
+    var ss = ssPrincipal_(), cfg = leerConfig_(ss), p = PropertiesService.getScriptProperties();
+    var partes = [lado, modo, p.getProperty('MESA_ULTIMA') || '', p.getProperty('MESA_CONT') || '0',
+      DriveApp.getFileById(ss.getId()).getLastUpdated().getTime()];
+    if (cfg.idVouchers) partes.push(DriveApp.getFileById(cfg.idVouchers).getLastUpdated().getTime());
+    try { partes.push(PropertiesService.getDocumentProperties().getProperty('ultimaActualizacion') || ''); } catch (e) {}
+    return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, partes.join('|'))).slice(0, 22);
+  } catch (e) { return ''; }
+}
+/** Un guardado de la Mesa (o un RUC escrito desde ella): la memoria ya no vale. */
+function MESA_tocar_() {
+  try { var p = PropertiesService.getScriptProperties(); p.setProperty('MESA_CONT', String(Number(p.getProperty('MESA_CONT') || 0) + 1)); } catch (e) {}
+}
+function MESA_cacheGuardar_(h, r) {
+  try {
+    var z = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(r), 'application/json')).getBytes());
+    var trozos = {}, n = 0;
+    for (var i = 0; i < z.length; i += 90000) trozos['mesa_c_' + h + '_' + (n++)] = z.slice(i, i + 90000);
+    if (n > 60) return;   // demasiado grande para la memoria de Google
+    trozos['mesa_c_' + h] = String(n);
+    CacheService.getScriptCache().putAll(trozos, 21600);
+  } catch (e) { console.warn('Mesa (memoria): ' + e.message); }
+}
+function MESA_cacheLeer_(h) {
+  try {
+    var c = CacheService.getScriptCache(), n = Number(c.get('mesa_c_' + h) || 0);
+    if (!n) return null;
+    var claves = []; for (var i = 0; i < n; i++) claves.push('mesa_c_' + h + '_' + i);
+    var t = c.getAll(claves), z = '';
+    for (var j = 0; j < n; j++) { if (!t[claves[j]]) return null; z += t[claves[j]]; }
+    return JSON.parse(Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(z), 'application/x-gzip')).getDataAsString());
+  } catch (e) { return null; }
+}
+
+/**
+ * 🪶 Carga liviana: los últimos 12 meses y TODO lo pendiente (facturas con saldo, vouchers sin aplicar), más lo que esté
+ * cruzado con eso (para no perder cruces al guardar). «⬇ Cargar todo el historial» pide lo completo.
+ */
+function MESA_liviano_(d) {
+  var corte = Utilities.formatDate(new Date(Date.now() - 365 * 86400000), 'America/Lima', 'yyyy-MM-dd');
+  var docOk = {}, vOk = {}, linksDe = {};
+  d.links.forEach(function (l) { (linksDe[l.p] = linksDe[l.p] || []).push(l.k); });
+  d.docs.forEach(function (x) { if (Math.abs(x.sal) > 0.005 || !x.f || x.f >= corte) docOk[x.k] = 1; });
+  d.vouchers.forEach(function (v) { if (!v.f || v.f >= corte || !(linksDe[v.id] || []).length) vOk[v.id] = 1; });
+  d.links.forEach(function (l) { if (docOk[l.k]) vOk[l.p] = 1; });        // vouchers que pagan facturas que se muestran
+  d.links.forEach(function (l) { if (vOk[l.p]) docOk[l.k] = 1; });        // y todas las facturas de esos vouchers
+  var nD = d.docs.length, nV = d.vouchers.length;
+  d.docs = d.docs.filter(function (x) { return docOk[x.k]; });
+  d.vouchers = d.vouchers.filter(function (v) { return vOk[v.id]; });
+  d.links = d.links.filter(function (l) { return docOk[l.k] && vOk[l.p]; });
+  d.sug = d.sug.filter(function (s) { return vOk[s.p]; });
+  d.movs = d.movs.filter(function (m) { return docOk[m[0]]; });
+  d.rets = d.rets.filter(function (x) { return docOk[x.k]; });
+  d.parcial = { corte: corte, docs: nD, vouchers: nV };
+  return d;
+}
+
 function MESA_datos_(tk, lado) {
   MESA_ok_(tk);
   lado = lado === 'Por cobrar' ? 'Por cobrar' : 'Por pagar';
@@ -569,7 +644,7 @@ function MESA_deshacer(tk) { var q = MESA_ok_(tk); return MESA_escribiendo_(func
 function MESA_escribiendo_(fn) {
   var p = PropertiesService.getScriptProperties(), marca = String(Date.now()) + Math.random();
   p.setProperty('MESA_ESCRIBIENDO', marca);
-  try { return fn(); } finally { if (p.getProperty('MESA_ESCRIBIENDO') === marca) p.deleteProperty('MESA_ESCRIBIENDO'); }
+  try { return fn(); } finally { MESA_tocar_(); if (p.getProperty('MESA_ESCRIBIENDO') === marca) p.deleteProperty('MESA_ESCRIBIENDO'); }
 }
 /** Espera (hasta ~90 s) a que termine de escribirse lo que se está guardando. Devuelve los segundos que esperó. */
 function MESA_esperarEscritura_() {
@@ -895,11 +970,11 @@ function MESA_filas_(fuentes) {
   return (fuentes || []).slice(0, 300).filter(function (f) { return /^[^!]+!\d+$/.test(String(f)); });
 }
 function MESA_rucRapido(tk, fuentes) { MESA_ok_(tk); return TGQ_rucDeFilas_(ssPrincipal_(), MESA_filas_(fuentes)); }
-function MESA_rucAplicar(tk, ids) { MESA_ok_(tk); return ANX_aplicarDet_(ssPrincipal_(), ids || [], false); }
+function MESA_rucAplicar(tk, ids) { MESA_ok_(tk); MESA_tocar_(); return ANX_aplicarDet_(ssPrincipal_(), ids || [], false); }
 function MESA_rucExternos(tk, fuentes) { MESA_ok_(tk); return TGQ_rucExternos_(ssPrincipal_(), MESA_filas_(fuentes)); }
 function MESA_rucEstado(tk, id) { MESA_ok_(tk); return TGQ_rucEstado_(String(id || '')); }
 function MESA_rucOtro(tk, nombre, filas) { MESA_ok_(tk); return TGQ_rucOtroNombre_(ssPrincipal_(), nombre, filas); }
-function MESA_rucElegir(tk, prov, filas, ruc, det) { MESA_ok_(tk); return TGQ_rucElegirFilas_(ssPrincipal_(), prov, filas, ruc, det); }
+function MESA_rucElegir(tk, prov, filas, ruc, det) { MESA_ok_(tk); MESA_tocar_(); return TGQ_rucElegirFilas_(ssPrincipal_(), prov, filas, ruc, det); }
 
 /* ============================================================ Telegram / WhatsApp: «mesa» */
 
