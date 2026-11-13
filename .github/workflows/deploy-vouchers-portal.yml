@@ -17,6 +17,7 @@ on:
     paths:
       - 'vouchers_portal/apps_script/**'
       - 'vouchers_portal/miniapp/**'
+      - 'scripts/publicar_pages.sh'
       - '.github/workflows/deploy-vouchers-portal.yml'
   workflow_dispatch:
     inputs:
@@ -132,11 +133,8 @@ jobs:
           # (rama gh-pages, carpeta vouchers/; vouchers_portal/miniapp/construir.py). Para que se vea: Settings → Pages → «Deploy from a
           # branch» → gh-pages / (root), una sola vez.
           MINI="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/vouchers/"
-          if python3 ../miniapp/construir.py "$ID" /tmp/sitio; then
-            ( cd /tmp/sitio && git init -q -b gh-pages && git add -A && \
-              git -c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com" commit -qm "Mini App del Portal de Vouchers" && \
-              git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages ) || echo "::warning::No se pudo publicar la Mini App en la rama gh-pages"
-          fi
+          # (solo cambia su carpeta vouchers/: la Mesa de Cobranzas publica la suya, mesa/)
+          if python3 ../miniapp/construir.py "$ID" /tmp/sitio; then bash ../../scripts/publicar_pages.sh /tmp/sitio/vouchers vouchers; fi
           # deja en la hoja de Vouchers la dirección del portal y de la Mini App (el bot de Telegram las usa)
           M=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$MINI")
           curl -sSL -o /dev/null "https://script.google.com/macros/s/$ID/exec?registrar=1&mini=$M" || echo "::warning::No se pudo registrar la dirección del portal"

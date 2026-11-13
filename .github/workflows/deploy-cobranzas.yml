@@ -40,6 +40,9 @@ on:
         required: false
         default: ""
 
+permissions:
+  contents: write   # 🧩 publicar la Mesa en GitHub Pages (rama gh-pages, carpeta mesa/)
+
 concurrency:
   group: appsscript-cobranzas-deploy
   cancel-in-progress: false
@@ -176,6 +179,14 @@ jobs:
           N=$(clasp --json list-versions 2>/dev/null | grep -c '"versionNumber"' || true)
           echo "Versiones del proyecto: $N de 200"
           if [ "${N:-0}" -ge 180 ]; then echo "::warning::El proyecto de Cobranzas tiene $N versiones (Google permite 200). Borre versiones viejas en Apps Script → Implementar → Gestionar implementaciones."; fi
+
+      - name: Publicar la Mesa de conciliación en GitHub Pages (sin el aviso de Google)
+        if: hashFiles('cobranzas/.clasp.json') != '' && (github.event_name == 'push' || inputs.accion == 'subir' || inputs.accion == 'publicar-bot') && steps.bot.outputs.id != ''
+        env:
+          ID: ${{ steps.bot.outputs.id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 mesa_web/construir.py "$ID" /tmp/mesa && bash ../scripts/publicar_pages.sh /tmp/mesa mesa || echo "::warning::No se pudo publicar la Mesa en GitHub Pages"
 
       - name: Limpiar credenciales
         if: always()
