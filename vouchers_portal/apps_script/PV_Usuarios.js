@@ -8,8 +8,14 @@
 
 /* ============================================================ la página */
 
-function doGet() {
-  try { PV_hojaUsuarios_(); } catch (e) {}   // la primera vez crea 👥 Portal (con instrucciones)
+function doGet(e) {
+  // ?registrar=1 (lo llama el workflow al publicar): deja la dirección de este portal en los metadatos de la hoja de Vouchers,
+  // para que el bot de Telegram (Cobranzas) abra el portal como Mini App. No devuelve ningún dato.
+  if (e && e.parameter && e.parameter.registrar) {
+    try { PV_registrarWeb_(); } catch (x) {}
+    return ContentService.createTextOutput('ok');
+  }
+  try { PV_hojaUsuarios_(); } catch (e2) {}   // la primera vez crea 👥 Portal (con instrucciones)
   return HtmlService.createTemplateFromFile('PV_Vista').evaluate()
     .setTitle('🧾 Vouchers')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
@@ -153,4 +159,13 @@ function PV_guardarUsuario_(s, d) {
   if (pin) sh.getRange(fila, 3).setNumberFormat('@').setValue(PV_hash_(pin)).setNote('PIN guardado (cifrado) ' + PV_hoy_() + ' por ' + s.u);
   PV_registrar_(s, x ? '✏️ Usuario cambiado' : '➕ Usuario nuevo', u + ' · ' + perm + (d.activo === false ? ' · inactivo' : '') + (pin ? ' · PIN nuevo' : ''));
   return PV_listaUsuarios_();
+}
+
+/** La dirección de este portal, en los metadatos de la hoja de Vouchers ('PV_WEB'): la usa el bot de Telegram (botón 🧾 Portal de Vouchers). */
+function PV_registrarWeb_() {
+  if (!PV_URL_) return;
+  var ss = PV_ss_(), m = ss.createDeveloperMetadataFinder().withKey('PV_WEB').find();
+  if (m.length && m[0].getValue() === PV_URL_) return;
+  m.forEach(function (x) { try { x.remove(); } catch (e) {} });
+  ss.addDeveloperMetadata('PV_WEB', PV_URL_, SpreadsheetApp.DeveloperMetadataVisibility.DOCUMENT);
 }
