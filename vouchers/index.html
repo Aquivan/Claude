@@ -1,0 +1,1762 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>🧾 Vouchers</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+/* 🧾 Mini App: google.script.run → POST al portal (mismas funciones públicas: PV_entrar, PV_entrarTelegram, PV_api) */
+window.PV_MINI = { url: "https://script.google.com/macros/s/AKfycbyUGNGMRpKtZfKVU4tB0Bx9hGFnOyNkZv3hWWOAKaqosu22U1-EZ4UZjVG5Hj-Z9C1w/exec" };
+(function () {
+  function llamar(f, args, ok, ko) {
+    fetch(window.PV_MINI.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ f: f, args: args }), redirect: 'follow' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (j && j.ok) { if (ok) ok(j.r); } else if (ko) ko(new Error((j && j.error) || 'Error del portal')); })
+      .catch(function (e) { if (ko) ko(new Error('Sin conexión con el portal: ' + (e && e.message || e))); });
+  }
+  function corredor(ok, ko) {
+    return new Proxy({}, { get: function (t, p) {
+      if (p === 'withSuccessHandler') return function (h) { return corredor(h, ko); };
+      if (p === 'withFailureHandler') return function (h) { return corredor(ok, h); };
+      return function () { llamar(p, Array.prototype.slice.call(arguments), ok, ko); };
+    } });
+  }
+  window.google = { script: { run: corredor(null, null) } };
+})();
+</script>
+
+
+<meta charset="utf-8">
+<meta name="theme-color" content="#1F3A5F">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{--az:#1F3A5F;--az2:#2563EB;--fo:#F1F5F9;--bo:#E2E8F0;--gr:#64748B;--ro:#B91C1C;--ve:#047857;--am:#B45309;--bl:#fff;--tx:#0F172A}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--fo);color:var(--tx);-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer;border:1px solid var(--bo);background:var(--bl);border-radius:8px;padding:7px 11px;color:var(--tx)}
+button.p{background:var(--az2);border-color:var(--az2);color:#fff;font-weight:600}button.r{color:var(--ro)}button:disabled{opacity:.5;cursor:default}
+input,select,textarea{border:1px solid #CBD5E1;border-radius:8px;padding:7px 9px;background:#fff;color:var(--tx);min-width:0}
+input:focus,select:focus,textarea:focus{outline:2px solid #93C5FD;border-color:var(--az2)}
+.oc{display:none!important}
+/* entrar */
+#login{min-height:100%;display:flex;align-items:center;justify-content:center;padding:16px}
+#login .caja{background:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(15,23,42,.12);padding:26px 22px;width:100%;max-width:360px}
+#login h1{font-size:20px;margin:0 0 4px;color:var(--az)}#login label{display:block;font-size:12px;color:var(--gr);margin:12px 0 4px}
+#login input{width:100%;font-size:16px;padding:10px 12px}#login button{width:100%;margin-top:16px;padding:11px;font-size:15px}
+/* app */
+#app{display:flex;flex-direction:column;height:100%}
+header{background:var(--az);color:#fff;display:flex;align-items:center;gap:8px;padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top));flex-wrap:wrap}
+header b{font-size:16px}header .yo{margin-left:auto;font-size:12px;opacity:.85;white-space:nowrap}
+header button{background:transparent;color:#fff;border-color:rgba(255,255,255,.35);padding:5px 9px;font-size:12px}
+nav{display:flex;gap:4px;background:#fff;border-bottom:1px solid var(--bo);padding:6px 8px;overflow-x:auto;scrollbar-width:none}
+nav button{border:0;background:transparent;white-space:nowrap;padding:7px 10px;border-radius:8px;color:#334155}
+nav button.on{background:#DBEAFE;color:#1E3A8A;font-weight:600}
+main{flex:1;min-height:0;overflow:auto}
+.pag{padding:10px 12px;max-width:1500px;margin:0 auto}
+.msg{padding:8px 12px;font-size:13px}.msg.e{color:var(--ro)}.msg.ok{color:var(--ve)}
+.chip{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;background:#E2E8F0;color:#334155;margin:1px 2px 1px 0;white-space:nowrap}
+.c-r{background:#FEE2E2;color:#991B1B}.c-v{background:#D1FAE5;color:#065F46}.c-a{background:#FEF3C7;color:#92400E}.c-z{background:#DBEAFE;color:#1E40AF}.c-m{background:#EDE9FE;color:#5B21B6}
+/* buscar */
+#bus{display:grid;grid-template-columns:minmax(330px,440px) 1fr;gap:12px;height:100%;padding:10px 12px}
+#bus .izq{display:flex;flex-direction:column;min-height:0}
+.filtros{background:#fff;border:1px solid var(--bo);border-radius:12px;padding:9px;display:flex;flex-direction:column;gap:7px}
+.filtros .f{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.filtros .f>*{flex:1 1 90px}
+.filtros input[type=search]{flex:1 1 100%;font-size:15px}
+.seg{display:inline-flex;border:1px solid #CBD5E1;border-radius:8px;overflow:hidden;flex:0 0 auto!important}.seg button{border:0;border-radius:0;padding:5px 9px;font-size:12.5px}.seg button.on{background:var(--az2);color:#fff}
+.marcas{display:flex;gap:5px;flex-wrap:wrap}.marcas button{font-size:12px;padding:4px 8px;border-radius:14px;flex:0 0 auto}.marcas button.on{background:#1E3A8A;color:#fff;border-color:#1E3A8A}
+.tot{font-size:12px;color:var(--gr);padding:6px 2px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+#lista{flex:1;overflow:auto;min-height:0;-webkit-overflow-scrolling:touch}
+.it{background:#fff;border:1px solid var(--bo);border-radius:10px;padding:8px 10px;margin-bottom:6px;cursor:pointer;display:flex;gap:8px;justify-content:space-between}
+.it:hover{border-color:#93C5FD}.it.sel{border-color:var(--az2);box-shadow:0 0 0 2px #BFDBFE}
+.it .a{min-width:0}.it .l1{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.it .l2{font-size:12px;color:var(--gr);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it .m{text-align:right;white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums}
+.mas{text-align:center;padding:10px}
+/* visor */
+#vis{background:#fff;border:1px solid var(--bo);border-radius:12px;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+#vis .vacio{margin:auto;color:var(--gr);text-align:center;padding:30px}
+.vbar{display:flex;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--bo);flex-wrap:wrap}
+.vbar .t{font-weight:700;margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vcuerpo{flex:1;min-height:0;display:grid;grid-template-columns:1.25fr 1fr;overflow:hidden}
+.vimg{background:#0F172A;position:relative;overflow:auto;min-height:260px;display:flex;flex-direction:column}
+.vimg .tabs{display:flex;gap:4px;padding:6px;background:#1E293B;position:sticky;top:0;z-index:2;flex-wrap:wrap}
+.vimg .tabs button{background:#334155;color:#E2E8F0;border:0;padding:4px 9px;font-size:12px}.vimg .tabs button.on{background:#2563EB;color:#fff}
+.vimg .lienzo{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:8px;touch-action:pan-x pan-y pinch-zoom}
+.vimg img,.vimg canvas{max-width:none;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+.vimg .aviso{color:#CBD5E1;padding:20px;text-align:center}
+.vdat{overflow:auto;padding:10px 12px;border-left:1px solid var(--bo)}
+.campo{display:grid;grid-template-columns:120px 1fr;gap:6px;align-items:center;padding:3px 0;border-bottom:1px dashed #EEF2F7}
+.campo label{font-size:12px;color:var(--gr);overflow:hidden;text-overflow:ellipsis}.campo input,.campo select{width:100%;padding:5px 7px}
+.campo .fijo{color:#334155;word-break:break-word}.campo.camb input,.campo.camb select{background:#FEF9C3;border-color:#EAB308}
+.vacc{display:flex;gap:6px;flex-wrap:wrap;padding:8px 0}
+.nota{white-space:pre-wrap;font-size:12px;color:#475569;background:#F8FAFC;border-radius:8px;padding:8px;margin-top:8px}
+/* subir */
+.zona{border:2px dashed #93C5FD;background:#EFF6FF;border-radius:14px;padding:22px;text-align:center;color:#1E3A8A}
+.zona.sobre{background:#DBEAFE}
+.zona .bot{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.sub{background:#fff;border:1px solid var(--bo);border-radius:10px;padding:8px;margin-top:8px;display:grid;grid-template-columns:64px 1fr auto;gap:8px;align-items:center}
+.sub img,.sub .ico{width:64px;height:64px;object-fit:cover;border-radius:6px;background:#F1F5F9;display:flex;align-items:center;justify-content:center;font-size:26px}
+.sub .n{display:flex;gap:6px;flex-wrap:wrap}.sub .n input{flex:1 1 180px}.sub .est{font-size:12px;margin-top:3px}
+/* tablas */
+.tb{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:13px}
+.tb th{background:#334155;color:#fff;text-align:left;padding:6px 8px;font-size:12px}.tb td{padding:6px 8px;border-bottom:1px solid #EEF2F7;vertical-align:top}
+.card{background:#fff;border:1px solid var(--bo);border-radius:12px;padding:12px;margin-bottom:10px}
+.card h3{margin:0 0 8px;font-size:15px;color:var(--az)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:10px}
+.kpi{background:#fff;border:1px solid var(--bo);border-radius:10px;padding:9px 11px}.kpi .t{font-size:11px;color:var(--gr);text-transform:uppercase}.kpi .v{font-size:18px;font-weight:700}
+/* ✂️ recortar */
+#rc{position:fixed;inset:0;background:#0B1220;z-index:70;display:flex;flex-direction:column;color:#E2E8F0;touch-action:none;user-select:none;-webkit-user-select:none}
+#rc .top{padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top));font-size:13px;display:flex;gap:8px;align-items:center}
+#rcArea{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#rcBox{position:relative}#rcCv{display:block}#rcSvg{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+#rc .h{position:absolute;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:50%;border:3px solid #38BDF8;background:rgba(56,189,248,.25);touch-action:none;cursor:grab;z-index:2}
+#rc .h:after{content:'';position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#fff}
+#rc .bar{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;padding:8px;padding-bottom:max(8px,env(safe-area-inset-bottom));background:#111827}
+#rc .bar button{background:#1F2937;color:#F1F5F9;border-color:#374151;padding:9px 12px}#rc .bar button.on{background:#0EA5E9;border-color:#0EA5E9;color:#fff}
+#rc .bar button.p{background:#16A34A;border-color:#16A34A}
+.sub input::placeholder{color:#475569;opacity:1}
+/* 🧠 IA */
+#iaChat .msgs{background:#fff;border:1px solid var(--bo);border-radius:12px;padding:10px;height:calc(100vh - 330px);min-height:260px;overflow:auto}
+.bur{border-radius:12px;padding:8px 11px;margin:6px 0;max-width:92%;word-wrap:break-word;font-size:13.5px}.bur.yo{background:#DBEAFE;margin-left:auto}.bur.ia{background:#F1F5F9}.bur.err{background:#FEE2E2;color:#991B1B}
+.bur table{border-collapse:collapse;font-size:11.5px;margin-top:6px;display:block;overflow:auto;max-width:100%}.bur td,.bur th{border:1px solid #CBD5E1;padding:2px 5px;white-space:nowrap}.bur th{background:#E2E8F0}
+.bur .camb{background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:6px;margin-top:6px}.bur .camb label{display:block;padding:3px 0;font-size:12.5px}
+.ej a{display:block;color:#1D4ED8;cursor:pointer;margin:3px 0;font-size:12.5px}
+.ruc .card{padding:8px;margin:7px 0}.ruc .card.ok{background:#F0FDF4;border-color:#86EFAC}.ruc .sug{background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:6px;margin:5px 0}
+.ruc input[type=text]{width:100%;margin:4px 0}.ruc pre{white-space:pre-wrap;font-size:11.5px;background:#F8FAFC;border-radius:8px;padding:6px;max-height:180px;overflow:auto}
+/* ventana */
+#modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:12px}
+#modal .caja{background:#fff;border-radius:14px;max-width:640px;width:100%;max-height:90vh;overflow:auto;padding:16px}
+#modal h3{margin:0 0 10px;color:var(--az)}#modal .bot{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+#cargando{position:fixed;left:50%;top:10px;transform:translateX(-50%);background:#1E293B;color:#fff;padding:6px 14px;border-radius:16px;font-size:13px;z-index:60;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.ayuda p,.ayuda li{line-height:1.55}
+/* celular */
+@media (max-width:860px){
+  #bus{grid-template-columns:1fr;padding:8px}
+  #vis{position:fixed;inset:0;z-index:40;border-radius:0;border:0}
+  #vis.oc-movil{display:none}
+  .vcuerpo{grid-template-columns:1fr;overflow:auto;display:block}
+  .vimg{min-height:52vh;max-height:68vh}
+  .vdat{border-left:0;overflow:visible}
+  .campo{grid-template-columns:105px 1fr}
+  header .yo{display:none}
+}
+@media (min-width:861px){#vis .solo-movil{display:none}}
+</style>
+</head>
+<body>
+<div id="cargando" class="oc">⏳ Cargando…</div>
+
+<!-- ============ entrar ============ -->
+<div id="login" class="oc"><div class="caja">
+  <h1>🧾 Vouchers</h1><div style="color:var(--gr);font-size:13px">Entre con su usuario y su PIN.</div>
+  <label for="lu">Usuario</label><input id="lu" autocomplete="username" autocapitalize="none" spellcheck="false">
+  <label for="lp">PIN</label><input id="lp" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8">
+  <button class="p" id="lb" onclick="entrar()">Entrar</button>
+  <div id="lm" class="msg e" style="padding:8px 0 0"></div>
+</div></div>
+
+<!-- ============ app ============ -->
+<div id="app" class="oc">
+  <header><b>🧾 Vouchers</b><span class="yo" id="yo"></span><button onclick="salir()">Salir</button></header>
+  <nav id="nav">
+    <button data-p="bus" onclick="ir('bus')">🔎 Buscar</button>
+    <button data-p="sub" onclick="ir('sub')" data-perm="subir">📤 Subir</button>
+    <button data-p="pen" onclick="ir('pen')">📥 Pendientes</button>
+    <button data-p="res" onclick="ir('res')">📊 Resumen</button>
+    <button data-p="ia" onclick="ir('ia')" data-perm="editar">🧠 IA</button>
+    <button data-p="usu" onclick="ir('usu')" data-perm="admin">👥 Usuarios</button>
+    <button data-p="ayu" onclick="ir('ayu')">❓ Ayuda</button>
+  </nav>
+  <main>
+    <!-- buscar -->
+    <section id="p-bus" class="oc" style="height:100%"><div id="bus">
+      <div class="izq">
+        <div class="filtros">
+          <input type="search" id="q" placeholder="🔎 n° operación, proveedor, monto, RUC, empresa…" oninput="filtrarPronto()"><button id="bQr" class="oc" onclick="leerQr()" title="Leer el QR de una factura o boleta electrónica (Telegram)">📷 QR</button>
+          <div class="f">
+            <span class="seg" id="sHoja"><button data-v="" class="on" onclick="seg('sHoja',this)">Todas</button><button data-v="0" onclick="seg('sHoja',this)">Originales</button><button data-v="1" onclick="seg('sHoja',this)">Fotos</button></span>
+            <select id="fMon" onchange="filtrar()"><option value="">S/ y US$</option><option value="PEN">Soles</option><option value="USD">Dólares</option></select>
+          </div>
+          <div class="f"><input type="date" id="fDe" onchange="filtrar()" title="Desde"><input type="date" id="fHa" onchange="filtrar()" title="Hasta"></div>
+          <div class="f"><select id="fBco" onchange="filtrar()"><option value="">Todos los bancos</option></select><select id="fEmp" onchange="filtrar()"><option value="">Todas las empresas</option></select></div>
+          <div class="f"><input id="fMin" inputmode="decimal" placeholder="Monto desde" oninput="filtrarPronto()"><input id="fMax" inputmode="decimal" placeholder="Monto hasta" oninput="filtrarPronto()"></div>
+          <div class="marcas" id="marcas">
+            <button data-m="sinruc" onclick="marca(this)">Sin RUC</button>
+            <button data-m="sinrev" onclick="marca(this)">Sin revisar</button>
+            <button data-m="dup" onclick="marca(this)">Duplicados</button>
+            <button data-m="porret" onclick="marca(this)">Por retener</button>
+            <button data-m="sinemp" onclick="marca(this)">Sin empresa</button>
+            <button onclick="limpiar()" style="margin-left:auto">✖ Limpiar</button>
+          </div>
+        </div>
+        <div class="tot"><span id="cuenta"></span><span id="sumas"></span><span><button id="bRucVis" class="oc" style="padding:2px 8px;font-size:12px" onclick="rucDeVisibles()" title="Identificar el RUC de los vouchers SIN RUC de esta lista">🔎 RUC</button> <button style="padding:2px 8px;font-size:12px" onclick="cargarIndice(true)" title="Traer los vouchers nuevos">🔄</button></span></div>
+        <div id="lista"></div>
+      </div>
+      <div id="vis" class="oc-movil"><div class="vacio">👈 Elija un voucher de la lista para verlo aquí.</div></div>
+    </div></section>
+
+    <!-- subir -->
+    <section id="p-sub" class="oc"><div class="pag" style="max-width:900px">
+      <div class="zona" id="zona">
+        <div style="font-size:30px">📤</div>
+        <div><b>Suba fotos o PDF de vouchers</b></div>
+        <div style="font-size:12.5px;color:#334155">Se guardan en la carpeta de entrada y la hoja los lee con IA (al instante si toca ⚡, o en su vuelta de 10 min).</div>
+        <div class="bot">
+          <button class="p" onclick="pedirCamara('fCam', camaraFoto)">📷 Tomar foto</button>
+          <button class="p" onclick="scanAbrir()" title="Varias fotos con la cámara → un solo PDF (una página por foto)">📄 Escanear a PDF</button>
+          <button onclick="$('fArch').click()">🖼 Elegir fotos o PDF</button>
+          <button onclick="escanearDrive()" title="Usa el escáner de la app Google Drive y guarda directo en la carpeta de entrada">📲 Escanear con Google Drive</button>
+        </div>
+        <input type="file" id="fCam" accept="image/*" capture="environment" class="oc" onchange="camaraFoto(this.files);this.value=''">
+        <input type="file" id="fArch" accept="image/*,application/pdf" multiple class="oc" onchange="agregarArchivos(this.files);this.value=''">
+      </div>
+      <!-- 📄 escanear a PDF -->
+      <div id="scan" class="card oc" style="margin-top:10px">
+        <h3>📄 Escanear a PDF <span class="chip" id="scanN">0 páginas</span></h3>
+        <div style="font-size:12.5px;color:var(--gr)">Tome una foto por página (o elíjalas de la galería). Puede girarlas, moverlas o quitarlas; al final toque <b>✅ Hacer el PDF</b>.</div>
+        <div id="scanPags" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="p" onclick="pedirCamara('scCam', function (f) { scanAgregar(f, true); })">📷 Agregar página (cámara)</button>
+          <button onclick="$('scGal').click()">🖼 Agregar desde galería</button>
+          <span style="flex:1"></span>
+          <button onclick="scanCerrar()">Cancelar</button><button class="p" id="scanOk" onclick="scanPdf()" disabled>✅ Hacer el PDF</button>
+        </div>
+        <input type="file" id="scCam" accept="image/*" capture="environment" class="oc" onchange="scanAgregar(this.files,true);this.value=''">
+        <input type="file" id="scGal" accept="image/*" multiple class="oc" onchange="scanAgregar(this.files);this.value=''">
+        <div id="scanMsg" class="msg" style="padding:6px 0 0"></div>
+      </div>
+      <div id="subLista"></div>
+      <div id="subBot" class="oc" style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:5px;margin-right:auto;font-size:13px"><input type="checkbox" id="subYa" checked> ⚡ Procesar al terminar</label>
+        <button onclick="subVaciar()">Quitar todo</button><button class="p" id="subBtn" onclick="subirTodo()">📤 Subir</button>
+      </div>
+      <div id="subMsg" class="msg"></div>
+    </div></section>
+
+    <!-- pendientes -->
+    <section id="p-pen" class="oc"><div class="pag" style="max-width:1000px" id="penCont"></div></section>
+    <!-- resumen -->
+    <section id="p-res" class="oc"><div class="pag" id="resCont"></div></section>
+    <!-- 🧠 IA -->
+    <section id="p-ia" class="oc"><div class="pag" style="max-width:980px">
+      <div class="marcas" id="sIA" style="margin-bottom:8px">
+        <button data-v="chat" onclick="iaVer('chat')">💬 Chat con la IA</button>
+        <button data-v="proc" onclick="iaVer('proc')">📋 Analizar procesados</button>
+        <button data-v="ruc" onclick="iaVer('ruc')">🔎 Identificar RUC</button>
+        <button data-v="vco" onclick="iaVer('vco')">🔗 Completar Originales con Fotos</button>
+        <button data-v="mesa" onclick="iaVer('mesa')">🧩 Mesa de conciliación</button>
+      </div>
+      <div id="iaChat" class="oc">
+        <div class="msgs" id="chat"></div>
+        <div id="chips" style="margin:6px 0"></div>
+        <textarea id="txt" rows="2" style="width:100%;resize:vertical" placeholder="Pregunte o pida algo… (adjunte foto, PDF o Excel con 📎)"></textarea>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center">
+          <button class="p" id="enviar" onclick="chatEnviar()">➤ Enviar</button>
+          <button onclick="$('arch').click()">📎 Adjuntar</button><input type="file" id="arch" class="oc" multiple accept="image/*,application/pdf,.xlsx,.xls,.csv" onchange="chatAgregar(this.files);this.value=''">
+          <button onclick="chatNueva()">🆕 Nueva conversación</button>
+          <button class="r" onclick="chatDeshacer()" title="Deshace los últimos datos que la IA escribió en la hoja de vouchers">↩️ Deshacer lo último de la IA</button>
+          <span id="espera" class="oc" style="color:var(--gr)">⏳ Pensando… (puede tardar hasta 1 minuto)</span>
+        </div>
+      </div>
+      <div id="iaProc" class="oc"><div class="card"><h3>📋 Analizar vouchers procesados</h3>
+        <p style="margin-top:0">La IA revisa a qué factura o recibo por honorarios corresponde cada voucher de una tanda, qué empresa pagó, si va con retención, y propone completar la hoja (usted marca qué se escribe).</p>
+        <input id="procTxt" style="width:100%" placeholder="¿Qué tanda? Ej.: hoy · hoy sonia · 26-10-26 Sonia(Edit) · 14 de octubre">
+        <div style="margin-top:8px"><button class="p" onclick="procAnalizar()">📋 Analizar con IA</button></div><div id="procMsg" class="msg"></div></div></div>
+      <div id="iaRuc" class="oc"><div class="card"><h3>🔎 Identificar RUC de los proveedores</h3>
+        <p style="margin-top:0;font-size:13px">Elija qué vouchers <b>sin RUC</b> revisar (no hace falta saber las filas). Busca el RUC en alias, SIRE, otros vouchers, recibos por honorarios y retenciones, y si falta, con IA en el padrón de SUNAT e internet.</p>
+        <div id="rpRap" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+          <select id="rpEmp" onchange="rpPintar()"></select><select id="rpRes" onchange="rpPintar()" title="Quién trajo el voucher (sale del nombre del archivo de la tanda, ej. «26-10-26 Sonia(Edit)» → Sonia)"></select>
+          <select id="rpMon" onchange="rpPintar()"><option value="">S/ y US$</option><option value="PEN">Solo S/</option><option value="USD">Solo US$</option></select>
+          <input id="rpQ" style="flex:1;min-width:150px" placeholder="Nombre del proveedor…" oninput="clearTimeout(TIMER);TIMER=setTimeout(rpPintar,220)">
+        </div>
+        <div id="rpBar" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px"></div>
+        <div id="rpLista" style="max-height:55vh;overflow:auto;margin-top:6px"></div>
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button onclick="rucUltimas(true)" title="Vuelve a abrir los resultados de las búsquedas en SUNAT e internet de las últimas 6 horas, aunque haya cerrado la ventana">📂 Ver la última búsqueda</button><button onclick="cargarIndice(true).then(rpAbrir)">🔄 Traer lo nuevo</button></div>
+        <details style="margin-top:8px"><summary style="font-size:12.5px;color:var(--gr)">Escribir las filas a mano (avanzado)</summary>
+          <input id="rucTxt" style="width:100%;margin-top:6px" placeholder="Filas. Ej.: Originales 2656-2666, Fotos 382, 383">
+          <div style="margin-top:6px"><button class="p" onclick="rucDeTexto()">🔎 Buscar RUC de esas filas</button></div></details></div></div>
+      <div id="iaVco" class="oc"><div class="card"><h3>🔗 Completar Originales con lo trabajado en Fotos</h3><div id="vcoCont"></div></div></div>
+      <div id="iaMesa" class="oc"><div class="card"><h3>🧩 Mesa de conciliación</h3>
+        <p style="margin-top:0">Facturas del SIRE a un lado y vouchers al otro, para cruzarlos con líneas; también retenciones, estado de cuenta y análisis. Lo que guarde se escribe en la hoja de vouchers.</p>
+        <button class="p" onclick="abrirMesa()">🧩 Abrir la Mesa de conciliación</button><div id="mesaMsg" class="msg"></div>
+        <div style="font-size:12px;color:var(--gr)">El enlace vale 6 horas desde el último uso. En el celular se ve mejor en horizontal.</div></div></div>
+    </div></section>
+
+    <!-- usuarios -->
+    <section id="p-usu" class="oc"><div class="pag" style="max-width:1000px" id="usuCont"></div></section>
+    <!-- ayuda -->
+    <section id="p-ayu" class="oc"><div class="pag ayuda" style="max-width:800px"><div class="card">
+      <h3>❓ Cómo usar el portal de Vouchers</h3>
+      <p><b>🔎 Buscar</b>: escriba un n° de operación, proveedor, RUC, monto o empresa. Filtre por pestaña (Originales / Fotos), moneda, fechas, banco, empresa, montos y marcas (<i>Sin RUC, Sin revisar, Duplicados, Por retener, Sin empresa</i>). Toque un voucher para verlo.</p>
+      <p><b>👁 Ver un voucher</b>: arriba la <b>imagen</b> de la hoja o el <b>archivo original</b> (PDF en la página exacta, o la foto). 🔍+ / 🔍− para acercar; en el celular también con dos dedos. ◀ ▶ pasan al voucher anterior o siguiente de la lista. ⬇ descarga el original.</p>
+      <p><b>✏️ Corregir</b> (permiso <i>editar</i>): cambie los datos y toque <b>💾 Guardar</b>; antes se muestra qué cambia. Queda una nota en la hoja con quién y qué cambió. <b>🔁 Releer con IA</b> vuelve a leer la página con la IA de la hoja y muestra ANTES / AHORA para elegir; <b>↩️ Deshacer relectura</b> lo devuelve.</p>
+      <p><b>📤 Subir</b> (permiso <i>subir</i>): <b>📷 Tomar foto</b> con la cámara, <b>📄 Escanear a PDF</b> (varias fotos con la cámara → un solo PDF, una página por foto; se pueden girar, ordenar o quitar antes) o elija fotos/PDF. Cada foto de la cámara pasa por <b>✂️ Recortar</b>: el portal busca solo los bordes del voucher (4 esquinas que se pueden mover con el dedo), la endereza y con <b>✨ Mejorar</b> aclara el fondo y oscurece el texto (en las fotos de la galería, botón ✂️). El nombre sugerido sale en gris: <b>escriba encima</b> el que quiera, sin borrar nada (si no pone extensión, se agrega sola); póngales un nombre (no se puede repetir uno que ya existe), elija <i>Original</i> (PDF o comprobante formal) o <i>Foto</i>, y suba. Con ⚡ la hoja los procesa en ~1 minuto.</p>
+      <p><b>📲 Escanear con Google Drive</b> (en 📤 Subir): elija Original o Foto → se abre la app de Drive en la carpeta 📥 de entrada → <b>+ → Escanear</b> → Guardar → vuelva y toque <b>⚡ Ya escaneé: procesar ahora</b>. Necesita una cuenta de Google con acceso a esa carpeta.</p>
+      <p><b>↩️ Deshacer mi última corrección</b> (en el visor): vuelve lo de antes de su último 💾 Guardar, si nadie cambió esas celdas después. <b>🗑 Quitar</b> (en 📥 Pendientes y en lo recién subido): saca de la entrada un voucher subido por error, mientras todavía no está en la hoja (va a la papelera de Drive, 30 días); quien solo sube puede quitar lo suyo.</p>
+      <p><b>🧠 IA</b> (permiso <i>editar</i>): el mismo 🧠 Asistente IA del menú de la hoja. <b>💬 Chat</b> (preguntas, fotos, PDF, Excel; lo que propone se escribe solo si usted lo marca, y ↩️ lo deshace), <b>📋 Analizar procesados</b> (a qué factura, empresa o retención corresponde cada voucher de una tanda), <b>🔎 Identificar RUC</b> (elija los vouchers sin RUC con 📥 Últimos procesados, 7 / 30 días o Todos, filtre por empresa, responsable (quién lo trajo), moneda o nombre y marque cuáles; también con el botón 🔎 RUC de Buscar y en el visor; los vouchers con el mismo nombre salen en una sola tarjeta y el RUC elegido va a todos; cada tarjeta tiene <b>🌐 Buscar con IA en SUNAT e internet</b>; con <b>📂 Ver la última búsqueda</b> se vuelven a abrir los resultados de las últimas 6 horas aunque haya cerrado la ventana; <b>🔍 Leer el voucher con IA</b> compara el nombre escrito con el que trae el voucher; <b>🗑 Borrar este alias</b> quita un alias equivocado), <b>🔗 Completar Originales con Fotos</b> y <b>🧩 Mesa de conciliación</b>.</p>
+      <p><b>📥 Pendientes</b>: lo que espera en las carpetas de entrada (todavía no está en la hoja) y lo último descartado (duplicados, vacíos, muy pesados).</p>
+      <p><b>📊 Resumen</b>: cuántos vouchers hay, cuántos sin RUC, sin revisar o duplicados, por pestaña y por mes.</p>
+      <p><b>👥 Usuarios</b> (admin): crear usuarios, cambiar PIN y permiso, desactivar; y el registro de quién hizo qué.</p>
+      <p>En el celular (Android): abra el enlace en Chrome → menú ⋮ → <b>Agregar a la pantalla principal</b>. En iPhone: Safari → Compartir → <b>Agregar a inicio</b>.</p>
+    </div></div></section>
+  </main>
+</div>
+
+<div id="rc" class="oc">
+  <div class="top">✂️ <span id="rcInfo">Ajuste las 4 esquinas al borde del voucher</span></div>
+  <div id="rcArea"><div id="rcBox"><canvas id="rcCv"></canvas><svg id="rcSvg"></svg>
+    <div class="h" data-i="0"></div><div class="h" data-i="1"></div><div class="h" data-i="2"></div><div class="h" data-i="3"></div></div></div>
+  <div class="bar">
+    <button onclick="rcGirar()">⟳ Girar</button><button onclick="rcAuto()">🎯 Auto</button><button onclick="rcTodo()">⬜ Todo</button>
+    <button id="rcMej" onclick="rcMejorar()">✨ Mejorar</button>
+    <button onclick="rcFin(false)">Cancelar</button><button class="p" onclick="rcFin(true)">✅ Listo</button>
+  </div>
+</div>
+
+<div id="modal" class="oc"><div class="caja" id="modalCaja"></div></div>
+
+<script>
+var TK = null, YO = null, IDX = null, VIS = [], VER = 60, SEL = -1, FILA = null, ORIG = {}, TIMER = null;
+var PERM = ['ver', 'subir', 'editar', 'admin'];
+function $(id) { return document.getElementById(id); }
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function fm(n) { return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function norma(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
+function puede(p) { return YO && PERM.indexOf(YO.permiso) >= PERM.indexOf(p); }
+function guardaLocal(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
+function leeLocal(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+var nCarga = 0;
+function cargando(on, txt) { nCarga += on ? 1 : -1; if (nCarga < 0) nCarga = 0; $('cargando').textContent = '⏳ ' + (txt || 'Cargando…'); $('cargando').classList.toggle('oc', !nCarga); }
+
+/** Llamada al servidor (con la sesión). */
+function api(accion, d, txt) {
+  return new Promise(function (ok, ko) {
+    if (txt !== false) cargando(true, txt);
+    google.script.run.withSuccessHandler(function (r) { if (txt !== false) cargando(false); ok(r); })
+      .withFailureHandler(function (e) {
+        if (txt !== false) cargando(false);
+        var m = String(e && e.message || e);
+        if (/^SESION:|SESION:/.test(m)) { verLogin(m.replace(/.*SESION:\s*/, '')); }
+        ko(new Error(m.replace(/^Error:\s*/, '').replace(/^Exception:\s*/, '')));
+      }).PV_api(TK, accion, d || {});
+  });
+}
+
+/* ============================================================ entrar */
+function verLogin(m) { TK = null; guardaLocal('pv_tk', null); $('app').classList.add('oc'); $('login').classList.remove('oc'); $('lm').textContent = m || ''; setTimeout(function () { ($('lu').value ? $('lp') : $('lu')).focus(); }, 50); }
+function entrar() {
+  var u = $('lu').value.trim(), p = $('lp').value.trim();
+  if (!u || !p) { $('lm').textContent = 'Escriba su usuario y su PIN.'; return; }
+  $('lb').disabled = true; $('lm').textContent = '';
+  google.script.run.withSuccessHandler(function (r) {
+    $('lb').disabled = false; $('lp').value = ''; TK = r.token; guardaLocal('pv_tk', TK); guardaLocal('pv_u', r.usuario);
+    YO = r; iniciar();
+    if (r.vinculado) setTimeout(function () { alerta('✅ Su Telegram quedó vinculado: la próxima vez que abra el portal desde el bot entrará solo, sin PIN.'); }, 400);
+  }).withFailureHandler(function (e) { $('lb').disabled = false; $('lm').textContent = String(e.message || e).replace(/^Error:\s*/, ''); }).PV_entrar(u, p, tgInit());
+}
+/* 🧾 Mini App de Telegram (página propia: vouchers_portal/miniapp/) */
+function tgApp() { return window.PV_MINI && window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Telegram.WebApp : null; }
+function tgInit() { var w = tgApp(); return w ? w.initData : ''; }
+function tgVibrar(tipo) { var w = tgApp(); try { if (w && w.HapticFeedback) w.HapticFeedback.notificationOccurred(tipo || 'success'); } catch (e) {} }
+function tgIniciar() {
+  var w = tgApp(); if (!w) return false;
+  try { w.ready(); w.expand(); if (w.disableVerticalSwipes) w.disableVerticalSwipes(); if (w.setHeaderColor) w.setHeaderColor('#1F3A5F'); } catch (e) {}
+  return true;
+}
+$('lp').addEventListener('keydown', function (e) { if (e.key === 'Enter') entrar(); });
+$('lu').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('lp').focus(); });
+function salir() { api('salir', {}, false).catch(function () {}); verLogin('Salió del portal.'); IDX = null; }
+function iniciar() {
+  $('login').classList.add('oc'); $('app').classList.remove('oc');
+  $('yo').textContent = (YO.nombre || YO.usuario) + ' · ' + YO.permiso;
+  if ($('bQr')) $('bQr').classList.toggle('oc', !(tgApp() && tgApp().showScanQrPopup && (!tgApp().isVersionAtLeast || tgApp().isVersionAtLeast('6.4'))));
+  document.querySelectorAll('nav button[data-perm]').forEach(function (b) { b.classList.toggle('oc', !puede(b.dataset.perm)); });
+  ir(leeLocal('pv_pag') && puede({ usu: 'admin', sub: 'subir', ia: 'editar' }[leeLocal('pv_pag')] || 'ver') ? leeLocal('pv_pag') : 'bus');
+}
+(function () {
+  $('lu').value = leeLocal('pv_u') || '';
+  TK = leeLocal('pv_tk');
+  if (tgIniciar() && !TK) {   // 🧾 desde el bot: entra solo si su Telegram ya está vinculado
+    cargando(true, 'Entrando con su Telegram…');
+    return google.script.run.withSuccessHandler(function (r) {
+      cargando(false);
+      if (r && r.token) { TK = r.token; guardaLocal('pv_tk', TK); guardaLocal('pv_u', r.usuario); YO = r; return iniciar(); }
+      verLogin('👋 ' + (r && r.nombreTg ? r.nombreTg + ': e' : 'E') + 'ntre una vez con su usuario y PIN; su Telegram quedará vinculado y la próxima vez entrará solo.');
+    }).withFailureHandler(function (e) { cargando(false); verLogin(String(e.message || e)); }).PV_entrarTelegram(tgInit());
+  }
+  if (!TK) return verLogin('');
+  api('yo', {}, 'Entrando…').then(function (r) { YO = r; iniciar(); }).catch(function (e) { verLogin(/SESION/.test(e.message) ? '' : e.message); });
+})();
+
+/* ============================================================ navegación */
+function ir(p) {
+  document.querySelectorAll('main>section').forEach(function (s) { s.classList.toggle('oc', s.id !== 'p-' + p); });
+  document.querySelectorAll('#nav button').forEach(function (b) { b.classList.toggle('on', b.dataset.p === p); });
+  guardaLocal('pv_pag', p);
+  if (p === 'bus' && !IDX) cargarIndice();
+  if (p === 'pen') cargarPendientes();
+  if (p === 'res') { if (IDX) pintarResumen(); else cargarIndice().then(pintarResumen); }
+  if (p === 'usu') cargarUsuarios();
+  if (p === 'ia') iaVer(IAV || 'chat');
+}
+function seg(id, b) { $(id).querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); filtrar(); }
+function segV(id) { var b = $(id).querySelector('button.on'); return b ? b.dataset.v : ''; }
+function marca(b) { b.classList.toggle('on'); filtrar(); }
+
+/* ============================================================ 🔎 buscar */
+// fila del índice: [h, fila, aaaammdd, fecha, op, banco, moneda, monto, proveedor, empresa, rev, porRet, ret, idBenef, cliente, desc, archivo, pagina, dup, idUsu, doc, nota]
+var DUPS = {};
+function cargarIndice(forzar) {
+  return api('indice', {}, forzar ? 'Trayendo vouchers nuevos…' : 'Cargando vouchers…').then(function (r) {
+    IDX = r; DUPS = {};
+    r.filas.forEach(function (x) { if (x[18]) DUPS[x[18]] = (DUPS[x[18]] || 0) + 1; x.txt = norma(x.slice(3, 22).join(' | ') + ' ' + fm(x[7])); });
+    var bancos = {}, emps = {};
+    r.filas.forEach(function (x) { if (x[5]) bancos[x[5].toUpperCase()] = 1; if (x[9]) emps[x[9]] = 1; });
+    var opc = function (sel, o, t) { var v = $(sel).value; $(sel).innerHTML = '<option value="">' + t + '</option>' + Object.keys(o).sort().map(function (k) { return '<option>' + esc(k) + '</option>'; }).join(''); $(sel).value = v; };
+    opc('fBco', bancos, 'Todos los bancos'); opc('fEmp', emps, 'Todas las empresas');
+    filtrar();
+  }).catch(function (e) { $('lista').innerHTML = '<div class="msg e">❌ ' + esc(e.message) + '</div>'; });
+}
+/**
+ * 📷 Lector de QR de Telegram (solo en la Mini App): el QR de un comprobante electrónico SUNAT trae
+ * RUC | tipo | serie | número | IGV | total | fecha | tipo doc. | doc. del cliente. Se busca el voucher por la serie-número
+ * (columna «Tipo y Nº Doc.»); si no aparece, por el monto total.
+ */
+function leerQr() {
+  var w = tgApp(); if (!w || !w.showScanQrPopup) return;
+  w.showScanQrPopup({ text: 'Apunte al QR de la factura o boleta' }, function (txt) {
+    var p = String(txt || '').split('|').map(function (x) { return x.trim(); });
+    if (p.length < 6 || !/^\d{11}$/.test(p[0])) { alerta('Ese QR no parece de un comprobante electrónico SUNAT:\n' + String(txt).slice(0, 120)); return true; }
+    var doc = p[2].toUpperCase() + '-' + String(parseInt(p[3], 10)), total = parseFloat(p[5]);
+    tgVibrar('success');
+    if (!IDX) { $('q').value = doc; cargarIndice(); return true; }
+    $('q').value = doc; filtrar();
+    if (!VIS.length && total) { $('q').value = fm(total).replace(/,/g, ''); filtrar(); }
+    alerta('📷 ' + ({ '01': 'Factura', '03': 'Boleta', '07': 'Nota de crédito', '08': 'Nota de débito' }[p[1]] || 'Comprobante') + ' ' + doc + ' · RUC ' + p[0] + ' · total ' + fm(total) +
+      (p[6] ? ' · ' + p[6] : '') + '\n' + (VIS.length ? 'Encontré ' + VIS.length + ' voucher(s).' : 'No encontré vouchers con ese comprobante ni con ese monto.'));
+    return true;
+  });
+}
+function filtrarPronto() { clearTimeout(TIMER); TIMER = setTimeout(filtrar, 220); }
+function limpiar() { ['q', 'fDe', 'fHa', 'fMin', 'fMax'].forEach(function (i) { $(i).value = ''; }); ['fMon', 'fBco', 'fEmp'].forEach(function (i) { $(i).value = ''; }); document.querySelectorAll('#marcas button.on').forEach(function (b) { b.classList.remove('on'); }); seg('sHoja', $('sHoja').querySelector('button')); }
+function esUSD(m) { return /USD|US\$|DOLAR|DÓLAR/i.test(String(m)); }
+function sinRuc(x) { return !String(x[13] || '').replace(/\D/g, ''); }
+function filtrar() {
+  if (!IDX) return;
+  var q = norma($('q').value), h = segV('sHoja'), mon = $('fMon').value, de = $('fDe').value.replace(/-/g, ''), ha = $('fHa').value.replace(/-/g, ''), bco = $('fBco').value, emp = $('fEmp').value;
+  var mi = parseFloat(String($('fMin').value).replace(/,/g, '')), mx = parseFloat(String($('fMax').value).replace(/,/g, ''));
+  var M = {}; document.querySelectorAll('#marcas button.on').forEach(function (b) { M[b.dataset.m] = 1; });
+  var palabras = q ? q.split(' ') : [];
+  VIS = IDX.filas.filter(function (x) {
+    if (h !== '' && String(x[0]) !== h) return false;
+    if (mon && (mon === 'USD') !== esUSD(x[6])) return false;
+    if (de && (!x[2] || x[2] < de)) return false;
+    if (ha && (!x[2] || x[2] > ha)) return false;
+    if (bco && String(x[5]).toUpperCase() !== bco) return false;
+    if (emp && x[9] !== emp) return false;
+    if (!isNaN(mi) && x[7] < mi) return false;
+    if (!isNaN(mx) && x[7] > mx) return false;
+    if (M.sinruc && !sinRuc(x)) return false;
+    if (M.sinrev && x[10]) return false;
+    if (M.dup && !(/DUPLICADO/i.test(x[4]) || (x[18] && DUPS[x[18]] > 1))) return false;
+    if (M.porret && !x[11]) return false;
+    if (M.sinemp && x[9]) return false;
+    for (var i = 0; i < palabras.length; i++) if (x.txt.indexOf(palabras[i]) < 0) return false;
+    return true;
+  }).sort(function (a, b) { return (b[2] || '').localeCompare(a[2] || '') || b[0] - a[0] || b[1] - a[1]; });
+  VER = 60;
+  var pen = 0, usd = 0; VIS.forEach(function (x) { if (esUSD(x[6])) usd += x[7]; else pen += x[7]; });
+  $('cuenta').textContent = VIS.length.toLocaleString() + ' de ' + IDX.filas.length.toLocaleString() + ' vouchers';
+  $('bRucVis').classList.toggle('oc', !puede('editar') || !VIS.some(sinRuc));
+  $('sumas').innerHTML = 'S/ <b>' + fm(pen) + '</b>' + (usd ? ' · US$ <b>' + fm(usd) + '</b>' : '');
+  pintarLista();
+}
+function pintarLista() {
+  var h = VIS.slice(0, VER).map(function (x, i) {
+    var marcas = (x[0] ? '<span class="chip c-z">📸 Fotos</span>' : '<span class="chip">📄 Originales</span>') +
+      (/DUPLICADO/i.test(x[4]) || (x[18] && DUPS[x[18]] > 1) ? '<span class="chip c-r">⧉ duplicado</span>' : '') +
+      (sinRuc(x) ? '<span class="chip c-a">sin RUC</span>' : '') + (x[10] ? '<span class="chip c-v">✔ revisado</span>' : '') +
+      (x[11] ? '<span class="chip c-m">por retener</span>' : '') + (x[12] ? '<span class="chip c-m">retenido</span>' : '');
+    return '<div class="it' + (SEL === i ? ' sel' : '') + '" onclick="abrir(' + i + ')"><div class="a"><div class="l1">' + esc(x[8] || x[14] || '(sin proveedor)') + '</div>' +
+      '<div class="l2">' + esc(x[3]) + ' · ' + esc(x[5]) + ' · op ' + esc(x[4] || '—') + (x[9] ? ' · 🏢 ' + esc(x[9]) : '') + '</div><div>' + marcas + '</div></div>' +
+      '<div class="m">' + (esUSD(x[6]) ? 'US$ ' : 'S/ ') + fm(x[7]) + '<div class="l2" style="font-weight:normal">' + (x[0] ? 'Fotos' : 'Orig.') + ' fila ' + x[1] + '</div></div></div>';
+  }).join('');
+  if (VIS.length > VER) h += '<div class="mas"><button onclick="VER+=100;pintarLista()">Ver más (' + (VIS.length - VER) + ' más)</button></div>';
+  if (!VIS.length) h = '<div class="msg" style="color:var(--gr)">No hay vouchers con estos filtros.</div>';
+  $('lista').innerHTML = h;
+}
+
+/* ============================================================ 👁 visor */
+var ZOOM = 1, VISTA = 'img', PDFDOC = null;
+function abrir(i) {
+  if (i < 0 || i >= VIS.length) return;
+  SEL = i; if (i >= VER) { VER = i + 20; } pintarLista();
+  var x = VIS[i], hoja = IDX.hojas[x[0]];
+  $('vis').classList.remove('oc-movil');
+  $('vis').innerHTML = '<div class="vacio">⏳ Abriendo ' + esc(hoja) + ' fila ' + x[1] + '…</div>';
+  api('fila', { hoja: hoja, fila: x[1] }, false).then(function (d) {
+    if (d.vacio) { $('vis').innerHTML = '<div class="vacio">Esa fila ya está vacía (¿se ordenó la hoja?). Toque 🔄 para actualizar.</div>'; return; }
+    FILA = d; ORIG = {}; PDFDOC = null; ZOOM = 1; VISTA = d.conImagen ? 'img' : 'orig';
+    pintarVisor();
+  }).catch(function (e) { $('vis').innerHTML = '<div class="vacio msg e">❌ ' + esc(e.message) + '</div>'; });
+}
+function cerrarVisor() { $('vis').classList.add('oc-movil'); }
+function pintarVisor() {
+  var d = FILA, x = VIS[SEL] || [];
+  var tabs = (d.conImagen ? '<button data-v="img" onclick="verComo(\'img\')">🖼 Imagen de la hoja</button>' : '') +
+    (d.archivo ? '<button data-v="orig" onclick="verComo(\'orig\',0)">📄 Original' + (d.pagina > 1 ? ' · pág. ' + d.pagina : '') + '</button>' : '') +
+    (d.versiones.length > 1 ? d.versiones.slice(1).map(function (v, k) { return '<button data-v="orig' + (k + 1) + '" onclick="verComo(\'orig\',' + (k + 1) + ')" title="Otro archivo con el mismo nombre">📄 otra versión ' + esc(v.fecha) + '</button>'; }).join('') : '') +
+    '<span style="flex:1"></span><button onclick="zoom(1.25)">🔍+</button><button onclick="zoom(0.8)">🔍−</button><button onclick="zoom(0)">↔</button>';
+  var campos = d.cols.map(function (c) {
+    var v = c.v, id = 'c' + c.c, inp;
+    if (!d.editar || c.tipo === 'fijo') inp = '<div class="fijo">' + (c.tipo === 'check' ? (v ? '✔ sí' : '—') : esc(v) || '<span style="color:#CBD5E1">—</span>') + '</div>';
+    else if (c.tipo === 'check') inp = '<input type="checkbox" id="' + id + '"' + (v ? ' checked' : '') + ' onchange="marcado(this)" style="width:auto">';
+    else if (c.tipo === 'lista') inp = '<select id="' + id + '" onchange="marcado(this)"><option value=""></option>' + c.op.map(function (o) { return '<option' + (o === v ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + (v && c.op.indexOf(v) < 0 ? '<option selected>' + esc(v) + '</option>' : '') + '</select>';
+    else inp = '<input id="' + id + '" value="' + esc(v) + '" oninput="marcado(this)"' + (c.tipo === 'numero' ? ' inputmode="decimal"' : '') + (c.tipo === 'fecha' ? ' placeholder="dd/mm/aaaa"' : '') + '>';
+    return '<div class="campo" data-c="' + c.c + '"><label title="' + esc(c.t) + '">' + esc(c.t) + '</label>' + inp + '</div>';
+  }).join('');
+  var acc = d.editar ? '<button class="p" id="bGuardar" onclick="guardar()" disabled>💾 Guardar</button><button onclick="deshacerCorreccion()" title="Vuelve lo de antes de su último 💾 Guardar (en cualquier voucher)">↩️ Deshacer mi última corrección</button>' +
+    (YO.puente ? '<button onclick="releer()" title="Volver a leer la página con la IA de la hoja">🔁 Releer con IA</button><button onclick="deshacer()">↩️ Deshacer relectura</button>' : '') +
+    '<button onclick="rucAbrir([FILA.hoja + \'!\' + FILA.fila])" title="Buscar el RUC del proveedor de este voucher">🔎 Identificar RUC</button>' : '';
+  $('vis').innerHTML = '<div class="vbar"><button class="solo-movil" onclick="cerrarVisor()">✖</button><span class="t">' + esc(d.hoja) + ' · fila ' + d.fila + ' · ' + esc(x[8] || '') + '</span>' +
+    '<button onclick="abrir(SEL-1)" ' + (SEL > 0 ? '' : 'disabled') + '>◀</button><button onclick="abrir(SEL+1)" ' + (SEL < VIS.length - 1 ? '' : 'disabled') + '>▶</button>' +
+    (d.archivo ? '<button onclick="descargar()" title="Descargar el archivo original">⬇</button>' : '') + '</div>' +
+    '<div class="vcuerpo"><div class="vimg"><div class="tabs">' + tabs + '</div><div class="lienzo" id="lienzo"><div class="aviso">⏳</div></div></div>' +
+    '<div class="vdat"><div style="font-size:12px;color:var(--gr);margin-bottom:6px">📎 ' + esc(d.archivo || '(sin archivo)') + (d.pagina ? ' · página ' + d.pagina : '') +
+    (d.versiones[0] ? ' · ' + esc(d.versiones[0].donde) : '') + (d.versiones.length > 1 ? ' · <b style="color:var(--am)">⚠ ' + d.versiones.length + ' archivos con este nombre</b>' : '') + '</div>' +
+    campos + '<div class="vacc">' + acc + '</div><div id="vMsg" class="msg" style="padding:4px 0"></div>' + (d.nota ? '<div class="nota">' + esc(d.nota) + '</div>' : '') + '</div></div>';
+  verComo(VISTA, 0);
+}
+function marcado(el) {
+  var c = FILA.cols.filter(function (k) { return 'c' + k.c === el.id; })[0], v = el.type === 'checkbox' ? el.checked : el.value;
+  el.closest('.campo').classList.toggle('camb', c && String(v) !== String(c.v));
+  $('bGuardar').disabled = !document.querySelector('.campo.camb');
+}
+function verComo(v, n) {
+  VISTA = v;
+  document.querySelectorAll('.vimg .tabs button[data-v]').forEach(function (b) { b.classList.toggle('on', b.dataset.v === (v === 'img' ? 'img' : 'orig' + (n ? n : ''))); });
+  var L = $('lienzo'); if (!L) return;
+  L.innerHTML = '<div class="aviso">⏳ Cargando ' + (v === 'img' ? 'la imagen' : 'el original') + '…</div>';
+  var fila = FILA;
+  if (v === 'img') {
+    var k = 'img';
+    (ORIG[k] ? Promise.resolve(ORIG[k]) : api('imagen', { hoja: fila.hoja, fila: fila.fila }, false)).then(function (u) {
+      if (FILA !== fila) return; ORIG[k] = u;
+      L.innerHTML = u ? '<img id="imgV" src="' + u + '">' : '<div class="aviso">Sin imagen en la hoja' + (fila.texto ? ' (' + esc(fila.texto) + ')' : '') + '.</div>';
+      ajustar();
+    }).catch(function (e) { L.innerHTML = '<div class="aviso">❌ ' + esc(e.message) + '</div>'; });
+    return;
+  }
+  var ko = 'o' + (n || 0);
+  (ORIG[ko] ? Promise.resolve(ORIG[ko]) : api('original', { hoja: fila.hoja, fila: fila.fila, n: n || 0 }, false)).then(function (o) {
+    if (FILA !== fila) return; ORIG[ko] = o; ORIG.ultimo = o;
+    if (/pdf/i.test(o.mime) && window.pdfjsLib) {
+      var bytes = Uint8Array.from(atob(o.b64), function (c) { return c.charCodeAt(0); });
+      pdfjsLib.getDocument({ data: bytes }).promise.then(function (doc) {
+        PDFDOC = doc; var pg = Math.min(fila.pagina || 1, doc.numPages);
+        L.innerHTML = '<div style="width:100%"><div style="color:#CBD5E1;font-size:12px;text-align:center;margin-bottom:6px"><span id="pgInfo"></span>' +
+          (doc.numPages > 1 ? ' · <a href="#" style="color:#93C5FD" onclick="pagPdf(-1);return false">◀ anterior</a> · <a href="#" style="color:#93C5FD" onclick="pagPdf(1);return false">siguiente ▶</a>' : '') + '</div><canvas id="cv"></canvas></div>';
+        PDFDOC.pag = pg; dibujarPdf();
+      }).catch(function (e) { L.innerHTML = '<div class="aviso">❌ No pude abrir el PDF: ' + esc(e.message) + '</div>'; });
+    } else if (/^image\//.test(o.mime)) {
+      L.innerHTML = '<img id="imgV" src="data:' + o.mime + ';base64,' + o.b64 + '">'; ajustar();
+    } else L.innerHTML = '<div class="aviso">Archivo ' + esc(o.mime) + ': use ⬇ para descargarlo.</div>';
+  }).catch(function (e) { L.innerHTML = '<div class="aviso">❌ ' + esc(e.message) + '</div>'; });
+}
+function pagPdf(d) { if (!PDFDOC) return; PDFDOC.pag = Math.max(1, Math.min(PDFDOC.numPages, PDFDOC.pag + d)); dibujarPdf(); }
+function dibujarPdf() {
+  var cv = $('cv'); if (!cv || !PDFDOC) return;
+  if ($('pgInfo')) $('pgInfo').textContent = 'Página ' + PDFDOC.pag + ' de ' + PDFDOC.numPages + (FILA && PDFDOC.pag === FILA.pagina ? ' (la de esta fila)' : '');
+  PDFDOC.getPage(PDFDOC.pag).then(function (p) {
+    var ancho = $('lienzo').clientWidth - 20, v0 = p.getViewport({ scale: 1 }), esc2 = Math.max(0.3, ancho / v0.width) * ZOOM, dpr = window.devicePixelRatio || 1;
+    var vp = p.getViewport({ scale: esc2 * dpr });
+    cv.width = vp.width; cv.height = vp.height; cv.style.width = (vp.width / dpr) + 'px'; cv.style.height = (vp.height / dpr) + 'px';
+    p.render({ canvasContext: cv.getContext('2d'), viewport: vp });
+  });
+}
+function ajustar() { var im = $('imgV'), L = $('lienzo'); if (!im || !L) return; var f = function () { im.style.width = Math.round((L.clientWidth - 20) * ZOOM) + 'px'; }; if (im.complete) f(); else im.onload = f; }
+function zoom(z) { ZOOM = z ? Math.max(0.3, Math.min(6, ZOOM * z)) : 1; if ($('cv')) dibujarPdf(); else ajustar(); }
+window.addEventListener('resize', function () { if ($('cv')) dibujarPdf(); else ajustar(); });
+function descargar() {
+  var hacer = function (o) { var a = document.createElement('a'); a.href = 'data:' + o.mime + ';base64,' + o.b64; a.download = o.nombre; document.body.appendChild(a); a.click(); a.remove(); };
+  if (ORIG.o0) return hacer(ORIG.o0);
+  api('original', { hoja: FILA.hoja, fila: FILA.fila, n: 0 }, 'Bajando el original…').then(function (o) { ORIG.o0 = o; hacer(o); }).catch(function (e) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + e.message; });
+}
+
+/* ---------- ✏️ corregir ---------- */
+function guardar() {
+  var cambios = {}, lineas = [];
+  document.querySelectorAll('.campo.camb').forEach(function (div) {
+    var c = FILA.cols.filter(function (k) { return String(k.c) === div.dataset.c; })[0], el = $('c' + c.c), v = el.type === 'checkbox' ? el.checked : el.value;
+    cambios[c.c] = v; lineas.push('<li><b>' + esc(c.t) + '</b>: <s style="color:var(--gr)">' + esc(c.tipo === 'check' ? (c.v ? 'sí' : 'no') : c.v || '—') + '</s> → <b>' + esc(v === true ? 'sí' : v === false ? 'no' : v || '(vacío)') + '</b></li>');
+  });
+  if (!lineas.length) return;
+  modal('<h3>💾 ¿Guardar en ' + esc(FILA.hoja) + ' fila ' + FILA.fila + '?</h3><ul>' + lineas.join('') + '</ul><div style="font-size:12px;color:var(--gr)">Queda una nota en la hoja con quién y qué cambió.</div>',
+    [['Cancelar'], ['💾 Guardar', function () {
+      var fila = FILA;
+      api('guardar', { hoja: fila.hoja, fila: fila.fila, clave: fila.clave, cambios: cambios }, 'Guardando…').then(function (d) {
+        FILA = d; pintarVisor(); $('vMsg').className = 'msg ok'; $('vMsg').textContent = '✅ Guardado.';
+        var x = VIS[SEL]; if (x) actualizarIdx(x, d);
+      }).catch(function (e) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + e.message; });
+    }, 'p']]);
+}
+/** Lo guardado también cambia la lista sin volver a cargar todo. */
+function actualizarIdx(x, d) {
+  var por = {}; d.cols.forEach(function (c) { por[norma(c.t)] = c.v; });
+  var pick = function (re) { for (var k in por) if (re.test(k)) return por[k]; return undefined; };
+  var v;
+  if ((v = pick(/^fecha de dep/)) !== undefined) x[3] = v; if ((v = pick(/^numero de op|^n.? de op/)) !== undefined) x[4] = v;
+  if ((v = pick(/^banco/)) !== undefined) x[5] = v; if ((v = pick(/^moneda/)) !== undefined) x[6] = v;
+  if ((v = pick(/^monto/)) !== undefined) x[7] = Number(String(v).replace(/,/g, '')) || 0; if ((v = pick(/^proveedor/)) !== undefined) x[8] = v;
+  if ((v = pick(/^empresa/)) !== undefined) x[9] = v; if ((v = pick(/^revisado/)) !== undefined) x[10] = v === true ? 1 : 0;
+  if ((v = pick(/^id benef/)) !== undefined) x[13] = v;
+  x.txt = norma(x.slice(3, 22).join(' | ') + ' ' + fm(x[7])); pintarLista();
+}
+
+/* ---------- 🔁 releer con IA ---------- */
+function releer() {
+  var fila = FILA;
+  $('vMsg').className = 'msg'; $('vMsg').textContent = '🔁 Leyendo la página con la IA de la hoja… (puede tardar 10–40 s)';
+  api('releer', { hoja: fila.hoja, fila: fila.fila }, 'Leyendo con IA…').then(function (r) {
+    if (!r.ok) throw new Error(r.error || 'No se pudo leer.');
+    var n = 0, preguntar = function () {
+      api('releerEstado', { id: r.id }, false).then(function (e) {
+        if (!e.listo && n++ < 40) return setTimeout(preguntar, 3000);
+        if (!e.listo) throw new Error('La IA tardó demasiado: intente de nuevo.');
+        if (e.error) throw new Error(e.error);
+        $('vMsg').textContent = '';
+        modal('<h3>🔁 Releer con IA · ' + esc(fila.hoja) + ' fila ' + fila.fila + '</h3><div style="font-size:12px;color:var(--gr)">' + esc(e.archivo) + ' · página ' + e.pagina + ' (versión del ' + esc(e.version) + ')</div>' +
+          '<p><b>ANTES:</b> ' + esc(e.antes) + '</p><p><b>AHORA</b> (elija' + (e.lineas.length > 1 ? ' cuál va en esta fila' : '') + '):</p>' +
+          e.lineas.map(function (l, i) { return '<label style="display:block;padding:6px;border:1px solid var(--bo);border-radius:8px;margin:4px 0"><input type="radio" name="rl" value="' + i + '"' + (i ? '' : ' checked') + '> ' + esc(l) + '</label>'; }).join('') +
+          (e.dup ? '<p class="msg e" style="padding:0">⚠️ Ese N° de operación ya está en la fila ' + e.dup + ': se anotará como [DUPLICADO].</p>' : '') +
+          (e.agregado ? '<p style="font-size:12px;color:var(--am)">ℹ️ Lo agregado a mano (columnas O en adelante) se mantiene.</p>' : ''),
+          [['Cancelar'], ['✅ Reemplazar', function () {
+            var i = (document.querySelector('input[name=rl]:checked') || { value: 0 }).value;
+            api('releerAplicar', { id: r.id, i: i }, 'Reemplazando…').then(function (a) {
+              if (!a.ok) throw new Error(a.error || 'No se pudo.');
+              api('fila', { hoja: fila.hoja, fila: fila.fila }, false).then(function (d) { FILA = d; ORIG = {}; pintarVisor(); $('vMsg').className = 'msg ok'; $('vMsg').textContent = a.mensaje || '✅ Listo.'; if (VIS[SEL]) actualizarIdx(VIS[SEL], d); });
+            }).catch(function (er) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + er.message; });
+          }, 'p']]);
+      }).catch(function (er) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + er.message; });
+    };
+    preguntar();
+  }).catch(function (e) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + e.message; });
+}
+/** ↩️ Deshacer MI última corrección (de cualquier voucher): primero muestra qué vuelve. */
+function deshacerCorreccion() {
+  api('verDeshacer', {}, 'Un momento…').then(function (u) {
+    if (!u) return alerta('No tiene ninguna corrección para deshacer (solo se puede deshacer la última que usted guardó).');
+    modal('<h3>↩️ Deshacer su última corrección</h3><p><b>' + esc(u.hoja) + ' fila ' + u.fila + '</b> · guardada el ' + esc(u.t) + '</p><p style="font-size:13px">' + esc(u.resumen) + '</p>' +
+      '<p style="font-size:12px;color:var(--gr)">Vuelven los valores de antes. Si alguien cambió esas celdas después, no se toca nada.</p>',
+      [['Cancelar'], ['↩️ Deshacer', function () {
+        api('deshacerCorreccion', {}, 'Deshaciendo…').then(function (r) {
+          if (FILA && FILA.hoja === r.hoja && FILA.fila === r.fila) api('fila', { hoja: r.hoja, fila: r.fila }, false).then(function (d) { FILA = d; pintarVisor(); $('vMsg').className = 'msg ok'; $('vMsg').textContent = r.mensaje; if (VIS[SEL]) actualizarIdx(VIS[SEL], d); });
+          else alerta(r.mensaje + '\nToque 🔄 en Buscar para ver la lista al día.');
+        }).catch(function (e) { alerta('❌ ' + e.message); });
+      }, 'p']]);
+  }).catch(function (e) { alerta('❌ ' + e.message); });
+}
+/** 🗑 Quitar de la entrada un voucher subido por error (va a la papelera de Drive). */
+function quitarPendiente(id, nombre, luego) {
+  modal('<h3>🗑 Quitar «' + esc(nombre) + '»</h3><p>Se quita de la carpeta de entrada (todavía no está en la hoja) y va a la papelera de Drive: se puede recuperar 30 días.</p>',
+    [['Cancelar'], ['🗑 Quitar', function () {
+      api('quitarPendiente', { id: id }, 'Quitando…').then(function (r) { if (luego) luego(r); else alerta(r.mensaje); }).catch(function (e) { alerta('❌ ' + e.message); });
+    }, 'r']]);
+}
+function deshacer() {
+  modal('<h3>↩️ Deshacer la última relectura</h3><p>Devuelve la última fila releída con IA (de cualquier persona) a como estaba antes. La imagen queda la de la página releída.</p>',
+    [['Cancelar'], ['↩️ Deshacer', function () {
+      api('deshacer', {}, 'Deshaciendo…').then(function (r) {
+        if (!r.ok) throw new Error(r.error || 'No se pudo.');
+        $('vMsg').className = 'msg ok'; $('vMsg').textContent = r.u ? '✅ ' + r.u.hoja + ' fila ' + r.u.fila + ' devuelta.' : 'No había ninguna relectura para deshacer.';
+        if (r.u && r.u.hoja === FILA.hoja && r.u.fila === FILA.fila) api('fila', { hoja: FILA.hoja, fila: FILA.fila }, false).then(function (d) { FILA = d; pintarVisor(); });
+      }).catch(function (e) { $('vMsg').className = 'msg e'; $('vMsg').textContent = '❌ ' + e.message; });
+    }, 'p']]);
+}
+
+/* ============================================================ 📤 subir */
+var SUB = [];
+['dragenter', 'dragover'].forEach(function (ev) { $('zona').addEventListener(ev, function (e) { e.preventDefault(); $('zona').classList.add('sobre'); }); });
+['dragleave', 'drop'].forEach(function (ev) { $('zona').addEventListener(ev, function (e) { e.preventDefault(); $('zona').classList.remove('sobre'); }); });
+$('zona').addEventListener('drop', function (e) { agregarArchivos(e.dataTransfer.files); });
+function nombreSugerido(f) {
+  var n = String(f.name || '').trim();
+  if (!n || /^(image|img|photo|foto)[\s_-]?\d*\.(jpe?g|png|heic|webp)$/i.test(n) || /^\d{8,}\.(jpe?g|png)$/i.test(n)) {
+    var d = new Date(), p = function (x) { return ('0' + x).slice(-2); };
+    n = 'Voucher ' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + (SUB.length ? '-' + (SUB.length + 1) : '') + '.' + (/pdf/.test(f.type) ? 'pdf' : (f.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg'));
+  }
+  return n;
+}
+function agregarArchivos(fl) {
+  Array.prototype.forEach.call(fl || [], function (f) {
+    if (!/^(application\/pdf|image\/)/.test(f.type)) { $('subMsg').className = 'msg e'; $('subMsg').textContent = '«' + f.name + '» no es PDF ni imagen.'; return; }
+    if (f.size > 45 * 1048576) { $('subMsg').className = 'msg e'; $('subMsg').textContent = '«' + f.name + '» pesa más de 45 MB.'; return; }
+    SUB.push({ f: f, sug: nombreSugerido(f), nombre: '', destino: /pdf/.test(f.type) ? 'original' : 'foto', est: '', url: /^image\//.test(f.type) ? URL.createObjectURL(f) : '' });
+  });
+  pintarSubir(); revisarRepetidos();
+}
+function pintarSubir() {
+  $('subLista').innerHTML = SUB.map(function (s, i) {
+    return '<div class="sub">' + (s.url ? '<img src="' + s.url + '">' : '<div class="ico">📄</div>') +
+      '<div><div class="n"><input value="' + esc(s.nombre) + '" placeholder="' + esc(s.sug) + '" title="Escriba encima el nombre que quiera (vacío = el gris)" onfocus="this.select()" oninput="SUB[' + i + '].nombre=this.value;SUB[' + i + '].est=\'\'" onchange="revisarRepetidos()" ' + (s.hecho ? 'disabled' : '') + '>' +
+      '<select onchange="SUB[' + i + '].destino=this.value" ' + (s.hecho ? 'disabled' : '') + '><option value="foto"' + (s.destino === 'foto' ? ' selected' : '') + '>📸 Foto</option><option value="original"' + (s.destino === 'original' ? ' selected' : '') + '>📄 Original</option></select></div>' +
+      '<div class="est" style="color:' + (s.hecho ? 'var(--ve)' : s.error ? 'var(--ro)' : 'var(--gr)') + '">' + esc(s.est || (Math.round(s.f.size / 1024) + ' KB')) + '</div></div>' +
+      (s.hecho ? (s.quitado ? '<span>🗑</span>' : '<span style="display:flex;flex-direction:column;gap:4px;align-items:center">✅' + (s.idDrive ? '<button class="r" style="padding:2px 7px;font-size:12px" title="Subido por error: quitarlo de la entrada" onclick="quitarSubido(' + i + ')">🗑</button>' : '') + '</span>') : '<span style="display:flex;flex-direction:column;gap:4px">' + (s.url ? '<button onclick="subRecortar(' + i + ')" title="Recortar / enderezar / mejorar">✂️</button>' : '') + '<button onclick="SUB.splice(' + i + ',1);pintarSubir()">✖</button></span>') + '</div>';
+  }).join('');
+  $('subBot').classList.toggle('oc', !SUB.length);
+}
+/** El nombre con que se sube: lo escrito encima, o el sugerido (gris). Si no le pone extensión, se agrega sola. */
+function quitarSubido(i) {
+  var s = SUB[i]; if (!s || !s.idDrive) return;
+  quitarPendiente(s.idDrive, s.nomDrive, function (r) { s.quitado = true; s.est = r.mensaje; pintarSubir(); });
+}
+function nombreDe(s) {
+  var n = String(s.nombre || '').trim();
+  if (!n) return s.sug;
+  var ext = (String(s.sug).match(/\.[A-Za-z0-9]{2,5}$/) || [''])[0];
+  return /\.[A-Za-z0-9]{2,5}$/.test(n) ? n : n + ext;
+}
+function subRecortar(i) {
+  var s = SUB[i]; if (!s || s.hecho) return;
+  recortar(s.orig || s.f).then(function (r) {
+    if (!r) return;
+    s.orig = s.orig || s.f; URL.revokeObjectURL(s.url);
+    s.f = new File([r.blob], s.sug.replace(/\.[A-Za-z0-9]{2,5}$/, '') + '.jpg', { type: 'image/jpeg' }); s.url = URL.createObjectURL(r.blob);
+    s.sug = s.sug.replace(/\.[A-Za-z0-9]{2,5}$/, '.jpg'); s.est = '✂️ Recortada' + (r.mejorada ? ' y mejorada' : '') + ' · ' + Math.round(r.blob.size / 1024) + ' KB'; s.error = false;
+    pintarSubir();
+  });
+}
+/** 📷 Tomar foto: cada foto pasa por ✂️ (esquinas automáticas) antes de quedar en la lista. */
+function camaraFoto(fl) {
+  var lista = Array.prototype.slice.call(fl || []).filter(function (f) { return /^image\//.test(f.type); });
+  var sig = function () {
+    var f = lista.shift(); if (!f) { pintarSubir(); revisarRepetidos(); return; }
+    recortar(f).then(function (r) {
+      if (r) {
+        var sug = nombreSugerido({ name: '', type: 'image/jpeg' });
+        SUB.push({ f: new File([r.blob], sug, { type: 'image/jpeg' }), orig: f, sug: sug, nombre: '', destino: 'foto', est: '✂️ Recortada' + (r.mejorada ? ' y mejorada' : '') + ' · ' + Math.round(r.blob.size / 1024) + ' KB', url: URL.createObjectURL(r.blob) });
+      }
+      sig();
+    });
+  };
+  sig();
+}
+function subVaciar() { SUB = []; pintarSubir(); $('subMsg').textContent = ''; }
+function revisarRepetidos() {
+  var pend = SUB.filter(function (s) { return !s.hecho; }); if (!pend.length) return;
+  var vistos = {}; pend.forEach(function (s) { var k = nombreDe(s).toLowerCase(); if (vistos[k]) { s.error = true; s.est = '⚠️ Dos archivos con el mismo nombre: cambie uno.'; } vistos[k] = 1; });
+  api('repetidos', { nombres: pend.map(nombreDe) }, false).then(function (rep) {
+    pend.forEach(function (s) { if (rep.indexOf(nombreDe(s)) >= 0) { s.error = true; s.est = '⚠️ Ya existe un archivo con ese nombre: escriba otro encima.'; } });
+    pintarSubir();
+  }).catch(function () {});
+}
+function leerB64(f) { return new Promise(function (ok, ko) { var r = new FileReader(); r.onload = function () { ok(String(r.result).split(',')[1]); }; r.onerror = function () { ko(new Error('No pude leer el archivo.')); }; r.readAsDataURL(f); }); }
+function subirTodo() {
+  var pend = SUB.filter(function (s) { return !s.hecho; }); if (!pend.length) return;
+  $('subBtn').disabled = true; var bien = 0, i = 0;
+  var sig = function () {
+    if (i >= pend.length) {
+      $('subBtn').disabled = false;
+      var fin = '✅ ' + bien + ' de ' + pend.length + ' subido(s).';
+      if (bien && $('subYa').checked) {
+        api('procesar', {}, 'Pidiendo que se procese…').then(function (r) { $('subMsg').className = 'msg ok'; $('subMsg').textContent = fin + (r.ok ? ' ⚡ La hoja los procesa en ~1 minuto: véalos en 📥 Pendientes y luego en 🔎 Buscar.' : ' (No pude pedir que se procese ya: ' + (r.error || '') + ' · se procesan en la vuelta de 10 min.)'); })
+          .catch(function (e) { $('subMsg').className = 'msg'; $('subMsg').textContent = fin + ' Se procesan en la vuelta de 10 min (' + e.message + ').'; });
+      } else { $('subMsg').className = 'msg ok'; $('subMsg').textContent = fin + (bien ? ' Se procesan en la vuelta de 10 min.' : ''); }
+      return;
+    }
+    var s = pend[i++]; s.est = '⏳ Subiendo…'; s.error = false; pintarSubir();
+    leerB64(s.f).then(function (b64) { return api('subir', { nombre: nombreDe(s), mime: s.f.type || 'image/jpeg', datos: b64, destino: s.destino }, false); }).then(function (r) {
+      if (r.ok) { s.hecho = true; s.idDrive = r.id; s.nomDrive = r.nombre; s.est = '✅ ' + r.nombre + ' → ' + r.destino; bien++; } else { s.error = true; s.est = '❌ ' + r.error; }
+      pintarSubir(); sig();
+    }).catch(function (e) { s.error = true; s.est = '❌ ' + e.message; pintarSubir(); sig(); });
+  };
+  sig();
+}
+
+/* ---------- 📲 escanear con la app de Google Drive (guarda directo en la carpeta de entrada) ---------- */
+var DRIVE = null;
+/**
+ * 📷 Cámara: en el navegador, la del celular (input con capture). Dentro de Telegram ese input abre la GALERÍA (Telegram no
+ * respeta «capture»), así que ahí se abre una cámara en la misma página (getUserMedia); si Telegram no da permiso de cámara,
+ * se explican las otras formas. cb recibe una lista de archivos, igual que el input.
+ */
+var CAM = null;
+function pedirCamara(input, cb) {
+  if (!enTelegram()) return $(input).click();
+  camaraEnVivo(cb, function () {
+    modal('<h3>📷 La cámara no se abre dentro de Telegram</h3><p style="margin-top:0">Telegram no le dio permiso de cámara al portal. Puede:</p>' +
+      '<ol style="padding-left:18px;line-height:1.6;margin:6px 0"><li><b>Mandar la foto al chat del bot</b> con la cámara de Telegram (📎 → Cámara): la lee y con ✅ la deja en la carpeta de entrada.</li>' +
+      '<li>Tomar la foto con la cámara del celular y elegirla aquí con <b>🖼 Elegir fotos o PDF</b>.</li>' +
+      '<li>Abrir el portal en el navegador (/portal → 🌐 Abrir en el navegador): ahí 📷 abre la cámara.</li></ol>',
+      [['🖼 Elegir de la galería', function () { $(input).click(); }], ['Entendido', null, 'p']]);
+  });
+}
+function camaraParar() { if (CAM) { try { CAM.getTracks().forEach(function (x) { x.stop(); }); } catch (e) {} CAM = null; } }
+function camaraEnVivo(cb, sinPermiso) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return sinPermiso();
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }).then(function (st) {
+    CAM = st;
+    modal('<h3>📷 Tomar foto</h3><video id="camVid" autoplay playsinline muted style="width:100%;max-height:60vh;background:#000;border-radius:8px"></video>' +
+      '<div style="font-size:12px;color:var(--gr);margin-top:4px">Encuadre el voucher completo y toque 📸. Luego puede recortarlo.</div>',
+      [['Cancelar', function () { camaraParar(); }], ['📸 Tomar', function () {
+        var v = $('camVid'), c = document.createElement('canvas');
+        c.width = v.videoWidth || 1280; c.height = v.videoHeight || 720;
+        c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+        camaraParar();
+        c.toBlob(function (b) { if (b) cb([new File([b], 'foto_' + Date.now() + '.jpg', { type: 'image/jpeg' })]); }, 'image/jpeg', 0.92);
+      }, 'p']]);
+    $('camVid').srcObject = st;
+  }).catch(function () { camaraParar(); sinPermiso(); });
+}
+
+/** ¿El portal está abierto dentro de Telegram (Mini App)? Ahí no se puede abrir la app de Drive (el enlace «intent» da ERR_UNKNOWN_URL_SCHEME). */
+function enTelegram() { return !!(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) || /Telegram/i.test(navigator.userAgent || ''); }
+function escanearDrive() {
+  if (enTelegram()) {
+    return modal('<h3>📲 Escanear dentro de Telegram</h3>' +
+      '<p style="margin-top:0">Desde aquí Telegram no deja abrir la app de Google Drive. Tiene tres formas fáciles:</p>' +
+      '<ol style="padding-left:18px;line-height:1.6;margin:6px 0">' +
+      '<li><b>📷 Tomar foto</b> o <b>📄 Escanear a PDF</b> de esta misma pantalla (con ✂️ recortar y ✨ mejorar).</li>' +
+      '<li><b>Con la cámara de Telegram</b>: cierre el portal y mande la foto o el PDF al chat del bot (📎 → Cámara). El bot lo lee, le dice si ya está registrado y con ✅ lo deja en la carpeta de entrada.</li>' +
+      '<li>Para usar el escáner de Drive: abra el portal en el navegador (menú ⋮ de arriba → abrir en el navegador, o el enlace que le manda /portal).</li></ol>',
+      [['Entendido', null, 'p']]);
+  }
+  var abrir = function (r) {
+    DRIVE = r;
+    modal('<h3>📲 Escanear con Google Drive</h3>' +
+      '<p style="margin:0 0 8px">¿Qué va a escanear?</p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="p" onclick="abrirDrive(\'original\')">📄 Original (comprobante / PDF)</button><button class="p" onclick="abrirDrive(\'foto\')">📸 Foto del voucher</button></div>' +
+      '<ol style="padding-left:18px;margin:6px 0;line-height:1.6">' +
+      '<li>Se abre <b>Google Drive</b> en la carpeta 📥 de entrada.</li>' +
+      '<li>Toque <b>+</b> (abajo a la derecha) → <b>Escanear</b>. Tome la foto (puede agregar más páginas con +), revise y toque <b>Guardar</b>. Póngale un nombre que no se repita; la carpeta ya es la correcta.</li>' +
+      '<li>Vuelva aquí y toque <b>⚡ Ya escaneé: procesar ahora</b>.</li></ol>' +
+      '<div style="font-size:12px;color:var(--gr)">Necesita la app de Google Drive con una cuenta que tenga acceso a la carpeta de entrada (pídale al administrador que se la comparta). Atajo: en la pantalla de inicio agregue el widget <b>«Escanear»</b> de Drive y elija esa carpeta una vez.</div>',
+      [['Cerrar'], ['⚡ Ya escaneé: procesar ahora', function () {
+        api('procesar', {}, 'Pidiendo que se procese…').then(function (x) {
+          $('subMsg').className = x.ok ? 'msg ok' : 'msg e';
+          $('subMsg').textContent = x.ok ? '⚡ La hoja procesa la carpeta de entrada en ~1 minuto. Vea su escaneo en 📥 Pendientes y luego en 🔎 Buscar.' : '❌ ' + (x.error || 'No se pudo pedir el proceso.');
+        }).catch(function (e) { $('subMsg').className = 'msg e'; $('subMsg').textContent = '❌ ' + e.message; });
+      }, 'p']]);
+  };
+  if (DRIVE) return abrir(DRIVE);
+  api('drive', {}, 'Un momento…').then(abrir).catch(function (e) { alerta('❌ ' + e.message); });
+}
+/**
+ * Abre la carpeta de entrada en la APP de Google Drive. En Android se usa un enlace «intent» que obliga a usar la app
+ * (desde cualquier navegador, también incógnito, sin pedir iniciar sesión en la web); si la app no está, abre la web.
+ */
+function enlaceDrive(web) {
+  if (!/Android/i.test(navigator.userAgent)) return web;
+  return 'intent://' + web.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.google.android.apps.docs;S.browser_fallback_url=' + encodeURIComponent(web) + ';end';
+}
+function abrirDrive(tipo) {
+  if (!DRIVE) return;
+  var web = tipo === 'original' ? DRIVE.original : DRIVE.foto, url = enlaceDrive(web);
+  if (url === web) { window.open(web, '_blank'); return; }
+  var a = document.createElement('a'); a.href = url; a.target = '_top'; a.rel = 'noopener';   // el portal corre dentro de un marco: la app se abre desde la página de arriba
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* ---------- 📄 escanear a PDF (en el celular, sin subir nada hasta que se toca 📤 Subir) ---------- */
+var SCAN = [];
+function scanAbrir() { SCAN = []; $('scan').classList.remove('oc'); scanPintar(); pedirCamara('scCam', function (f) { scanAgregar(f, true); }); }
+function scanCerrar() { SCAN.forEach(function (p) { URL.revokeObjectURL(p.url); }); SCAN = []; $('scan').classList.add('oc'); }
+function scanAgregar(fl, conRecorte) {
+  var lista = Array.prototype.slice.call(fl || []).filter(function (f) { return /^image\//.test(f.type); });
+  if (!conRecorte) { lista.forEach(function (f) { SCAN.push({ f: f, url: URL.createObjectURL(f), rot: 0 }); }); return scanPintar(); }
+  var sig = function () {
+    var f = lista.shift(); if (!f) return scanPintar();
+    recortar(f).then(function (r) { if (r) SCAN.push({ f: r.blob, orig: f, url: URL.createObjectURL(r.blob), rot: 0 }); scanPintar(); sig(); });
+  };
+  sig();
+}
+function scanRecortar(i) {
+  var p = SCAN[i]; if (!p) return;
+  recortar(p.orig || p.f).then(function (r) { if (!r) return; p.orig = p.orig || p.f; URL.revokeObjectURL(p.url); p.f = r.blob; p.url = URL.createObjectURL(r.blob); p.rot = 0; scanPintar(); });
+}
+function scanPintar() {
+  $('scanN').textContent = SCAN.length + (SCAN.length === 1 ? ' página' : ' páginas');
+  $('scanOk').disabled = !SCAN.length;
+  $('scanPags').innerHTML = SCAN.map(function (p, i) {
+    return '<div style="width:108px;text-align:center;font-size:11px"><div style="height:130px;display:flex;align-items:center;justify-content:center;background:#F1F5F9;border-radius:8px;overflow:hidden">' +
+      '<img src="' + p.url + '" style="max-width:100%;max-height:130px;transform:rotate(' + p.rot + 'deg)"></div><div>Pág. ' + (i + 1) + '</div>' +
+      '<div style="display:flex;gap:2px;justify-content:center"><button style="padding:2px 6px" onclick="scanMover(' + i + ',-1)" ' + (i ? '' : 'disabled') + '>◀</button>' +
+      '<button style="padding:2px 6px" onclick="scanRecortar(' + i + ')" title="Recortar / enderezar / mejorar">✂️</button>' +
+      '<button style="padding:2px 6px" onclick="SCAN[' + i + '].rot=(SCAN[' + i + '].rot+90)%360;scanPintar()" title="Girar">⟳</button>' +
+      '<button style="padding:2px 6px" onclick="scanMover(' + i + ',1)" ' + (i < SCAN.length - 1 ? '' : 'disabled') + '>▶</button>' +
+      '<button style="padding:2px 6px" class="r" onclick="window.URL.revokeObjectURL(SCAN[' + i + '].url);SCAN.splice(' + i + ',1);scanPintar()">✖</button></div></div>';
+  }).join('');
+}
+function scanMover(i, d) { var x = SCAN.splice(i, 1)[0]; SCAN.splice(i + d, 0, x); scanPintar(); }
+function cargarLib(url, global) {
+  return new Promise(function (ok, ko) {
+    if (window[global]) return ok();
+    var s = document.createElement('script'); s.src = url; s.onload = function () { ok(); }; s.onerror = function () { ko(new Error('No pude cargar el generador de PDF (¿sin internet?).')); }; document.head.appendChild(s);
+  });
+}
+/** Una foto → JPEG enderezado y de tamaño razonable (lado mayor 2000 px): el PDF queda liviano y legible. */
+function scanImagen(p) {
+  return new Promise(function (ok, ko) {
+    var im = new Image();
+    im.onload = function () {
+      var max = 2000, k = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight)), w = Math.round(im.naturalWidth * k), h = Math.round(im.naturalHeight * k);
+      var gira = p.rot === 90 || p.rot === 270, cv = document.createElement('canvas');
+      cv.width = gira ? h : w; cv.height = gira ? w : h;
+      var c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
+      c.translate(cv.width / 2, cv.height / 2); c.rotate(p.rot * Math.PI / 180); c.drawImage(im, -w / 2, -h / 2, w, h);
+      ok({ data: cv.toDataURL('image/jpeg', 0.82), w: cv.width, h: cv.height });
+    };
+    im.onerror = function () { ko(new Error('No pude leer una de las fotos (¿formato HEIC? tómela otra vez con la cámara).')); };
+    im.src = p.url;
+  });
+}
+function scanPdf() {
+  if (!SCAN.length) return;
+  $('scanOk').disabled = true; $('scanMsg').className = 'msg'; $('scanMsg').textContent = '⏳ Armando el PDF…';
+  cargarLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf').then(function () {
+    return SCAN.reduce(function (pr, p) { return pr.then(function (l) { return scanImagen(p).then(function (x) { l.push(x); return l; }); }); }, Promise.resolve([]));
+  }).then(function (imgs) {
+    var A4 = 595.28, doc = null;
+    imgs.forEach(function (x) {
+      var w = A4, h = A4 * x.h / x.w;   // ancho A4, alto proporcional (la página es la foto entera)
+      if (!doc) doc = new window.jspdf.jsPDF({ unit: 'pt', format: [w, h], orientation: w > h ? 'l' : 'p', compress: true });
+      else doc.addPage([w, h], w > h ? 'l' : 'p');
+      doc.addImage(x.data, 'JPEG', 0, 0, w, h);
+    });
+    var blob = doc.output('blob'), d = new Date(), q = function (n) { return ('0' + n).slice(-2); };
+    var nombre = 'Voucher escaneado ' + d.getFullYear() + '-' + q(d.getMonth() + 1) + '-' + q(d.getDate()) + ' ' + q(d.getHours()) + q(d.getMinutes()) + q(d.getSeconds()) + '.pdf';
+    var f = new File([blob], nombre, { type: 'application/pdf' });
+    SUB.push({ f: f, nombre: nombre, destino: 'original', est: '📄 PDF de ' + imgs.length + ' página(s) · ' + Math.round(blob.size / 1024) + ' KB', url: '' });
+    scanCerrar(); pintarSubir(); revisarRepetidos();
+    $('subMsg').className = 'msg ok'; $('subMsg').textContent = '📄 PDF listo (' + imgs.length + ' página(s)). Revise el nombre y toque 📤 Subir.';
+  }).catch(function (e) { $('scanOk').disabled = false; $('scanMsg').className = 'msg e'; $('scanMsg').textContent = '❌ ' + e.message; });
+}
+
+/* ============================================================ ✂️ recortar, enderezar y mejorar (todo en el celular) */
+var RC = null;
+/** Abre el recorte con la foto. Devuelve {blob, mejorada} o null si se canceló. */
+function recortar(file) {
+  return new Promise(function (ok) {
+    var url = URL.createObjectURL(file), im = new Image();
+    im.onload = function () {
+      var k = Math.min(1, 2400 / Math.max(im.naturalWidth, im.naturalHeight)), b = document.createElement('canvas');
+      b.width = Math.round(im.naturalWidth * k); b.height = Math.round(im.naturalHeight * k);
+      b.getContext('2d').drawImage(im, 0, 0, b.width, b.height); URL.revokeObjectURL(url);
+      RC = { base: b, pts: null, mej: false, ok: ok };
+      $('rcMej').classList.remove('on'); $('rc').classList.remove('oc');
+      rcAuto(); 
+    };
+    im.onerror = function () { URL.revokeObjectURL(url); alerta('No pude abrir esa foto (¿formato HEIC?). Tómela otra vez con la cámara.'); ok(null); };
+    im.src = url;
+  });
+}
+function rcEsc() { var A = $('rcArea'); return Math.min((A.clientWidth - 24) / RC.base.width, (A.clientHeight - 24) / RC.base.height); }
+function rcPintar() {
+  if (!RC) return;
+  var k = rcEsc(), w = Math.round(RC.base.width * k), h = Math.round(RC.base.height * k), dpr = window.devicePixelRatio || 1, cv = $('rcCv');
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  var c = cv.getContext('2d'); c.drawImage(RC.base, 0, 0, cv.width, cv.height);
+  if (RC.mej) mejorarCanvas(cv);
+  RC.k = k;
+  var P = RC.pts.map(function (p) { return [p[0] * k, p[1] * k]; });
+  $('rcSvg').setAttribute('width', w); $('rcSvg').setAttribute('height', h);
+  $('rcSvg').innerHTML = '<path d="M0 0H' + w + 'V' + h + 'H0Z M' + P.map(function (p) { return p.join(' '); }).join(' L') + 'Z" fill="rgba(2,6,23,.55)" fill-rule="evenodd"/>' +
+    '<polygon points="' + P.map(function (p) { return p.join(','); }).join(' ') + '" fill="none" stroke="#38BDF8" stroke-width="2.5"/>';
+  document.querySelectorAll('#rc .h').forEach(function (hd, i) { hd.style.left = P[i][0] + 'px'; hd.style.top = P[i][1] + 'px'; });
+}
+document.querySelectorAll('#rc .h').forEach(function (hd) {
+  hd.addEventListener('pointerdown', function (e) { e.preventDefault(); hd.setPointerCapture(e.pointerId); hd.dataset.mov = '1'; });
+  hd.addEventListener('pointermove', function (e) {
+    if (!hd.dataset.mov || !RC) return;
+    var r = $('rcCv').getBoundingClientRect(), i = Number(hd.dataset.i);
+    RC.pts[i] = [Math.max(0, Math.min(RC.base.width, (e.clientX - r.left) / RC.k)), Math.max(0, Math.min(RC.base.height, (e.clientY - r.top) / RC.k))];
+    rcPintar();
+  });
+  ['pointerup', 'pointercancel'].forEach(function (ev) { hd.addEventListener(ev, function () { hd.dataset.mov = ''; }); });
+});
+window.addEventListener('resize', function () { if (RC && !$('rc').classList.contains('oc')) rcPintar(); });
+function rcTodo() { var w = RC.base.width, h = RC.base.height; RC.pts = [[0, 0], [w, 0], [w, h], [0, h]]; $('rcInfo').textContent = 'Toda la foto (mueva las esquinas si quiere recortar)'; rcPintar(); }
+function rcAuto() {
+  var q = esquinasAuto(RC.base);
+  if (q) { RC.pts = q; $('rcInfo').textContent = '🎯 Encontré el voucher: corrija las esquinas si hace falta'; }
+  else { var w = RC.base.width, h = RC.base.height, m = 0.05; RC.pts = [[w * m, h * m], [w * (1 - m), h * m], [w * (1 - m), h * (1 - m)], [w * m, h * (1 - m)]]; $('rcInfo').textContent = 'No encontré los bordes solo: arrastre las 4 esquinas al voucher'; }
+  rcPintar();
+}
+function rcGirar() {
+  var b = RC.base, n = document.createElement('canvas'); n.width = b.height; n.height = b.width;
+  var c = n.getContext('2d'); c.translate(n.width, 0); c.rotate(Math.PI / 2); c.drawImage(b, 0, 0);
+  RC.pts = RC.pts.map(function (p) { return [b.height - p[1], p[0]]; }); RC.pts = ordenar(RC.pts);
+  RC.base = n; rcPintar();
+}
+function rcMejorar() { RC.mej = !RC.mej; $('rcMej').classList.toggle('on', RC.mej); rcPintar(); }
+function rcFin(listo) {
+  var R = RC; RC = null; $('rc').classList.add('oc');
+  if (!listo) return R.ok(null);
+  var out = enderezar(R.base, ordenar(R.pts));
+  if (R.mej) mejorarCanvas(out);
+  out.toBlob(function (bl) { R.ok(bl ? { blob: bl, mejorada: R.mej } : null); }, 'image/jpeg', 0.86);
+}
+/** Las 4 esquinas en orden: arriba-izq, arriba-der, abajo-der, abajo-izq (aunque se hayan cruzado). */
+function ordenar(P) {
+  var cx = 0, cy = 0; P.forEach(function (p) { cx += p[0] / 4; cy += p[1] / 4; });
+  var s = P.slice().sort(function (a, b) { return Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx); });   // horario desde la izquierda
+  var i0 = 0; s.forEach(function (p, i) { if (p[0] + p[1] < s[i0][0] + s[i0][1]) i0 = i; });
+  return s.slice(i0).concat(s.slice(0, i0));
+}
+/**
+ * 🎯 Bordes automáticos. En una copia chica prueba varias «vistas» de la foto (gris, qué tan blanco/claro es, qué tan
+ * azul vs. rojo/café, saturación) porque un papel celeste sobre madera se separa mejor por color que por brillo. En cada
+ * vista: umbral de Otsu, el voucher es el tono que NO domina el borde de la foto, se separan uniones finas (erosión), se toma
+ * la mancha más grande y sus 4 puntas. Gana la vista cuya mancha llena mejor su cuadrilátero (forma de papel). Si ninguna
+ * convence, devuelve null y se ajusta a mano.
+ */
+function esquinasAuto(base) { return esquinasCentro(base) || esquinasVistas(base); }
+/**
+ * 🎯 Método principal (como los escáneres): el voucher casi siempre está al centro de la foto. Se toma el color del PAPEL
+ * en el centro (los tonos más claros, para no tomar las letras), y se hace crecer la zona de ese color hasta sus bordes
+ * con varias tolerancias; las letras quedan como huecos que se rellenan. Gana la tolerancia cuya zona tiene mejor forma de
+ * papel (llena su cuadrilátero y no se escapa hasta el borde de la foto).
+ */
+function esquinasCentro(base) {
+  var k = 360 / Math.max(base.width, base.height), w = Math.max(8, Math.round(base.width * k)), h = Math.max(8, Math.round(base.height * k)), N = w * h, i, j;
+  var c = document.createElement('canvas'); c.width = w; c.height = h; var x = c.getContext('2d'); x.drawImage(base, 0, 0, w, h);
+  var d = x.getImageData(0, 0, w, h).data, C = [new Float32Array(N), new Float32Array(N), new Float32Array(N)];
+  for (var ch = 0; ch < 3; ch++) {   // suavizado 5×5 separable
+    var tmp = new Float32Array(N), out = C[ch];
+    for (j = 0; j < h; j++) for (i = 0; i < w; i++) { var s = 0, n = 0; for (var di = -2; di <= 2; di++) { var a = i + di; if (a >= 0 && a < w) { s += d[(j * w + a) * 4 + ch]; n++; } } tmp[j * w + i] = s / n; }
+    for (j = 0; j < h; j++) for (i = 0; i < w; i++) { var s2 = 0, n2 = 0; for (var dj = -2; dj <= 2; dj++) { var e = j + dj; if (e >= 0 && e < h) { s2 += tmp[e * w + i]; n2++; } } out[j * w + i] = s2 / n2; }
+  }
+  var x0 = Math.round(w * 0.35), x1 = Math.round(w * 0.65), y0 = Math.round(h * 0.35), y1 = Math.round(h * 0.65), cen = [];
+  for (j = y0; j < y1; j++) for (i = x0; i < x1; i++) { var p = j * w + i; cen.push([C[0][p], C[1][p], C[2][p], C[0][p] + C[1][p] + C[2][p]]); }
+  cen.sort(function (a, b) { return a[3] - b[3]; });
+  var P = [0, 0, 0], desde = Math.floor(cen.length * 0.6);
+  for (i = desde; i < cen.length; i++) { P[0] += cen[i][0]; P[1] += cen[i][1]; P[2] += cen[i][2]; }
+  P = P.map(function (v) { return v / (cen.length - desde); });
+  var dist = new Float32Array(N);
+  for (i = 0; i < N; i++) dist[i] = Math.hypot(C[0][i] - P[0], C[1][i] - P[1], C[2][i] - P[2]);
+  // morfología binaria con sumas de ventana (r = radio)
+  var caja = function (m, r) {
+    var sh = new Float32Array(N), sv = new Float32Array(N), ii, jj;
+    for (jj = 0; jj < h; jj++) { var acc = 0; for (ii = -r; ii < w; ii++) { if (ii + r < w) acc += m[jj * w + ii + r]; if (ii - r - 1 >= 0) acc -= m[jj * w + ii - r - 1]; if (ii >= 0) sh[jj * w + ii] = acc; } }
+    for (ii = 0; ii < w; ii++) { var ac2 = 0; for (jj = -r; jj < h; jj++) { if (jj + r < h) ac2 += sh[(jj + r) * w + ii]; if (jj - r - 1 >= 0) ac2 -= sh[(jj - r - 1) * w + ii]; if (jj >= 0) sv[jj * w + ii] = ac2; } }
+    return sv;
+  };
+  var dilatar = function (m, r) { var s = caja(m, r), o = new Uint8Array(N); for (var q = 0; q < N; q++) o[q] = s[q] > 0 ? 1 : 0; return o; };
+  var erosionar = function (m, r) { var s = caja(m, r), o = new Uint8Array(N), lleno = (2 * r + 1) * (2 * r + 1); for (var q = 0; q < N; q++) { var qx = q % w, qy = (q / w) | 0; o[q] = qx >= r && qy >= r && qx < w - r && qy < h - r && s[q] >= lleno ? 1 : 0; } return o; };
+  var mejor = null;
+  [20, 28, 36, 45, 55, 70, 90].forEach(function (T) {
+    var m = new Uint8Array(N); for (var q = 0; q < N; q++) m[q] = dist[q] < T ? 1 : 0;
+    m = erosionar(dilatar(m, 2), 2);   // cierre: tapa las letras
+    m = dilatar(erosionar(m, 1), 1);   // apertura: corta hilos con la mesa
+    // la zona que más ocupa el centro
+    var lab = new Int32Array(N), nl = 0, mejorL = 0, mejorC = 0, pila = [];
+    for (var yy = y0; yy < y1; yy++) for (var xx = x0; xx < x1; xx++) {
+      var p0 = yy * w + xx; if (!m[p0] || lab[p0]) continue;
+      nl++; lab[p0] = nl; pila.push(p0); var enC = 0;
+      while (pila.length) {
+        var pp = pila.pop(), px = pp % w, py = (pp / w) | 0;
+        if (px >= x0 && px < x1 && py >= y0 && py < y1) enC++;
+        if (px > 0 && m[pp - 1] && !lab[pp - 1]) { lab[pp - 1] = nl; pila.push(pp - 1); }
+        if (px < w - 1 && m[pp + 1] && !lab[pp + 1]) { lab[pp + 1] = nl; pila.push(pp + 1); }
+        if (py > 0 && m[pp - w] && !lab[pp - w]) { lab[pp - w] = nl; pila.push(pp - w); }
+        if (py < h - 1 && m[pp + w] && !lab[pp + w]) { lab[pp + w] = nl; pila.push(pp + w); }
+      }
+      if (enC > mejorC) { mejorC = enC; mejorL = nl; }
+    }
+    if (!mejorL) return;
+    // rellenar huecos: lo que no se alcanza desde el borde sin pasar por la zona
+    var fuera = new Uint8Array(N); pila = [];
+    for (var b0 = 0; b0 < w; b0++) { [b0, (h - 1) * w + b0].forEach(function (q) { if (lab[q] !== mejorL && !fuera[q]) { fuera[q] = 1; pila.push(q); } }); }
+    for (var b1 = 0; b1 < h; b1++) { [b1 * w, b1 * w + w - 1].forEach(function (q) { if (lab[q] !== mejorL && !fuera[q]) { fuera[q] = 1; pila.push(q); } }); }
+    while (pila.length) {
+      var f0 = pila.pop(), fx = f0 % w, fy = (f0 / w) | 0;
+      [fx > 0 ? f0 - 1 : -1, fx < w - 1 ? f0 + 1 : -1, fy > 0 ? f0 - w : -1, fy < h - 1 ? f0 + w : -1].forEach(function (q) { if (q >= 0 && !fuera[q] && lab[q] !== mejorL) { fuera[q] = 1; pila.push(q); } });
+    }
+    var n1 = 0, toca = 0, A = [1e9, 0], B = [-1e9, 0], Cc = [1e9, 0], D = [-1e9, 0];
+    for (var q2 = 0; q2 < N; q2++) {
+      if (fuera[q2]) continue;
+      var qx = q2 % w, qy = (q2 / w) | 0; n1++;
+      if (qx <= 1 || qy <= 1 || qx >= w - 2 || qy >= h - 2) toca++;
+      if (qx + qy < A[0]) A = [qx + qy, q2]; if (qx + qy > B[0]) B = [qx + qy, q2];
+      if (qx - qy < Cc[0]) Cc = [qx - qy, q2]; if (qx - qy > D[0]) D = [qx - qy, q2];
+    }
+    var frac = n1 / N;
+    if (frac < 0.06 || frac > 0.95) return;
+    var pt = function (q) { return [q % w + 0.5, ((q / w) | 0) + 0.5]; };
+    var Q = [pt(A[1]), pt(D[1]), pt(B[1]), pt(Cc[1])], area = 0;
+    for (var z = 0; z < 4; z++) { var p1 = Q[z], p2 = Q[(z + 1) % 4]; area += p1[0] * p2[1] - p2[0] * p1[1]; }
+    area = Math.abs(area) / 2;
+    var punt = Math.min(1, n1 / Math.max(1, area)) - Math.min(0.4, 2 * toca / (Math.sqrt(n1) * 4));
+    if (!mejor || punt > mejor.punt + 0.01) mejor = { punt: punt, q: Q };
+  });
+  if (!mejor || mejor.punt < 0.8) return null;
+  return mejor.q.map(function (p) { return [p[0] / k, p[1] / k]; });
+}
+/** 🎯 Método de respaldo: separar por brillo / color en toda la foto (para cuando el voucher no está al centro). */
+function esquinasVistas(base) {
+  var k = 360 / Math.max(base.width, base.height), w = Math.max(8, Math.round(base.width * k)), h = Math.max(8, Math.round(base.height * k)), N = w * h;
+  var c = document.createElement('canvas'); c.width = w; c.height = h; var x = c.getContext('2d'); x.drawImage(base, 0, 0, w, h);
+  var d = x.getImageData(0, 0, w, h).data, i;
+  var vistas = [new Float32Array(N), new Float32Array(N), new Float32Array(N), new Float32Array(N)];
+  for (i = 0; i < N; i++) {
+    var R = d[i * 4], G = d[i * 4 + 1], B = d[i * 4 + 2], mx = Math.max(R, G, B), mn = Math.min(R, G, B);
+    vistas[0][i] = 0.299 * R + 0.587 * G + 0.114 * B;           // brillo
+    vistas[1][i] = mn;                                          // «blancura» (papel claro de cualquier color pastel)
+    vistas[2][i] = 128 + (B - R) / 2;                           // azul vs. rojo/café (papel celeste sobre madera)
+    vistas[3][i] = 255 - (mx ? (mx - mn) * 255 / mx : 0);       // poco saturado (papel blanco sobre mesa de color)
+  }
+  var mejor = null;
+  vistas.forEach(function (g, vi) {
+    var r = esquinasDeVista(g, w, h);
+    if (r && (!mejor || r.puntaje > mejor.puntaje)) { mejor = r; mejor.vista = vi; }
+  });
+  if (!mejor || mejor.puntaje < 0.72) return null;
+  return mejor.q.map(function (p) { return [p[0] / k, p[1] / k]; });
+}
+function esquinasDeVista(g0, w, h) {
+  var N = w * h, i, j, g = new Float32Array(N);
+  for (j = 0; j < h; j++) for (i = 0; i < w; i++) {   // suavizado 5×5 (borra letras y vetas finas)
+    var s = 0, n = 0;
+    for (var dj = -2; dj <= 2; dj++) { var e = j + dj; if (e < 0 || e >= h) continue; for (var di = -2; di <= 2; di++) { var a = i + di; if (a < 0 || a >= w) continue; s += g0[e * w + a]; n++; } }
+    g[j * w + i] = s / n;
+  }
+  var lo = 1e9, hi = -1e9; for (i = 0; i < N; i++) { if (g[i] < lo) lo = g[i]; if (g[i] > hi) hi = g[i]; }
+  if (hi - lo < 12) return null;   // esta vista no separa nada
+  var hist = new Array(256).fill(0), q = function (v) { return Math.min(255, Math.max(0, Math.round((v - lo) * 255 / (hi - lo)))); };
+  for (i = 0; i < N; i++) hist[q(g[i])]++;
+  var sum = 0; for (i = 0; i < 256; i++) sum += i * hist[i];
+  var sB = 0, wB = 0, mv = 0, th = 127;
+  for (i = 0; i < 256; i++) { wB += hist[i]; if (!wB) continue; var wF = N - wB; if (!wF) break; sB += i * hist[i]; var mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF); if (v > mv) { mv = v; th = i; } }
+  var m = new Uint8Array(N); for (i = 0; i < N; i++) m[i] = q(g[i]) > th ? 1 : 0;
+  var bc = 0, bn = 0; for (i = 0; i < w; i++) { bc += m[i] + m[(h - 1) * w + i]; bn += 2; } for (j = 0; j < h; j++) { bc += m[j * w] + m[j * w + w - 1]; bn += 2; }
+  var fg = bc / bn > 0.5 ? 0 : 1;
+  for (i = 0; i < N; i++) m[i] = m[i] === fg ? 1 : 0;
+  var er = new Uint8Array(N);   // erosión 3×3: corta uniones finas con la mesa
+  for (j = 1; j < h - 1; j++) for (i = 1; i < w - 1; i++) { var p = j * w + i; er[p] = m[p] && m[p - 1] && m[p + 1] && m[p - w] && m[p + w] && m[p - w - 1] && m[p - w + 1] && m[p + w - 1] && m[p + w + 1] ? 1 : 0; }
+  var vis = new Uint8Array(N), pila = [], best = null;
+  for (i = 0; i < N; i++) {
+    if (vis[i] || !er[i]) continue;
+    var cp = { n: 0, a: [1e9, 0], b: [-1e9, 0], c: [1e9, 0], d: [-1e9, 0], borde: 0 }; pila.push(i); vis[i] = 1;
+    while (pila.length) {
+      var pp = pila.pop(), px = pp % w, py = (pp / w) | 0; cp.n++;
+      if (px <= 1 || py <= 1 || px >= w - 2 || py >= h - 2) cp.borde++;
+      if (px + py < cp.a[0]) cp.a = [px + py, pp]; if (px + py > cp.b[0]) cp.b = [px + py, pp];
+      if (px - py < cp.c[0]) cp.c = [px - py, pp]; if (px - py > cp.d[0]) cp.d = [px - py, pp];
+      if (px > 0 && !vis[pp - 1] && er[pp - 1]) { vis[pp - 1] = 1; pila.push(pp - 1); }
+      if (px < w - 1 && !vis[pp + 1] && er[pp + 1]) { vis[pp + 1] = 1; pila.push(pp + 1); }
+      if (pp >= w && !vis[pp - w] && er[pp - w]) { vis[pp - w] = 1; pila.push(pp - w); }
+      if (pp < N - w && !vis[pp + w] && er[pp + w]) { vis[pp + w] = 1; pila.push(pp + w); }
+    }
+    if (!best || cp.n > best.n) best = cp;
+  }
+  if (!best || best.n < 0.08 * N || best.n > 0.95 * N) return null;
+  var pt = function (pp) { return [pp % w + 0.5, ((pp / w) | 0) + 0.5]; };
+  var Q = [pt(best.a[1]), pt(best.d[1]), pt(best.b[1]), pt(best.c[1])];   // arriba-izq, arriba-der, abajo-der, abajo-izq
+  var area = 0; for (i = 0; i < 4; i++) { var p1 = Q[i], p2 = Q[(i + 1) % 4]; area += p1[0] * p2[1] - p2[0] * p1[1]; }
+  area = Math.abs(area) / 2;
+  if (area < 0.08 * N) return null;
+  // la erosión achicó 1 px: se devuelve ese píxel hacia afuera
+  var cx = (Q[0][0] + Q[1][0] + Q[2][0] + Q[3][0]) / 4, cy = (Q[0][1] + Q[1][1] + Q[2][1] + Q[3][1]) / 4;
+  Q = Q.map(function (p) { var dx = p[0] - cx, dy = p[1] - cy, L = Math.hypot(dx, dy) || 1; return [p[0] + dx / L * 1.2, p[1] + dy / L * 1.2]; });
+  var llenado = Math.min(1, best.n / area), toca = best.borde / Math.max(1, Math.sqrt(best.n) * 4);
+  return { q: Q, puntaje: llenado - Math.min(0.4, toca) };
+}
+/** Endereza el cuadrilátero a un rectángulo (perspectiva) con el tamaño natural de sus lados (máx. 2000 px). */
+function enderezar(base, P) {
+  var dist = function (a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); };
+  var W = Math.max(dist(P[0], P[1]), dist(P[3], P[2])), H = Math.max(dist(P[0], P[3]), dist(P[1], P[2]));
+  var z = Math.min(1, 2000 / Math.max(W, H)); W = Math.max(10, Math.round(W * z)); H = Math.max(10, Math.round(H * z));
+  // homografía destino(u,v) → origen(x,y)
+  var D = [[0, 0], [W, 0], [W, H], [0, H]], A = [], B = [];
+  for (var i = 0; i < 4; i++) {
+    var u = D[i][0], v = D[i][1], x = P[i][0], y = P[i][1];
+    A.push([u, v, 1, 0, 0, 0, -u * x, -v * x]); B.push(x);
+    A.push([0, 0, 0, u, v, 1, -u * y, -v * y]); B.push(y);
+  }
+  var h = resolver(A, B);
+  var sc = base.getContext('2d').getImageData(0, 0, base.width, base.height), sd = sc.data, sw = base.width, sh = base.height;
+  var out = document.createElement('canvas'); out.width = W; out.height = H;
+  var oc = out.getContext('2d'), od = oc.createImageData(W, H), o = od.data;
+  for (var vv = 0; vv < H; vv++) for (var uu = 0; uu < W; uu++) {
+    var den = h[6] * uu + h[7] * vv + 1, sx = (h[0] * uu + h[1] * vv + h[2]) / den, sy = (h[3] * uu + h[4] * vv + h[5]) / den;
+    var x0 = Math.floor(sx), y0 = Math.floor(sy), fx = sx - x0, fy = sy - y0, k0 = (vv * W + uu) * 4;
+    if (x0 < 0 || y0 < 0 || x0 >= sw - 1 || y0 >= sh - 1) { x0 = Math.max(0, Math.min(sw - 1, x0)); y0 = Math.max(0, Math.min(sh - 1, y0)); var q0 = (y0 * sw + x0) * 4; o[k0] = sd[q0]; o[k0 + 1] = sd[q0 + 1]; o[k0 + 2] = sd[q0 + 2]; o[k0 + 3] = 255; continue; }
+    var a = (y0 * sw + x0) * 4, bb = a + 4, cc = a + sw * 4, dd = cc + 4;
+    for (var ch = 0; ch < 3; ch++) o[k0 + ch] = (sd[a + ch] * (1 - fx) + sd[bb + ch] * fx) * (1 - fy) + (sd[cc + ch] * (1 - fx) + sd[dd + ch] * fx) * fy;
+    o[k0 + 3] = 255;
+  }
+  oc.putImageData(od, 0, 0);
+  return out;
+}
+function resolver(A, B) {   // Gauss con pivoteo (8×8)
+  var n = B.length, M = A.map(function (f, i) { return f.concat([B[i]]); });
+  for (var c = 0; c < n; c++) {
+    var p = c; for (var r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    var t = M[c]; M[c] = M[p]; M[p] = t;
+    for (r = 0; r < n; r++) { if (r === c || !M[c][c]) continue; var f = M[r][c] / M[c][c]; for (var k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+  }
+  return M.map(function (f, i) { return f[n] / (f[i] || 1); });
+}
+/**
+ * ✨ Mejorar, como los escáneres: estima el color del PAPEL en cada zona (quitando el texto con un filtro de máximo en una
+ * copia chica y suavizándolo) y divide la foto por ese fondo. Así el papel queda blanco parejo aunque sea celeste, amarillo
+ * o tenga sombra, y el texto queda oscuro. Después se oscurece un poco el texto y se limpia el fondo casi blanco.
+ */
+function mejorarCanvas(cv) {
+  var w = cv.width, h = cv.height, paso = Math.max(1, Math.max(w, h) / 160), sw = Math.max(4, Math.round(w / paso)), sh = Math.max(4, Math.round(h / paso));
+  var sm = document.createElement('canvas'); sm.width = sw; sm.height = sh;
+  var sc = sm.getContext('2d'); sc.imageSmoothingEnabled = true; sc.drawImage(cv, 0, 0, sw, sh);
+  var img = sc.getImageData(0, 0, sw, sh), a = img.data;
+  for (var vuelta = 0; vuelta < 2; vuelta++) {   // máximo 5×5: borra las letras y deja el papel
+    var src = new Uint8ClampedArray(a);
+    for (var y = 0; y < sh; y++) for (var x = 0; x < sw; x++) {
+      var m0 = 0, m1 = 0, m2 = 0;
+      for (var dy = -2; dy <= 2; dy++) { var yy = y + dy; if (yy < 0 || yy >= sh) continue;
+        for (var dx = -2; dx <= 2; dx++) { var xx = x + dx; if (xx < 0 || xx >= sw) continue; var q = (yy * sw + xx) * 4;
+          if (src[q] > m0) m0 = src[q]; if (src[q + 1] > m1) m1 = src[q + 1]; if (src[q + 2] > m2) m2 = src[q + 2]; } }
+      var k = (y * sw + x) * 4; a[k] = m0; a[k + 1] = m1; a[k + 2] = m2;
+    }
+  }
+  sc.putImageData(img, 0, 0);
+  var bg = document.createElement('canvas'); bg.width = w; bg.height = h;
+  var bc = bg.getContext('2d'); bc.imageSmoothingEnabled = true; bc.imageSmoothingQuality = 'high'; bc.filter = 'blur(' + Math.max(2, Math.round(paso * 2)) + 'px)';
+  bc.drawImage(sm, 0, 0, w, h);
+  var B = bc.getImageData(0, 0, w, h).data, c = cv.getContext('2d'), I = c.getImageData(0, 0, w, h), D = I.data;
+  for (var i = 0; i < D.length; i += 4) {
+    var mn = 255;
+    for (var ch = 0; ch < 3; ch++) {
+      var v = D[i + ch] * 255 / Math.max(B[i + ch], 24);   // 255 = papel
+      // niveles: lo muy claro (lo impreso al reverso que se transparenta, manchas) → blanco; el texto → bien oscuro
+      v = (v - 70) * 255 / (205 - 70);
+      v = v < 0 ? 0 : v > 255 ? 255 : 255 * Math.pow(v / 255, 1.25);
+      D[i + ch] = v; if (v < mn) mn = v;
+    }
+    if (mn > 215) { D[i] = D[i + 1] = D[i + 2] = 255; }   // fondo casi blanco → blanco
+  }
+  c.putImageData(I, 0, 0);
+}
+
+/* ============================================================ 📥 pendientes */
+var PENL = [];
+function quitarPenN(n) { var f = PENL[n]; if (f) quitarPendiente(f.id, f.nombre, function (r) { alerta(r.mensaje); cargarPendientes(); }); }
+function cargarPendientes() {
+  PENL = [];
+  $('penCont').innerHTML = '<div class="msg">⏳ Revisando las carpetas…</div>';
+  api('pendientes', {}, false).then(function (r) {
+    var tabla = function (t, l, vacio) {
+      var entrada = /por procesar/.test(t);
+      return '<div class="card"><h3>' + t + ' <span class="chip">' + l.length + '</span></h3>' + (l.length ? '<table class="tb"><tr><th>Archivo</th><th>Subido</th><th>KB</th><th>Por</th>' + (entrada ? '<th></th>' : '') + '</tr>' +
+        l.map(function (f) {
+          var puedeQuitar = entrada && f.id && (puede('editar') || (puede('subir') && f.por === YO.usuario));
+          return '<tr><td style="word-break:break-word">' + esc(f.nombre) + '</td><td style="white-space:nowrap">' + esc(f.fecha) + '</td><td>' + f.kb + '</td><td>' + esc(f.por || '') + '</td>' +
+            (entrada ? '<td>' + (puedeQuitar ? '<button class="r" style="padding:3px 8px" title="Quitar (subido por error)" onclick="quitarPenN(' + (PENL.push(f) - 1) + ')">🗑</button>' : '') + '</td>' : '') + '</tr>';
+        }).join('') + '</table>' : '<div style="color:var(--gr)">' + vacio + '</div>') + '</div>';
+    };
+    $('penCont').innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap"><span style="color:var(--gr);font-size:12px">Al ' + esc(r.t) + '</span><span>' +
+      (puede('subir') ? '<button onclick="procesarYa()">⚡ Procesar ahora</button> ' : '') + '<button onclick="cargarPendientes()">🔄 Actualizar</button></span></div>' +
+      tabla('📥 Originales por procesar', r.originales, 'Nada esperando ✅') + tabla('📥 Fotos por procesar', r.fotos, 'Nada esperando ✅') +
+      tabla('🗑 Descartados (últimos)', r.descartados, 'Nada descartado.');
+  }).catch(function (e) { $('penCont').innerHTML = '<div class="msg e">❌ ' + esc(e.message) + '</div>'; });
+}
+function procesarYa() { api('procesar', {}, 'Pidiendo…').then(function (r) { alerta(r.ok ? '⚡ La hoja procesará la entrada en ~1 minuto.' : '❌ ' + (r.error || 'No se pudo.')); }).catch(function (e) { alerta('❌ ' + e.message); }); }
+
+/* ============================================================ 📊 resumen */
+function pintarResumen() {
+  if (!IDX) return;
+  var F = IDX.filas, por = [0, 1].map(function (h) { return F.filter(function (x) { return x[0] === h; }); });
+  var c = function (l, fn) { return l.filter(fn).length; };
+  var dup = function (x) { return /DUPLICADO/i.test(x[4]) || (x[18] && DUPS[x[18]] > 1); };
+  var hoy = new Date(), hace = function (d) { var t = new Date(hoy.getTime() - d * 86400000); return t.getFullYear() + ('0' + (t.getMonth() + 1)).slice(-2) + ('0' + t.getDate()).slice(-2); };
+  var k = function (t, v, col, filtro) { return '<div class="kpi"' + (filtro ? ' style="cursor:pointer" onclick="irFiltro(\'' + filtro + '\')"' : '') + '><div class="t">' + t + '</div><div class="v" style="color:' + (col || 'inherit') + '">' + v.toLocaleString() + '</div></div>'; };
+  var h = '<div class="kpis">' + k('Vouchers', F.length) + k('Originales', por[0].length) + k('Fotos', por[1].length) + k('Últimos 7 días', c(F, function (x) { return x[2] >= hace(7); })) +
+    k('Sin RUC', c(F, sinRuc), 'var(--am)', 'sinruc') + k('Sin revisar', c(F, function (x) { return !x[10]; }), 'var(--am)', 'sinrev') + k('Duplicados', c(F, dup), 'var(--ro)', 'dup') + k('Por retener', c(F, function (x) { return x[11]; }), '#5B21B6', 'porret') + '</div>';
+  var meses = {}; F.forEach(function (x) { var m = (x[2] || '').slice(0, 6) || 'sin fecha'; var o = meses[m] || (meses[m] = { n: 0, pen: 0, usd: 0, o: 0, f: 0 }); o.n++; if (esUSD(x[6])) o.usd += x[7]; else o.pen += x[7]; if (x[0]) o.f++; else o.o++; });
+  h += '<div class="card"><h3>Por mes (fecha del depósito)</h3><table class="tb"><tr><th>Mes</th><th>Vouchers</th><th>Originales</th><th>Fotos</th><th style="text-align:right">S/</th><th style="text-align:right">US$</th></tr>' +
+    Object.keys(meses).sort().reverse().slice(0, 24).map(function (m) { var o = meses[m]; return '<tr><td>' + (m.length === 6 ? m.slice(4) + '/' + m.slice(0, 4) : m) + '</td><td>' + o.n + '</td><td>' + o.o + '</td><td>' + o.f + '</td><td style="text-align:right">' + fm(o.pen) + '</td><td style="text-align:right">' + fm(o.usd) + '</td></tr>'; }).join('') + '</table></div>';
+  var bancos = {}; F.forEach(function (x) { var b = String(x[5] || '—').toUpperCase(); bancos[b] = (bancos[b] || 0) + 1; });
+  h += '<div class="card"><h3>Por banco</h3>' + Object.keys(bancos).sort(function (a, b) { return bancos[b] - bancos[a]; }).map(function (b) { return '<span class="chip" style="font-size:12.5px;padding:3px 9px">' + esc(b) + ' · <b>' + bancos[b] + '</b></span>'; }).join(' ') + '</div>';
+  h += '<div style="font-size:12px;color:var(--gr)">Datos al ' + esc(IDX.t) + ' · toque un cuadro para ver esos vouchers.</div>';
+  $('resCont').innerHTML = h;
+}
+function irFiltro(m) { limpiar(); var b = document.querySelector('#marcas button[data-m="' + m + '"]'); if (b) b.classList.add('on'); ir('bus'); filtrar(); }
+
+/* ============================================================ 👥 usuarios (admin) */
+var USU = null;
+function cargarUsuarios() {
+  $('usuCont').innerHTML = '<div class="msg">⏳</div>';
+  Promise.all([api('usuarios', {}, false), api('registro', { n: 200 }, false), api('enlace', {}, false)]).then(function (r) {
+    USU = r[0];
+    var h = '<div class="card"><h3>🔗 Enlace del portal</h3>' + (r[2] ? '<input readonly style="width:100%" value="' + esc(r[2]) + '" onclick="this.select()"><div style="font-size:12px;color:var(--gr);margin-top:4px">Compártalo solo con quien tenga usuario. Sin usuario y PIN no se ve nada.</div>' : '<div style="color:var(--gr)">Se completa al publicar.</div>') + '</div>';
+    h += '<div class="card"><h3>👥 Usuarios <button style="float:right" class="p" onclick="editarUsuario(null)">➕ Nuevo</button></h3><table class="tb"><tr><th>Usuario</th><th>Nombre</th><th>Permiso</th><th>Activo</th><th>Último ingreso</th><th></th></tr>' +
+      USU.usuarios.map(function (u, i) { return '<tr><td><b>' + esc(u.usuario) + '</b>' + (u.conPin ? '' : ' <span class="chip c-r">sin PIN</span>') + '</td><td>' + esc(u.nombre) + '</td><td>' + esc(u.permiso) + '</td><td>' + (u.activo ? '✅' : '⛔') + '</td><td>' + esc(u.ultimo) + '</td><td><button onclick="editarUsuario(' + i + ')">✏️</button></td></tr>'; }).join('') + '</table>' +
+      '<div style="font-size:12px;color:var(--gr);margin-top:6px">' + USU.permisos.map(function (p) { return '<b>' + p + '</b>: ' + esc(USU.textos[p]); }).join(' · ') + '</div></div>';
+    h += '<div class="card"><h3>🧾 Registro (lo más nuevo arriba)</h3><div style="max-height:420px;overflow:auto"><table class="tb"><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr>' +
+      r[1].map(function (x) { return '<tr><td style="white-space:nowrap">' + esc(x[0]) + '</td><td>' + esc(x[1]) + '</td><td>' + esc(x[2]) + '</td><td style="font-size:12px;word-break:break-word">' + esc(x[3]) + '</td></tr>'; }).join('') + '</table></div></div>';
+    $('usuCont').innerHTML = h;
+  }).catch(function (e) { $('usuCont').innerHTML = '<div class="msg e">❌ ' + esc(e.message) + '</div>'; });
+}
+function editarUsuario(i) {
+  var u = i == null ? { usuario: '', nombre: '', permiso: 'ver', activo: true, notas: '' } : USU.usuarios[i];
+  modal('<h3>' + (i == null ? '➕ Usuario nuevo' : '✏️ ' + esc(u.usuario)) + '</h3>' +
+    '<div class="campo"><label>Usuario</label><input id="uU" value="' + esc(u.usuario) + '" ' + (i == null ? '' : 'disabled') + ' autocapitalize="none" placeholder="ej. maria"></div>' +
+    '<div class="campo"><label>Nombre</label><input id="uN" value="' + esc(u.nombre) + '"></div>' +
+    '<div class="campo"><label>Permiso</label><select id="uP">' + USU.permisos.map(function (p) { return '<option value="' + p + '"' + (p === u.permiso ? ' selected' : '') + '>' + p + ' — ' + esc(USU.textos[p]) + '</option>'; }).join('') + '</select></div>' +
+    '<div class="campo"><label>Activo</label><input type="checkbox" id="uA" style="width:auto"' + (u.activo ? ' checked' : '') + '></div>' +
+    '<div class="campo"><label>' + (i == null ? 'PIN' : 'PIN nuevo') + '</label><input id="uPin" type="password" inputmode="numeric" maxlength="8" placeholder="' + (i == null ? '4 a 8 números' : 'vacío = no cambia') + '"></div>' +
+    '<div class="campo"><label>Notas</label><input id="uNo" value="' + esc(u.notas || '') + '"></div><div id="uMsg" class="msg e" style="padding:6px 0 0"></div>',
+    [['Cancelar'], ['💾 Guardar', function () {
+      api('guardarUsuario', { usuario: $('uU').value, nombre: $('uN').value, permiso: $('uP').value, activo: $('uA').checked, pin: $('uPin').value, notas: $('uNo').value }, 'Guardando…')
+        .then(function () { cerrarModal(); cargarUsuarios(); }).catch(function (e) { abrirModal(); $('uMsg').textContent = '❌ ' + e.message; });
+      return false;
+    }, 'p']]);
+}
+
+/* ============================================================ 🧠 IA (el mismo asistente del menú de la hoja) */
+var IAV = '';
+function ia(accion, cuerpo, txt) { return api('ia', { accion: accion, cuerpo: cuerpo || {} }, txt); }
+function iaVer(v) {
+  IAV = v;
+  document.querySelectorAll('#sIA button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === v); });
+  ['chat', 'proc', 'ruc', 'vco', 'mesa'].forEach(function (k) { $('ia' + k.charAt(0).toUpperCase() + k.slice(1)).classList.toggle('oc', k !== v); });
+  if (v === 'chat' && !$('chat').childNodes.length) chatPintarHistorial();
+  if (v === 'vco') vcoCargar();
+  if (v === 'ruc') rpAbrir();
+}
+/* ---------- 💬 chat ---------- */
+var CHAT = { historial: [], adjuntos: [] }, CHPEND = [];
+try { var g0 = JSON.parse(leeLocal('pv_chat') || 'null'); if (g0 && g0.historial) CHAT = g0; } catch (e) {}
+function chatGuardar() { guardaLocal('pv_chat', JSON.stringify({ historial: CHAT.historial.slice(-20), adjuntos: CHAT.adjuntos })); }
+function fmtIA(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>'); }
+function burbuja(html, cls) { var d = document.createElement('div'); d.className = 'bur ' + cls; d.innerHTML = html; $('chat').appendChild(d); $('chat').scrollTop = $('chat').scrollHeight; return d; }
+function chatPintarHistorial() {
+  $('chat').innerHTML = '';
+  var d = burbuja('<b>¿En qué le ayudo?</b> Pregunte libre o adjunte un voucher, factura, PDF o Excel. Ejemplos:<div class="ej"><a>¿Este voucher ya está registrado? ¿A qué factura corresponde?</a><a>Completa los RUC y facturas de los vouchers de hoy</a><a>¿Qué vouchers de octubre no están usados en ninguna factura?</a><a>Dame un resumen de cuentas por pagar y cobrar del grupo</a></div>', 'ia');
+  d.querySelectorAll('.ej a').forEach(function (a) { a.onclick = function () { $('txt').value = a.textContent; $('txt').focus(); }; });
+  CHAT.historial.forEach(function (h) { burbuja(fmtIA(h.p), 'yo'); burbuja(fmtIA(h.r), 'ia'); });
+  chatChips();
+}
+function chatChips() { $('chips').innerHTML = CHPEND.map(function (a, i) { return '<span class="chip">📎 ' + esc(a.nombre) + ' <a href="#" onclick="CHPEND.splice(' + i + ',1);chatChips();return false">✕</a></span>'; }).join('') + (CHAT.adjuntos.length ? ' <span class="chip">' + CHAT.adjuntos.length + ' archivo(s) en la conversación</span>' : ''); }
+function chatAgregar(fl) {
+  Array.prototype.forEach.call(fl || [], function (f) {
+    var r = new FileReader();
+    r.onload = function () {
+      var b64 = String(r.result).split(',')[1];
+      if (/^image\/(jpeg|png|webp)$/.test(f.type) && f.size > 600 * 1024) {
+        var im = new Image(); im.onload = function () { var k = Math.min(1, 2000 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); CHPEND.push({ nombre: f.name.replace(/\.\w+$/, '') + '.jpg', mime: 'image/jpeg', base64: cv.toDataURL('image/jpeg', 0.88).split(',')[1] }); chatChips(); }; im.src = r.result;
+      } else { CHPEND.push({ nombre: f.name, mime: f.type || 'application/octet-stream', base64: b64 }); chatChips(); }
+    };
+    r.readAsDataURL(f);
+  });
+}
+function chatEnviar(texto) {
+  var t = texto != null ? texto : $('txt').value.trim();
+  if (!t && !CHPEND.length) return;
+  burbuja(fmtIA(t || '(analizar los archivos)') + CHPEND.map(function (a) { return ' <span class="chip">📎 ' + esc(a.nombre) + '</span>'; }).join(''), 'yo');
+  var msg = { texto: t, nuevos: CHPEND, anteriores: CHAT.adjuntos, historial: CHAT.historial.slice(-4) };
+  $('txt').value = ''; CHPEND = []; chatChips(); $('espera').classList.remove('oc'); $('enviar').disabled = true;
+  ia('chat', { msg: msg }, false).then(function (r) {
+    $('espera').classList.add('oc'); $('enviar').disabled = false; r = r || {};
+    if (r.adjuntos) CHAT.adjuntos = r.adjuntos;
+    if (r.error) { burbuja(fmtIA(r.error), 'err'); chatGuardar(); chatChips(); return; }
+    chatMostrar(r);
+    CHAT.historial.push({ p: t || '(archivos adjuntos)', r: r.respuesta || '' }); chatGuardar(); chatChips();
+  }).catch(function (e) { $('espera').classList.add('oc'); $('enviar').disabled = false; burbuja(fmtIA(e.message), 'err'); });
+}
+function chatMostrar(r) {
+  var h = fmtIA(r.respuesta || '');
+  (r.tablas || []).forEach(function (t) {
+    h += '<div style="margin-top:6px"><b>📊 ' + esc(t.titulo) + '</b> (' + t.total + ')<table><tr>' + t.columnas.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr>' +
+      t.filas.map(function (f) { return '<tr>' + f.map(function (v) { return '<td>' + esc(v) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>' + (t.total > t.filas.length ? '<div style="font-size:11px;color:var(--gr)">… ' + (t.total - t.filas.length) + ' filas más (en la pestaña 💬 Resultado IA de Cobranzas)</div>' : '') + '</div>';
+  });
+  if (r.detalle) h += '<div style="font-size:11px;color:var(--gr);margin-top:4px">' + esc(r.detalle) + '</div>';
+  var d = burbuja(h, 'ia');
+  if (r.cambios && r.cambios.length) {
+    var c = document.createElement('div'); c.className = 'camb';
+    c.innerHTML = '<b>✏️ La IA propone completar la hoja de vouchers:</b>' + r.cambios.map(function (x) {
+      return '<label><input type="checkbox" value="' + esc(x.id) + '"' + (/vacía/.test(x.aviso || '') ? ' checked' : '') + '> <b>' + esc(x.fila) + '</b> · ' + esc(x.columna) + ' = <b>' + esc(x.nuevo) + '</b>' + (x.motivo ? '<br><span style="color:var(--gr);font-size:11.5px">' + esc(x.motivo) + '</span>' : '') + (x.aviso ? '<br><span style="color:var(--am);font-size:11.5px">' + esc(x.aviso) + '</span>' : '') + '</label>';
+    }).join('') + '<label><input type="checkbox" class="reemp"> Reemplazar si la celda ya tiene un dato</label>';
+    var b = document.createElement('button'); b.className = 'p'; b.textContent = '✅ Escribir los marcados';
+    b.onclick = function () {
+      var ids = Array.prototype.map.call(c.querySelectorAll('input[type=checkbox]:checked:not(.reemp)'), function (i) { return i.value; });
+      if (!ids.length) return;
+      b.disabled = true; b.textContent = '⏳ Escribiendo…';
+      ia('aplicar', { ids: ids, reemplazar: c.querySelector('.reemp').checked }, false).then(function (x) { b.textContent = '✔ Listo'; burbuja(fmtIA(x.error || x.mensaje || 'Listo.'), x.error ? 'err' : 'ia'); })
+        .catch(function (e) { b.disabled = false; b.textContent = '✅ Escribir los marcados'; burbuja(fmtIA(e.message), 'err'); });
+    };
+    c.appendChild(b); d.appendChild(c);
+  }
+}
+function chatNueva() { CHAT = { historial: [], adjuntos: [] }; CHPEND = []; chatGuardar(); chatPintarHistorial(); }
+function chatDeshacer() {
+  modal('<h3>↩️ Deshacer lo último de la IA</h3><p>Devuelve los últimos datos que la IA escribió en la hoja de vouchers (desde el chat, 🔎 RUC o 📋 procesados), solo en las celdas que nadie cambió después.</p>',
+    [['Cancelar'], ['↩️ Deshacer', function () { ia('deshacer', {}, 'Deshaciendo…').then(function (x) { iaVer('chat'); burbuja(fmtIA(x.error || x.mensaje || 'Listo.'), x.error ? 'err' : 'ia'); }).catch(function (e) { alerta('❌ ' + e.message); }); }, 'p']]);
+}
+/* ---------- 📋 analizar procesados ---------- */
+function procAnalizar() {
+  var t = $('procTxt').value.trim() || 'hoy';
+  $('procMsg').className = 'msg'; $('procMsg').textContent = '⏳ Buscando la tanda «' + t + '»…';
+  ia('procesados', { texto: t }, false).then(function (r) {
+    if (r.error) { $('procMsg').className = 'msg e'; $('procMsg').textContent = r.error; return; }
+    $('procMsg').textContent = ''; iaVer('chat'); chatEnviar(r.pedido);
+  }).catch(function (e) { $('procMsg').className = 'msg e'; $('procMsg').textContent = '❌ ' + e.message; });
+}
+/* ---------- 🧩 mesa ---------- */
+function abrirMesa() {
+  $('mesaMsg').className = 'msg'; $('mesaMsg').textContent = '⏳ Pidiendo el enlace…';
+  ia('mesa', {}, false).then(function (r) {
+    if (!r || !r.url) { $('mesaMsg').className = 'msg e'; $('mesaMsg').textContent = (r && r.error) || 'No pude abrir la Mesa.'; return; }
+    $('mesaMsg').innerHTML = '<a class="p" style="display:inline-block;background:var(--az2);color:#fff;padding:9px 14px;border-radius:8px;text-decoration:none" href="' + esc(r.url) + '" target="_blank">🧩 Abrir la Mesa ↗</a>';
+    try { window.open(r.url, '_blank'); } catch (e) {}
+  }).catch(function (e) { $('mesaMsg').className = 'msg e'; $('mesaMsg').textContent = '❌ ' + e.message; });
+}
+/* ---------- 🔗 completar Originales con Fotos ---------- */
+var VCO = '';
+function vcoCargar() {
+  $('vcoCont').innerHTML = '<div class="msg">⏳ Buscando los vouchers que están en Originales y en Fotos…</div>';
+  ia('vco_ver', {}, false).then(function (r) {
+    if (r.error) { $('vcoCont').innerHTML = '<div class="msg e">' + esc(r.error) + '</div>'; return; }
+    VCO = r.id;
+    var tb = function (cab, filas) { return '<div style="overflow:auto;max-height:260px"><table class="tb"><tr>' + cab.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr>' + filas.join('') + '</table></div>'; };
+    var h = '<p style="font-size:12.5px;color:var(--gr);margin-top:0">Mismo voucher = mismo banco, N° de operación y monto. Se copia de Fotos a Originales solo lo que está <b>vacío</b> en Originales (ID Usuario, Empresa, ID Beneficiario, Tipo y Nº Doc., Por retener, Retenido, Revisado, Nota). Se puede deshacer.</p>' +
+      '<p><b>' + r.pares + '</b> voucher(s) en Originales y en Fotos · <b>' + r.nCopias + '</b> dato(s) por copiar' + (r.nConflictos ? ' · <span style="color:var(--ro)"><b>' + r.nConflictos + '</b> diferencia(s) para revisar (no se copian)</span>' : '') + '</p>';
+    if (r.copias.length) h += '<h4>✅ Se copiaría</h4>' + tb(['Original', 'Columna', 'Valor (de la foto)', 'Copia'], r.copias.map(function (x) { return '<tr><td>' + esc(x.o) + '</td><td>' + esc(x.titulo) + '</td><td>' + (x.valor === true ? '☑' : esc(x.valor)) + '</td><td>' + esc(x.f) + '</td></tr>'; }));
+    if (r.conflictos.length) h += '<h4 style="color:var(--ro)">⚠️ Dicen distinto (no se copia)</h4>' + tb(['Original', 'Columna', 'En Originales', 'En Fotos', 'Copia'], r.conflictos.map(function (x) { return '<tr><td>' + esc(x.o) + '</td><td>' + esc(x.col) + '</td><td>' + esc(x.vo) + '</td><td>' + esc(x.vf) + '</td><td>' + esc(x.f) + '</td></tr>'; }));
+    if (!r.copias.length && !r.conflictos.length) h += '<p>✓ No hay nada por copiar: lo trabajado en Fotos ya está en Originales.</p>';
+    h += '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="p" onclick="vcoCopiar()"' + (r.nCopias ? '' : ' disabled') + '>✅ Copiar a Originales</button><button onclick="vcoDeshacer()">↩️ Deshacer la última copia</button><button onclick="vcoCargar()">🔄 Revisar otra vez</button></div><div id="vcoMsg" class="msg"></div>';
+    $('vcoCont').innerHTML = h;
+  }).catch(function (e) { $('vcoCont').innerHTML = '<div class="msg e">❌ ' + esc(e.message) + '</div>'; });
+}
+function vcoCopiar() { modal('<h3>🔗 Copiar a Originales</h3><p>Se copian los datos de Fotos a Originales, solo en celdas vacías.</p>', [['Cancelar'], ['✅ Copiar', function () { ia('vco_copiar', { id: VCO }, 'Copiando…').then(function (r) { $('vcoMsg').textContent = r.error || r.mensaje; }).catch(function (e) { alerta('❌ ' + e.message); }); }, 'p']]); }
+function vcoDeshacer() { modal('<h3>↩️ Deshacer la última copia</h3><p>Solo las celdas que nadie cambió después.</p>', [['Cancelar'], ['↩️ Deshacer', function () { ia('vco_deshacer', {}, 'Deshaciendo…').then(function (r) { $('vcoMsg').textContent = r.error || r.mensaje; }).catch(function (e) { alerta('❌ ' + e.message); }); }, 'p']]); }
+/* ---------- 🔎 identificar RUC (la misma ventana de la hoja) ---------- */
+/* elegir los vouchers sin RUC sin saber las filas: últimos procesados, 7 / 30 días o todos; por empresa, banco, moneda o nombre */
+var RP = { modo: 'proc', vis: [], fuera: {} };
+var RP_MAX_ = 150;
+/** Quién trajo el voucher: el nombre del archivo de la tanda sin la fecha ni «Edit», «voucher», la extensión… («26-10-26 Sonia(Edit).pdf» → Sonia). */
+function rpResponsable(archivo) {
+  var a = String(archivo || '').replace(/\.(pdf|jpe?g|png|heic|webp)$/i, '').replace(/^\s*\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}\s*/, '');
+  a = a.replace(/[()\[\]_.,-]+/g, ' ').replace(/\b(edit(ado)?|vouchers?|scan(eo)?|img|image|imagen|foto|fotos|copia|whatsapp|wa|documento|doc|pdf|pagina|p[aá]g)\b/gi, ' ').replace(/\b\d+\b/g, ' ').replace(/\s+/g, ' ').trim();
+  return a ? a.split(' ').map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); }).join(' ') : '';
+}
+function rpYmd(dias) { var d = new Date(); d.setDate(d.getDate() - dias); return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2); }
+function rpAbrir() {
+  if (!IDX) { cargarIndice().then(function () { if (IDX) rpAbrir(); }); return; }
+  var resp = {}, emps = {};
+  IDX.filas.forEach(function (x) { if (!sinRuc(x)) return; var r = rpResponsable(x[16]); if (r) resp[r] = 1; if (x[9]) emps[x[9]] = 1; });
+  var opc = function (sel, o, t) { var v = $(sel).value; $(sel).innerHTML = '<option value="">' + t + '</option>' + Object.keys(o).sort().map(function (k) { return '<option>' + esc(k) + '</option>'; }).join(''); $(sel).value = v; };
+  opc('rpEmp', emps, 'Todas las empresas'); opc('rpRes', resp, 'Todos los responsables');
+  rpPintar();
+}
+/** Vouchers sin RUC según los filtros (empresa, banco, moneda, nombre), sin mirar el botón rápido. */
+function rpBase() {
+  var emp = $('rpEmp').value, res = $('rpRes').value, mon = $('rpMon').value, q = norma($('rpQ').value), pal = q ? q.split(' ') : [];
+  return IDX.filas.filter(function (x) {
+    if (!sinRuc(x) || !x[8] || /DUPLICADO/i.test(x[4])) return false;
+    if (emp && x[9] !== emp) return false;
+    if (res && rpResponsable(x[16]) !== res) return false;
+    if (mon && (mon === 'USD') !== esUSD(x[6])) return false;
+    var n = norma(x[8] + ' ' + x[14]);
+    for (var i = 0; i < pal.length; i++) if (n.indexOf(pal[i]) < 0) return false;
+    return true;
+  });
+}
+function rpModos() {
+  var dia = ''; IDX.filas.forEach(function (x) { var p = String(x[22] || '').slice(0, 8); if (p > dia) dia = p; });
+  var d7 = rpYmd(7), d30 = rpYmd(30);
+  return [
+    { k: 'proc', t: '📥 Últimos procesados' + (dia ? ' (' + dia.slice(6, 8) + '/' + dia.slice(4, 6) + ')' : ''), f: function (x) { return dia && String(x[22] || '').slice(0, 8) === dia; } },
+    { k: 'd7', t: '📅 Últimos 7 días', f: function (x) { return x[2] && x[2] >= d7; } },
+    { k: 'd30', t: '📅 Últimos 30 días', f: function (x) { return x[2] && x[2] >= d30; } },
+    { k: 'todos', t: '📋 Todos los que faltan', f: function () { return true; } }
+  ];
+}
+function rpPintar() {
+  if (!IDX) return;
+  var base = rpBase(), modos = rpModos(), m = modos.filter(function (x) { return x.k === RP.modo; })[0] || modos[0];
+  $('rpRap').innerHTML = modos.map(function (x) {
+    var n = base.filter(x.f).length;
+    return '<button class="' + (x.k === m.k ? 'p' : '') + '" onclick="RP.modo=\'' + x.k + '\';RP.fuera={};rpPintar()">' + esc(x.t) + ' <b>(' + n + ')</b></button>';
+  }).join('');
+  RP.vis = base.filter(m.f).sort(function (a, b) { return (b[2] || '').localeCompare(a[2] || '') || b[1] - a[1]; });
+  var n = RP.vis.length;
+  if (!n) { $('rpBar').innerHTML = ''; $('rpLista').innerHTML = '<div class="msg ok">✅ No hay vouchers sin RUC con esos filtros.</div>'; return; }
+  var mostrados = RP.vis.slice(0, 300);
+  $('rpLista').innerHTML = mostrados.map(function (x, i) {
+    var k = IDX.hojas[x[0]] + '!' + x[1];
+    return '<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 2px;border-bottom:1px solid var(--bo);font-size:13px"><input type="checkbox" data-k="' + esc(k) + '"' + (RP.fuera[k] ? '' : ' checked') + ' onchange="RP.fuera[this.dataset.k]=!this.checked;rpCuenta()" style="margin-top:3px">' +
+      '<span style="flex:1"><b>' + esc(x[8]) + '</b><br><span style="color:var(--gr);font-size:12px">' + esc(x[3]) + ' · ' + esc(x[6]) + ' ' + fm(x[7]) + (x[9] ? ' · ' + esc(x[9]) : '') + (rpResponsable(x[16]) ? ' · 👤 ' + esc(rpResponsable(x[16])) : '') + ' · ' + esc(k) + '</span></span></label>';
+  }).join('') + (n > mostrados.length ? '<div style="font-size:12px;color:var(--gr);padding:6px">… y ' + (n - mostrados.length) + ' más (use los filtros para acotar).</div>' : '');
+  rpCuenta();
+}
+function rpMarcados() { return Array.prototype.slice.call(document.querySelectorAll('#rpLista input[type=checkbox]:checked')).map(function (c) { return c.dataset.k; }); }
+function rpCuenta() {
+  var k = rpMarcados().length;
+  $('rpBar').innerHTML = '<button onclick="rpTodos(true)">☑ Marcar todos</button><button onclick="rpTodos(false)">☐ Ninguno</button>' +
+    '<button class="p" onclick="rpBuscar()"' + (k ? '' : ' disabled') + '>🔎 Buscar RUC de los marcados (' + k + ')</button>' +
+    (k > RP_MAX_ ? '<span style="font-size:12px;color:var(--am)">Se buscan de ' + RP_MAX_ + ' en ' + RP_MAX_ + ': los más nuevos primero.</span>' : '');
+}
+function rpTodos(si) { document.querySelectorAll('#rpLista input[type=checkbox]').forEach(function (c) { c.checked = si; RP.fuera[c.dataset.k] = !si; }); rpCuenta(); }
+function rpBuscar() { var fs = rpMarcados().slice(0, RP_MAX_); if (!fs.length) return alerta('No marcó ningún voucher.'); rucAbrir(fs); }
+var RUC = null, RK = 0, RDAT = {};
+function rucDeVisibles() {
+  var fs = VIS.filter(sinRuc).slice(0, 150).map(function (x) { return IDX.hojas[x[0]] + '!' + x[1]; });
+  if (!fs.length) return alerta('No hay vouchers sin RUC en esta lista.');
+  rucAbrir(fs);
+}
+function rucDeTexto() {
+  var out = [], hoja = 'Originales';
+  String($('rucTxt').value || '').split(/[,;\s]+(?=[A-Za-z])|,/).forEach(function (parte) {
+    var m = parte.match(/(originales?|fotos?)/i); if (m) hoja = /^o/i.test(m[1]) ? 'Originales' : 'Fotos';
+    (parte.match(/\d+\s*-\s*\d+|\d+/g) || []).forEach(function (x) { var r = x.split('-').map(Number), a = r[0], b = r[1] || r[0]; for (var i = Math.min(a, b); i <= Math.max(a, b) && out.length < 300; i++) out.push(hoja + '!' + i); });
+  });
+  if (!out.length) return alerta('Escriba las filas. Ej.: Originales 2656-2666, Fotos 382');
+  rucAbrir(out);
+}
+function rucAbrir(filas) {
+  ia('rucfilas', { filas: filas }, 'Buscando el RUC de ' + filas.length + ' voucher(s)…').then(function (r) {
+    if (r.error) return alerta(r.error);
+    // una tarjeta por NOMBRE (y sugerencia): lo que se elige vale para todos sus vouchers
+    var G = [], porK = {};
+    (r.detalle || []).filter(function (f) { return !f.ruc; }).forEach(function (f) {
+      var k = f.prov ? rucNn(f.prov) + '|' + (f.sug || '') : '#' + f.k, g = porK[k];
+      if (!g) { g = porK[k] = { prov: f.prov, sug: f.sug, sugNombre: f.sugNombre, como: f.como, parecidos: f.parecidos || [], opciones: f.opciones || [], alias: f.alias || '', aliasNombre: f.aliasNombre || '', aliasRaro: !!f.aliasRaro, vs: [] }; G.push(g); }
+      g.vs.push(f);
+    });
+    RUC = { filas: filas, sin: G, texto: r.texto || '' };
+    rucPintar();
+  }).catch(function (e) { alerta('❌ ' + e.message); });
+}
+function rucNn(s) { return String(s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]+/g, ' ').trim(); }
+function rucFila(g) { return g.vs.map(function (f) { return { hoja: f.hoja, fila: f.fila, col: f.col }; }); }
+function rucPintar() {
+  var S2 = RUC.sin, nSug = S2.filter(function (f) { return f.sug && !f.hecho; }).length;
+  var h = '<div class="ruc"><h3>🔎 Identificar RUC · ' + RUC.filas.length + ' voucher(s)</h3><div style="display:flex;gap:6px;flex-wrap:wrap">' +
+    (nSug ? '<button class="p" id="rW" onclick="rucEscribirMarcados()">✍️ Escribir los RUC marcados</button>' : '') +
+    (S2.some(function (f) { return !f.hecho; }) ? '<button onclick="rucInternet()" title="Padrón de SUNAT e internet, también los que ya tienen sugerencia">🌐 Buscar con IA en SUNAT e internet</button>' : '') + '<button onclick="rucUltimas()" title="Resultados de las búsquedas en SUNAT e internet de las últimas 6 horas">📂 Ver la última búsqueda</button></div><div id="rMsg" class="msg"></div>';
+  if (!S2.length) h += '<div class="msg ok">✅ Todos los vouchers elegidos ya tienen RUC.</div>';
+  h += S2.map(function (f, i) {
+    var tot = {}; f.vs.forEach(function (v) { tot[v.moneda] = (tot[v.moneda] || 0) + v.monto; });
+    var x = '<div class="card' + (f.hecho ? ' ok' : '') + '"><b>' + esc(f.prov || '(sin nombre del proveedor)') + '</b> · ' + f.vs.length + ' voucher(s) · ' + Object.keys(tot).map(function (m) { return m + ' ' + fm(tot[m]); }).join(' + ') +
+      '<div style="font-size:11.5px;color:var(--gr);margin-left:6px">' + f.vs.map(function (v) { return esc(v.k) + ' · ' + esc(v.fecha) + ' · ' + esc(v.moneda) + ' ' + fm(v.monto); }).join('<br>') + '</div>';
+    if (f.hecho) return x + '<div class="msg ok" style="padding:2px 0">' + esc(f.hecho) + '</div></div>';
+    if (f.sug) x += '<div class="sug"><label><input type="checkbox" id="rk' + i + '"' + (f.aliasRaro && f.sug === f.alias ? '' : ' checked') + '> 💡 <b>' + esc(f.sug) + '</b> — <b style="color:#1D4ED8">' + esc(f.sugNombre || '(nombre no hallado: verifíquelo en SUNAT)') + '</b><br><span style="font-size:12px;color:var(--gr)">' + esc(f.como) + '</span></label> <button class="r" style="padding:2px 8px" onclick="rucNoEs(' + i + ')">❌ No es este</button></div>';
+    else if (f.opciones && f.opciones.length) x += '<div style="font-size:12px;color:var(--gr)">❓ Sin RUC claro. Posibles:</div>' + rucSelector(i, f.opciones);
+    else if (!f.parecidos.length) x += '<div style="font-size:12px;color:var(--gr)">❓ No lo encontré en vouchers, SIRE, recibos por honorarios ni retenciones.</div>';
+    if (f.alias) x += (f.aliasRaro ? '<div class="sug" style="background:#FEF2F2;border-color:#FCA5A5">⚠️ <b>Ojo:</b> el alias guardado para este nombre es <b>' + esc(f.alias) + '</b> — <b>' + esc(f.aliasNombre) + '</b>, un nombre muy distinto. Revise el voucher: puede ser correcto (se le pagó en nombre de esa empresa) o un alias equivocado.</div>' : '') +
+      '<label style="display:block;margin:4px 0;font-size:12px;color:var(--gr)"><input type="checkbox" id="ra' + i + '" checked> 🔁 Si elijo otro RUC, actualizar el alias de este nombre (hoy: ' + esc(f.alias) + (f.aliasNombre ? ' ' + esc(f.aliasNombre) : '') + ')</label>' +
+      '<button class="r" style="padding:2px 8px" onclick="rucBorrarAlias(' + i + ')" title="Quita el alias de este nombre en Cobranzas → Config: ya no se sugerirá solo">🗑 Borrar este alias</button>';
+    if (f.parecidos && f.parecidos.length) x += '<div style="font-size:12px;color:var(--gr);margin-top:5px">🔤 <b>Nombres parecidos</b> (compare el nombre y elija):</div>' + f.parecidos.map(function (o, j) {
+      return '<div style="display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0"><span style="flex:1;font-size:12.5px"><b>' + esc(o.ruc) + '</b> — <b style="color:#1D4ED8">' + esc(o.nombre) + '</b> <span style="color:var(--gr)">' + esc(o.det) + (o.ruc === f.sug ? ' · ← sugerido' : '') + '</span></span><button class="p" style="padding:3px 8px" onclick="rucElegirP(' + i + ',' + j + ')">✅ Este</button></div>';
+    }).join('');
+    return x + '<div><button style="padding:3px 9px;font-size:12.5px" onclick="rucOpciones(' + i + ')">📋 Otras opciones (SIRE, honorarios, retenciones…)</button>' + (f.prov ? ' <button style="padding:3px 9px;font-size:12.5px" onclick="rucIaNombre(' + i + ')" title="Busca este nombre en el padrón de SUNAT y con IA en internet">🌐 Buscar con IA en SUNAT e internet</button>' : '') + ' <button style="padding:3px 9px;font-size:12.5px" onclick="rucLeer(' + i + ')" title="La IA lee la imagen del voucher (no cambia la fila) y busca el RUC del nombre que trae">🔍 Leer el voucher con IA</button></div>' +
+      '<input type="text" id="rq' + i + '" placeholder="RUC (11 dígitos) u otro nombre para buscar"><button style="padding:3px 9px;font-size:12.5px" onclick="rucOtro(' + i + ')">🔎 Usar este RUC / buscar otro nombre con IA</button>' +
+      '<div id="rl' + i + '"></div><div id="ro' + i + '"></div><div id="rr' + i + '"></div><div class="msg" id="rm' + i + '" style="padding:2px 0"></div></div>';
+  }).join('') + '<div id="rExt"></div><details><summary style="font-size:12px;color:var(--gr)">Resumen de la búsqueda</summary><pre>' + esc(RUC.texto) + '</pre></details></div>';
+  modal(h, [['Cerrar']]);
+  $('modalCaja').style.maxWidth = '760px';
+}
+function rucReemp(i) { var c = $('ra' + i); return !!(c && c.checked); }
+function rucReempProv(p) { var r = false; ((RUC && RUC.sin) || []).forEach(function (g, i) { if (rucNn(g.prov) === rucNn(p) && rucReemp(i)) r = true; }); return r; }
+function rucNucleo(s) { return rucNn(s).replace(/ /g, '').replace(/(EIRL|SAC|SRL|SAA|SCRL|SA)$/, ''); }
+function rucNombreDistinto(a, b) { var x = rucNucleo(a), y = rucNucleo(b); return !(x && y && (x.indexOf(y) >= 0 || y.indexOf(x) >= 0)); }
+/* 🗑 borrar el alias de un nombre (Cobranzas → Config) */
+function rucBorrarAlias(i) {
+  var g = RUC.sin[i];
+  modal('<h3>🗑 Borrar el alias</h3><p>¿Borrar el alias de «' + esc(g.prov) + '» → ' + esc(g.alias) + (g.aliasNombre ? ' ' + esc(g.aliasNombre) : '') + '? Ya no se sugerirá solo para ese nombre.</p>', [['Cancelar', function () { rucPintar(); }], ['🗑 Borrar', function () {
+    ia('rucaliasborrar', { prov: g.prov }, 'Borrando el alias…').then(function (r) {
+      if (r.error) { rucPintar(); return rucMsg('rm' + i, r.error, 1); }
+      var viejo = g.alias; g.alias = ''; g.aliasRaro = false; if (g.sug === viejo) { g.sug = ''; g.sugNombre = ''; }
+      g.parecidos = g.parecidos.filter(function (o) { return o.ruc !== viejo; });
+      rucPintar(); rucMsg('rm' + i, r.mensaje || 'Listo.');
+    }).catch(function (e) { rucPintar(); rucMsg('rm' + i, e.message, 1); });
+  }, 'p']]);
+}
+/* 🔍 leer el voucher con IA (no cambia la fila) y buscar el RUC del nombre que trae */
+function rucLeer(i) {
+  var g = RUC.sin[i], f = g.vs[0];
+  rucMsg('rm' + i, '🔍 La IA está leyendo el voucher ' + f.k + (g.vs.length > 1 ? ' (el primero de ' + g.vs.length + ')' : '') + '… (20–60 s)');
+  api('releer', { hoja: f.hoja, fila: f.fila }, false).then(function (r) {
+    if (!r.ok) throw new Error(r.error || 'No se pudo leer.');
+    var n = 0, preguntar = function () {
+      api('releerEstado', { id: r.id }, false).then(function (e) {
+        if (!e.listo && n++ < 40) { rucMsg('rm' + i, '🔍 Leyendo el voucher… (' + n * 3 + ' s)'); return setTimeout(preguntar, 3000); }
+        if (!e.listo) throw new Error('La IA tardó demasiado: intente de nuevo.');
+        if (e.error) throw new Error(e.error);
+        var v = (e.leidos || [])[0] || {}, prov = String(v.proveedor || '').trim();
+        var listo = function (ops) { rucMsg('rm' + i, ''); rucLeido(i, { proveedor: prov, idv: String(v.idCliente || '').replace(/\D/g, ''), linea: (e.lineas || [])[0] || '', opciones: ops }); };
+        if (prov.length < 3) return listo([]);
+        ia('rucopciones', { nombre: prov }, false).then(function (o) { listo((o.opciones || []).slice(0, 8)); }).catch(function () { listo([]); });
+      }).catch(function (x) { rucMsg('rm' + i, '❌ ' + x.message, 1); });
+    };
+    preguntar();
+  }).catch(function (x) { rucMsg('rm' + i, '❌ ' + x.message, 1); });
+}
+function rucLeido(i, r) {
+  var g = RUC.sin[i], k = ++RK; RDAT['l' + k] = r.opciones; RDAT['n' + k] = r.proveedor;
+  var h = '<div class="sug" style="background:#EFF6FF;border-color:#BFDBFE">📄 <b>La IA leyó en el voucher:</b> beneficiario <b>' + esc(r.proveedor || '(no se lee)') + '</b><br><span style="font-size:12px;color:var(--gr)">' + esc(r.linea) + (r.idv ? ' · RUC/DNI que aparece en el voucher: ' + esc(r.idv) + ' (verifique de quién es)' : '') + '</span>';
+  if (r.proveedor && rucNombreDistinto(r.proveedor, g.prov)) h += '<div style="color:var(--ro);margin-top:3px">⚠️ En la hoja dice «' + esc(g.prov) + '». Si el voucher es de otro, corrija la fila con 🔁 Releer con IA (visor del voucher) o a mano.</div>';
+  if (r.opciones.length) h += '<div style="font-size:12px;color:var(--gr);margin-top:4px">RUC posibles para «' + esc(r.proveedor) + '»:</div>' + r.opciones.map(function (o, j) {
+    return '<div style="display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0"><span style="flex:1;font-size:12.5px"><b>' + esc(o.ruc) + '</b> — <b style="color:#1D4ED8">' + esc(o.nombre) + '</b> <span style="color:var(--gr)">' + esc(o.det) + '</span></span><button class="p" style="padding:3px 8px" onclick="rucElegirL(' + i + ',' + k + ',' + j + ')">✅ Este</button></div>';
+  }).join('');
+  else if (r.proveedor) h += '<div style="font-size:12px;color:var(--gr)">No encontré «' + esc(r.proveedor) + '» en vouchers, SIRE, honorarios ni retenciones.</div>';
+  if (r.proveedor) h += '<button style="padding:3px 9px;font-size:12.5px" onclick="rucIaLeido(' + i + ',' + k + ')">🌐 Buscar «' + esc(r.proveedor) + '» con IA en SUNAT e internet</button>';
+  $('rl' + i).innerHTML = h + '</div>';
+}
+function rucElegirL(i, k, j) {
+  var f = RUC.sin[i], o = RDAT['l' + k][j];
+  rucMsg('rm' + i, 'Escribiendo ' + o.ruc + '…');
+  ia('rucelegir', { prov: f.prov, filas: rucFila(f), ruc: o.ruc, det: o.nombre + ' — ' + o.det + ' · leído en el voucher', reemplazarAlias: rucReemp(i) }, false).then(function (y) {
+    if (y.error) return rucMsg('rm' + i, y.error, 1);
+    f.hecho = '✅ ' + o.ruc + ' ' + o.nombre + ' en ' + f.vs.length + ' voucher(s) · ' + (y.mensaje || 'escrito'); f.sug = ''; rucPintar();
+  }).catch(function (e) { rucMsg('rm' + i, e.message, 1); });
+}
+function rucIaLeido(i, k) {
+  var f = RUC.sin[i], v = RDAT['n' + k];
+  rucMsg('rm' + i, '⏳ Busco «' + v + '» en el padrón de SUNAT y con IA en internet (3–5 min). Deje esta ventana abierta.');
+  ia('rucotro', { nombre: v, filas: rucFila(f) }, false).then(function (r) { if (r.error) return rucMsg('rm' + i, r.error, 1); if (r.id) rucEsperar(r.id, 0, 'rr' + i, 'rm' + i); else rucMsg('rm' + i, r.texto || ''); })
+    .catch(function (e) { rucMsg('rm' + i, e.message, 1); });
+}
+function rucMsg(id, t, e) { var el = $(id); if (el) { el.className = 'msg' + (e ? ' e' : ''); el.textContent = t || ''; } }
+function rucSelector(i, ops) { var k = ++RK; RDAT['s' + k] = ops; return '<select id="rs' + k + '" style="max-width:100%">' + ops.map(function (o, j) { return '<option value="' + j + '">' + esc(o.ruc + ' ' + o.nombre + ' — ' + o.det) + '</option>'; }).join('') + '</select> <button class="p" style="padding:3px 9px" onclick="rucElegir(' + i + ',' + k + ')">✅ Es este</button>'; }
+function rucNoEs(i) { var f = RUC.sin[i]; f.rechazado = f.sug; f.sug = ''; rucPintar(); rucMsg('rm' + i, 'Quité la sugerencia ' + f.rechazado + '. Busco otras opciones…'); rucOpciones(i); }
+function rucOpciones(i) {
+  var f = RUC.sin[i]; if (!f.prov) return rucMsg('rm' + i, 'Este voucher no tiene nombre del proveedor: escriba el RUC o un nombre.', 1);
+  rucMsg('rm' + i, 'Buscando otras opciones de «' + f.prov + '»…');
+  ia('rucopciones', { nombre: f.prov }, false).then(function (r) {
+    var ops = (r.opciones || []).filter(function (o) { return o.ruc !== f.rechazado; });
+    if (!ops.length) return rucMsg('rm' + i, r.texto || r.error || 'No hay otras opciones en las fuentes propias. Pruebe 🔎 buscar con IA.');
+    rucMsg('rm' + i, ''); $('ro' + i).innerHTML = '<div style="font-size:12px;color:var(--gr)">Otras opciones:</div>' + rucSelector(i, ops);
+  }).catch(function (e) { rucMsg('rm' + i, e.message, 1); });
+}
+function rucElegir(i, k) {
+  var f = RUC.sin[i], o = RDAT['s' + k][Number($('rs' + k).value)];
+  rucMsg('rm' + i, 'Escribiendo ' + o.ruc + '…');
+  ia('rucelegir', { prov: f.prov, filas: rucFila(f), ruc: o.ruc, det: o.nombre + ' — ' + o.det, reemplazarAlias: rucReemp(i) }, false).then(function (y) {
+    if (y.error) return rucMsg('rm' + i, y.error, 1);
+    f.hecho = '✅ ' + o.ruc + ' ' + o.nombre + ' en ' + f.vs.length + ' voucher(s) · ' + (y.mensaje || 'escrito'); f.sug = ''; rucPintar();
+  }).catch(function (e) { rucMsg('rm' + i, e.message, 1); });
+}
+function rucElegirP(i, j) {
+  var f = RUC.sin[i], o = f.parecidos[j];
+  rucMsg('rm' + i, 'Escribiendo ' + o.ruc + '…');
+  ia('rucelegir', { prov: f.prov, filas: rucFila(f), ruc: o.ruc, det: o.nombre + ' — ' + o.det, reemplazarAlias: rucReemp(i) }, false).then(function (y) {
+    if (y.error) return rucMsg('rm' + i, y.error, 1);
+    f.hecho = '✅ ' + o.ruc + ' ' + o.nombre + ' en ' + f.vs.length + ' voucher(s) · ' + (y.mensaje || 'escrito'); f.sug = ''; rucPintar();
+  }).catch(function (e) { rucMsg('rm' + i, e.message, 1); });
+}
+function rucIaNombre(i) {
+  var f = RUC.sin[i];
+  rucMsg('rm' + i, '⏳ Busco «' + f.prov + '» en el padrón de SUNAT y con IA en internet (3–5 min). Deje esta ventana abierta.');
+  ia('rucotro', { nombre: f.prov, filas: rucFila(f) }, false).then(function (r) { if (r.error) return rucMsg('rm' + i, r.error, 1); if (r.id) rucEsperar(r.id, 0, 'rr' + i, 'rm' + i); else rucMsg('rm' + i, r.texto || ''); })
+    .catch(function (e) { rucMsg('rm' + i, e.message, 1); });
+}
+function rucOtro(i) {
+  var f = RUC.sin[i], v = String($('rq' + i).value || '').trim(), dg = v.replace(/\D/g, '');
+  if (/^\d{11}$/.test(dg) && dg.length === v.replace(/[\s.-]/g, '').length) {
+    rucMsg('rm' + i, 'Escribiendo ' + dg + '…');
+    return ia('rucelegir', { prov: f.prov || v, filas: rucFila(f), ruc: dg, det: 'RUC escrito por la persona', reemplazarAlias: rucReemp(i) }, false).then(function (y) {
+      if (y.error) return rucMsg('rm' + i, y.error, 1); f.hecho = '✅ ' + dg + ' (escrito a mano) · ' + (y.mensaje || ''); f.sug = ''; rucPintar();
+    }).catch(function (e) { rucMsg('rm' + i, e.message, 1); });
+  }
+  if (v.length < 3) return rucMsg('rm' + i, 'Escriba el RUC (11 dígitos) o un nombre de al menos 3 letras.', 1);
+  rucMsg('rm' + i, '⏳ Busco «' + v + '» en el padrón de SUNAT y con IA en internet (3–5 min). Deje esta ventana abierta.');
+  ia('rucotro', { nombre: v, filas: rucFila(f) }, false).then(function (r) { if (r.error) return rucMsg('rm' + i, r.error, 1); if (r.id) rucEsperar(r.id, 0, 'rr' + i, 'rm' + i); else rucMsg('rm' + i, r.texto || ''); })
+    .catch(function (e) { rucMsg('rm' + i, e.message, 1); });
+}
+function rucEscribirMarcados() {
+  var ids = [], cuales = [];
+  RUC.sin.forEach(function (f, i) { var c = $('rk' + i); if (f.sug && c && c.checked) { f.vs.forEach(function (v) { if (v.id) ids.push(v.id); }); cuales.push(f); } });
+  if (!ids.length) return rucMsg('rMsg', 'No hay ninguno marcado.', 1);
+  $('rW').disabled = true; rucMsg('rMsg', 'Escribiendo ' + ids.length + '…');
+  ia('aplicar', { ids: ids, reemplazar: false }, false).then(function (x) {
+    if (x.error) return rucMsg('rMsg', x.error, 1);
+    cuales.forEach(function (f) { f.hecho = '✅ ' + f.sug + ' ' + (f.sugNombre || '') + ' escrito en ' + f.vs.length + ' voucher(s)'; f.sug = ''; }); rucPintar(); rucMsg('rMsg', x.mensaje || 'Listo.');
+  }).catch(function (e) { rucMsg('rMsg', e.message, 1); });
+}
+function rucInternet() {
+  var fs = []; RUC.sin.forEach(function (f) { if (!f.hecho) f.vs.forEach(function (v) { fs.push(v.k); }); });
+  rucMsg('rMsg', '⏳ Lanzando la búsqueda en el padrón de SUNAT y con IA en internet…');
+  ia('rucexternos', { filas: fs, todos: true }, false).then(function (r) { rucMsg('rMsg', r.error || r.texto || '', !!r.error); if (r.id) rucEsperar(r.id, 0, 'rExt', 'rMsg'); }).catch(function (e) { rucMsg('rMsg', e.message, 1); });
+}
+/* 📂 búsquedas anteriores en SUNAT e internet (Cobranzas las guarda 6 horas) */
+function rucUltimas(nueva) {
+  ia('rucultimas', {}, 'Buscando las búsquedas anteriores…').then(function (r) {
+    if (r.error) return alerta(r.error);
+    var l = r.lista || [];
+    if (!l.length) return alerta('No hay búsquedas en SUNAT e internet de las últimas 6 horas.');
+    var h = '<div class="card"><b>📂 Búsquedas anteriores (últimas 6 horas)</b>' + l.map(function (x) {
+      return '<div style="display:flex;gap:6px;align-items:center;border-bottom:1px dashed #E2E8F0;padding:3px 0"><span style="flex:1;font-size:12.5px">' + esc(x.cuando) + ' · ' + esc(x.que) + ' <span style="color:var(--gr)">' +
+        (x.listo ? '✅ lista · ' + x.claros + ' encontrado(s), ' + x.elecciones + ' por elegir' : '⏳ todavía buscando') + '</span></span><button style="padding:3px 8px" onclick="rucVerBusq(\'' + esc(x.id) + '\',this)">Ver</button></div>';
+    }).join('') + '</div>';
+    if (nueva || !$('rExt')) { modal('<div class="ruc"><h3>📂 Búsquedas de RUC anteriores</h3>' + h + '<div id="rExt"></div></div>', [['Cerrar']]); $('modalCaja').style.maxWidth = '760px'; }
+    else { var d = document.createElement('div'); d.innerHTML = h; $('rExt').insertBefore(d, $('rExt').firstChild); d.scrollIntoView(); }
+  }).catch(function (e) { alerta('❌ ' + e.message); });
+}
+function rucVerBusq(id, b) {
+  b.disabled = true; var k = ++RK, c = document.createElement('div');
+  c.innerHTML = '<div class="msg" id="rvm' + k + '"></div><div id="rvc' + k + '"></div>'; b.parentNode.parentNode.appendChild(c);
+  rucMsg('rvm' + k, 'Abriendo…');
+  ia('rucestado', { id: id }, false).then(function (r) {
+    if (r.error) return rucMsg('rvm' + k, r.error, 1);
+    if (r.listo) { rucMsg('rvm' + k, ''); rucResultado(r, 'rvc' + k); } else rucEsperar(id, 0, 'rvc' + k, 'rvm' + k);
+  }).catch(function (e) { rucMsg('rvm' + k, e.message, 1); });
+}
+function rucEsperar(id, n, cont, m) {
+  setTimeout(function () {
+    ia('rucestado', { id: id }, false).then(function (r) {
+      if (r.error) return rucMsg(m, r.error, 1);
+      if (!r.listo && n >= 120) return rucMsg(m, '⚠️ La búsqueda tardó más de 30 min. Vuelva a intentarlo en un rato.', 1);
+      if (!r.listo) { rucMsg(m, (r.etapa || '⏳ Buscando en el padrón de SUNAT e internet…') + ' (' + Math.round((n + 1) * 15 / 60 * 10) / 10 + ' min) — deje esta ventana abierta'); return rucEsperar(id, n + 1, cont, m); }
+      rucMsg(m, ''); rucResultado(r, cont);
+    }).catch(function (e) { rucMsg(m, e.message, 1); });
+  }, 15000);
+}
+function rucResultado(r, cont) {
+  var h = '<pre>' + esc(r.texto) + '</pre>', cl = r.claros || [];
+  if (cl.length) { var k = ++RK; RDAT['c' + k] = cl; h += '<div class="card"><b>✅ Encontrados (desmarque si alguno no es):</b>' + cl.map(function (x, i) { return '<label style="display:block"><input type="checkbox" id="rc' + k + '_' + i + '" checked> ' + esc(x.prov) + ' → <b>' + esc(x.ruc) + '</b> ' + esc(x.nombre) + ' · ' + esc(x.filasTxt || '') + '</label>'; }).join('') + '<button class="p" onclick="rucClaros(' + k + ')">✍️ Escribir los marcados</button><div id="rcm' + k + '" class="msg"></div></div>'; }
+  (r.elecciones || []).forEach(function (el) {
+    var k = ++RK; RDAT['e' + k] = el;
+    h += '<div class="card">🤔 <b>' + esc(el.prov) + '</b> (' + esc(el.filasTxt || el.filas.map(function (f) { return f.hoja + '!' + f.fila; }).join(', ')) + ')<br>' +
+      (el.opciones.length ? '<select id="re' + k + '" style="max-width:100%">' + el.opciones.map(function (o, j) { return '<option value="' + j + '">' + esc(o.ruc + ' ' + o.nombre + ' — ' + o.det) + '</option>'; }).join('') + '<option value="-1">— Ninguno de estos —</option></select> <button class="p" onclick="rucElegirEl(' + k + ')">✅ Es este</button>' : '<i>No lo encontré. Escriba el RUC u otro nombre en la tarjeta de ese voucher.</i>') +
+      '<div id="rem' + k + '" class="msg"></div></div>';
+  });
+  var d = document.createElement('div'); d.innerHTML = h; ($(cont) || $('modalCaja')).appendChild(d);
+}
+function rucClaros(k) {
+  var cl = RDAT['c' + k], sel = cl.filter(function (x, i) { return $('rc' + k + '_' + i).checked; });
+  if (!sel.length) return rucMsg('rcm' + k, 'No marcó ninguno.');
+  rucMsg('rcm' + k, '⏳ Escribiendo ' + sel.length + ' de una vez y recalculando Cobranzas una sola vez (hasta 1–2 min)…');
+  ia('rucelegirvarios', { lista: sel.map(function (x) { return { prov: x.prov, filas: x.filas, ruc: x.ruc, det: x.nombre + ' — ' + x.como, reemplazarAlias: rucReempProv(x.prov) }; }) }, false)
+    .then(function (y) { rucMsg('rcm' + k, y.error ? '❌ ' + y.error : (y.mensaje || 'Listo.'), !!y.error); })
+    .catch(function (e) { rucMsg('rcm' + k, '❌ ' + e.message + ' — lo ya escrito queda; puede volver a intentar.', 1); });
+}
+function rucElegirEl(k) {
+  var el = RDAT['e' + k], j = Number($('re' + k).value);
+  if (j < 0) return rucMsg('rem' + k, 'No escribí nada para ' + el.prov + '.');
+  var o = el.opciones[j]; rucMsg('rem' + k, 'Escribiendo ' + o.ruc + '…');
+  ia('rucelegir', { prov: el.prov, filas: el.filas, ruc: o.ruc, det: o.nombre + ' — ' + o.det, reemplazarAlias: rucReempProv(el.prov) }, false).then(function (y) { rucMsg('rem' + k, y.mensaje || y.error || 'Listo.', !!y.error); }).catch(function (e) { rucMsg('rem' + k, e.message, 1); });
+}
+
+/* ============================================================ ventanas */
+function modal(html, botones) {
+  anchoModal();
+  $('modalCaja').innerHTML = html + '<div class="bot">' + botones.map(function (b, i) { return '<button id="mb' + i + '" class="' + (b[2] || '') + '">' + b[0] + '</button>'; }).join('') + '</div>';
+  botones.forEach(function (b, i) { $('mb' + i).onclick = function () { var r = b[1] ? b[1]() : null; if (r !== false) cerrarModal(); }; });
+  abrirModal();
+}
+function abrirModal() { $('modal').classList.remove('oc'); }
+function anchoModal() { $('modalCaja').style.maxWidth = ''; }
+function cerrarModal() { camaraParar(); $('modal').classList.add('oc'); }
+function alerta(t) { modal('<div style="white-space:pre-wrap">' + esc(t) + '</div>', [['Aceptar', null, 'p']]); }
+$('modal').addEventListener('click', function (e) { if (e.target === $('modal')) cerrarModal(); });
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') { if (!$('modal').classList.contains('oc')) cerrarModal(); else cerrarVisor(); }
+  if (!FILA || /INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
+  if (e.key === 'ArrowLeft' && SEL > 0) abrir(SEL - 1);
+  if (e.key === 'ArrowRight' && SEL < VIS.length - 1) abrir(SEL + 1);
+});
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+</script>
+</body>
+</html>
