@@ -181,6 +181,7 @@ main{flex:1;min-height:0;overflow:auto}
           <button class="p" onclick="pedirCamara('fCam', camaraFoto)">📷 Tomar foto</button>
           <button class="p" onclick="scanAbrir()" title="Varias fotos con la cámara → un solo PDF (una página por foto)">📄 Escanear a PDF</button>
           <button onclick="$('fArch').click()">🖼 Elegir fotos o PDF</button>
+          <button onclick="abrirEscaner()" title="EscánerPro: bordes automáticos, captura sola, filtros y PDF de varias páginas; al terminar «✅ Enviar a Vouchers» lo trae aquí">📄 Escanear con EscánerPro</button>
           <button onclick="escanearDrive()" title="Usa el escáner de la app Google Drive y guarda directo en la carpeta de entrada">📲 Escanear con Google Drive</button>
         </div>
         <input type="file" id="fCam" accept="image/*" capture="environment" class="oc" onchange="camaraFoto(this.files);this.value=''">
@@ -349,6 +350,7 @@ function iniciar() {
   if ($('bQr')) $('bQr').classList.toggle('oc', !(tgApp() && tgApp().showScanQrPopup && (!tgApp().isVersionAtLeast || tgApp().isVersionAtLeast('6.4'))));
   document.querySelectorAll('nav button[data-perm]').forEach(function (b) { b.classList.toggle('oc', !puede(b.dataset.perm)); });
   ir(leeLocal('pv_pag') && puede({ usu: 'admin', sub: 'subir', ia: 'editar' }[leeLocal('pv_pag')] || 'ver') ? leeLocal('pv_pag') : 'bus');
+  recibirEscaner();   // 📄 lo que mandó EscánerPro
 }
 (function () {
   $('lu').value = leeLocal('pv_u') || '';
@@ -748,6 +750,35 @@ function subirTodo() {
     }).catch(function (e) { s.error = true; s.est = '❌ ' + e.message; pintarSubir(); sig(); });
   };
   sig();
+}
+
+/* ---------- 📄 EscánerPro (aquivan.github.io/escaner): escanea y, con «✅ Enviar a Vouchers», deja el archivo en una base del
+   navegador que comparte con esta página (mismo sitio, aquivan.github.io) y vuelve aquí; recibirEscaner() lo pone en 📤 Subir. */
+var ESC_URL_ = 'https://aquivan.github.io/escaner/?para=vouchers';
+function abrirEscaner() {
+  if (location.origin === 'https://aquivan.github.io') { location.href = '/escaner/?para=vouchers'; return; }
+  // desde la versión de Google: el escáner devuelve el archivo al portal de aquivan.github.io (allí entra con su usuario)
+  modal('<h3>📄 EscánerPro</h3><p style="margin-top:0">Se abre el escáner. Al terminar toque <b>Exportar → ✅ Enviar a Vouchers</b>: el archivo llega al portal en <b>aquivan.github.io</b> (entre con su usuario y PIN si se lo pide) y luego toca 📤 Subir.</p>',
+    [['Cancelar'], ['Abrir EscánerPro', function () { window.open(ESC_URL_, '_blank'); }, 'p']]);
+}
+function recibirEscaner() {
+  if (!window.indexedDB || location.origin !== 'https://aquivan.github.io' || !puede('subir')) return;
+  var r;
+  try { r = indexedDB.open('puente-vouchers', 1); } catch (e) { return; }
+  r.onupgradeneeded = function () { r.result.createObjectStore('archivos', { keyPath: 'id' }); };
+  r.onsuccess = function () {
+    var db = r.result, tx = db.transaction('archivos', 'readwrite'), st = tx.objectStore('archivos'), q = st.getAll();
+    q.onsuccess = function () {
+      var lista = (q.result || []).filter(function (x) { return Date.now() - x.t < 24 * 3600 * 1000; });
+      st.clear();
+      if (!lista.length) return;
+      var files = lista.map(function (x) { return new File([x.blob], x.nombre || 'escaneo.pdf', { type: x.tipo || x.blob.type }); });
+      ir('sub'); agregarArchivos(files);
+      $('subMsg').className = 'msg ok';
+      $('subMsg').textContent = '📄 Llegó ' + (files.length > 1 ? files.length + ' archivos' : '«' + files[0].name + '»') + ' de EscánerPro: revise el nombre y Original / Foto, y toque 📤 Subir.';
+      tgVibrar('success');
+    };
+  };
 }
 
 /* ---------- 📲 escanear con la app de Google Drive (guarda directo en la carpeta de entrada) ---------- */
