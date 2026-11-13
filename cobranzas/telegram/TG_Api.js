@@ -367,3 +367,32 @@ function TG_colorear_(rm, quitar) {
   });
   return texto ? JSON.stringify(o) : o;
 }
+/**
+ * 🧾 Mini App: comprueba que el «initData» que manda Telegram a la página de verdad lo firmó Telegram para ESTE bot
+ * (HMAC-SHA256 con la clave derivada del token, según core.telegram.org/bots/webapps) y que no tiene más de 24 h.
+ * → {ok, id, nombre, autorizado} — autorizado = está en la lista de usuarios activos del bot. El token nunca sale de aquí.
+ */
+function TG_verificarInitData_(ss, initData) {
+  var token = TG_token_();
+  if (!token) return { ok: false, error: 'El bot no está conectado.' };
+  var pares = String(initData || '').split('&').filter(String).map(function (kv) {
+    var i = kv.indexOf('='); return [decodeURIComponent(kv.slice(0, i)), decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' '))];
+  });
+  var hash = '', resto = [];
+  pares.forEach(function (p) { if (p[0] === 'hash') hash = p[1]; else if (p[0] !== 'signature') resto.push(p); });
+  if (!/^[0-9a-f]{64}$/.test(hash)) return { ok: false, error: 'Datos de Telegram incompletos.' };
+  resto.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+  var dcs = resto.map(function (p) { return p[0] + '=' + p[1]; }).join('\n');
+  var bytes = function (s) { return Utilities.newBlob(s).getBytes(); };
+  var secreto = Utilities.computeHmacSha256Signature(bytes(token), bytes('WebAppData'));
+  var firma = Utilities.computeHmacSha256Signature(bytes(dcs), secreto)
+    .map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
+  var d = 0; for (var i = 0; i < 64; i++) d |= firma.charCodeAt(i) ^ hash.charCodeAt(i);
+  if (d !== 0) return { ok: false, error: 'La firma de Telegram no es válida.' };
+  var m = {}; resto.forEach(function (p) { m[p[0]] = p[1]; });
+  if (!(Number(m.auth_date) > 0) || Date.now() / 1000 - Number(m.auth_date) > 86400) return { ok: false, error: 'Los datos de Telegram vencieron: vuelva a abrir el portal desde el bot.' };
+  var u = {}; try { u = JSON.parse(m.user || '{}'); } catch (e) { u = {}; }
+  if (!u.id) return { ok: false, error: 'Telegram no mandó el usuario.' };
+  var x = TG_usuario_(ss, String(u.id));
+  return { ok: true, id: String(u.id), nombre: [u.first_name, u.last_name].filter(String).join(' '), autorizado: !!(x && x.activo) };
+}

@@ -428,6 +428,16 @@ function TGV_cuando_(x) {
   return 'vence en <b>' + x.faltan + ' días</b>';
 }
 
+/** ✨ Tabla para el mensaje enriquecido (Bot API 10.1+): Empresa · Obligación · Periodo · Vence · Estado. */
+function TGV_tablaRica_(lista) {
+  if (!lista.length) return '';
+  return '<table><tr><th>Empresa</th><th>Obligación</th><th>Periodo</th><th>Vence</th><th>Estado</th></tr>' + lista.map(function (x) {
+    var est = x.presentado ? '✅ presentado' : x.faltan < 0 ? '🔴 venció hace ' + (-x.faltan) + ' d' : x.faltan === 0 ? '🟠 HOY' : x.faltan === 1 ? '🟠 mañana' : (x.faltan <= 2 ? '🟠 ' : '🟡 ') + 'en ' + x.faltan + ' días';
+    return '<tr><td>' + TG_esc_(x.nombre) + (x.bc ? ' <i>(BC)</i>' : '') + '</td><td>' + TGV_OBLIG_[x.ob].corto + '</td><td>' + x.periodo.slice(4) + '/' + x.periodo.slice(0, 4) +
+      '</td><td>' + Utilities.formatDate(x.vence, 'America/Lima', 'dd/MM') + '</td><td>' + est + '</td></tr>';
+  }).join('') + '</table>';
+}
+
 function TGV_linea_(x) {
   var per = x.periodo.slice(4) + '/' + x.periodo.slice(0, 4);
   return (x.presentado ? '✅ ' : x.faltan < 0 ? '🔴 ' : x.faltan <= 2 ? '🟠 ' : '🟡 ') + '<b>' + TG_esc_(x.nombre) + '</b> · ' + TGV_OBLIG_[x.ob].corto + ' ' + per +
@@ -453,7 +463,9 @@ function TGV_avisar_(ss, destinos) {
   var html = '📅 <b>Vencimientos SUNAT</b>\n' + hoy.map(TGV_linea_).join('\n') +
     (faltaCrono.length ? '\n\n⚠️ Falta el cronograma del periodo ' + faltaCrono[0].periodo + ' en la pestaña ' + TGV_HOJA_ + ' (no se pudo bajar de SUNAT).' : '');
   var teclado = TGV_botones_(hoy);
-  destinos.forEach(function (u) { TG_enviar_(u.chatId, html, teclado); });
+  var rico = '<h3>📅 Vencimientos SUNAT</h3>' + TGV_tablaRica_(hoy) +
+    (faltaCrono.length ? '<p>⚠️ Falta el cronograma del periodo ' + faltaCrono[0].periodo + ' en la pestaña ' + TGV_HOJA_ + '.</p>' : '');
+  destinos.forEach(function (u) { TG_mostrarRico_({ chatId: u.chatId }, rico, html, teclado, true); });
 }
 
 function TGV_botones_(items) {
@@ -504,7 +516,10 @@ function TGV_comando_(ctx, arg) {
     (pend.length ? '<b>Pendientes</b>\n' + pend.map(TGV_linea_).join('\n') : '✅ No hay nada pendiente.') +
     (hechos.length ? '\n\n<b>Ya presentado</b>\n' + hechos.slice(-10).map(TGV_linea_).join('\n') : '') +
     '\n\n<i>El SIRE (RVIE/RCE) vence 1 día hábil antes que el IGV (R.S. 281-2022, Anexo II). El SIRE se marca solo con el mensaje del Buzón SUNAT; el IGV-Renta (621) y el PLAME (601) se marcan solos cuando su constancia está en la hoja Declaraciones (se baja de SUNAT antes de cada aviso), o con el botón ✅. Ajustes: /vencimientos ajustes</i>';
-  TG_enviar_(ctx.chatId, html, TGV_botones_(pend));
+  var rico = '<h2>📅 Vencimientos SUNAT</h2>' + (pend.length ? '<h4>Pendientes</h4>' + TGV_tablaRica_(pend) : '<p>✅ No hay nada pendiente.</p>') +
+    (hechos.length ? '<details><summary>Ya presentado (' + Math.min(10, hechos.length) + ')</summary>' + TGV_tablaRica_(hechos.slice(-10)) + '</details>' : '') +
+    '<p><i>El SIRE vence 1 día hábil antes que el IGV. IGV-Renta (621) y PLAME (601) se marcan solos con la hoja Declaraciones; el SIRE con el Buzón. Ajustes: /vencimientos ajustes</i></p>';
+  TG_mostrarRico_(ctx, rico, html, TGV_botones_(pend), true);
 }
 
 function TGV_enviarAjustes_(ctx) {

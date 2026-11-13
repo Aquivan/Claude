@@ -58,3 +58,11 @@ En el celular: Chrome → menú ⋮ → **Agregar a la pantalla principal** (iPh
 
 `deploy-vouchers-portal.yml`: con cada push a `vouchers_portal/apps_script/` sube el código y vuelve a publicar la **misma**
 dirección (escribe `PV_Despliegue.js` con las direcciones del portal y de la hoja de Vouchers).
+
+## 🧾 Mini App de Telegram (página propia)
+
+`vouchers_portal/miniapp/construir.py` arma, en cada despliegue, la MISMA página del portal para GitHub Pages (rama `gh-pages`, carpeta `vouchers/`), con `telegram-web-app.js` y un puente que cambia `google.script.run` por `fetch` POST al `doPost` del portal (mismas funciones públicas: `PV_entrar`, `PV_api`, más `PV_entrarTelegram`). Así:
+- no aparece el aviso de Google Apps Script;
+- **entra sin PIN** desde el bot: Telegram firma quién abrió (initData) y Cobranzas lo comprueba con el token del bot (canal vch `tgverificar`); la primera vez se entra con usuario y PIN y ese Telegram queda vinculado (propiedad `PV_TG_<id>`);
+- **📷 QR** en Buscar: el lector de Telegram lee el QR de una factura o boleta electrónica (RUC|tipo|serie|número|IGV|total|fecha…) y busca el voucher por «serie-número» o por el total.
+La dirección de la Mini App queda en los metadatos de la hoja de Vouchers (`PV_MINIAPP`) y el bot la usa cuando ya responde. **Una vez**: GitHub → Settings → Pages → *Deploy from a branch* → `gh-pages` / *(root)*. La página publicada contiene la dirección del portal (para entrar igual hace falta usuario y PIN o un Telegram autorizado y vinculado).
