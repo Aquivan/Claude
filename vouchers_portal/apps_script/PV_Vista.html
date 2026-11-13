@@ -713,7 +713,18 @@ function subirTodo() {
 
 /* ---------- 📲 escanear con la app de Google Drive (guarda directo en la carpeta de entrada) ---------- */
 var DRIVE = null;
+/** ¿El portal está abierto dentro de Telegram (Mini App)? Ahí no se puede abrir la app de Drive (el enlace «intent» da ERR_UNKNOWN_URL_SCHEME). */
+function enTelegram() { return /Telegram/i.test(navigator.userAgent || ''); }
 function escanearDrive() {
+  if (enTelegram()) {
+    return modal('<h3>📲 Escanear dentro de Telegram</h3>' +
+      '<p style="margin-top:0">Desde aquí Telegram no deja abrir la app de Google Drive. Tiene tres formas fáciles:</p>' +
+      '<ol style="padding-left:18px;line-height:1.6;margin:6px 0">' +
+      '<li><b>📷 Tomar foto</b> o <b>📄 Escanear a PDF</b> de esta misma pantalla (con ✂️ recortar y ✨ mejorar).</li>' +
+      '<li><b>Con la cámara de Telegram</b>: cierre el portal y mande la foto o el PDF al chat del bot (📎 → Cámara). El bot lo lee, le dice si ya está registrado y con ✅ lo deja en la carpeta de entrada.</li>' +
+      '<li>Para usar el escáner de Drive: abra el portal en el navegador (menú ⋮ de arriba → abrir en el navegador, o el enlace que le manda /portal).</li></ol>',
+      [['Entendido', null, 'p']]);
+  }
   var abrir = function (r) {
     DRIVE = r;
     modal('<h3>📲 Escanear con Google Drive</h3>' +

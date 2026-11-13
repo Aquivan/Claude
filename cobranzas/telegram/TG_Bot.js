@@ -231,7 +231,7 @@ function TG_comando_(ctx, texto) {
     case 'portal': {   // 🧾 el Portal de Vouchers dentro de Telegram (Mini App)
       var bp = TG_botonPortal_(chatId);
       if (!bp) return TG_enviar_(chatId, '⚠️ Todavía no encuentro la dirección del Portal de Vouchers (se registra al publicarlo).');
-      return TG_enviar_(chatId, '🧾 <b>Portal de Vouchers</b>: buscar, subir con la cámara, corregir, 🔎 Identificar RUC y 🧠 IA, sin salir de Telegram. Entre con su usuario y PIN del portal.', [[bp]]);
+      return TG_enviar_(chatId, '🧾 <b>Portal de Vouchers</b>: buscar, subir con la cámara, corregir, 🔎 Identificar RUC y 🧠 IA, sin salir de Telegram. Entre con su usuario y PIN del portal.\n📷 Para fotos de vouchers también puede mandarlas aquí mismo, con la cámara de Telegram (📎 → Cámara).', bp.web_app ? [[bp], [{ text: '🌐 Abrir en el navegador (para el escáner de Drive)', url: bp.web_app.url }]] : [[bp]]);
     }
     case 'ayuda': case 'help': case 'instrucciones': return AYU_telegram_(ctx, arg);   // ❓ Centro de ayuda por temas (Ayuda.js)
     case 'resumen': case 'hoy': return TG_enviarResumen_(ctx);
