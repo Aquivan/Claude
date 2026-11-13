@@ -292,6 +292,7 @@ main{flex:1;min-height:0;overflow:auto}
       <p><b>🔎 Buscar</b>: escriba un n° de operación, proveedor, RUC, monto o empresa. Filtre por pestaña (Originales / Fotos), moneda, fechas, banco, empresa, montos y marcas (<i>Sin RUC, Sin revisar, Duplicados, Por retener, Sin empresa</i>). Toque un voucher para verlo.</p>
       <p><b>👁 Ver un voucher</b>: arriba la <b>imagen</b> de la hoja o el <b>archivo original</b> (PDF en la página exacta, o la foto). 🔍+ / 🔍− para acercar; en el celular también con dos dedos. ◀ ▶ pasan al voucher anterior o siguiente de la lista. ⬇ descarga el original.</p>
       <p><b>✏️ Corregir</b> (permiso <i>editar</i>): cambie los datos y toque <b>💾 Guardar</b>; antes se muestra qué cambia. Queda una nota en la hoja con quién y qué cambió. <b>🔁 Releer con IA</b> vuelve a leer la página con la IA de la hoja y muestra ANTES / AHORA para elegir; <b>↩️ Deshacer relectura</b> lo devuelve.</p>
+      <p><b>🔁 Pasar a Fotos / a Originales</b> (visor, permiso <i>editar</i>): si un voucher se subió como Original y era Foto (o al revés), se vuelve a procesar en la otra pestaña; sus filas se vacían y lo escrito a mano se repone solo. En <b>📥 Pendientes</b>, 🔁 mueve un archivo que aún no se procesa a la otra carpeta de entrada.</p>
       <p><b>📤 Subir</b> (permiso <i>subir</i>): <b>📷 Tomar foto</b> con la cámara, <b>📄 Escanear a PDF</b> (varias fotos con la cámara → un solo PDF, una página por foto; se pueden girar, ordenar o quitar antes) o elija fotos/PDF. Cada foto de la cámara pasa por <b>✂️ Recortar</b>: el portal busca solo los bordes del voucher (4 esquinas que se pueden mover con el dedo), la endereza y con <b>✨ Mejorar</b> aclara el fondo y oscurece el texto (en las fotos de la galería, botón ✂️). El nombre sugerido sale en gris: <b>escriba encima</b> el que quiera, sin borrar nada (si no pone extensión, se agrega sola); póngales un nombre (no se puede repetir uno que ya existe), elija <i>Original</i> (PDF o comprobante formal) o <i>Foto</i>, y suba. Con ⚡ la hoja los procesa en ~1 minuto.</p>
       <p><b>📲 Escanear con Google Drive</b> (en 📤 Subir): elija Original o Foto → se abre la app de Drive en la carpeta 📥 de entrada → <b>+ → Escanear</b> → Guardar → vuelva y toque <b>⚡ Ya escaneé: procesar ahora</b>. Necesita una cuenta de Google con acceso a esa carpeta.</p>
       <p><b>↩️ Deshacer mi última corrección</b> (en el visor): vuelve lo de antes de su último 💾 Guardar, si nadie cambió esas celdas después. <b>🗑 Quitar</b> (en 📥 Pendientes y en lo recién subido): saca de la entrada un voucher subido por error, mientras todavía no está en la hoja (va a la papelera de Drive, 30 días); quien solo sube puede quitar lo suyo.</p>
@@ -520,7 +521,8 @@ function pintarVisor() {
   }).join('');
   var acc = d.editar ? '<button class="p" id="bGuardar" onclick="guardar()" disabled>💾 Guardar</button><button onclick="deshacerCorreccion()" title="Vuelve lo de antes de su último 💾 Guardar (en cualquier voucher)">↩️ Deshacer mi última corrección</button>' +
     (YO.puente ? '<button onclick="releer()" title="Volver a leer la página con la IA de la hoja">🔁 Releer con IA</button><button onclick="deshacer()">↩️ Deshacer relectura</button>' : '') +
-    '<button onclick="rucAbrir([FILA.hoja + \'!\' + FILA.fila])" title="Buscar el RUC del proveedor de este voucher">🔎 Identificar RUC</button>' : '';
+    '<button onclick="rucAbrir([FILA.hoja + \'!\' + FILA.fila])" title="Buscar el RUC del proveedor de este voucher">🔎 Identificar RUC</button>' +
+    '<button onclick="cambiarTipo()" title="Era ' + (d.hoja === 'Fotos' ? 'un Original' : 'una Foto') + ': se vuelve a procesar en la otra pestaña (lo escrito a mano se repone solo)">🔁 Pasar a ' + (d.hoja === 'Fotos' ? 'Originales' : 'Fotos') + '</button>' : '';
   $('vis').innerHTML = '<div class="vbar"><button class="solo-movil" onclick="cerrarVisor()">✖</button><span class="t">' + esc(d.hoja) + ' · fila ' + d.fila + ' · ' + esc(x[8] || '') + '</span>' +
     '<button onclick="abrir(SEL-1)" ' + (SEL > 0 ? '' : 'disabled') + '>◀</button><button onclick="abrir(SEL+1)" ' + (SEL < VIS.length - 1 ? '' : 'disabled') + '>▶</button>' +
     (d.archivo ? '<button onclick="descargar()" title="Descargar el archivo original">⬇</button>' : '') + '</div>' +
@@ -1270,6 +1272,25 @@ function mejorarCanvas(cv) {
 
 /* ============================================================ 📥 pendientes */
 var PENL = [];
+/* 🔁 Original ↔ Foto (lo hace Cobranzas: TG_CambiarTipo.js) */
+function cambiarTipo() {
+  var f = FILA; if (!f) return;
+  var hacia = f.hoja === 'Fotos' ? 'Originales' : 'Fotos';
+  ia('cambiartipo', { paso: 'plan', pedido: { hoja: f.hoja, fila: f.fila, hacia: hacia } }, 'Revisando…').then(function (pl) {
+    if (!pl || !pl.ok) return alerta(String((pl && (pl.texto || pl.error)) || 'No se pudo.').replace(/<[^>]+>/g, ''));
+    modal('<h3>🔁 Pasar a ' + hacia + '</h3><p style="white-space:pre-line;margin-top:0">' + pl.texto + '</p>', [['Cancelar'], ['✅ Sí, cambiar', function () {
+      ia('cambiartipo', { paso: 'hacer', plan: pl.plan }, 'Cambiando…').then(function (h) {
+        if (h && h.ok) api('procesar', {}, false).catch(function () {});   // ⚡ que la hoja lo procese ya
+        alerta(String((h && (h.texto || h.error)) || 'Listo.').replace(/<[^>]+>/g, '') + (h && h.ok ? '\n\n⚡ Pedí procesar ahora: en ~1 minuto aparece en ' + hacia + '.' : ''));
+        if (h && h.ok) { cerrarVisor && cerrarVisor(); cargarIndice(true); }
+      }).catch(function (e) { alerta('❌ ' + e.message); });
+    }, 'p']]);
+  }).catch(function (e) { alerta('❌ ' + e.message); });
+}
+function moverPenN(n) {
+  var f = PENL[n]; if (!f) return;
+  api('moverPendiente', { id: f.id }, 'Moviendo…').then(function (r) { alerta(r.mensaje); cargarPendientes(); }).catch(function (e) { alerta('❌ ' + e.message); });
+}
 function quitarPenN(n) { var f = PENL[n]; if (f) quitarPendiente(f.id, f.nombre, function (r) { alerta(r.mensaje); cargarPendientes(); }); }
 function cargarPendientes() {
   PENL = [];
@@ -1281,7 +1302,8 @@ function cargarPendientes() {
         l.map(function (f) {
           var puedeQuitar = entrada && f.id && (puede('editar') || (puede('subir') && f.por === YO.usuario));
           return '<tr><td style="word-break:break-word">' + esc(f.nombre) + '</td><td style="white-space:nowrap">' + esc(f.fecha) + '</td><td>' + f.kb + '</td><td>' + esc(f.por || '') + '</td>' +
-            (entrada ? '<td>' + (puedeQuitar ? '<button class="r" style="padding:3px 8px" title="Quitar (subido por error)" onclick="quitarPenN(' + (PENL.push(f) - 1) + ')">🗑</button>' : '') + '</td>' : '') + '</tr>';
+            (entrada ? '<td style="white-space:nowrap">' + (puedeQuitar ? '<button style="padding:3px 8px" title="Era ' + (/Fotos/.test(t) ? 'un Original' : 'una Foto') + ': pasarlo a la otra carpeta de entrada" onclick="moverPenN(' + (PENL.push(f) - 1) + ')">🔁 ' + (/Fotos/.test(t) ? 'a Originales' : 'a Fotos') + '</button> ' +
+              '<button class="r" style="padding:3px 8px" title="Quitar (subido por error)" onclick="quitarPenN(' + (PENL.push(f) - 1) + ')">🗑</button>' : '') + '</td>' : '') + '</tr>';
         }).join('') + '</table>' : '<div style="color:var(--gr)">' + vacio + '</div>') + '</div>';
     };
     $('penCont').innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap"><span style="color:var(--gr);font-size:12px">Al ' + esc(r.t) + '</span><span>' +
