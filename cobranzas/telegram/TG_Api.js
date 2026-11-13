@@ -68,6 +68,10 @@ function TG_enviar_(chatId, html, teclado, opciones) {
       delete carga.parse_mode;
       r = TG_llamar_('sendMessage', carga);
     }
+    if (!r.ok && carga.reply_markup && /BUTTON|web_app|WEB_APP/i.test(r.description || '')) {   // 🧾 un botón Mini App no vale en este chat: va como enlace normal
+      carga.reply_markup = JSON.parse(JSON.stringify(carga.reply_markup, function (k, v) { return v && v.web_app ? { text: v.text, url: v.web_app.url } : v; }));
+      r = TG_llamar_('sendMessage', carga);
+    }
     if (r.ok) id = r.result.message_id;
   });
   return id;

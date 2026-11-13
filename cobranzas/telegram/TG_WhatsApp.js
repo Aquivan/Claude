@@ -117,6 +117,10 @@ function TGW_responder_(q) {
     var tm; try { tm = TGM_respuesta_(TG_cfg_(ss)); } catch (err) { tm = '⚠️ ' + err.message; }
     return { ok: true, respuesta: tm, tablas: [], sugerencias: [], archivos: [], avisos: [] };
   }
+  if (/^\/?(portal|portal de vouchers)$/i.test(texto)) {   // 🧾 enlace al Portal de Vouchers (en Telegram se abre dentro de la app)
+    var up = TG_urlPortal_();
+    return { ok: true, respuesta: up ? '🧾 *Portal de Vouchers* (usuario y PIN del portal):\n' + up : '⚠️ Todavía no encuentro la dirección del Portal de Vouchers.', tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  }
   if (MESA_RX_.test(texto)) {   // 🧩 «mesa»: enlace a la Mesa de conciliación (Mesa.js)
     var me; try { me = MESA_textoEnlace_('WhatsApp').texto; } catch (err) { me = '⚠️ ' + err.message; }
     return { ok: true, respuesta: me, tablas: [], sugerencias: [], archivos: [], avisos: [] };

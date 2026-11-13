@@ -126,6 +126,8 @@ jobs:
             clasp push --force
           fi
           clasp create-deployment -i "$ID" -d "$DESC" | sed -E "s/AKfy[A-Za-z0-9_-]+/(oculto)/g"
+          # 🧾 deja la dirección del portal en la hoja de Vouchers (el bot de Telegram la usa para abrirlo como Mini App)
+          curl -sSL -o /dev/null "https://script.google.com/macros/s/$ID/exec?registrar=1" || echo "::warning::No se pudo registrar la dirección del portal"
           SID=$(python3 -c "import json;print(json.load(open('.clasp.json'))['scriptId'])")
           echo "::notice title=Portal publicado::El enlace lo ve el administrador en el portal (👥 Usuarios). Primera vez: abra https://script.google.com/d/$SID/edit, elija doGet y pulse Ejecutar para dar permisos."
           N=$(clasp --json list-versions 2>/dev/null | grep -c '"versionNumber"' || true)

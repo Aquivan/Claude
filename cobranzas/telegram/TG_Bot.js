@@ -74,7 +74,7 @@ function TG_manejar_(u) {
       var rol = TG_admins_(ss).length ? 'usuario' : 'admin';
       usuario = TG_agregarUsuario_(ss, chatId, nombre, rol);
       TG_enviar_(chatId, '✅ <b>¡Listo, ' + TG_esc_(nombre || 'bienvenido') + '!</b> Su Telegram quedó vinculado' + (rol === 'admin' ? ' como <b>administrador</b>' : '') + '.\n\n' + TG_textoBienvenida_(), TG_tecladoFijo_());
-      TG_enviar_(chatId, TG_textoMenu_(), TG_tecladoMenu_());
+      TG_enviar_(chatId, TG_textoMenu_(), TG_tecladoMenu_(chatId));
       TG_admins_(ss).forEach(function (a) { if (a.chatId !== chatId) TG_enviar_(a.chatId, '👤 ' + TG_esc_(nombre) + ' (ID ' + chatId + ') se vinculó al bot con un código.'); });
       return;
     }
@@ -168,8 +168,32 @@ function TG_tecladoFijo_() {
     resize_keyboard: true, is_persistent: true, input_field_placeholder: 'Pregunte lo que quiera o mande una foto…' };
 }
 
-function TG_tecladoMenu_() {
-  return [
+/**
+ * 🧾 Portal de Vouchers (vouchers_portal/): su dirección la deja el portal en los metadatos de la hoja de Vouchers ('PV_WEB').
+ * En el chat privado se abre como Mini App (dentro de Telegram, botón web_app); en un grupo, como enlace normal.
+ */
+function TG_urlPortal_() {
+  var c = CacheService.getScriptCache(), u = c.get('TG_URL_PORTAL');
+  if (u) return u === '-' ? '' : u;
+  u = '';
+  try {
+    var id = leerConfig_(ssPrincipal_()).idVouchers;
+    var m = id ? SpreadsheetApp.openById(id).createDeveloperMetadataFinder().withKey('PV_WEB').find() : [];
+    if (m.length) u = 'https://script.google.com/macros/s/' + m[0].getValue() + '/exec';
+  } catch (e) { console.warn('Portal de Vouchers: ' + e.message); }
+  c.put('TG_URL_PORTAL', u || '-', u ? 21600 : 600);
+  return u;
+}
+function TG_botonPortal_(chatId) {
+  var u = TG_urlPortal_();
+  if (!u) return null;
+  var privado = /^\d+$/.test(String(chatId || ''));   // chat privado: id positivo (los grupos son negativos)
+  return privado ? { text: '🧾 Portal de Vouchers', web_app: { url: u } } : { text: '🧾 Portal de Vouchers', url: u };
+}
+
+function TG_tecladoMenu_(chatId) {
+  var bp = TG_botonPortal_(chatId);
+  return (bp ? [[bp]] : []).concat([
     [{ text: '📊 Resumen de hoy', callback_data: 'c:resumen' }],
     [{ text: '💰 Por cobrar', callback_data: 'c:cobrar' }, { text: '💸 Por pagar', callback_data: 'c:pagar' }, { text: '⏰ Vencidas', callback_data: 'c:vencidas' }],
     [{ text: '📬 Buzón SUNAT', callback_data: 'c:notificaciones' }, { text: '🏦 Detracciones', callback_data: 'c:detracciones' }],
@@ -177,7 +201,7 @@ function TG_tecladoMenu_() {
     [{ text: '⚙️ Estado descargas', callback_data: 'c:estado' }, { text: '⬇ Descargar de SUNAT', callback_data: 'c:descargar' }],
     [{ text: '🔄 Recalcular cobranzas', callback_data: 'c:actualizar' }, { text: '💱 Tipo de cambio', callback_data: 'c:tc' }],
     [{ text: '⏰ Recordatorios', callback_data: 'c:recordatorios' }, { text: '🔔 Mis avisos', callback_data: 'c:avisos' }, { text: '❓ Ayuda', callback_data: 'c:ayuda' }],
-  ];
+  ]);
 }
 
 function TG_textoMenu_() {
@@ -202,8 +226,13 @@ function TG_comando_(ctx, texto) {
   switch (cmd) {
     case 'start':
       TG_enviar_(chatId, '👋 <b>Hola' + (ctx.nombre ? ', ' + TG_esc_(ctx.nombre.split(' ')[0]) : '') + '.</b> ' + TG_textoBienvenida_(), TG_tecladoFijo_());
-      return TG_enviar_(chatId, TG_textoMenu_(), TG_tecladoMenu_());
-    case 'menu': return TG_enviar_(chatId, TG_textoMenu_(), TG_tecladoMenu_());
+      return TG_enviar_(chatId, TG_textoMenu_(), TG_tecladoMenu_(chatId));
+    case 'menu': return TG_enviar_(chatId, TG_textoMenu_(), TG_tecladoMenu_(chatId));
+    case 'portal': {   // 🧾 el Portal de Vouchers dentro de Telegram (Mini App)
+      var bp = TG_botonPortal_(chatId);
+      if (!bp) return TG_enviar_(chatId, '⚠️ Todavía no encuentro la dirección del Portal de Vouchers (se registra al publicarlo).');
+      return TG_enviar_(chatId, '🧾 <b>Portal de Vouchers</b>: buscar, subir con la cámara, corregir, 🔎 Identificar RUC y 🧠 IA, sin salir de Telegram. Entre con su usuario y PIN del portal.', [[bp]]);
+    }
     case 'ayuda': case 'help': case 'instrucciones': return AYU_telegram_(ctx, arg);   // ❓ Centro de ayuda por temas (Ayuda.js)
     case 'resumen': case 'hoy': return TG_enviarResumen_(ctx);
     case 'cobrar': return TG_enviarCartera_(ctx, 'Por cobrar', arg);
@@ -248,7 +277,7 @@ function TG_comando_(ctx, texto) {
     }
   }
   if (arg || cmd.length > 2) return TG_preguntar_(ctx, texto.replace(/^\//, ''), []);
-  return TG_enviar_(chatId, 'No conozco ese comando. ' + TG_textoMenu_(), TG_tecladoMenu_());
+  return TG_enviar_(chatId, 'No conozco ese comando. ' + TG_textoMenu_(), TG_tecladoMenu_(chatId));
 }
 
 function TG_textoAyuda_() {
@@ -440,7 +469,7 @@ function TG_alBoton_(ss, q) {
       TG_agregarUsuario_(ss, datos.chat, datos.nombre, 'usuario');
       TG_editar_(chatId, ctx.msgId, '✅ ' + TG_esc_(datos.nombre) + ' (ID ' + datos.chat + ') quedó autorizado.');
       TG_enviar_(datos.chat, '✅ <b>Un administrador le dio acceso.</b>\n\n' + TG_textoBienvenida_(), TG_tecladoFijo_());
-      return TG_enviar_(datos.chat, TG_textoMenu_(), TG_tecladoMenu_());
+      return TG_enviar_(datos.chat, TG_textoMenu_(), TG_tecladoMenu_(datos.chat));
     case 'baja':
       if (usuario.rol !== 'admin') return;
       TG_desactivarUsuario_(ss, datos.chat);
