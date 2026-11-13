@@ -37,7 +37,46 @@ function MESA_menuAbrir() {
 function MESA_enlace_(quien) {
   var url = TG_urlWebApp_();
   if (!url) throw new Error('La aplicación web de Cobranzas aún no está publicada.');
-  return url + '?mesa=' + MESA_llaveNueva_(quien);
+  var tk = MESA_llaveNueva_(quien), web = MESA_urlWeb_();
+  return web ? web + '?k=' + tk : url + '?mesa=' + tk;
+}
+
+/**
+ * 🧩 La Mesa en GitHub Pages (sin el aviso de Google): misma carpeta que la Mini App del portal (…/vouchers/ → …/mesa/).
+ * Solo si ya responde; si no, la de Google de siempre.
+ */
+function MESA_urlWeb_() {
+  var c = CacheService.getScriptCache(), u = c.get('MESA_URL_WEB');
+  if (u) return u === '-' ? '' : u;
+  u = '';
+  try {
+    var id = leerConfig_(ssPrincipal_()).idVouchers;
+    var m = id ? SpreadsheetApp.openById(id).createDeveloperMetadataFinder().withKey('PV_MINIAPP').find() : [];
+    if (m.length) {
+      var cand = String(m[0].getValue()).replace(/vouchers\/?$/, 'mesa/');
+      var r = UrlFetchApp.fetch(cand, { muteHttpExceptions: true, followRedirects: true });
+      if (r.getResponseCode() === 200 && /MESA_WEB/.test(r.getContentText())) u = cand;
+    }
+  } catch (e) { console.warn('Mesa en GitHub Pages: ' + e.message); }
+  c.put('MESA_URL_WEB', u || '-', u ? 21600 : 900);
+  return u;
+}
+
+/** POST ?canal=mesa (la Mesa en GitHub Pages): solo las funciones de la página; cada una exige la llave temporal. */
+var MESA_WEB_FN_ = {
+  MESA_datos: MESA_datos, MESA_guardar: MESA_guardar, MESA_reasignar: MESA_reasignar, MESA_completar: MESA_completar, MESA_manual: MESA_manual,
+  MESA_historial: MESA_historial, MESA_deshacer: MESA_deshacer, MESA_recalcularAhora: MESA_recalcularAhora, MESA_estado: MESA_estado,
+  MESA_archivo: MESA_archivo, MESA_ia: MESA_ia, MESA_rucRapido: MESA_rucRapido, MESA_rucAplicar: MESA_rucAplicar, MESA_rucExternos: MESA_rucExternos,
+  MESA_rucEstado: MESA_rucEstado, MESA_rucOtro: MESA_rucOtro, MESA_rucElegir: MESA_rucElegir
+};
+function MESA_doPost_(e) {
+  var salida = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
+  var q;
+  try { q = JSON.parse(e.postData.contents); } catch (x) { return salida({ ok: false, error: 'pedido ilegible' }); }
+  var fn = Object.prototype.hasOwnProperty.call(MESA_WEB_FN_, q.f) ? MESA_WEB_FN_[q.f] : null;
+  if (!fn) return salida({ ok: false, error: 'función no permitida' });
+  try { return salida({ ok: true, r: fn.apply(null, q.args || []) }); }
+  catch (x) { return salida({ ok: false, error: String(x && x.message || x) }); }
 }
 
 function MESA_llaveNueva_(quien) {
