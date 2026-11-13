@@ -128,6 +128,7 @@ function TG_manejar_(u) {
     catch (err) { return TG_enviar_(chatId, '⚠️ ' + TG_esc_(err.message)); }
   }
   if (TGRL_tg_(ctx, texto)) return;   // 🔁 "volver a leer Originales 2666" (TG_Releer.js)
+  if (CTV_tg_(ctx, texto)) return;   // 🔁 "cambia el último a foto" (TG_CambiarTipo.js)
   if (TGQ_RX_.test(texto)) return TGQ_tg_(ctx, texto);   // 📋 "procesados hoy sonia" (TG_Procesados.js)
   var vivo = TGEV_comando_(texto) || TGPC_comando_(texto);   // 📺 «en vivo sí/no» · 🖥 «en pc sí/no» (TG_EnVivo.js)
   if (vivo) return TG_enviar_(chatId, TG_esc_(vivo));
@@ -515,6 +516,7 @@ function TG_alBoton_(ss, q) {
     case 'venc': return TGV_alBoton_(ctx, datos);
     case 'entrega': return TGE_alBotonTG_(ctx, datos, op, partes[1]);
     case 'procesar': return TGP_alBotonTG_(ctx, op, partes[1]);
+    case 'ctv': return CTV_alBoton_(ctx, datos, op);   // 🔁 Original ↔ Foto (TG_CambiarTipo.js)
     case 'deshacer2': return TGU_alBotonTG_(ctx, datos, op);
     case 'cre': return TGR_alBotonTG_(ctx, datos, op, partes[1]);   // 🧾 emitir comprobante de retención
     case 'gre': return TGG_alBotonTG_(ctx, datos, op);   // 🚚 guía de remisión por SUNAT

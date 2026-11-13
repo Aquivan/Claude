@@ -10,11 +10,11 @@
 // Qué puede pedir el portal y con qué permiso (todo lo que escribe pide «editar»).
 var PV_IA_ACC_ = {
   chat: 'editar', aplicar: 'editar', deshacer: 'editar', procesados: 'editar',
-  rucfilas: 'editar', rucexternos: 'editar', rucestado: 'editar', rucultimas: 'editar', rucaliasborrar: 'editar', rucotro: 'editar', rucelegir: 'editar', rucelegirvarios: 'editar', rucopciones: 'editar',
+  rucfilas: 'editar', rucexternos: 'editar', rucestado: 'editar', rucultimas: 'editar', rucaliasborrar: 'editar', cambiartipo: 'editar', rucotro: 'editar', rucelegir: 'editar', rucelegirvarios: 'editar', rucopciones: 'editar',
   mesa: 'editar', vco_ver: 'editar', vco_copiar: 'editar', vco_deshacer: 'editar'
 };
 // Lo que deja huella en la hoja: se anota en 🌐 Registro portal.
-var PV_IA_REG_ = { aplicar: '🧠 Escribió lo propuesto por la IA', deshacer: '🧠 Deshizo lo último de la IA', rucelegir: '🔎 Eligió un RUC', rucelegirvarios: '🔎 Escribió varios RUC', rucaliasborrar: '🗑 Borró un alias',
+var PV_IA_REG_ = { aplicar: '🧠 Escribió lo propuesto por la IA', deshacer: '🧠 Deshizo lo último de la IA', rucelegir: '🔎 Eligió un RUC', rucelegirvarios: '🔎 Escribió varios RUC', rucaliasborrar: '🗑 Borró un alias', cambiartipo: '🔁 Cambió Original ↔ Foto',
   vco_copiar: '🔗 Copió de Fotos a Originales', vco_deshacer: '🔗 Deshizo la copia de Fotos', mesa: '🧩 Abrió la Mesa de conciliación' };
 
 function PV_conexionIA_(nueva) {
@@ -42,9 +42,9 @@ function PV_ia_(token, d) {
   var accion = String(d.accion || ''), nivel = PV_IA_ACC_[accion];
   if (!nivel) throw new Error('Acción de IA no permitida.');
   var s = PV_sesion_(token, nivel), cuerpo = d.cuerpo || {};
-  if (accion === 'mesa' || accion === 'vco_copiar' || accion === 'vco_deshacer') cuerpo.quien = 'Portal · ' + s.u;
+  if (accion === 'mesa' || accion === 'vco_copiar' || accion === 'vco_deshacer' || accion === 'cambiartipo') cuerpo.quien = 'Portal · ' + s.u;
   var r = PV_iaLlamar_(accion, cuerpo);
-  if (PV_IA_REG_[accion] && r && !r.error) {
+  if (PV_IA_REG_[accion] && r && !r.error && !(accion === 'cambiartipo' && cuerpo.paso !== 'hacer')) {
     var det = accion === 'aplicar' ? (cuerpo.ids || []).length + ' cambio(s) · ' + String(r.mensaje || '').slice(0, 300)
       : accion === 'rucelegir' ? String(cuerpo.prov || '') + ' → ' + String(cuerpo.ruc || '') + ' (' + (cuerpo.filas || []).map(function (f) { return f.hoja + '!' + f.fila; }).join(', ') + ')'
       : accion === 'rucaliasborrar' ? String(cuerpo.prov || '') + ' · ' + String(r.mensaje || '').slice(0, 200)

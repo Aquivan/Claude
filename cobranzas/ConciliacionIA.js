@@ -30,6 +30,7 @@ function CIA_agregarMenu_() {
     .addItem('📰 Resumen de cobranzas y pagos con IA', 'CIA_menuResumen')
     .addItem('📋 Analizar vouchers procesados (factura, empresa, retención)', 'menuAnalizarIAProcesados')
     .addItem('🔎 Identificar RUC de los proveedores (filas seleccionadas)', 'menuIdentificarRucFilas')
+    .addItem('🔁 Cambiar Original ↔ Foto (el último o una fila)', 'CTV_menuCambiar')
     .addItem('🔗 Completar Originales con lo trabajado en Fotos', 'VCO_menuAbrir')
     .addSeparator()
     .addItem('🔍 Auditor IA: abrir (compras y pagos de todas las empresas)', 'AUD_menuAbrir')

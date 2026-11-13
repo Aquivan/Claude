@@ -115,6 +115,31 @@ function VIA_menuIdentificarRuc() {
   ui.showModalDialog(html, '🔎 Identificar RUC de los proveedores');
 }
 
+/**
+ * 🔁 Cambiar Original ↔ Foto: la fila seleccionada (Originales o Fotos) o, si no hay, lo último que entró. Lo hace Cobranzas
+ * (TG_CambiarTipo.js): pendiente → pasa a la otra carpeta de entrada; procesado → vacía sus filas, el archivo vuelve a la
+ * entrada de la otra pestaña, se procesa de nuevo y lo escrito a mano se repone solo.
+ */
+function VIA_menuCambiarTipo() {
+  var ui = SpreadsheetApp.getUi(), sh = SpreadsheetApp.getActiveSheet(), nombre = sh.getName(), ped = {};
+  var fila = sh.getActiveRange() ? sh.getActiveRange().getRow() : 0;
+  if (/^(originales|fotos)$/i.test(nombre) && fila >= 2 && String(sh.getRange(fila, 11).getValue() || '').trim()) {
+    ped = { hoja: /^o/i.test(nombre) ? 'Originales' : 'Fotos', fila: fila };
+    ped.hacia = ped.hoja === 'Fotos' ? 'Originales' : 'Fotos';
+  } else {
+    var r = ui.alert('🔁 Cambiar Original ↔ Foto', 'No hay una fila de voucher seleccionada: se usa lo ÚLTIMO que entró.\n\n¿Pasarlo a FOTOS? (No = pasarlo a ORIGINALES)', ui.ButtonSet.YES_NO_CANCEL);
+    if (r === ui.Button.CANCEL || r === ui.Button.CLOSE) return;
+    ped.hacia = r === ui.Button.YES ? 'Fotos' : 'Originales';
+  }
+  var pl = VIA_llamar_('cambiartipo', { paso: 'plan', pedido: ped });
+  var txt = function (s) { return String(s || '').replace(/<[^>]+>/g, ''); };
+  if (!pl || !pl.ok) return ui.alert(txt((pl && (pl.texto || pl.error)) || 'No se pudo.'));
+  if (ui.alert('🔁 Cambiar Original ↔ Foto', txt(pl.texto) + '\n\n¿Lo hago?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  var quien = ''; try { quien = Session.getActiveUser().getEmail(); } catch (e) {}
+  var h = VIA_llamar_('cambiartipo', { paso: 'hacer', plan: pl.plan, quien: 'hoja de Vouchers · ' + quien });
+  ui.alert(txt((h && (h.texto || h.error)) || 'Listo.'));
+}
+
 /** 🧩 Mesa de conciliación: es una página de Cobranzas (facturas de SIRE + estos vouchers); se abre con un enlace temporal. */
 function VIA_menuMesa() {
   var quien = ''; try { quien = Session.getActiveUser().getEmail(); } catch (e) {}

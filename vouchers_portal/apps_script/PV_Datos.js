@@ -274,6 +274,22 @@ function PV_quitarPendiente_(s, id) {
   return { ok: true, mensaje: '🗑 «' + nombre + '» quitado de la entrada (se puede recuperar 30 días desde la papelera de Drive).' };
 }
 
+/** 🔁 Un archivo que espera en la entrada pasa a la entrada de la otra pestaña (Original ↔ Foto). */
+function PV_moverPendiente_(s, id) {
+  var f;
+  try { f = DriveApp.getFileById(String(id || '')); } catch (e) { throw new Error('Ese archivo ya no está (¿ya se procesó?).'); }
+  var de = '', ps = f.getParents();
+  while (ps.hasNext()) { var pid = ps.next().getId(); if (pid === PV_CARP_.oe.id) de = 'oe'; else if (pid === PV_CARP_.fe.id) de = 'fe'; }
+  if (!de || f.isTrashed()) throw new Error('«' + f.getName() + '» ya no está esperando en la entrada (¿ya se procesó?). Use 🔁 Pasar a… en el visor del voucher.');
+  var por = String(f.getDescription() || '').replace(/^Subido desde el 🌐 portal por /, '').split(' el ')[0];
+  if (PV_nivel_(s.p) < PV_nivel_('editar') && por !== s.u) throw new Error('Solo puede mover lo que usted subió (este lo subió ' + (por || 'otra persona') + ').');
+  var a = de === 'oe' ? 'fe' : 'oe';
+  f.moveTo(DriveApp.getFolderById(PV_CARP_[a].id));
+  var hacia = a === 'fe' ? 'Fotos' : 'Originales';
+  PV_registrar_(s, '🔁 Pasó un voucher pendiente a ' + hacia, f.getName());
+  return { ok: true, mensaje: '🔁 «' + f.getName() + '» pasó a la entrada de ' + hacia + ': se procesa como ' + (a === 'fe' ? '📸 Foto' : '📄 Original') + '.' };
+}
+
 /* ============================================================ carpetas */
 
 /** Lo que espera en Entrada (por procesar) y lo último descartado. */
