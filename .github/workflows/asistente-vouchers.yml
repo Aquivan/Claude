@@ -133,7 +133,7 @@ jobs:
           bloque = re.search(r'function CIA_agregarMenu_\(\)\s*\{(.*?)\.addToUi\(\)', cia, re.S).group(1)
           aqui = {'CHAT_menuAbrir': 'VIA_menuAbrirChat', 'CIA_menuResumen': 'VIA_menuResumen',
                   'menuAnalizarIAProcesados': 'VIA_menuProcesados', 'IA_menuRetirar': 'VIA_menuRetirar',
-                  'menuIdentificarRucFilas': 'VIA_menuIdentificarRuc', 'MESA_menuAbrir': 'VIA_menuMesa', 'VCO_menuAbrir': 'VIA_menuVco'}
+                  'menuIdentificarRucFilas': 'VIA_menuIdentificarRuc', 'MESA_menuAbrir': 'VIA_menuMesa', 'VCO_menuAbrir': 'VIA_menuVco', 'CTV_menuCambiar': 'VIA_menuCambiarTipo'}
           pest = {'CIA_': '🤝 Conciliar con IA', 'IMP_': '🤝 Importar'}
           lineas, extra = [], []
           for m in re.finditer(r"\.addItem\('((?:[^'\\]|\\.)*)',\s*'(\w+)'\)|\.addSeparator\(\)", bloque):

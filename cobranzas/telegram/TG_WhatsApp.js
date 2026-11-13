@@ -121,6 +121,10 @@ function TGW_responder_(q) {
     var up = TG_urlPortal_();
     return { ok: true, respuesta: up ? '🧾 *Portal de Vouchers* (usuario y PIN del portal):\n' + up : '⚠️ Todavía no encuentro la dirección del Portal de Vouchers.', tablas: [], sugerencias: [], archivos: [], avisos: [] };
   }
+  if (!(q.adjuntos || []).length) {   // 🔁 «cambia el último a foto» (+ «sí» para confirmar) (TG_CambiarTipo.js)
+    var ctv; try { ctv = CTV_wa_(ss, texto, clave); } catch (err) { ctv = '⚠️ ' + err.message; }
+    if (ctv) return { ok: true, respuesta: ctv, tablas: [], sugerencias: [], archivos: [], avisos: [] };
+  }
   if (MESA_RX_.test(texto)) {   // 🧩 «mesa»: enlace a la Mesa de conciliación (Mesa.js)
     var me; try { me = MESA_textoEnlace_('WhatsApp').texto; } catch (err) { me = '⚠️ ' + err.message; }
     return { ok: true, respuesta: me, tablas: [], sugerencias: [], archivos: [], avisos: [] };

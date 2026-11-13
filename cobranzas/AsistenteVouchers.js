@@ -42,6 +42,7 @@ function VCH_doPost_(e) {
       case 'rucfilas':   // 🔎 Identificar RUC de las filas seleccionadas en la hoja de Vouchers
         return TGW_json_(TGQ_rucDeFilas_(ss, (q.filas || []).slice(0, 2000)));
       case 'rucexternos': return TGW_json_(TGQ_rucExternos_(ss, (q.filas || []).slice(0, 2000), !!q.todos));   // 🏛 padrón + internet
+      case 'cambiartipo': return TGW_json_(CTV_vch_(ss, q));   // 🔁 Original ↔ Foto (TG_CambiarTipo.js)
       case 'tgverificar': return TGW_json_(TG_verificarInitData_(ss, q.initData));   // 🧾 Mini App del portal: ¿quién abrió? (TG_Api.js)
       case 'rucopciones': return TGW_json_(TGQ_rucOpciones_(ss, q.nombre));   // 📋 otras opciones en las fuentes propias
       case 'rucestado': return TGW_json_(TGQ_rucEstado_(String(q.id || '')));
