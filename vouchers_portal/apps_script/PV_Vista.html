@@ -178,7 +178,7 @@ main{flex:1;min-height:0;overflow:auto}
         <div><b>Suba fotos o PDF de vouchers</b></div>
         <div style="font-size:12.5px;color:#334155">Se guardan en la carpeta de entrada y la hoja los lee con IA (al instante si toca ⚡, o en su vuelta de 10 min).</div>
         <div class="bot">
-          <button class="p" onclick="$('fCam').click()">📷 Tomar foto</button>
+          <button class="p" onclick="pedirCamara('fCam', camaraFoto)">📷 Tomar foto</button>
           <button class="p" onclick="scanAbrir()" title="Varias fotos con la cámara → un solo PDF (una página por foto)">📄 Escanear a PDF</button>
           <button onclick="$('fArch').click()">🖼 Elegir fotos o PDF</button>
           <button onclick="escanearDrive()" title="Usa el escáner de la app Google Drive y guarda directo en la carpeta de entrada">📲 Escanear con Google Drive</button>
@@ -192,7 +192,7 @@ main{flex:1;min-height:0;overflow:auto}
         <div style="font-size:12.5px;color:var(--gr)">Tome una foto por página (o elíjalas de la galería). Puede girarlas, moverlas o quitarlas; al final toque <b>✅ Hacer el PDF</b>.</div>
         <div id="scanPags" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="p" onclick="$('scCam').click()">📷 Agregar página (cámara)</button>
+          <button class="p" onclick="pedirCamara('scCam', function (f) { scanAgregar(f, true); })">📷 Agregar página (cámara)</button>
           <button onclick="$('scGal').click()">🖼 Agregar desde galería</button>
           <span style="flex:1"></span>
           <button onclick="scanCerrar()">Cancelar</button><button class="p" id="scanOk" onclick="scanPdf()" disabled>✅ Hacer el PDF</button>
@@ -713,6 +713,40 @@ function subirTodo() {
 
 /* ---------- 📲 escanear con la app de Google Drive (guarda directo en la carpeta de entrada) ---------- */
 var DRIVE = null;
+/**
+ * 📷 Cámara: en el navegador, la del celular (input con capture). Dentro de Telegram ese input abre la GALERÍA (Telegram no
+ * respeta «capture»), así que ahí se abre una cámara en la misma página (getUserMedia); si Telegram no da permiso de cámara,
+ * se explican las otras formas. cb recibe una lista de archivos, igual que el input.
+ */
+var CAM = null;
+function pedirCamara(input, cb) {
+  if (!enTelegram()) return $(input).click();
+  camaraEnVivo(cb, function () {
+    modal('<h3>📷 La cámara no se abre dentro de Telegram</h3><p style="margin-top:0">Telegram no le dio permiso de cámara al portal. Puede:</p>' +
+      '<ol style="padding-left:18px;line-height:1.6;margin:6px 0"><li><b>Mandar la foto al chat del bot</b> con la cámara de Telegram (📎 → Cámara): la lee y con ✅ la deja en la carpeta de entrada.</li>' +
+      '<li>Tomar la foto con la cámara del celular y elegirla aquí con <b>🖼 Elegir fotos o PDF</b>.</li>' +
+      '<li>Abrir el portal en el navegador (/portal → 🌐 Abrir en el navegador): ahí 📷 abre la cámara.</li></ol>',
+      [['🖼 Elegir de la galería', function () { $(input).click(); }], ['Entendido', null, 'p']]);
+  });
+}
+function camaraParar() { if (CAM) { try { CAM.getTracks().forEach(function (x) { x.stop(); }); } catch (e) {} CAM = null; } }
+function camaraEnVivo(cb, sinPermiso) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return sinPermiso();
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }).then(function (st) {
+    CAM = st;
+    modal('<h3>📷 Tomar foto</h3><video id="camVid" autoplay playsinline muted style="width:100%;max-height:60vh;background:#000;border-radius:8px"></video>' +
+      '<div style="font-size:12px;color:var(--gr);margin-top:4px">Encuadre el voucher completo y toque 📸. Luego puede recortarlo.</div>',
+      [['Cancelar', function () { camaraParar(); }], ['📸 Tomar', function () {
+        var v = $('camVid'), c = document.createElement('canvas');
+        c.width = v.videoWidth || 1280; c.height = v.videoHeight || 720;
+        c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+        camaraParar();
+        c.toBlob(function (b) { if (b) cb([new File([b], 'foto_' + Date.now() + '.jpg', { type: 'image/jpeg' })]); }, 'image/jpeg', 0.92);
+      }, 'p']]);
+    $('camVid').srcObject = st;
+  }).catch(function () { camaraParar(); sinPermiso(); });
+}
+
 /** ¿El portal está abierto dentro de Telegram (Mini App)? Ahí no se puede abrir la app de Drive (el enlace «intent» da ERR_UNKNOWN_URL_SCHEME). */
 function enTelegram() { return /Telegram/i.test(navigator.userAgent || ''); }
 function escanearDrive() {
@@ -763,7 +797,7 @@ function abrirDrive(tipo) {
 
 /* ---------- 📄 escanear a PDF (en el celular, sin subir nada hasta que se toca 📤 Subir) ---------- */
 var SCAN = [];
-function scanAbrir() { SCAN = []; $('scan').classList.remove('oc'); scanPintar(); $('scCam').click(); }
+function scanAbrir() { SCAN = []; $('scan').classList.remove('oc'); scanPintar(); pedirCamara('scCam', function (f) { scanAgregar(f, true); }); }
 function scanCerrar() { SCAN.forEach(function (p) { URL.revokeObjectURL(p.url); }); SCAN = []; $('scan').classList.add('oc'); }
 function scanAgregar(fl, conRecorte) {
   var lista = Array.prototype.slice.call(fl || []).filter(function (f) { return /^image\//.test(f.type); });
@@ -1650,7 +1684,7 @@ function modal(html, botones) {
 }
 function abrirModal() { $('modal').classList.remove('oc'); }
 function anchoModal() { $('modalCaja').style.maxWidth = ''; }
-function cerrarModal() { $('modal').classList.add('oc'); }
+function cerrarModal() { camaraParar(); $('modal').classList.add('oc'); }
 function alerta(t) { modal('<div style="white-space:pre-wrap">' + esc(t) + '</div>', [['Aceptar', null, 'p']]); }
 $('modal').addEventListener('click', function (e) { if (e.target === $('modal')) cerrarModal(); });
 document.addEventListener('keydown', function (e) {
