@@ -178,10 +178,17 @@ function TG_urlPortal_() {
   u = '';
   try {
     var id = leerConfig_(ssPrincipal_()).idVouchers;
-    var m = id ? SpreadsheetApp.openById(id).createDeveloperMetadataFinder().withKey('PV_WEB').find() : [];
+    var libro = id ? SpreadsheetApp.openById(id) : null;
+    var m = libro ? libro.createDeveloperMetadataFinder().withKey('PV_WEB').find() : [];
     if (m.length) u = 'https://script.google.com/macros/s/' + m[0].getValue() + '/exec';
+    // 🧾 la Mini App propia (GitHub Pages: sin el aviso de Google, entra sin PIN, lector de QR), si ya está publicada
+    var mi = libro ? libro.createDeveloperMetadataFinder().withKey('PV_MINIAPP').find() : [];
+    if (mi.length) {
+      var rm = UrlFetchApp.fetch(mi[0].getValue(), { muteHttpExceptions: true, followRedirects: true });
+      if (rm.getResponseCode() === 200 && /PV_MINI/.test(rm.getContentText())) u = mi[0].getValue();
+    }
   } catch (e) { console.warn('Portal de Vouchers: ' + e.message); }
-  c.put('TG_URL_PORTAL', u || '-', u ? 21600 : 600);
+  c.put('TG_URL_PORTAL', u || '-', u && /github\.io/.test(u) ? 21600 : 900);
   return u;
 }
 function TG_botonPortal_(chatId) {
@@ -194,7 +201,7 @@ function TG_botonPortal_(chatId) {
 function TG_tecladoMenu_(chatId) {
   var bp = TG_botonPortal_(chatId);
   return (bp ? [[bp]] : []).concat([
-    [{ text: '📊 Resumen de hoy', callback_data: 'c:resumen' }],
+    [{ text: '📊 Resumen de hoy', callback_data: 'c:resumen' }, { text: '📌 Tablero fijo', callback_data: 'c:tablero' }],
     [{ text: '💰 Por cobrar', callback_data: 'c:cobrar' }, { text: '💸 Por pagar', callback_data: 'c:pagar' }, { text: '⏰ Vencidas', callback_data: 'c:vencidas' }],
     [{ text: '📬 Buzón SUNAT', callback_data: 'c:notificaciones' }, { text: '🏦 Detracciones', callback_data: 'c:detracciones' }],
     [{ text: '🧾 Retenciones', callback_data: 'c:retenciones' }, { text: '🧑‍💼 Honorarios', callback_data: 'c:honorarios' }],
@@ -228,10 +235,11 @@ function TG_comando_(ctx, texto) {
       TG_enviar_(chatId, '👋 <b>Hola' + (ctx.nombre ? ', ' + TG_esc_(ctx.nombre.split(' ')[0]) : '') + '.</b> ' + TG_textoBienvenida_(), TG_tecladoFijo_());
       return TG_enviar_(chatId, TG_textoMenu_(), TG_tecladoMenu_(chatId));
     case 'menu': return TG_enviar_(chatId, TG_textoMenu_(), TG_tecladoMenu_(chatId));
+    case 'tablero': return TGT_enviar_(ctx);   // 📊 tablero fijo que se actualiza solo (TG_Tablero.js)
     case 'portal': {   // 🧾 el Portal de Vouchers dentro de Telegram (Mini App)
       var bp = TG_botonPortal_(chatId);
       if (!bp) return TG_enviar_(chatId, '⚠️ Todavía no encuentro la dirección del Portal de Vouchers (se registra al publicarlo).');
-      return TG_enviar_(chatId, '🧾 <b>Portal de Vouchers</b>: buscar, subir con la cámara, corregir, 🔎 Identificar RUC y 🧠 IA, sin salir de Telegram. Entre con su usuario y PIN del portal.\n📷 Para fotos de vouchers también puede mandarlas aquí mismo, con la cámara de Telegram (📎 → Cámara).', bp.web_app ? [[bp], [{ text: '🌐 Abrir en el navegador (para el escáner de Drive)', url: bp.web_app.url }]] : [[bp]]);
+      return TG_enviar_(chatId, '🧾 <b>Portal de Vouchers</b>: buscar, subir con la cámara, corregir, 🔎 Identificar RUC y 🧠 IA, sin salir de Telegram. La primera vez entre con su usuario y PIN del portal; después entra solo.\n📷 Para fotos de vouchers también puede mandarlas aquí mismo, con la cámara de Telegram (📎 → Cámara).', bp.web_app ? [[bp], [{ text: '🌐 Abrir en el navegador (para el escáner de Drive)', url: bp.web_app.url }]] : [[bp]]);
     }
     case 'ayuda': case 'help': case 'instrucciones': return AYU_telegram_(ctx, arg);   // ❓ Centro de ayuda por temas (Ayuda.js)
     case 'resumen': case 'hoy': return TG_enviarResumen_(ctx);

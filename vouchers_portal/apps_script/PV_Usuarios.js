@@ -12,7 +12,7 @@ function doGet(e) {
   // ?registrar=1 (lo llama el workflow al publicar): deja la dirección de este portal en los metadatos de la hoja de Vouchers,
   // para que el bot de Telegram (Cobranzas) abra el portal como Mini App. No devuelve ningún dato.
   if (e && e.parameter && e.parameter.registrar) {
-    try { PV_registrarWeb_(); } catch (x) {}
+    try { PV_registrarWeb_(e.parameter.mini); } catch (x) {}
     return ContentService.createTextOutput('ok');
   }
   try { PV_hojaUsuarios_(); } catch (e2) {}   // la primera vez crea 👥 Portal (con instrucciones)
@@ -72,7 +72,7 @@ function PV_nivel_(p) { return PV_PERMISOS_.indexOf(p); }
 /* ============================================================ entrar / sesión */
 
 /** usuario + PIN → {token, nombre, permiso}. 5 intentos fallidos bloquean al usuario 15 minutos. */
-function PV_entrar(usuario, pin) {
+function PV_entrar(usuario, pin, initData) {
   var u = String(usuario || '').trim().toLowerCase(), cache = CacheService.getScriptCache(), kf = 'pv_f_' + u.slice(0, 60);
   if (!u || !String(pin || '').trim()) throw new Error('Escriba su usuario y su PIN.');
   var fallos = Number(cache.get(kf) || 0);
@@ -88,8 +88,54 @@ function PV_entrar(usuario, pin) {
   var token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
   cache.put('pv_s_' + token, JSON.stringify({ u: x.u, n: x.n, p: x.p }), PV_HORAS_ * 3600);
   try { PV_hojaUsuarios_().getRange(x.fila, 6).setValue(new Date()); } catch (e) {}
-  PV_registrar_({ u: x.u }, '🔑 Entró al portal', '');
-  return { token: token, nombre: x.n || x.u, permiso: x.p, usuario: x.u, puente: !!PV_PUENTE_URL_ };
+  var vinculado = '';
+  if (initData) {   // 🧾 entró con PIN desde la Mini App: ese Telegram queda vinculado y la próxima vez entra solo
+    try { var tg = PV_telegramDe_(initData); PropertiesService.getScriptProperties().setProperty('PV_TG_' + tg.id, x.u); vinculado = tg.nombre || tg.id; } catch (e) { vinculado = ''; }
+  }
+  PV_registrar_({ u: x.u }, '🔑 Entró al portal', vinculado ? 'y vinculó su Telegram (' + vinculado + ')' : '');
+  return { token: token, nombre: x.n || x.u, permiso: x.p, usuario: x.u, puente: !!PV_PUENTE_URL_, vinculado: !!vinculado };
+}
+
+/**
+ * 🧾 Mini App de Telegram (página propia, vouchers_portal/miniapp/): la misma página del portal pero servida fuera de Google
+ * (sin el aviso de Apps Script). Llama aquí por POST en vez de google.script.run. Solo las MISMAS funciones públicas del
+ * portal (PV_entrar, PV_api) más PV_entrarTelegram. Responde JSON.
+ */
+function doPost(e) {
+  var salida = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
+  var q;
+  try { q = JSON.parse(e.postData.contents); } catch (x) { return salida({ ok: false, error: 'pedido ilegible' }); }
+  try {
+    var a = q.args || [];
+    if (q.f === 'PV_entrar') return salida({ ok: true, r: PV_entrar(a[0], a[1], a[2]) });
+    if (q.f === 'PV_entrarTelegram') return salida({ ok: true, r: PV_entrarTelegram(a[0]) });
+    if (q.f === 'PV_api') return salida({ ok: true, r: PV_api(a[0], a[1], a[2]) });
+    return salida({ ok: false, error: 'función desconocida' });
+  } catch (x) {
+    return salida({ ok: false, error: String(x && x.message || x) });
+  }
+}
+
+/** Quién es en Telegram (lo verifica Cobranzas con el token del bot: aquí nunca llega el token). → {id, nombre} o error. */
+function PV_telegramDe_(initData) {
+  if (!initData) return null;
+  var r = PV_iaLlamar_('tgverificar', { initData: String(initData).slice(0, 4096) });
+  if (!r || !r.ok) throw new Error((r && r.error) || 'No se pudo comprobar su Telegram.');
+  if (!r.autorizado) throw new Error('Su Telegram no está autorizado en el bot.');
+  return r;
+}
+
+/** 🧾 Entrar sin PIN desde la Mini App: si ese Telegram ya se vinculó (entrando una vez con usuario y PIN), entra solo. */
+function PV_entrarTelegram(initData) {
+  var tg = PV_telegramDe_(initData);
+  var u = PropertiesService.getScriptProperties().getProperty('PV_TG_' + tg.id);
+  var x = u && PV_usuarios_().filter(function (y) { return y.u === u; })[0];
+  if (!x || !x.activo) return { vincular: true, nombreTg: tg.nombre };
+  var token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+  CacheService.getScriptCache().put('pv_s_' + token, JSON.stringify({ u: x.u, n: x.n, p: x.p }), PV_HORAS_ * 3600);
+  try { PV_hojaUsuarios_().getRange(x.fila, 6).setValue(new Date()); } catch (e) {}
+  PV_registrar_({ u: x.u }, '🔑 Entró al portal (Telegram)', tg.nombre);
+  return { token: token, nombre: x.n || x.u, permiso: x.p, usuario: x.u, puente: !!PV_PUENTE_URL_, telegram: true };
 }
 
 /** Revisa la sesión (y que el usuario siga activo y con permiso suficiente). El permiso vale el de la hoja AHORA. */
@@ -162,10 +208,16 @@ function PV_guardarUsuario_(s, d) {
 }
 
 /** La dirección de este portal, en los metadatos de la hoja de Vouchers ('PV_WEB'): la usa el bot de Telegram (botón 🧾 Portal de Vouchers). */
-function PV_registrarWeb_() {
+function PV_registrarWeb_(mini) {
   if (!PV_URL_) return;
-  var ss = PV_ss_(), m = ss.createDeveloperMetadataFinder().withKey('PV_WEB').find();
-  if (m.length && m[0].getValue() === PV_URL_) return;
-  m.forEach(function (x) { try { x.remove(); } catch (e) {} });
-  ss.addDeveloperMetadata('PV_WEB', PV_URL_, SpreadsheetApp.DeveloperMetadataVisibility.DOCUMENT);
+  var ss = PV_ss_();
+  var poner = function (k, v) {
+    var m = ss.createDeveloperMetadataFinder().withKey(k).find();
+    if (m.length && m[0].getValue() === v) return;
+    m.forEach(function (x) { try { x.remove(); } catch (e) {} });
+    ss.addDeveloperMetadata(k, v, SpreadsheetApp.DeveloperMetadataVisibility.DOCUMENT);
+  };
+  poner('PV_WEB', PV_URL_);
+  // 🧾 la Mini App (GitHub Pages del repositorio): solo se acepta una dirección *.github.io
+  if (/^https:\/\/[a-z0-9-]+\.github\.io\/[\w.\/-]+$/i.test(String(mini || ''))) poner('PV_MINIAPP', String(mini));
 }

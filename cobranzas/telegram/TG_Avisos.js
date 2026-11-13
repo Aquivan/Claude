@@ -46,6 +46,7 @@ function TG_vigia() {
   // 📅 Vencimientos SUNAT (IGV-Renta, PLAME, SIRE): a la hora elegida en la pestaña 📅 Vencimientos.
   // (tiene su propia hora, por eso no se salta de noche)
   try { TGV_activarParaTodos_(ss, us); TGV_avisar_(ss, para('oblig')); } catch (e) { console.warn('Vencimientos SUNAT: ' + e.message); }
+  try { TGT_actualizar_(ss); } catch (e) { console.warn('Tablero: ' + e.message); }   // 📊 tableros fijos (TG_Tablero.js)
 
   // ⏱ Minutos de GitHub del mes: mide cada 6 h y avisa al 50/75/90/100% (TG_Minutos.js)
   try { TGM_revisar_(ss, cfg); } catch (e) { console.warn('Minutos de GitHub: ' + e.message); }

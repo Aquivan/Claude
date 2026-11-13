@@ -148,7 +148,7 @@ main{flex:1;min-height:0;overflow:auto}
     <section id="p-bus" class="oc" style="height:100%"><div id="bus">
       <div class="izq">
         <div class="filtros">
-          <input type="search" id="q" placeholder="🔎 n° operación, proveedor, monto, RUC, empresa…" oninput="filtrarPronto()">
+          <input type="search" id="q" placeholder="🔎 n° operación, proveedor, monto, RUC, empresa…" oninput="filtrarPronto()"><button id="bQr" class="oc" onclick="leerQr()" title="Leer el QR de una factura o boleta electrónica (Telegram)">📷 QR</button>
           <div class="f">
             <span class="seg" id="sHoja"><button data-v="" class="on" onclick="seg('sHoja',this)">Todas</button><button data-v="0" onclick="seg('sHoja',this)">Originales</button><button data-v="1" onclick="seg('sHoja',this)">Fotos</button></span>
             <select id="fMon" onchange="filtrar()"><option value="">S/ y US$</option><option value="PEN">Soles</option><option value="USD">Dólares</option></select>
@@ -328,7 +328,17 @@ function entrar() {
   google.script.run.withSuccessHandler(function (r) {
     $('lb').disabled = false; $('lp').value = ''; TK = r.token; guardaLocal('pv_tk', TK); guardaLocal('pv_u', r.usuario);
     YO = r; iniciar();
-  }).withFailureHandler(function (e) { $('lb').disabled = false; $('lm').textContent = String(e.message || e).replace(/^Error:\s*/, ''); }).PV_entrar(u, p);
+    if (r.vinculado) setTimeout(function () { alerta('✅ Su Telegram quedó vinculado: la próxima vez que abra el portal desde el bot entrará solo, sin PIN.'); }, 400);
+  }).withFailureHandler(function (e) { $('lb').disabled = false; $('lm').textContent = String(e.message || e).replace(/^Error:\s*/, ''); }).PV_entrar(u, p, tgInit());
+}
+/* 🧾 Mini App de Telegram (página propia: vouchers_portal/miniapp/) */
+function tgApp() { return window.PV_MINI && window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Telegram.WebApp : null; }
+function tgInit() { var w = tgApp(); return w ? w.initData : ''; }
+function tgVibrar(tipo) { var w = tgApp(); try { if (w && w.HapticFeedback) w.HapticFeedback.notificationOccurred(tipo || 'success'); } catch (e) {} }
+function tgIniciar() {
+  var w = tgApp(); if (!w) return false;
+  try { w.ready(); w.expand(); if (w.disableVerticalSwipes) w.disableVerticalSwipes(); if (w.setHeaderColor) w.setHeaderColor('#1F3A5F'); } catch (e) {}
+  return true;
 }
 $('lp').addEventListener('keydown', function (e) { if (e.key === 'Enter') entrar(); });
 $('lu').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('lp').focus(); });
@@ -336,12 +346,21 @@ function salir() { api('salir', {}, false).catch(function () {}); verLogin('Sali
 function iniciar() {
   $('login').classList.add('oc'); $('app').classList.remove('oc');
   $('yo').textContent = (YO.nombre || YO.usuario) + ' · ' + YO.permiso;
+  if ($('bQr')) $('bQr').classList.toggle('oc', !(tgApp() && tgApp().showScanQrPopup && (!tgApp().isVersionAtLeast || tgApp().isVersionAtLeast('6.4'))));
   document.querySelectorAll('nav button[data-perm]').forEach(function (b) { b.classList.toggle('oc', !puede(b.dataset.perm)); });
   ir(leeLocal('pv_pag') && puede({ usu: 'admin', sub: 'subir', ia: 'editar' }[leeLocal('pv_pag')] || 'ver') ? leeLocal('pv_pag') : 'bus');
 }
 (function () {
   $('lu').value = leeLocal('pv_u') || '';
   TK = leeLocal('pv_tk');
+  if (tgIniciar() && !TK) {   // 🧾 desde el bot: entra solo si su Telegram ya está vinculado
+    cargando(true, 'Entrando con su Telegram…');
+    return google.script.run.withSuccessHandler(function (r) {
+      cargando(false);
+      if (r && r.token) { TK = r.token; guardaLocal('pv_tk', TK); guardaLocal('pv_u', r.usuario); YO = r; return iniciar(); }
+      verLogin('👋 ' + (r && r.nombreTg ? r.nombreTg + ': e' : 'E') + 'ntre una vez con su usuario y PIN; su Telegram quedará vinculado y la próxima vez entrará solo.');
+    }).withFailureHandler(function (e) { cargando(false); verLogin(String(e.message || e)); }).PV_entrarTelegram(tgInit());
+  }
   if (!TK) return verLogin('');
   api('yo', {}, 'Entrando…').then(function (r) { YO = r; iniciar(); }).catch(function (e) { verLogin(/SESION/.test(e.message) ? '' : e.message); });
 })();
@@ -374,6 +393,26 @@ function cargarIndice(forzar) {
     opc('fBco', bancos, 'Todos los bancos'); opc('fEmp', emps, 'Todas las empresas');
     filtrar();
   }).catch(function (e) { $('lista').innerHTML = '<div class="msg e">❌ ' + esc(e.message) + '</div>'; });
+}
+/**
+ * 📷 Lector de QR de Telegram (solo en la Mini App): el QR de un comprobante electrónico SUNAT trae
+ * RUC | tipo | serie | número | IGV | total | fecha | tipo doc. | doc. del cliente. Se busca el voucher por la serie-número
+ * (columna «Tipo y Nº Doc.»); si no aparece, por el monto total.
+ */
+function leerQr() {
+  var w = tgApp(); if (!w || !w.showScanQrPopup) return;
+  w.showScanQrPopup({ text: 'Apunte al QR de la factura o boleta' }, function (txt) {
+    var p = String(txt || '').split('|').map(function (x) { return x.trim(); });
+    if (p.length < 6 || !/^\d{11}$/.test(p[0])) { alerta('Ese QR no parece de un comprobante electrónico SUNAT:\n' + String(txt).slice(0, 120)); return true; }
+    var doc = p[2].toUpperCase() + '-' + String(parseInt(p[3], 10)), total = parseFloat(p[5]);
+    tgVibrar('success');
+    if (!IDX) { $('q').value = doc; cargarIndice(); return true; }
+    $('q').value = doc; filtrar();
+    if (!VIS.length && total) { $('q').value = fm(total).replace(/,/g, ''); filtrar(); }
+    alerta('📷 ' + ({ '01': 'Factura', '03': 'Boleta', '07': 'Nota de crédito', '08': 'Nota de débito' }[p[1]] || 'Comprobante') + ' ' + doc + ' · RUC ' + p[0] + ' · total ' + fm(total) +
+      (p[6] ? ' · ' + p[6] : '') + '\n' + (VIS.length ? 'Encontré ' + VIS.length + ' voucher(s).' : 'No encontré vouchers con ese comprobante ni con ese monto.'));
+    return true;
+  });
 }
 function filtrarPronto() { clearTimeout(TIMER); TIMER = setTimeout(filtrar, 220); }
 function limpiar() { ['q', 'fDe', 'fHa', 'fMin', 'fMax'].forEach(function (i) { $(i).value = ''; }); ['fMon', 'fBco', 'fEmp'].forEach(function (i) { $(i).value = ''; }); document.querySelectorAll('#marcas button.on').forEach(function (b) { b.classList.remove('on'); }); seg('sHoja', $('sHoja').querySelector('button')); }
@@ -748,7 +787,7 @@ function camaraEnVivo(cb, sinPermiso) {
 }
 
 /** ¿El portal está abierto dentro de Telegram (Mini App)? Ahí no se puede abrir la app de Drive (el enlace «intent» da ERR_UNKNOWN_URL_SCHEME). */
-function enTelegram() { return /Telegram/i.test(navigator.userAgent || ''); }
+function enTelegram() { return !!(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) || /Telegram/i.test(navigator.userAgent || ''); }
 function escanearDrive() {
   if (enTelegram()) {
     return modal('<h3>📲 Escanear dentro de Telegram</h3>' +
