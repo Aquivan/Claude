@@ -242,7 +242,7 @@ main{flex:1;min-height:0;overflow:auto}
         <p style="margin-top:0;font-size:13px">Elija qué vouchers <b>sin RUC</b> revisar (no hace falta saber las filas). Busca el RUC en alias, SIRE, otros vouchers, recibos por honorarios y retenciones, y si falta, con IA en el padrón de SUNAT e internet.</p>
         <div id="rpRap" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-          <select id="rpEmp" onchange="rpPintar()"></select><select id="rpBco" onchange="rpPintar()" title="Banco o cuenta de cargo"></select>
+          <select id="rpEmp" onchange="rpPintar()"></select><select id="rpRes" onchange="rpPintar()" title="Quién trajo el voucher (sale del nombre del archivo de la tanda, ej. «26-10-26 Sonia(Edit)» → Sonia)"></select>
           <select id="rpMon" onchange="rpPintar()"><option value="">S/ y US$</option><option value="PEN">Solo S/</option><option value="USD">Solo US$</option></select>
           <input id="rpQ" style="flex:1;min-width:150px" placeholder="Nombre del proveedor…" oninput="clearTimeout(TIMER);TIMER=setTimeout(rpPintar,220)">
         </div>
@@ -270,7 +270,7 @@ main{flex:1;min-height:0;overflow:auto}
       <p><b>📤 Subir</b> (permiso <i>subir</i>): <b>📷 Tomar foto</b> con la cámara, <b>📄 Escanear a PDF</b> (varias fotos con la cámara → un solo PDF, una página por foto; se pueden girar, ordenar o quitar antes) o elija fotos/PDF. Cada foto de la cámara pasa por <b>✂️ Recortar</b>: el portal busca solo los bordes del voucher (4 esquinas que se pueden mover con el dedo), la endereza y con <b>✨ Mejorar</b> aclara el fondo y oscurece el texto (en las fotos de la galería, botón ✂️). El nombre sugerido sale en gris: <b>escriba encima</b> el que quiera, sin borrar nada (si no pone extensión, se agrega sola); póngales un nombre (no se puede repetir uno que ya existe), elija <i>Original</i> (PDF o comprobante formal) o <i>Foto</i>, y suba. Con ⚡ la hoja los procesa en ~1 minuto.</p>
       <p><b>📲 Escanear con Google Drive</b> (en 📤 Subir): elija Original o Foto → se abre la app de Drive en la carpeta 📥 de entrada → <b>+ → Escanear</b> → Guardar → vuelva y toque <b>⚡ Ya escaneé: procesar ahora</b>. Necesita una cuenta de Google con acceso a esa carpeta.</p>
       <p><b>↩️ Deshacer mi última corrección</b> (en el visor): vuelve lo de antes de su último 💾 Guardar, si nadie cambió esas celdas después. <b>🗑 Quitar</b> (en 📥 Pendientes y en lo recién subido): saca de la entrada un voucher subido por error, mientras todavía no está en la hoja (va a la papelera de Drive, 30 días); quien solo sube puede quitar lo suyo.</p>
-      <p><b>🧠 IA</b> (permiso <i>editar</i>): el mismo 🧠 Asistente IA del menú de la hoja. <b>💬 Chat</b> (preguntas, fotos, PDF, Excel; lo que propone se escribe solo si usted lo marca, y ↩️ lo deshace), <b>📋 Analizar procesados</b> (a qué factura, empresa o retención corresponde cada voucher de una tanda), <b>🔎 Identificar RUC</b> (elija los vouchers sin RUC con 📥 Últimos procesados, 7 / 30 días o Todos, filtre por empresa, banco, moneda o nombre y marque cuáles; también con el botón 🔎 RUC de Buscar y en el visor; los vouchers con el mismo nombre salen en una sola tarjeta y el RUC elegido va a todos; cada tarjeta tiene <b>🌐 Buscar con IA en SUNAT e internet</b>; con <b>📂 Ver la última búsqueda</b> se vuelven a abrir los resultados de las últimas 6 horas aunque haya cerrado la ventana; <b>🔍 Leer el voucher con IA</b> compara el nombre escrito con el que trae el voucher; <b>🗑 Borrar este alias</b> quita un alias equivocado), <b>🔗 Completar Originales con Fotos</b> y <b>🧩 Mesa de conciliación</b>.</p>
+      <p><b>🧠 IA</b> (permiso <i>editar</i>): el mismo 🧠 Asistente IA del menú de la hoja. <b>💬 Chat</b> (preguntas, fotos, PDF, Excel; lo que propone se escribe solo si usted lo marca, y ↩️ lo deshace), <b>📋 Analizar procesados</b> (a qué factura, empresa o retención corresponde cada voucher de una tanda), <b>🔎 Identificar RUC</b> (elija los vouchers sin RUC con 📥 Últimos procesados, 7 / 30 días o Todos, filtre por empresa, responsable (quién lo trajo), moneda o nombre y marque cuáles; también con el botón 🔎 RUC de Buscar y en el visor; los vouchers con el mismo nombre salen en una sola tarjeta y el RUC elegido va a todos; cada tarjeta tiene <b>🌐 Buscar con IA en SUNAT e internet</b>; con <b>📂 Ver la última búsqueda</b> se vuelven a abrir los resultados de las últimas 6 horas aunque haya cerrado la ventana; <b>🔍 Leer el voucher con IA</b> compara el nombre escrito con el que trae el voucher; <b>🗑 Borrar este alias</b> quita un alias equivocado), <b>🔗 Completar Originales con Fotos</b> y <b>🧩 Mesa de conciliación</b>.</p>
       <p><b>📥 Pendientes</b>: lo que espera en las carpetas de entrada (todavía no está en la hoja) y lo último descartado (duplicados, vacíos, muy pesados).</p>
       <p><b>📊 Resumen</b>: cuántos vouchers hay, cuántos sin RUC, sin revisar o duplicados, por pestaña y por mes.</p>
       <p><b>👥 Usuarios</b> (admin): crear usuarios, cambiar PIN y permiso, desactivar; y el registro de quién hizo qué.</p>
@@ -1325,22 +1325,28 @@ function vcoDeshacer() { modal('<h3>↩️ Deshacer la última copia</h3><p>Solo
 /* elegir los vouchers sin RUC sin saber las filas: últimos procesados, 7 / 30 días o todos; por empresa, banco, moneda o nombre */
 var RP = { modo: 'proc', vis: [], fuera: {} };
 var RP_MAX_ = 150;
+/** Quién trajo el voucher: el nombre del archivo de la tanda sin la fecha ni «Edit», «voucher», la extensión… («26-10-26 Sonia(Edit).pdf» → Sonia). */
+function rpResponsable(archivo) {
+  var a = String(archivo || '').replace(/\.(pdf|jpe?g|png|heic|webp)$/i, '').replace(/^\s*\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}\s*/, '');
+  a = a.replace(/[()\[\]_.,-]+/g, ' ').replace(/\b(edit(ado)?|vouchers?|scan(eo)?|img|image|imagen|foto|fotos|copia|whatsapp|wa|documento|doc|pdf|pagina|p[aá]g)\b/gi, ' ').replace(/\b\d+\b/g, ' ').replace(/\s+/g, ' ').trim();
+  return a ? a.split(' ').map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); }).join(' ') : '';
+}
 function rpYmd(dias) { var d = new Date(); d.setDate(d.getDate() - dias); return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2); }
 function rpAbrir() {
   if (!IDX) { cargarIndice().then(function () { if (IDX) rpAbrir(); }); return; }
-  var bancos = {}, emps = {};
-  IDX.filas.forEach(function (x) { if (!sinRuc(x)) return; if (x[5]) bancos[x[5].toUpperCase()] = 1; if (x[9]) emps[x[9]] = 1; });
+  var resp = {}, emps = {};
+  IDX.filas.forEach(function (x) { if (!sinRuc(x)) return; var r = rpResponsable(x[16]); if (r) resp[r] = 1; if (x[9]) emps[x[9]] = 1; });
   var opc = function (sel, o, t) { var v = $(sel).value; $(sel).innerHTML = '<option value="">' + t + '</option>' + Object.keys(o).sort().map(function (k) { return '<option>' + esc(k) + '</option>'; }).join(''); $(sel).value = v; };
-  opc('rpEmp', emps, 'Todas las empresas'); opc('rpBco', bancos, 'Todos los bancos');
+  opc('rpEmp', emps, 'Todas las empresas'); opc('rpRes', resp, 'Todos los responsables');
   rpPintar();
 }
 /** Vouchers sin RUC según los filtros (empresa, banco, moneda, nombre), sin mirar el botón rápido. */
 function rpBase() {
-  var emp = $('rpEmp').value, bco = $('rpBco').value, mon = $('rpMon').value, q = norma($('rpQ').value), pal = q ? q.split(' ') : [];
+  var emp = $('rpEmp').value, res = $('rpRes').value, mon = $('rpMon').value, q = norma($('rpQ').value), pal = q ? q.split(' ') : [];
   return IDX.filas.filter(function (x) {
     if (!sinRuc(x) || !x[8] || /DUPLICADO/i.test(x[4])) return false;
     if (emp && x[9] !== emp) return false;
-    if (bco && String(x[5]).toUpperCase() !== bco) return false;
+    if (res && rpResponsable(x[16]) !== res) return false;
     if (mon && (mon === 'USD') !== esUSD(x[6])) return false;
     var n = norma(x[8] + ' ' + x[14]);
     for (var i = 0; i < pal.length; i++) if (n.indexOf(pal[i]) < 0) return false;
@@ -1371,7 +1377,7 @@ function rpPintar() {
   $('rpLista').innerHTML = mostrados.map(function (x, i) {
     var k = IDX.hojas[x[0]] + '!' + x[1];
     return '<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 2px;border-bottom:1px solid var(--bo);font-size:13px"><input type="checkbox" data-k="' + esc(k) + '"' + (RP.fuera[k] ? '' : ' checked') + ' onchange="RP.fuera[this.dataset.k]=!this.checked;rpCuenta()" style="margin-top:3px">' +
-      '<span style="flex:1"><b>' + esc(x[8]) + '</b><br><span style="color:var(--gr);font-size:12px">' + esc(x[3]) + ' · ' + esc(x[6]) + ' ' + fm(x[7]) + (x[9] ? ' · ' + esc(x[9]) : '') + (x[5] ? ' · ' + esc(x[5]) : '') + ' · ' + esc(k) + '</span></span></label>';
+      '<span style="flex:1"><b>' + esc(x[8]) + '</b><br><span style="color:var(--gr);font-size:12px">' + esc(x[3]) + ' · ' + esc(x[6]) + ' ' + fm(x[7]) + (x[9] ? ' · ' + esc(x[9]) : '') + (rpResponsable(x[16]) ? ' · 👤 ' + esc(rpResponsable(x[16])) : '') + ' · ' + esc(k) + '</span></span></label>';
   }).join('') + (n > mostrados.length ? '<div style="font-size:12px;color:var(--gr);padding:6px">… y ' + (n - mostrados.length) + ' más (use los filtros para acotar).</div>' : '');
   rpCuenta();
 }
