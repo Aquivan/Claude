@@ -9,8 +9,40 @@ function TG_token_() {
 }
 
 /** Llama a un método de la API. carga con un Blob adentro = se envía como archivo (multipart). */
+var TG_CB_ = null;   // el botón que se está atendiendo en esta ejecución: {msgId, data, rm (teclado original)}
+
+/**
+ * ☑️ Botón tocado: en vez de quitar el teclado, se dejan los botones GRISES (desactivados, Bot API 10.3) y el tocado con ✔.
+ * Así se ve qué se eligió y no se puede tocar dos veces. Devuelve null si el teclado no tiene botones de acción.
+ */
+function TG_deshabilitar_(rm, data) {
+  var o; try { o = JSON.parse(JSON.stringify(rm)); } catch (e) { return null; }
+  if (!o || !Array.isArray(o.inline_keyboard)) return null;
+  var hay = false;
+  o.inline_keyboard.forEach(function (fila) {
+    (fila || []).forEach(function (b) {
+      if (!b || !b.callback_data) return;
+      hay = true;
+      if (b.callback_data === data) b.text = '✔ ' + String(b.text || '').replace(/^\s*(✅|☑️|✔️?)?\s*/, '');
+      else delete b.style;
+      b.disabled = {};
+    });
+  });
+  return hay ? o : null;
+}
+
 function TG_llamar_(metodo, carga, reintentado) {
   var token = TG_token_();
+  var sinDes = carga && carga._sinDes; if (carga) delete carga._sinDes;
+  if (metodo === 'editMessageReplyMarkup' && !sinDes && TG_CB_ && TG_CB_.rm && TG_CB_.data !== 'x' && carga && carga.reply_markup &&
+      Array.isArray(carga.reply_markup.inline_keyboard) && !carga.reply_markup.inline_keyboard.length && String(carga.message_id) === String(TG_CB_.msgId)) {
+    var gris = TG_deshabilitar_(TG_CB_.rm, TG_CB_.data);
+    if (gris) {
+      var rg = TG_llamar_('editMessageReplyMarkup', { chat_id: carga.chat_id, message_id: carga.message_id, reply_markup: gris, _sinColor: true, _sinDes: true });
+      if (rg.ok || /not modified/i.test(rg.description || '')) return rg;
+      // si Telegram no aceptara botones desactivados: se quita el teclado, como antes
+    }
+  }
   var sinColor = carga && carga._sinColor; if (carga) delete carga._sinColor;
   if (carga && carga.reply_markup && !sinColor) carga.reply_markup = TG_colorear_(carga.reply_markup);   // 🎨 botones verdes/rojos/azules
   if (!token) throw new Error('Falta conectar el bot (menú 🤖 Telegram → 1️⃣ Conectar bot).');
