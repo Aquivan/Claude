@@ -165,10 +165,16 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 #calc .his span:first-child{color:#94A3B8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#calc .his b{color:#F8FAFC;font-variant-numeric:tabular-nums}
 #calc .pie{display:flex;justify-content:space-between;padding:0 10px 8px;font-size:10.5px;color:#64748B}
 @media (max-width:900px){
-  #main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+  /* 📱 celular vertical: la página se desplaza entera y cada lista tiene su propia altura (antes quedaban aplastadas) */
+  html,body{height:auto}
+  body{overflow:auto}
+  #main{flex:none;grid-template-columns:1fr;grid-template-rows:auto auto}
   #gut,#svg{display:none}
-  .col:first-child{border-right:0;border-bottom:2px solid var(--bo)}
+  .col:first-child{border-right:0;border-bottom:3px solid var(--az)}
+  .col .lista{flex:none;height:62vh;min-height:280px;-webkit-overflow-scrolling:touch}
   #top .t{flex:1 1 100%}
+  #leyenda{font-size:10.5px}
+  #pie{position:sticky;bottom:0;background:#fff;z-index:5;box-shadow:0 -2px 8px rgba(0,0,0,.08)}
 }
 </style>
 </head>
