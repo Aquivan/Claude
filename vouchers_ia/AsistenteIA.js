@@ -159,7 +159,7 @@ function VIA_rucLeerEstado(id) {
   } catch (e) { return { listo: true, error: e.message }; }
 }
 /** 📋 Los vouchers SIN RUC de Originales y Fotos, para elegir en la ventana sin saber las filas.
- *  → {filas: [[hoja, fila, aaaammdd, fecha, banco, moneda, monto, proveedor, empresa, procesado aaaammdd]], ultimoProc} */
+ *  → {filas: [[hoja, fila, aaaammdd, fecha, banco, moneda, monto, proveedor, empresa, procesado aaaammdd, archivo]], ultimoProc} */
 function VIA_rucCandidatos() {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet(), out = [], ultimo = '', tz = ss.getSpreadsheetTimeZone() || 'America/Lima';
@@ -170,7 +170,7 @@ function VIA_rucCandidatos() {
       var nCol = sh.getLastColumn(), tit = sh.getRange(1, 1, 1, nCol).getDisplayValues()[0].map(norm);
       var col = function (re, def) { var i = tit.findIndex(function (t) { return re.test(t); }); return i >= 0 ? i : def; };
       var I = { f: col(/^fecha de dep/, 0), op: col(/^numero de op|^n.? de op/, 1), b: col(/^banco/, 2), mon: col(/^moneda/, 3), m: col(/^monto/, 4),
-        p: col(/^proveedor/, 5), emp: col(/^empresa/, -1), idb: col(/^id benef/, -1), proc: col(/^fecha de proc|^procesad/, 11) };
+        p: col(/^proveedor/, 5), emp: col(/^empresa/, -1), idb: col(/^id benef/, -1), proc: col(/^fecha de proc|^procesad/, 11), arch: col(/^archivo original/, 10) };
       if (I.idb < 0) return;
       var n = sh.getLastRow() - 1, v = sh.getRange(2, 1, n, nCol).getValues();
       for (var r = 0; r < n; r++) {
@@ -180,7 +180,7 @@ function VIA_rucCandidatos() {
         if (!prov || String(x[I.idb] || '').replace(/\D/g, '') || /DUPLICADO/i.test(String(x[I.op] || ''))) continue;
         var f = x[I.f] instanceof Date ? x[I.f] : null;
         out.push([nombre, r + 2, f ? Utilities.formatDate(f, tz, 'yyyyMMdd') : '', f ? Utilities.formatDate(f, tz, 'dd/MM/yyyy') : String(x[I.f] || ''),
-          String(x[I.b] || ''), String(x[I.mon] || ''), Number(x[I.m]) || 0, prov, I.emp >= 0 ? String(x[I.emp] || '') : '', pr]);
+          String(x[I.b] || ''), String(x[I.mon] || ''), Number(x[I.m]) || 0, prov, I.emp >= 0 ? String(x[I.emp] || '') : '', pr, String(x[I.arch] || '')]);
       }
     });
     return { filas: out, ultimoProc: ultimo };
@@ -320,19 +320,20 @@ var VIA_RUC_HTML_ = [
   'var C=null,PM="proc",PF={};',
   'function ymd(n){var d=new Date();d.setDate(d.getDate()-n);return d.getFullYear()+("0"+(d.getMonth()+1)).slice(-2)+("0"+d.getDate()).slice(-2)}',
   'function elegir(){$("pk").innerHTML="<div class=\\"card\\">⏳ Buscando los vouchers sin RUC…</div>";google.script.run.withFailureHandler(function(e){$("pk").innerHTML="<div class=\\"card e\\">❌ "+esc(e&&e.message||e)+"</div>"}).withSuccessHandler(function(r){r=r||{};if(r.error){$("pk").innerHTML="<div class=\\"card e\\">❌ "+esc(r.error)+"</div>";return}C=r;PF={};',
-  ' var em={},bc={};C.filas.forEach(function(x){if(x[8])em[x[8]]=1;if(x[4])bc[String(x[4]).toUpperCase()]=1});',
+  ' var em={},bc={};C.filas.forEach(function(x){if(x[8])em[x[8]]=1;var r=resp(x[10]);if(r)bc[r]=1});',
   ' var op=function(o,t){return "<option value=\\"\\">"+t+"</option>"+Object.keys(o).sort().map(function(k){return "<option>"+esc(k)+"</option>"}).join("")};',
   ' $("pk").innerHTML="<div class=\\"card\\" style=\\"border-color:#93C5FD\\"><b>📋 Vouchers sin RUC</b> <span class=\\"s\\">(elija cuáles revisar; no hace falta saber las filas)</span><div id=\\"pkR\\" style=\\"margin:6px 0\\"></div>"+',
-  '  "<select id=\\"pkE\\" onchange=\\"pkPintar()\\">"+op(em,"Todas las empresas")+"</select> <select id=\\"pkB\\" onchange=\\"pkPintar()\\" title=\\"Banco o cuenta de cargo\\">"+op(bc,"Todos los bancos")+"</select> <select id=\\"pkM\\" onchange=\\"pkPintar()\\"><option value=\\"\\">S/ y US$</option><option value=\\"PEN\\">Solo S/</option><option value=\\"USD\\">Solo US$</option></select> "+',
+  '  "<select id=\\"pkE\\" onchange=\\"pkPintar()\\">"+op(em,"Todas las empresas")+"</select> <select id=\\"pkB\\" onchange=\\"pkPintar()\\" title=\\"Quién trajo el voucher (del nombre del archivo de la tanda)\\">"+op(bc,"Todos los responsables")+"</select> <select id=\\"pkM\\" onchange=\\"pkPintar()\\"><option value=\\"\\">S/ y US$</option><option value=\\"PEN\\">Solo S/</option><option value=\\"USD\\">Solo US$</option></select> "+',
   '  "<input type=\\"text\\" id=\\"pkQ\\" placeholder=\\"Nombre del proveedor…\\" oninput=\\"pkPintar()\\" style=\\"width:40%\\"><div id=\\"pkBar\\" style=\\"margin-top:6px\\"></div><div id=\\"pkL\\" style=\\"max-height:260px;overflow:auto;border-top:1px solid #E2E8F0;margin-top:4px\\"></div></div>";pkPintar()}).VIA_rucCandidatos()}',
+  'function resp(a){a=String(a||"").replace(/\\.(pdf|jpe?g|png|heic|webp)$/i,"").replace(/^\\s*\\d{1,2}[-\\/.]\\d{1,2}[-\\/.]\\d{2,4}\\s*/,"");a=a.replace(/[()\\[\\]_.,-]+/g," ").replace(/\\b(edit(ado)?|vouchers?|scan(eo)?|img|image|imagen|foto|fotos|copia|whatsapp|wa|documento|doc|pdf|pagina|p[aá]g)\\b/gi," ").replace(/\\b\\d+\\b/g," ").replace(/\\s+/g," ").trim();return a?a.split(" ").map(function(w){return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()}).join(" "):""}',
   'function usd(m){return /USD|US\$|DOLAR/i.test(String(m))}',
-  'function pkBase(){var e=$("pkE").value,b=$("pkB").value,m=$("pkM").value,q=nn($("pkQ").value),pl=q?q.split(" "):[];return C.filas.filter(function(x){if(e&&x[8]!==e)return false;if(b&&String(x[4]).toUpperCase()!==b)return false;if(m&&(m==="USD")!==usd(x[5]))return false;var n=nn(x[7]);for(var i=0;i<pl.length;i++)if(n.indexOf(pl[i])<0)return false;return true})}',
+  'function pkBase(){var e=$("pkE").value,b=$("pkB").value,m=$("pkM").value,q=nn($("pkQ").value),pl=q?q.split(" "):[];return C.filas.filter(function(x){if(e&&x[8]!==e)return false;if(b&&resp(x[10])!==b)return false;if(m&&(m==="USD")!==usd(x[5]))return false;var n=nn(x[7]);for(var i=0;i<pl.length;i++)if(n.indexOf(pl[i])<0)return false;return true})}',
   'function pkModos(){var d=C.ultimoProc||"",d7=ymd(7),d30=ymd(30);return[{k:"proc",t:"📥 Últimos procesados"+(d?" ("+d.slice(6,8)+"/"+d.slice(4,6)+")":""),f:function(x){return d&&x[9]===d}},{k:"d7",t:"📅 Últimos 7 días",f:function(x){return x[2]&&x[2]>=d7}},{k:"d30",t:"📅 Últimos 30 días",f:function(x){return x[2]&&x[2]>=d30}},{k:"todos",t:"📋 Todos los que faltan",f:function(){return true}}]}',
   'function pkPintar(){var base=pkBase(),ms=pkModos(),m=ms.filter(function(x){return x.k===PM})[0]||ms[0];',
   ' $("pkR").innerHTML=ms.map(function(x){return "<button class=\\""+(x.k===m.k?"":"g")+"\\" onclick=\\"PM=\x27"+x.k+"\x27;PF={};pkPintar()\\">"+esc(x.t)+" <b>("+base.filter(x.f).length+")</b></button>"}).join("");',
   ' var vis=base.filter(m.f).sort(function(a,b){return String(b[2]).localeCompare(String(a[2]))||b[1]-a[1]});',
   ' if(!vis.length){$("pkBar").innerHTML="";$("pkL").innerHTML="<div class=\\"m\\">✅ No hay vouchers sin RUC con esos filtros.</div>";return}',
-  ' $("pkL").innerHTML=vis.slice(0,300).map(function(x){var k=x[0]+"!"+x[1];return "<label style=\\"display:block;padding:4px 0;border-bottom:1px solid #F1F5F9\\"><input type=\\"checkbox\\" data-k=\\""+esc(k)+"\\""+(PF[k]?"":" checked")+" onchange=\\"PF[this.dataset.k]=!this.checked;pkCuenta()\\"> <b>"+esc(x[7])+"</b> <span class=\\"s\\">"+esc(x[3])+" · "+esc(x[5])+" "+fm(x[6])+(x[8]?" · "+esc(x[8]):"")+(x[4]?" · "+esc(x[4]):"")+" · "+esc(k)+"</span></label>"}).join("")+(vis.length>300?"<div class=\\"s\\">… y "+(vis.length-300)+" más (use los filtros).</div>":"");',
+  ' $("pkL").innerHTML=vis.slice(0,300).map(function(x){var k=x[0]+"!"+x[1];return "<label style=\\"display:block;padding:4px 0;border-bottom:1px solid #F1F5F9\\"><input type=\\"checkbox\\" data-k=\\""+esc(k)+"\\""+(PF[k]?"":" checked")+" onchange=\\"PF[this.dataset.k]=!this.checked;pkCuenta()\\"> <b>"+esc(x[7])+"</b> <span class=\\"s\\">"+esc(x[3])+" · "+esc(x[5])+" "+fm(x[6])+(x[8]?" · "+esc(x[8]):"")+(resp(x[10])?" · 👤 "+esc(resp(x[10])):"")+" · "+esc(k)+"</span></label>"}).join("")+(vis.length>300?"<div class=\\"s\\">… y "+(vis.length-300)+" más (use los filtros).</div>":"");',
   ' pkCuenta()}',
   'function pkMarcados(){return Array.prototype.slice.call(document.querySelectorAll("#pkL input:checked")).map(function(c){return c.dataset.k})}',
   'function pkCuenta(){var k=pkMarcados().length;$("pkBar").innerHTML="<button class=\\"g\\" onclick=\\"pkTodos(true)\\">☑ Todos</button><button class=\\"g\\" onclick=\\"pkTodos(false)\\">☐ Ninguno</button><button class=\\"v\\" onclick=\\"pkBuscar()\\""+(k?"":" disabled")+">🔎 Buscar RUC de los marcados ("+k+")</button>"+(k>150?" <span class=\\"s\\">Se buscan de 150 en 150, los más nuevos primero.</span>":"")}',
