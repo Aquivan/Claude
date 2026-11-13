@@ -22,7 +22,7 @@ function PV_columnas_(tit) {
     f: col(/^fecha de dep/, 0), op: col(/^numero de op|^n.? de op/, 1), b: col(/^banco/, 2), mon: col(/^moneda/, 3), m: col(/^monto/, 4),
     p: col(/^proveedor/, 5), cli: col(/^cliente/, 7), des: col(/^descripcion/, 8), arch: col(/^archivo original/, 10), pag: col(/^pagina/, 12),
     rev: col(/^revisado/, -1), pr: col(/^por retener/, -1), ret: col(/^retenido/, -1), emp: col(/^empresa/, -1), idb: col(/^id benef/, -1),
-    idu: col(/^id usuario/, -1), doc: col(/^tipo y n/, -1), nota: col(/^nota/, -1)
+    idu: col(/^id usuario/, -1), doc: col(/^tipo y n/, -1), nota: col(/^nota/, -1), proc: col(/^fecha de proc|^procesad/, 11)
   };
 }
 
@@ -34,7 +34,7 @@ function PV_claveDup_(op, banco, monto) {   // = claveDuplicado() de VoucherProc
 /**
  * 🔎 Índice de las dos pestañas para buscar y filtrar en el navegador (cada filtro es instantáneo).
  * Cada fila: [h, fila, aaaammdd, fecha, op, banco, moneda, monto, proveedor, empresa, revisado, porRetener, retenido,
- *             idBenef, cliente, descripcion, archivo, pagina, claveDup, idUsuario, doc, nota]
+ *             idBenef, cliente, descripcion, archivo, pagina, claveDup, idUsuario, doc, nota, procesado aaaammddHHmm]
  */
 function PV_indice_() {
   var ss = PV_ss_(), filas = [];
@@ -51,7 +51,8 @@ function PV_indice_() {
       var f = c[I.f] instanceof Date ? Utilities.formatDate(c[I.f], PV_TZ_, 'yyyyMMdd') : '';
       filas.push([h, r + 2, f, tx(v, I.f), tx(v, I.op), tx(v, I.b), tx(v, I.mon), Number(c[I.m]) || 0, tx(v, I.p), tx(v, I.emp),
         si(v, c, I.rev), si(v, c, I.pr), si(v, c, I.ret), tx(v, I.idb), tx(v, I.cli), tx(v, I.des).slice(0, 160), tx(v, I.arch), tx(v, I.pag),
-        tx(v, I.op) && !/DUPLICADO/i.test(tx(v, I.op)) ? PV_claveDup_(c[I.op], c[I.b], c[I.m]) : '', tx(v, I.idu), tx(v, I.doc).slice(0, 120), tx(v, I.nota).slice(0, 120)]);
+        tx(v, I.op) && !/DUPLICADO/i.test(tx(v, I.op)) ? PV_claveDup_(c[I.op], c[I.b], c[I.m]) : '', tx(v, I.idu), tx(v, I.doc).slice(0, 120), tx(v, I.nota).slice(0, 120),
+        c[I.proc] instanceof Date ? Utilities.formatDate(c[I.proc], PV_TZ_, 'yyyyMMddHHmm') : '']);
     }
   });
   return { hojas: PV_HOJAS_, filas: filas, t: PV_hoy_() };
