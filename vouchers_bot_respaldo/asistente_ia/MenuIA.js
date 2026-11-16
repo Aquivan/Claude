@@ -8,6 +8,7 @@ function VIA_menu_() {
     .addItem('📰 Resumen de cobranzas y pagos con IA', 'VIA_menuResumen')
     .addItem('📋 Analizar vouchers procesados (factura, empresa, retención)', 'VIA_menuProcesados')
     .addItem('🔎 Identificar RUC de los proveedores (filas seleccionadas)', 'VIA_menuIdentificarRuc')
+    .addItem('🔁 Cambiar Original ↔ Foto (el último o una fila)', 'VIA_menuCambiarTipo')
     .addItem('🔗 Completar Originales con lo trabajado en Fotos', 'VIA_menuVco')
     .addSeparator()
     .addItem('🔍 Auditor IA: abrir (compras y pagos de todas las empresas) ↗', 'VIA_m_AUD_menuAbrir')
