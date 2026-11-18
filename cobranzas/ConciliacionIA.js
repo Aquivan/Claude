@@ -29,7 +29,7 @@ function CIA_agregarMenu_() {
     .addItem('💬 Chat con la IA (preguntas, fotos, PDF, Excel)', 'CHAT_menuAbrir')
     .addItem('📰 Resumen de cobranzas y pagos con IA', 'CIA_menuResumen')
     .addItem('📋 Analizar vouchers procesados (factura, empresa, retención)', 'menuAnalizarIAProcesados')
-    .addItem('🔎 Identificar RUC de los proveedores (filas seleccionadas)', 'menuIdentificarRucFilas')
+    .addItem('🔎 Identificar RUC de los proveedores (vouchers sin RUC)', 'menuIdentificarRucFilas')
     .addItem('🔁 Cambiar Original ↔ Foto (el último o una fila)', 'CTV_menuCambiar')
     .addItem('🔗 Completar Originales con lo trabajado en Fotos', 'VCO_menuAbrir')
     .addSeparator()

@@ -14,7 +14,7 @@ name: Asistente IA en hoja Vouchers
 on:
   push:
     branches: [claude/python-codes-izve18]
-    paths: ['vouchers_ia/**', 'cobranzas/ChatPanel.html', 'cobranzas/VcoVista.html', 'cobranzas/ConciliacionIA.js', '.github/workflows/asistente-vouchers.yml']
+    paths: ['vouchers_ia/**', 'cobranzas/ChatPanel.html', 'cobranzas/VcoVista.html', 'cobranzas/RucVista.html', 'cobranzas/ConciliacionIA.js', '.github/workflows/asistente-vouchers.yml']
   workflow_dispatch:
     inputs:
       accion:
@@ -128,6 +128,13 @@ jobs:
           if re.search(r'\bVCO_\w+\(', vco):
               print('::error::VcoVista.html usa una función VCO_ nueva: agréguela a vouchers_ia.'); sys.exit(1)
           open(os.path.join(d, carpeta, 'VcoVista.html'), 'w', encoding='utf-8').write(vco)
+          # 🔎 La misma ventana de Identificar RUC de Cobranzas (sus llamadas RUCV_x pasan a VIA_x de esta hoja).
+          rv = open('cobranzas/RucVista.html', encoding='utf-8').read()
+          rv = re.sub(r'\bRUCV_(ruc\w+)\(', r'VIA_\1(', rv)
+          faltan = sorted(set(re.findall(r'\.VIA_(ruc\w+)\(', rv)) - set(re.findall(r'function VIA_(ruc\w+)\(', js)))
+          if faltan or re.search(r'\bRUCV_\w+', rv):
+              print('::error::RucVista.html usa una función que vouchers_ia no tiene: VIA_' + ', VIA_'.join(faltan)); sys.exit(1)
+          open(os.path.join(d, carpeta, 'RucVista.html'), 'w', encoding='utf-8').write(rv)
           # El menu: los mismos items del menu 🧠 Asistente IA de Cobranzas (CIA_agregarMenu_).
           cia = open('cobranzas/ConciliacionIA.js', encoding='utf-8').read()
           bloque = re.search(r'function CIA_agregarMenu_\(\)\s*\{(.*?)\.addToUi\(\)', cia, re.S).group(1)

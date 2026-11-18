@@ -218,6 +218,8 @@ function PV_registrarWeb_(mini) {
     ss.addDeveloperMetadata(k, v, SpreadsheetApp.DeveloperMetadataVisibility.DOCUMENT);
   };
   poner('PV_WEB', PV_URL_);
+  // 🔍 dirección del puente de la hoja (PV_Puente.js): con ella Cobranzas también puede pedir «Leer el voucher con IA» (RucVentana.js)
+  if (/^https:\/\/script\.google\.com\//.test(String(PV_PUENTE_URL_ || ''))) poner('PV_HOJA', PV_PUENTE_URL_);
   // 🧾 la Mini App (GitHub Pages del repositorio): solo se acepta una dirección *.github.io
   if (/^https:\/\/[a-z0-9-]+\.github\.io\/[\w.\/-]+$/i.test(String(mini || ''))) poner('PV_MINIAPP', String(mini));
 }

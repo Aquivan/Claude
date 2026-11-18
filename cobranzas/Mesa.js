@@ -67,7 +67,8 @@ var MESA_WEB_FN_ = {
   MESA_datos: MESA_datos, MESA_guardar: MESA_guardar, MESA_reasignar: MESA_reasignar, MESA_completar: MESA_completar, MESA_manual: MESA_manual,
   MESA_historial: MESA_historial, MESA_deshacer: MESA_deshacer, MESA_recalcularAhora: MESA_recalcularAhora, MESA_estado: MESA_estado,
   MESA_archivo: MESA_archivo, MESA_ia: MESA_ia, MESA_rucRapido: MESA_rucRapido, MESA_rucAplicar: MESA_rucAplicar, MESA_rucExternos: MESA_rucExternos,
-  MESA_rucEstado: MESA_rucEstado, MESA_rucOtro: MESA_rucOtro, MESA_rucElegir: MESA_rucElegir, MESA_version: MESA_version
+  MESA_rucEstado: MESA_rucEstado, MESA_rucOtro: MESA_rucOtro, MESA_rucElegir: MESA_rucElegir, MESA_version: MESA_version,
+  MESA_rucVentana: MESA_rucVentana, MESA_ruc: MESA_ruc
 };
 function MESA_doPost_(e) {
   var salida = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
@@ -165,6 +166,22 @@ function MESA_version(tk, lado, completo) {
   lado = lado === 'Por cobrar' ? 'Por cobrar' : 'Por pagar';
   var p = PropertiesService.getScriptProperties();
   return { huella: MESA_huella_(lado, completo ? 'todo' : 'liviano'), ultima: p.getProperty('MESA_ULTIMA') || '', recalculando: !!p.getProperty('MESA_PEDIDO') };
+}
+
+/* ------------------------------------------------ 🔎 Identificar RUC (la misma ventana del menú 🧠 Asistente IA, dentro de la Mesa) */
+
+/** HTML de la ventana (RucVentana.js / RucVista.html); con filas («Originales!569»…) ya trae lo encontrado para ellas (máx. 300). */
+function MESA_rucVentana(tk, filas) {
+  MESA_ok_(tk);
+  var d = null;
+  if (filas && filas.length) { d = RUCV_rucFilas(filas); if (d && d.error) throw new Error(d.error); }
+  return RUCV_html_(d);
+}
+/** Lo que pide esa ventana: solo sus funciones (RUCV_FN_), con la llave de la Mesa. */
+function MESA_ruc(tk, fn, args) {
+  MESA_ok_(tk);
+  if (!Object.prototype.hasOwnProperty.call(RUCV_FN_, fn)) throw new Error('función no permitida');
+  return RUCV_FN_[fn].apply(null, args || []);
 }
 
 /* ------------------------------------------------ ⚡ memoria (caché) de los datos de la Mesa */
