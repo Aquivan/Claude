@@ -283,6 +283,41 @@ function TGV_detectarSire_(ss, c) {
   return n;
 }
 
+/**
+ * SIRE presentado, segunda verificación: el robot SIRE baja de SUNAT el registro y, si el periodo ya está
+ * PRESENTADO, SUNAT entrega el registro generado (se guarda como Aceptada_venta.zip / Aceptada_compra.zip);
+ * si no, solo la propuesta (Propuesta_*.zip). Presentado = hay registro aceptado y ningún libro quedó solo en
+ * propuesta. Se consulta como mucho una vez por hora (una lectura de GitHub por empresa).
+ */
+function TGV_detectarSireRepo_(ss) {
+  var c = CacheService.getScriptCache();
+  if (c.get('tgv_sire_repo')) return 0;
+  c.put('tgv_sire_repo', '1', 3600);
+  var cfg; try { cfg = TG_cfg_(ss); } catch (e) { return 0; }
+  if (!cfg.github) return 0;
+  var n = 0, pres = TGV_presentaciones_(ss), desde = TGV_periodoMenos_(TGV_hoyLima_(), 3);
+  (cfg.cob.grupo || []).forEach(function (ruc) {
+    var arbol;
+    try { arbol = TG_gh_(cfg, '/git/trees/' + encodeURIComponent(cfg.rama + ':sire/' + ruc + '/historico') + '?recursive=1'); } catch (e) { return; }
+    var est = {};
+    (arbol.tree || []).forEach(function (t) {
+      var m = String(t.path).match(/^(\d{6})\/(Aceptada|Propuesta)_(compra|venta)\.zip$/);
+      if (!m || m[1] < desde) return;
+      var x = est[m[1]] = est[m[1]] || {};
+      if (m[2] === 'Aceptada' || !x[m[3]]) x[m[3]] = m[2];
+    });
+    Object.keys(est).forEach(function (per) {
+      var x = est[per], libros = Object.keys(x);
+      if (!libros.some(function (l) { return x[l] === 'Aceptada'; }) || libros.some(function (l) { return x[l] === 'Propuesta'; })) return;
+      if (pres[ruc + '|' + per + '|sire']) return;
+      if (TGV_marcar_(ss, ruc, per, 'sire', 'SUNAT: registro SIRE ' + libros.map(function (l) { return l === 'venta' ? 'RVIE' : 'RCE'; }).join(' y ') + ' generado (automático)')) {
+        n++; pres[ruc + '|' + per + '|sire'] = true;
+      }
+    });
+  });
+  return n;
+}
+
 function TGV_estaPresentado_(pres, ruc, per, ob) {
   if (pres[ruc + '|' + per + '|' + ob]) return true;
   if (ob !== 'plame') return false;
@@ -375,10 +410,22 @@ function TGV_previo_(ss) {
   var hoyTxt = Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd'), props = PropertiesService.getScriptProperties();
   if (prm.hora < 2 || hora < prm.hora - 2 || hora >= prm.hora || props.getProperty('TGV_PREVIO') === hoyTxt) return;
   props.setProperty('TGV_PREVIO', hoyTxt);
-  var porPer = {};
+  var porPer = {}, sire = {};
   TGV_deHoy_(TGV_lista_(ss, null), prm).forEach(function (x) {
+    if (x.ob === 'sire') { (sire[x.periodo] = sire[x.periodo] || {})[x.ruc] = true; return; }
     if (x.ob !== 'igv' && x.ob !== 'plame') return;
     (porPer[x.periodo] = porPer[x.periodo] || {})[x.ruc] = true;
+  });
+  // 📑 SIRE: igual que el 621, antes del aviso se pregunta a SUNAT (solo el registro, rápido): si ya se presentó,
+  // SUNAT entrega el registro generado y TGV_detectarSireRepo_ lo marca solo (así no avisa «por presentar»).
+  Object.keys(sire).forEach(function (per) {
+    try {
+      var cfg = TG_cfg_(ss), p = TG_PROYECTOS_.sire_rapido;
+      var inputs = p.inputs({ empresa: Object.keys(sire[per]).join(','), desde: per, hasta: per, tipo: 'ambos' });
+      TG_gh_(cfg, '/actions/workflows/' + p.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: inputs });
+      CacheService.getScriptCache().remove('tgv_sire_repo');
+      console.log('Vencimientos, SIRE previo pedido: ' + per + ' · ' + Object.keys(sire[per]).length + ' empresa(s)');
+    } catch (e) { console.warn('Vencimientos, SIRE previo: ' + e.message); }
   });
   var res = Object.keys(porPer).map(function (per) {
     var rucs = Object.keys(porPer[per]);
@@ -400,6 +447,7 @@ function TGV_lista_(ss, c) {
   var crono = TGV_leerCronograma_(TGV_hoja_(ss));
   var hoy = TGV_hoyLima_();
   if (c) TGV_detectarSire_(ss, c);
+  try { TGV_detectarSireRepo_(ss); } catch (e) { console.warn('SIRE (registro aceptado): ' + e.message); }
   var dec = TGV_decLeer_(ss);
   try { TGV_detectarDecl_(ss, dec); } catch (e) { console.warn('Declaraciones: ' + e.message); }
   var pres = TGV_presentaciones_(ss);
@@ -515,10 +563,10 @@ function TGV_comando_(ctx, arg) {
   var html = '📅 <b>Vencimientos SUNAT</b> (IGV-Renta, PLAME y SIRE)\n\n' +
     (pend.length ? '<b>Pendientes</b>\n' + pend.map(TGV_linea_).join('\n') : '✅ No hay nada pendiente.') +
     (hechos.length ? '\n\n<b>Ya presentado</b>\n' + hechos.slice(-10).map(TGV_linea_).join('\n') : '') +
-    '\n\n<i>El SIRE (RVIE/RCE) vence 1 día hábil antes que el IGV (R.S. 281-2022, Anexo II). El SIRE se marca solo con el mensaje del Buzón SUNAT; el IGV-Renta (621) y el PLAME (601) se marcan solos cuando su constancia está en la hoja Declaraciones (se baja de SUNAT antes de cada aviso), o con el botón ✅. Ajustes: /vencimientos ajustes</i>';
+    '\n\n<i>El SIRE (RVIE/RCE) vence 1 día hábil antes que el IGV (R.S. 281-2022, Anexo II). El SIRE se marca solo cuando SUNAT ya entrega el registro generado (antes de cada aviso se le pregunta) o con el mensaje del Buzón SUNAT; el IGV-Renta (621) y el PLAME (601) se marcan solos cuando su constancia está en la hoja Declaraciones (se baja de SUNAT antes de cada aviso), o con el botón ✅. Ajustes: /vencimientos ajustes</i>';
   var rico = '<h2>📅 Vencimientos SUNAT</h2>' + (pend.length ? '<h4>Pendientes</h4>' + TGV_tablaRica_(pend) : '<p>✅ No hay nada pendiente.</p>') +
     (hechos.length ? '<details><summary>Ya presentado (' + Math.min(10, hechos.length) + ')</summary>' + TGV_tablaRica_(hechos.slice(-10)) + '</details>' : '') +
-    '<p><i>El SIRE vence 1 día hábil antes que el IGV. IGV-Renta (621) y PLAME (601) se marcan solos con la hoja Declaraciones; el SIRE con el Buzón. Ajustes: /vencimientos ajustes</i></p>';
+    '<p><i>El SIRE vence 1 día hábil antes que el IGV. IGV-Renta (621) y PLAME (601) se marcan solos con la hoja Declaraciones; el SIRE cuando SUNAT entrega el registro generado (o con el Buzón). Ajustes: /vencimientos ajustes</i></p>';
   TG_mostrarRico_(ctx, rico, html, TGV_botones_(pend), true);
 }
 
