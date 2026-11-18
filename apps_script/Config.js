@@ -35,6 +35,7 @@ function onOpen() {
     .addItem('7. Ver estado de la ultima ejecucion en GitHub', 'menuVerEstadoGitHub')
     .addSeparator()
     .addItem('8. Generar/Actualizar liquidacion IGV (una empresa o TODAS)...', 'menuGenerarLiquidacion')
+    .addItem('✅ Validar comprobantes con SUNAT (API Consulta Integrada)...', 'menuValidarComprobantes')
     .addItem('🔗 Reparar enlaces PDF/XML que se ven como texto', 'menuRepararEnlaces')
     .addItem('Activar/Desactivar liquidacion automatica al importar', 'menuToggleLiquidacionAuto')
     .addItem('Vaciar valores manuales de una liquidacion (Percep/Retenc/Coef/Ajustes)',
