@@ -67,7 +67,7 @@ var MESA_WEB_FN_ = {
   MESA_datos: MESA_datos, MESA_guardar: MESA_guardar, MESA_reasignar: MESA_reasignar, MESA_completar: MESA_completar, MESA_manual: MESA_manual,
   MESA_historial: MESA_historial, MESA_deshacer: MESA_deshacer, MESA_recalcularAhora: MESA_recalcularAhora, MESA_estado: MESA_estado,
   MESA_archivo: MESA_archivo, MESA_ia: MESA_ia, MESA_rucRapido: MESA_rucRapido, MESA_rucAplicar: MESA_rucAplicar, MESA_rucExternos: MESA_rucExternos,
-  MESA_rucEstado: MESA_rucEstado, MESA_rucOtro: MESA_rucOtro, MESA_rucElegir: MESA_rucElegir
+  MESA_rucEstado: MESA_rucEstado, MESA_rucOtro: MESA_rucOtro, MESA_rucElegir: MESA_rucElegir, MESA_version: MESA_version
 };
 function MESA_doPost_(e) {
   var salida = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
@@ -152,7 +152,19 @@ function MESA_datos(tk, lado, completo) {
     if (huella) MESA_cacheGuardar_(huella, r);
   } else r.deMemoria = true;
   r.recalculando = !!PropertiesService.getScriptProperties().getProperty('MESA_PEDIDO');
+  r.huella = huella;
   return r;
+}
+
+/**
+ * 🔁 «Actualizar sola»: consulta liviana (no lee facturas ni vouchers) que la Mesa abierta hace cada pocos minutos.
+ * Devuelve la huella de lo que muestra; si cambió, la página recarga en silencio.
+ */
+function MESA_version(tk, lado, completo) {
+  MESA_ok_(tk);
+  lado = lado === 'Por cobrar' ? 'Por cobrar' : 'Por pagar';
+  var p = PropertiesService.getScriptProperties();
+  return { huella: MESA_huella_(lado, completo ? 'todo' : 'liviano'), ultima: p.getProperty('MESA_ULTIMA') || '', recalculando: !!p.getProperty('MESA_PEDIDO') };
 }
 
 /* ------------------------------------------------ ⚡ memoria (caché) de los datos de la Mesa */
