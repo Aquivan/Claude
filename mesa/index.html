@@ -232,6 +232,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <button onclick="calc()" title="Calculadora (también con la tecla F2) · Alt+clic en cualquier monto de la pantalla lo pasa a la calculadora">🧮 Calculadora</button>
   <button id="bRecalc" onclick="recalcularAhora()" title="Recalcular Cobranzas en este momento (saldos, Consulta, Panel) sin esperar">⚡ Recalcular ahora</button>
   <button onclick="cargar(true)" title="Volver a leer facturas, vouchers y cruces">🔄 Recargar</button>
+  <label id="lAuto" title="Revisa cada 3 minutos si Cobranzas se recalculó o entraron vouchers; si hay algo nuevo recarga sola, sin perder filtros ni el estado de cuenta abierto. Nunca mientras tenga cambios sin guardar o esté eligiendo." style="color:var(--tx,#111);font-size:12px;white-space:nowrap"><input type="checkbox" id="cAuto" onchange="autoCambio()"> 🔁 Actualizar sola</label><span id="auHace" style="font-size:11px;color:var(--gr)"></span>
   <button id="bAparte" onclick="aparte()" title="Abrir en una pestaña del navegador (pantalla completa, otro monitor o celular)">↗ Ventana aparte</button>
   <button onclick="ayudaCompleta()">❓</button>
 </div>
@@ -373,12 +374,13 @@ function cambiarLado(b) {
   $('lContra').textContent = S.lado === 'Por pagar' ? 'Proveedor' : 'Cliente';
   S.links = {}; S.orig = {}; S.hist = []; S.act = ''; cargar(false);
 }
-function cargar(mantener) {
-  $('carga').style.display = 'flex';
+function cargar(mantener, silencioso) {
+  if (!silencioso) $('carga').style.display = 'flex';
   var guardar = {};
   if (mantener) sucios().forEach(function (id) { var mm = {}; S.links[id].forEach(function (k) { if (S.montos[id + '|' + k] != null) mm[k] = S.montos[id + '|' + k]; }); guardar[id] = { l: S.links[id].slice(), refs: S.V[id].refs, r: S.reempl[id], mm: mm }; });
   var rGuard = mantener ? rSucios().map(function (u) { return { u: u, l: JSON.parse(JSON.stringify(S.rl[u])) }; }) : [];
-  R.withFailureHandler(falla).withSuccessHandler(function (d) {
+  R.withFailureHandler(silencioso ? function (e) { AU.ocupado = false; auHace('⚠️ no se pudo actualizar (' + (e && e.message || e) + '); reintenta en 3 min'); } : falla).withSuccessHandler(function (d) {
+    AU.ocupado = false; AU.huella = d.huella || ''; AU.en = Date.now(); AU.pend = false; auHace();
     S.data = d; S.D = {}; S.V = {}; S.links = {}; S.orig = {}; S.motor = {}; S.origen = {}; S.fijo = {}; S.sug = (d.sug || []).slice();
     d.docs.forEach(function (x) { S.D[x.k] = x; });
     d.vouchers.forEach(function (x) { S.V[x.id] = x; S.links[x.id] = []; });
@@ -432,8 +434,52 @@ function cargar(mantener) {
       d.vouchers.length + ' de ' + d.parcial.vouchers + ' vouchers). <button onclick="S.completo=true;cargar(true)">⬇ Cargar todo el historial</button>' : (S.completo ? '📚 Todo el historial.' : '')) +
       (d.deMemoria ? ' <span title="Ya estaba armado: nada cambió desde la última vez">⚡ al instante</span>' : '');
     simular(); pintar(); detalle();
+    // 📨 el estado de cuenta abierto se rehace con los datos nuevos (mismas fechas, moneda y nota)
+    if (EC && $('ec').className === 'on') { try { construirEV('antes'); ecPintar(); } catch (e) {} }
+    if (silencioso) estado($('estado').textContent + ' · 🔁 actualizado solo a las ' + new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }));
   }).MESA_datos(TK, S.lado, !!S.completo);
 }
+
+/* ------------------------------------------------ 🔁 Actualizar sola */
+var AU = { on: false, huella: '', en: 0, ocupado: false, pend: false, toque: 0, t: 0 };
+try { AU.on = localStorage.getItem('mesa_auto') === '1'; } catch (e) {}
+$('cAuto').checked = AU.on;
+['pointerdown', 'keydown', 'wheel'].forEach(function (ev) { document.addEventListener(ev, function () { AU.toque = Date.now(); }, true); });
+function autoCambio() {
+  AU.on = $('cAuto').checked;
+  try { localStorage.setItem('mesa_auto', AU.on ? '1' : '0'); } catch (e) {}
+  auHace(); if (AU.on) autoRevisar();
+}
+/** «hace X min» junto a la casilla (o un aviso). */
+function auHace(txt) {
+  var el = $('auHace'); if (!el) return;
+  if (txt) { el.textContent = txt; return; }
+  if (!AU.en) { el.textContent = ''; return; }
+  var m = Math.floor((Date.now() - AU.en) / 60000);
+  el.textContent = (AU.pend ? '🆕 hay datos nuevos: se cargan al terminar lo que está haciendo · ' : '') + 'actualizado ' + (m < 1 ? 'recién' : 'hace ' + m + ' min');
+}
+/** Ocupado = no recargar: cambios sin guardar, algo elegido, una ventana abierta o tocó la pantalla hace menos de 20 s. */
+function autoOcupado() {
+  if (sucios().length || rSucios().length) return true;
+  if (S.act || S.actR || Object.keys(S.selV || {}).length || Object.keys(S.selF || {}).length) return true;
+  if ($('pop') || ($('modal') && $('modal').className) || ($('visor') && $('visor').className)) return true;
+  if ($('carga').style.display === 'flex') return true;
+  return Date.now() - AU.toque < 20000;
+}
+function autoRevisar() {
+  if (!AU.on || AU.ocupado || document.hidden || !S.data) return;
+  if (AU.pend) { if (!autoOcupado()) { AU.ocupado = true; cargar(true, true); } return; }
+  AU.ocupado = true;
+  R.withFailureHandler(function () { AU.ocupado = false; }).withSuccessHandler(function (v) {
+    AU.ocupado = false;
+    if (!v || !v.huella || v.huella === AU.huella) { auHace(); return; }
+    AU.pend = true;
+    if (!autoOcupado()) { AU.ocupado = true; cargar(true, true); } else auHace();
+  }).MESA_version(TK, S.lado, !!S.completo);
+}
+setInterval(function () { auHace(); if (AU.on && AU.pend) autoRevisar(); }, 30000);     // si quedó pendiente, prueba cada 30 s
+setInterval(autoRevisar, 180000);                                                  // revisión cada 3 min
+document.addEventListener('visibilitychange', function () { if (!document.hidden && AU.on && AU.en && Date.now() - AU.en > 180000) autoRevisar(); });
 
 /* ------------------------------------------------ cálculo (igual al motor: cada voucher, por fecha, llena sus facturas en el orden escrito) */
 function iguales(a, b) { return a.length === b.length && a.every(function (x, i) { return x === b[i]; }); }
