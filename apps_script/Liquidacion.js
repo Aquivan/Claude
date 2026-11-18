@@ -641,6 +641,8 @@ function construirLiquidacion_(ruc, anio) {
   }
   escribirParametros_(ss);
   escribirTablero_(ss, anio);
+  // ✔️ N/C, detracción pagada, SSCO y validez SUNAT de cada comprobante + estado SIRE por mes (LiquidacionVerificar.js)
+  try { LVER_aplicar_(ss, ruc, anio); } catch (eV2) { Logger.log('Verificación: ' + eV2.message); }
   limpiarHojasVacias_(ss);
   return ss.getUrl();
 }

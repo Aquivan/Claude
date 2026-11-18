@@ -68,7 +68,7 @@ var MESA_WEB_FN_ = {
   MESA_historial: MESA_historial, MESA_deshacer: MESA_deshacer, MESA_recalcularAhora: MESA_recalcularAhora, MESA_estado: MESA_estado,
   MESA_archivo: MESA_archivo, MESA_ia: MESA_ia, MESA_rucRapido: MESA_rucRapido, MESA_rucAplicar: MESA_rucAplicar, MESA_rucExternos: MESA_rucExternos,
   MESA_rucEstado: MESA_rucEstado, MESA_rucOtro: MESA_rucOtro, MESA_rucElegir: MESA_rucElegir, MESA_version: MESA_version,
-  MESA_rucVentana: MESA_rucVentana, MESA_ruc: MESA_ruc
+  MESA_rucVentana: MESA_rucVentana, MESA_ruc: MESA_ruc, MESA_sireRapido: MESA_sireRapido
 };
 function MESA_doPost_(e) {
   var salida = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
@@ -182,6 +182,29 @@ function MESA_ruc(tk, fn, args) {
   MESA_ok_(tk);
   if (!Object.prototype.hasOwnProperty.call(RUCV_FN_, fn)) throw new Error('función no permitida');
   return RUCV_FN_[fn].apply(null, args || []);
+}
+
+/* ------------------------------------------------ ⚡ Traer de SUNAT el registro de compras / ventas (solo reporte, sin PDF/XML) */
+
+/**
+ * Pide a SUNAT SOLO el registro (lo mismo que /sire en Telegram: sire-solo-reporte.yml). empresa: RUC del grupo o '' = todas;
+ * periodo AAAAMM; tipo compra | venta | ambos. Al terminar, la hoja SIRE lo importa, la Liquidación IGV se actualiza y
+ * Cobranzas se recalcula: con «🔁 Actualizar sola» la Mesa lo muestra sin hacer nada.
+ */
+function MESA_sireRapido(tk, empresa, periodo, tipo) {
+  var quien = MESA_ok_(tk);
+  var ss = TG_ss_(), cfg = TG_cfg_(ss);
+  empresa = String(empresa || '').replace(/\D/g, '');
+  if (empresa && cfg.cob.grupo.indexOf(empresa) < 0) throw new Error('Ese RUC no es del grupo.');
+  periodo = String(periodo || '').replace(/\D/g, '') || TG_mes_(0);
+  if (!/^20\d\d(0[1-9]|1[0-2])$/.test(periodo)) throw new Error('Periodo inválido (AAAAMM).');
+  if (periodo > TG_mes_(0)) throw new Error(periodo + ' todavía no empieza.');
+  tipo = tipo === 'compra' || tipo === 'venta' ? tipo : 'ambos';
+  var acc = { t: 'descarga', proyecto: 'sire_rapido', empresa: empresa || 'todas', desde: periodo, hasta: periodo, tipo: tipo };
+  var p = TG_PROYECTOS_.sire_rapido, inputs = p.inputs(acc);
+  TG_gh_(cfg, '/actions/workflows/' + p.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: inputs });
+  console.log('Mesa · SIRE rápido pedido por ' + quien + ': ' + JSON.stringify(inputs));
+  return { texto: TG_textoDescarga_(acc, cfg.cob) };
 }
 
 /* ------------------------------------------------ ⚡ memoria (caché) de los datos de la Mesa */
