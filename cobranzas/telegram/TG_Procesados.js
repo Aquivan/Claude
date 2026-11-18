@@ -1264,15 +1264,7 @@ function TGQ_filasDeTexto_(texto) {
 }
 
 /** Menú 🧠 Asistente IA (Cobranzas): pide las filas; en la hoja de Vouchers se usan las filas seleccionadas. */
-function menuIdentificarRucFilas() {
-  var ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive();
-  var p = ui.prompt('🔎 Identificar RUC de los proveedores', '¿Qué filas de la hoja de Vouchers?\nEj.: Originales 2656-2666 · Fotos 382, 383', ui.ButtonSet.OK_CANCEL);
-  if (p.getSelectedButton() !== ui.Button.OK) return;
-  var filas = TGQ_filasDeTexto_(p.getResponseText());
-  if (!filas.length) return ui.alert('No entendí las filas. Ej.: Originales 2656-2666');
-  var r = TGQ_rucDeFilas_(ss, filas);
-  TGQ_confirmarRuc_(ui, r, function (ids) { return ANX_aplicarDet_(ss, ids, false); });
-}
+// 🔎 menuIdentificarRucFilas: ahora abre la ventana completa (RucVentana.js / RucVista.html), la misma de la hoja de Vouchers y de la Mesa.
 
 /** Muestra lo encontrado y, si hay RUC sugeridos, pregunta si se escriben. aplicar(ids) → {mensaje}. */
 function TGQ_confirmarRuc_(ui, r, aplicar) {
