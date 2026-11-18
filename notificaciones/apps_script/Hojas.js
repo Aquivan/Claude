@@ -46,22 +46,20 @@ function NOT_esCoactiva_(r) { return /coactiva|embargo/i.test(r.clase + ' ' + r.
 
 /* ------------------------------------------------------- lectura de datos */
 
+/** Lo que mandó el robot (pestaña oculta «_Datos», Web.js); la primera vez trae lo de antes desde el repositorio. */
 function NOT_leerDatos_(cfg) {
-  var archivos = NOT_listarArchivos_(cfg);
-  var rutas = archivos.map(function (a) { return a.path; }).filter(function (p) { return /^\d{11}\/(notificaciones|mensajes)\.csv$/.test(p); });
-  var textos = NOT_leerTextos_(cfg, rutas);
+  var filas = NOT_datosLeer_();
+  if (!filas.length) { NOT_migrar_(cfg); filas = NOT_datosLeer_(); }
   var empresas = {};
   NOT_listarEmpresas_(cfg).forEach(function (e) { if (e.activo) empresas[e.ruc] = NOT_nombreCorto_(e.nombre); });
   var desde = cfg.desde || '000000';
   var notif = [], msj = [];
-  rutas.forEach(function (ruta) {
-    NOT_csvObjetos_(textos[ruta]).forEach(function (r) {
-      r.empresa = empresas[r.empresa_ruc] || r.empresa_ruc;
-      r.fecha = NOT_fechaHora_(r.fecha_publicacion);
-      var p = r.fecha instanceof Date ? Utilities.formatDate(r.fecha, 'America/Lima', 'yyyyMM') : '';
-      if (p && p < desde) return;
-      (/notificaciones\.csv$/.test(ruta) ? notif : msj).push(r);
-    });
+  filas.forEach(function (r) {
+    r.empresa = empresas[r.empresa_ruc] || r.empresa_ruc;
+    r.fecha = NOT_fechaHora_(r.fecha_publicacion);
+    var p = r.fecha instanceof Date ? Utilities.formatDate(r.fecha, 'America/Lima', 'yyyyMM') : '';
+    if (p && p < desde) return;
+    (r.tipo === 'Mensaje' ? msj : notif).push(r);
   });
   var orden = function (a, b) { return (b.fecha || 0) - (a.fecha || 0) || a.empresa.localeCompare(b.empresa); };
   notif.sort(orden); msj.sort(orden);

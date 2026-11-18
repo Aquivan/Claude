@@ -60,6 +60,7 @@ function TGN_revisar_(cfg) {
       // Una que sigue corriendo todavía puede fallar: se espera a que termine (antes se daba por lista y no se reintentaba).
       if (hoyRuns.some(function (r) { return r.status !== 'completed'; })) return;
       if (k === 'detracciones') TG_detPedir_(t.inputs());   // va por la hoja de Detracciones (pone la llave)
+      else if (k === 'notificaciones') TG_notPedir_(cfg, t.inputs());   // va por la hoja de Notificaciones (pone la llave)
       else TG_gh_(cfg, '/actions/workflows/' + t.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: t.inputs() });
       est.n++; est.t = Date.now();
       props.setProperty(pk, JSON.stringify(est));

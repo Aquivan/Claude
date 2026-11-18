@@ -6,9 +6,14 @@ Descarga del Buzón Electrónico de SUNAT SOL de UNA empresa:
     ejecución coactiva, cartas, requerimientos, etc.) y de MENSAJES, y
   - opcional: los PDF adjuntos de cada notificación (constancia y documento).
 
-    notificaciones/datos/<RUC>/notificaciones.csv     un renglón por notificación
-    notificaciones/datos/<RUC>/mensajes.csv           un renglón por mensaje
-    notificaciones/datos/<RUC>/<AAAA>/<MM>/<código>-<archivo>.pdf
+Todo va DIRECTO a la hoja «Notificaciones · Grupo» (su aplicación web, variables DESTINO y LLAVE: la llave de un
+solo uso la crea la hoja al pedir la descarga). En el repositorio (público) NO se guarda nada:
+    estado  → lo que la hoja ya tiene de la empresa (para bajar solo lo nuevo y no repetir PDF)
+    archivo → cada documento (RUC/AAAA/MM/<código>-<archivo>.pdf), que la hoja guarda en Drive
+    lista   → la lista completa de notificaciones y la de mensajes
+    fin     → terminó la empresa (la hoja rehace sus pestañas)
+Sin DESTINO (solo para probar a mano) escribe en --salida como antes:
+    <salida>/<RUC>/notificaciones.csv | mensajes.csv | <AAAA>/<MM>/<código>-<archivo>.pdf
 
 Rutas en SUNAT (las mismas que usa la página del buzón):
   visor/listNotiMenPag    lista paginada (tipoMsj 2 = notificaciones, 1 = mensajes)
@@ -21,10 +26,12 @@ buzón (día hábil siguiente), se lea o no. La lista sola NO marca nada.
 Las claves SOL llegan por variables de entorno (SUNAT_RUC, SUNAT_USUARIO,
 SUNAT_CLAVE) y nunca se imprimen.
 
-Uso:  python descargar_buzon.py [--desde 202601 | 15/03/2026] [--salida notificaciones/datos] [--sin-pdf] [--pdf-mensajes] [--solo-nuevas]
+Uso:  DESTINO=... LLAVE=... python descargar_buzon.py [--desde 202601 | 15/03/2026] [--sin-pdf] [--pdf-mensajes] [--solo-nuevas]
+      (prueba local: sin DESTINO y con --salida carpeta)
       --desde: solo lo publicado desde ese mes (AAAAMM) o fecha (dd/mm/aaaa). Vacío = todo.
 """
 import argparse
+import base64
 import csv
 import html
 import json
@@ -33,6 +40,7 @@ import re
 import sys
 import time
 import unicodedata
+import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "retenciones", "scripts"))
 from descargar_cre import Sol, MENU  # noqa: E402
@@ -220,6 +228,31 @@ def nombre_archivo(s):
     return re.sub(r"[^\w.\-]+", "_", s)[:80]
 
 
+def enviar(destino, llave, datos, intentos=3):
+    """Manda a la hoja (aplicación web de Apps Script) y devuelve su respuesta JSON."""
+    cuerpo = json.dumps(dict(datos, llave=llave), ensure_ascii=False).encode("utf-8")
+    ultimo = None
+    for i in range(intentos):
+        try:
+            req = urllib.request.Request(destino, data=cuerpo, headers={"Content-Type": "application/json"}, method="POST")
+            with urllib.request.urlopen(req, timeout=180) as r:
+                res = json.loads(r.read().decode("utf-8", "replace"))
+            if not res.get("ok"):
+                raise RuntimeError(res.get("error") or "la hoja no aceptó el envío")
+            return res
+        except Exception as e:   # noqa: BLE001
+            ultimo = e
+            time.sleep(5 * (i + 1))
+    texto = re.sub(r"https?://\S+", "<hoja>", str(ultimo))[:200]
+    raise RuntimeError("No se pudo mandar a la hoja: " + texto)
+
+
+def ordenar(filas):
+    filas.sort(key=lambda r: (r["fecha_publicacion"][6:10], r["fecha_publicacion"][3:5], r["fecha_publicacion"][:2],
+                              r["fecha_publicacion"][11:]), reverse=True)
+    return filas
+
+
 def leer_previo(ruta):
     if not os.path.exists(ruta):
         return {}
@@ -229,8 +262,7 @@ def leer_previo(ruta):
 
 def guardar(ruta, filas):
     os.makedirs(os.path.dirname(ruta), exist_ok=True)
-    filas.sort(key=lambda r: (r["fecha_publicacion"][6:10], r["fecha_publicacion"][3:5], r["fecha_publicacion"][:2],
-                              r["fecha_publicacion"][11:]), reverse=True)
+    ordenar(filas)
     with open(ruta, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=COLS)
         w.writeheader()
@@ -240,7 +272,7 @@ def guardar(ruta, filas):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--salida", default="notificaciones/datos")
+    ap.add_argument("--salida", default="", help="solo para probar a mano sin la hoja (DESTINO vacío)")
     ap.add_argument("--desde", default="", help="AAAAMM o dd/mm/aaaa; vacío = todo")
     ap.add_argument("--sin-pdf", action="store_true", help="no abrir notificaciones ni bajar sus PDF")
     ap.add_argument("--pdf-mensajes", action="store_true", help="bajar también los adjuntos de los MENSAJES")
@@ -250,6 +282,24 @@ def main():
     ruc, usuario, clave = (os.environ.get(k, "") for k in ["SUNAT_RUC", "SUNAT_USUARIO", "SUNAT_CLAVE"])
     if not (ruc and usuario and clave):
         sys.exit("Faltan SUNAT_RUC / SUNAT_USUARIO / SUNAT_CLAVE")
+    destino, llave = os.environ.get("DESTINO", ""), os.environ.get("LLAVE", "")
+    remoto = bool(destino and llave)
+    if not remoto and not a.salida:
+        sys.exit("Falta la llave de la hoja (DESTINO y LLAVE): pida la descarga desde la hoja «Notificaciones · Grupo».")
+    try:
+        procesar(a, ruc, usuario, clave, remoto, destino, llave)
+    except Exception as e:
+        if remoto:
+            try:
+                enviar(destino, llave, {"accion": "fin", "ruc": ruc, "ok": False, "error": str(e)[:200]})
+            except Exception:
+                pass
+        raise
+    if remoto:
+        enviar(destino, llave, {"accion": "fin", "ruc": ruc, "ok": True})
+
+
+def procesar(a, ruc, usuario, clave, remoto, destino, llave):
     # De madrugada SOL a veces no abre el buzón (mantenimiento): se reintenta con un ingreso nuevo.
     for intento in range(1, 5):
         try:
@@ -262,13 +312,14 @@ def main():
             if intento == 4:
                 raise
             time.sleep(60 * intento)
-    carpeta = os.path.join(a.salida, ruc)
+    carpeta = os.path.join(a.salida or ".", ruc)
     desde = desde_clave(a.desde)
+    estado = enviar(destino, llave, {"accion": "estado", "ruc": ruc}) if remoto else None
     print(f"Empresa {ruc}: buzón abierto. Desde: {desde or ('solo lo nuevo' if a.solo_nuevas else 'todo')}. "
           f"PDF de notificaciones: {'no' if a.sin_pdf else 'sí'}")
     for tipo, nombre, con_pdf in [("2", "notificaciones", not a.sin_pdf), ("1", "mensajes", a.pdf_mensajes)]:
         ruta = os.path.join(carpeta, f"{nombre}.csv")
-        previo = leer_previo(ruta)
+        previo = {c: {k: str(v) for k, v in r.items()} for c, r in (estado.get(nombre) or {}).items()} if remoto else leer_previo(ruta)
         filas, nuevas, pdfs = [], 0, 0
         # Solo lo nuevo: cuenta como "ya descargada" la que está guardada y no tiene un PDF pendiente de reintento.
         conocidos = {c for c, r in previo.items() if "se reintenta" not in (r.get("nota_pdf") or "")} if a.solo_nuevas else None
@@ -296,7 +347,7 @@ def main():
                 previos = [x for x in fila["archivos"].split(";") if x]
                 # Las constancias que se guardaron antes se quitan: solo queda el documento.
                 for x in previos:
-                    if "-documento" not in x and os.path.exists(os.path.join(a.salida, x)):
+                    if not remoto and "-documento" not in x and os.path.exists(os.path.join(a.salida, x)):
                         os.remove(os.path.join(a.salida, x))
                 previos = [x for x in previos if "-documento" in x]
                 guardados, notas = list(previos), []
@@ -317,8 +368,12 @@ def main():
                         rel = f"{ruc}/{sub}/{cod}-{nombre_archivo(nom)}"
                         if not rel.lower().endswith(ext):
                             rel = re.sub(r"\.(pdf|bin)$", "", rel, flags=re.I) + ext
-                        os.makedirs(os.path.dirname(os.path.join(a.salida, rel)), exist_ok=True)
-                        open(os.path.join(a.salida, rel), "wb").write(b)
+                        if remoto:   # la hoja lo guarda en Drive (PDF Notificaciones/<RUC - Empresa>/<AAAA>/<NN_Mes>/)
+                            enviar(destino, llave, {"accion": "archivo", "ruc": ruc, "ruta": rel, "b64": base64.b64encode(b).decode("ascii"),
+                                                    "fecha": fila["fecha_publicacion"], "clase": fila["clase"], "documento": fila["documento"]})
+                        else:
+                            os.makedirs(os.path.dirname(os.path.join(a.salida, rel)), exist_ok=True)
+                            open(os.path.join(a.salida, rel), "wb").write(b)
                         guardados.append(rel)
                         pdfs += 1
                 except Exception as e:
@@ -332,7 +387,12 @@ def main():
         vistos = {f["codigo"] for f in filas}
         filas += [r for c, r in previo.items() if c not in vistos and
                   (a.solo_nuevas or (desde and fecha_clave(r.get("fecha_publicacion")) < desde))]
-        guardar(ruta, filas)
+        if remoto:
+            r = enviar(destino, llave, {"accion": "lista", "ruc": ruc, "tipo": nombre, "filas": [{k: x.get(k, "") for k in COLS} for x in ordenar(filas)]})
+            if r.get("conservado"):
+                print(f"  {nombre}: SUNAT no devolvió nada; la hoja conserva las {r.get('antes')} que ya tenía.")
+        else:
+            guardar(ruta, filas)
         print(f"  {nombre}: {len(filas)} (nuevas {nuevas})" + (f" · PDF bajados {pdfs}" if con_pdf else ""))
 
 

@@ -17,10 +17,17 @@ notificación (opcional), en una hoja de Google Sheets.
      notificación surte efecto desde su depósito (día hábil siguiente), se lea o no.
      La lista sola no marca nada.
 
-   Guarda en `notificaciones/datos/<RUC>/notificaciones.csv`, `mensajes.csv` y
-   `<AAAA>/<MM>/*.pdf`. Corre solo dos veces al día (~7:07 a. m. y ~4:07 p. m. de
-   Lima, últimos 3 meses) y a mano: **desde qué mes o fecha** (AAAAMM o dd/mm/aaaa, vacío = todo),
-   empresa (o todas), PDF sí/no, adjuntos de mensajes sí/no.
+   **Ya no guarda nada en el repositorio (es público).** Lo bajado va directo a la hoja
+   (su aplicación web, `Web.js`) con una **llave de un solo uso** (6 h) que la hoja crea al pedir
+   la descarga: `estado` (lo que la hoja ya tiene, para bajar solo lo nuevo), `archivo` (cada
+   documento, que la hoja guarda directo en Drive), `lista` (notificaciones y mensajes de la
+   empresa; si SUNAT responde vacío se conserva lo que había) y `fin` (en 3 min se rehacen las
+   pestañas). Los datos quedan en la pestaña oculta `_Datos`. Lo descargado antes del cambio se
+   migra una sola vez desde la última versión del repositorio que lo tenía (`NOT_REF_LEGADO_`).
+   La pide la hoja (8 a. m. y 5 p. m., últimos 3 meses) o el bot de Cobranzas a través de la hoja
+   (`TG_notPedir_`, metadatos `NOT_WEB` / `NOT_PUENTE`); ya no hay corrida programada de GitHub.
+   A mano: **desde qué mes o fecha** (AAAAMM o dd/mm/aaaa, vacío = todo), empresa (o todas),
+   PDF sí/no, adjuntos de mensajes sí/no.
    Cada notificación queda clasificada: Orden de Pago, Resolución de Ejecución
    Coactiva, Resolución de Conclusión, Carta, Requerimiento, Esquela, etc., con su N°.
 2. **La hoja "Notificaciones · Grupo"** (`notificaciones/apps_script/`, menú 📬 Notificaciones):
@@ -49,13 +56,11 @@ haga esto: las direcciones se obtuvieron observando la página oficial del buzó
 
 ## Descarga diaria puntual (y respaldo)
 
-El programador de GitHub (cron) se atrasa horas y a veces se salta días. Por eso
-el disparador diario de la hoja (`*_actualizacionAutomatica`, `Diario.js`) es el
-que **pide** la descarga a GitHub a su hora (workflow_dispatch, arranca en
-segundos), revisa cada 8 minutos y **importa cuando termina**. El cron del
-workflow queda como **respaldo**: las corridas diarias se llaman igual
-("… · diario"), van en fila (`concurrency`) y si una ya corrió, la otra no
-descarga nada.
+El disparador diario de la hoja (`NOT_actualizacionAutomatica`, `Diario.js`) **pide**
+la descarga a GitHub a su hora (workflow_dispatch con la llave), revisa cada 8 minutos y
+rehace las pestañas cuando termina (además, el robot avisa con `fin`). Las corridas
+diarias se llaman igual ("Notificaciones · diario"), van en fila (`concurrency`) y si una
+ya corrió, la otra no descarga nada.
 
 
 ## Qué se baja de cada notificación (16/10/2026)

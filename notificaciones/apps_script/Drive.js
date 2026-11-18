@@ -4,6 +4,8 @@
  *   <carpeta de esta hoja>/PDF Notificaciones/<RUC - Empresa>/<AAAA>/<NN_Mes>/
  *     2026-09-21 Resolución de Ejecución Coactiva 211-006-0033228 - documento.pdf
  * La pestaña oculta "_Archivos" recuerda qué PDF ya se copió (no se duplica).
+ * Los PDF nuevos llegan directo del robot (Web.js → NOT_guardarEnDrive_); los de antes del cambio, que aún no
+ * estaban en Drive, se copian desde la versión del repositorio que los tenía (NOT_REF_LEGADO_).
  * En la pestaña Notificaciones, la columna PDF muestra un enlace por archivo.
  */
 
@@ -77,21 +79,15 @@ function NOT_ordenarPdf_() {
         var emp = NOT_subcarpeta_(raiz, NOT_limpiarNombre_(p.ruc + ' - ' + p.empresa));
         cache[clave] = NOT_subcarpeta_(NOT_subcarpeta_(emp, anio), NOT_MESES_CARPETA[mes - 1]);
       }
-      var archivoOriginal = p.ruta.split('/').pop().replace(/^\d+-/, '');
-      var mExt = /\.[a-z0-9]{2,4}$/i.exec(archivoOriginal);
-      var ext = mExt ? mExt[0].toLowerCase() : '.pdf';
-      var base = mExt ? archivoOriginal.slice(0, mExt.index) : archivoOriginal;
-      var nombre = NOT_limpiarNombre_(Utilities.formatDate(f, 'America/Lima', 'yyyy-MM-dd') + ' ' + p.clase + ' ' + (p.doc || '') +
-        ' - ' + base) + ext;
-      var existe = cache[clave].getFilesByName(nombre);
-      var archivo = existe.hasNext() ? existe.next() : null;
-      if (!archivo) {
-        var blob = NOT_leerBlob_(cfg, p.ruta, nombre);
+      var blob = null;
+      var nombreDrive = NOT_nombreDrive_(p);
+      var yaEsta = cache[clave].getFilesByName(nombreDrive);
+      if (!yaEsta.hasNext()) {
+        blob = NOT_REF_LEGADO_ ? NOT_leerBlob_(cfg, p.ruta, nombreDrive, NOT_REF_LEGADO_) : null;
         if (!blob) continue;
-        var tipos = { '.pdf': 'application/pdf', '.zip': 'application/zip', '.jpg': 'image/jpeg', '.png': 'image/png' };
-        archivo = cache[clave].createFile(blob.setContentType(tipos[ext] || 'application/octet-stream'));
       }
-      nuevos.push([p.ruta, archivo.getId(), new Date(), nombre]);
+      var r = NOT_guardarEnDrive_(cfg, p, blob, cache);
+      nuevos.push(r);
       hechos++;
     } catch (e) {
       console.warn('No se pudo copiar ' + p.ruta + ': ' + e.message);
@@ -133,4 +129,37 @@ function NOT_ponerEnlacesPdf_(hoja) {
     return [t.build()];
   });
   hoja.getRange(4, NOT_COL.PDF, n, 1).setRichTextValues(celdas);
+}
+
+/** Nombre en Drive: «2026-09-21 Resolución de Ejecución Coactiva 211-006-0033228 - documento.pdf». */
+function NOT_nombreDrive_(p) {
+  var f = p.fecha instanceof Date ? p.fecha : new Date();
+  var archivoOriginal = p.ruta.split('/').pop().replace(/^\d+-/, '');
+  var mExt = /\.[a-z0-9]{2,4}$/i.exec(archivoOriginal);
+  var ext = mExt ? mExt[0].toLowerCase() : '.pdf';
+  var base = mExt ? archivoOriginal.slice(0, mExt.index) : archivoOriginal;
+  return NOT_limpiarNombre_(Utilities.formatDate(f, 'America/Lima', 'yyyy-MM-dd') + ' ' + p.clase + ' ' + (p.doc || '') + ' - ' + base) + ext;
+}
+
+/**
+ * Guarda un documento en PDF Notificaciones/<RUC - Empresa>/<AAAA>/<NN_Mes>/ (si ya existe con ese nombre, lo reutiliza).
+ * blob puede ser null si ya está en Drive. → fila para «_Archivos»: [ruta, id, fecha, nombre]
+ */
+function NOT_guardarEnDrive_(cfg, p, blob, cache) {
+  var f = p.fecha instanceof Date ? p.fecha : new Date();
+  var anio = String(f.getFullYear()), mes = f.getMonth() + 1, clave = p.ruc + '|' + anio + '|' + mes;
+  if (!cache[clave]) {
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), padres = DriveApp.getFileById(ss.getId()).getParents();
+    var raiz = NOT_subcarpeta_(padres.hasNext() ? padres.next() : DriveApp.getRootFolder(), cfg.carpetaPdf || 'PDF Notificaciones');
+    var emp = NOT_subcarpeta_(raiz, NOT_limpiarNombre_(p.ruc + ' - ' + p.empresa));
+    cache[clave] = NOT_subcarpeta_(NOT_subcarpeta_(emp, anio), NOT_MESES_CARPETA[mes - 1]);
+  }
+  var nombre = NOT_nombreDrive_(p), ext = (/\.[a-z0-9]{2,4}$/i.exec(nombre) || ['.pdf'])[0];
+  var existe = cache[clave].getFilesByName(nombre);
+  var archivo = existe.hasNext() ? existe.next() : null;
+  if (!archivo) {
+    var tipos = { '.pdf': 'application/pdf', '.zip': 'application/zip', '.jpg': 'image/jpeg', '.png': 'image/png' };
+    archivo = cache[clave].createFile(blob.setName(nombre).setContentType(tipos[ext] || 'application/octet-stream'));
+  }
+  return [p.ruta, archivo.getId(), new Date(), nombre];
 }

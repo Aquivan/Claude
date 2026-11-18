@@ -1,11 +1,13 @@
 /**
  * Notificaciones · Grupo — GitHub.js
- * Lee del repositorio los archivos que deja el workflow
- * "Notificaciones - descargar Buzón Electrónico (SUNAT SOL)":
- *   notificaciones/datos/<RUC>/notificaciones.csv | mensajes.csv | <AAAA>/<MM>/*.pdf
+ * Pide al workflow "Notificaciones - descargar Buzón Electrónico (SUNAT SOL)" que revise el buzón. El robot YA NO
+ * guarda nada en el repositorio (es público): manda lo bajado a la aplicación web de esta hoja (Web.js) con una
+ * llave de un solo uso. Lo descargado antes del cambio se lee una sola vez de la última versión del repositorio
+ * que lo tenía (NOT_REF_LEGADO_): notificaciones/datos/<RUC>/notificaciones.csv | mensajes.csv | <AAAA>/<MM>/*.pdf
  */
 
 var NOT_RUTA_DATOS = 'notificaciones/datos';
+var NOT_REF_LEGADO_ = '016a9d98f0f43d780947037d2e080b7fe1bc5e5a';   // última versión con notificaciones/datos en el repositorio
 
 function NOT_api_(cfg, ruta, crudo) {
   if (!cfg.token) throw new Error('Falta el token de GitHub: menú 📬 Notificaciones → 🔑 Guardar token de GitHub.');
@@ -30,11 +32,11 @@ function NOT_pedir_(cfg, ruta, crudo) {
   return r;
 }
 
-/** Lista todos los archivos de notificaciones/datos: [{path, sha, size}] (path relativo a datos/). */
-function NOT_listarArchivos_(cfg) {
-  var rama = encodeURIComponent(cfg.rama);
+/** Lista todos los archivos de notificaciones/datos: [{path, sha, size}] (path relativo a datos/). ref: versión (por defecto la rama). */
+function NOT_listarArchivos_(cfg, ref) {
+  var rama = encodeURIComponent(ref || cfg.rama);
   var r = NOT_pedir_(cfg, '/contents/notificaciones?ref=' + rama);
-  if (!r) throw new Error('No se encontró la carpeta notificaciones/ en la rama ' + cfg.rama + '.');
+  if (!r) throw new Error('No se encontró la carpeta notificaciones/ en ' + (ref || 'la rama ' + cfg.rama) + '.');
   var datos = JSON.parse(r.getContentText()).filter(function (x) { return x.name === 'datos' && x.type === 'dir'; })[0];
   if (!datos) return [];  // todavía no se descargó nada
   var t = NOT_pedir_(cfg, '/git/trees/' + datos.sha + '?recursive=1');
@@ -44,12 +46,12 @@ function NOT_listarArchivos_(cfg) {
 }
 
 /** Descarga varios archivos de texto a la vez. rutas: relativas a notificaciones/datos/. */
-function NOT_leerTextos_(cfg, rutas) {
+function NOT_leerTextos_(cfg, rutas, ref) {
   var res = {};
   for (var i = 0; i < rutas.length; i += 20) {
     var lote = rutas.slice(i, i + 20);
     var pedidos = lote.map(function (ruta) {
-      var p = NOT_api_(cfg, '/contents/' + NOT_RUTA_DATOS + '/' + ruta + '?ref=' + encodeURIComponent(cfg.rama), true);
+      var p = NOT_api_(cfg, '/contents/' + NOT_RUTA_DATOS + '/' + ruta + '?ref=' + encodeURIComponent(ref || cfg.rama), true);
       return { url: p.url, headers: p.headers, muteHttpExceptions: true };
     });
     var resp = UrlFetchApp.fetchAll(pedidos);
@@ -61,8 +63,8 @@ function NOT_leerTextos_(cfg, rutas) {
 }
 
 /** Descarga un archivo binario (PDF) como Blob. */
-function NOT_leerBlob_(cfg, ruta, nombre) {
-  var r = NOT_pedir_(cfg, '/contents/' + NOT_RUTA_DATOS + '/' + ruta + '?ref=' + encodeURIComponent(cfg.rama), true);
+function NOT_leerBlob_(cfg, ruta, nombre, ref) {
+  var r = NOT_pedir_(cfg, '/contents/' + NOT_RUTA_DATOS + '/' + ruta + '?ref=' + encodeURIComponent(ref || cfg.rama), true);
   return r ? r.getBlob().setName(nombre) : null;
 }
 
@@ -84,7 +86,7 @@ function NOT_menuPedirDescarga() {
     // Solo lo nuevo: en cada empresa se deja de revisar el buzón donde empieza lo ya descargado (rápido).
     NOT_despachar_(cfg, 'todas', cfg.bajarPdf, '', true);
     ui.alert('⬇ Pedido enviado. GitHub está revisando SOLO LO NUEVO del Buzón Electrónico de todas las empresas' +
-      (cfg.bajarPdf ? ' (con PDF de las notificaciones nuevas).' : ' (solo la lista).') + '\n\nTarda unos minutos. Luego use 🔄 Actualizar todo.');
+      (cfg.bajarPdf ? ' (con PDF de las notificaciones nuevas).' : ' (solo la lista).') + '\n\nTarda unos minutos: lo bajado llega solo a esta hoja y a Drive, y las pestañas se rehacen solas.');
   } catch (e) {
     ui.alert('❌ ' + e.message);
   }
@@ -94,7 +96,8 @@ function NOT_despachar_(cfg, empresa, conPdf, desde, soloNuevas) {
   var p = NOT_api_(cfg, '/actions/workflows/notificaciones-descargar.yml/dispatches');
   p.method = 'post';
   p.contentType = 'application/json';
-  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: empresa, pdf: conPdf ? 'true' : 'false', desde: desde || '', solo_nuevas: soloNuevas ? 'true' : 'false' } });
+  var w = NOT_nuevaLlave_();   // el robot manda lo bajado a esta hoja con esta llave (Web.js)
+  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: empresa, pdf: conPdf ? 'true' : 'false', desde: desde || '', solo_nuevas: soloNuevas ? 'true' : 'false', destino: w.destino, llave: w.llave } });
   var r = UrlFetchApp.fetch(p.url, p);
   if (r.getResponseCode() !== 204) throw new Error('GitHub respondió HTTP ' + r.getResponseCode() + ' (el token necesita permiso "Actions: Read and write").');
 }
@@ -119,7 +122,7 @@ function NOT_menuPedirRango() {
     var conPdf = ui.alert('📄 PDF', '¿Bajar el PDF de las notificaciones nuevas?\n\nSÍ = SUNAT las marca como leídas (igual que al abrirlas; la notificación ya surte efecto desde su depósito).\nNO = solo la lista.', ui.ButtonSet.YES_NO) === ui.Button.YES;
     NOT_despachar_(cfg, empresa, conPdf, desde, soloNuevas);
     ui.alert('⬇ Pedido enviado: ' + (empresa === 'todas' ? 'todas las empresas' : empresa) + ', ' + (soloNuevas ? 'solo lo nuevo' : 'desde ' + (desde || 'el inicio')) + (conPdf ? ', con PDF.' : ', solo lista.') +
-      '\n\nTarda unos minutos. Luego use 🔄 Actualizar todo.');
+      '\n\nTarda unos minutos: lo bajado llega solo a esta hoja y las pestañas se rehacen solas.');
   } catch (e) {
     ui.alert('❌ ' + e.message);
   }

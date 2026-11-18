@@ -1,7 +1,9 @@
 # Proyecto "Notificaciones · Grupo" (carpeta notificaciones/). Descarga del Buzón
 # Electrónico de SUNAT SOL la lista de NOTIFICACIONES y MENSAJES, y los PDF de las
 # notificaciones si se pide, de una empresa o de todas las activas de empresas.json.
-# Solo escribe en notificaciones/datos/. No toca ningún otro proyecto.
+# Lo bajado va DIRECTO a la hoja «Notificaciones · Grupo» (su aplicación web, con la llave de un solo uso que la
+# hoja manda en «destino» y «llave»): en el repositorio (público) NO se guarda nada. Por eso solo la pide la hoja
+# (o el bot de Cobranzas a través de la hoja). No toca ningún otro proyecto.
 # Nunca imprime claves. Bajar el PDF marca la notificación como "leída" en SOL.
 
 name: Notificaciones - descargar Buzón Electrónico (SUNAT SOL)
@@ -10,10 +12,8 @@ name: Notificaciones - descargar Buzón Electrónico (SUNAT SOL)
 run-name: ${{ (github.event_name == 'schedule' || inputs.diario) && 'Notificaciones · diario' || 'Notificaciones - descargar Buzón Electrónico (SUNAT SOL)' }}
 
 on:
-  # Dos veces al día: ~7:07 a. m. y ~4:07 p. m. de Lima, todas las empresas (con PDF de notificaciones).
-  # (La hoja también la pide a las 8 y a las 17; si ya corrió, no se repite.)
-  schedule:
-    - cron: '7 10,21 * * *'   # respaldo: 5:07 a.m. y 4:07 p.m. Perú (el bot la pide a las 2 a.m.; si ya corrió, no se repite)
+  # Ya no hay corrida programada de GitHub: sin la llave de la hoja no tendría a dónde mandar lo bajado.
+  # La hoja la pide sola a las 8 y a las 17 (⏰ Activar actualización diaria), y el bot cuando se le pide.
   workflow_dispatch:
     inputs:
       empresa:
@@ -36,17 +36,21 @@ on:
         description: "Bajar también los adjuntos de los MENSAJES"
         type: boolean
         default: false
-      guardar:
-        description: "Guardar en el repositorio (notificaciones/datos/)"
-        type: boolean
-        default: true
+      destino:
+        description: "Lo pone la hoja (dirección de su aplicación web). No lo escriba a mano."
+        required: false
+        default: ""
+      llave:
+        description: "Lo pone la hoja (llave de un solo uso). No lo escriba a mano."
+        required: false
+        default: ""
       diario:
         description: "Corrida diaria automatica (la pide la hoja a su hora). No hace falta marcarlo a mano."
         type: boolean
         default: false
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 # Las corridas diarias (hoja o respaldo) van en fila, nunca a la vez: la
@@ -121,7 +125,20 @@ jobs:
         ruc: ${{ fromJson(needs.empresas.outputs.lista) }}
     environment: ${{ matrix.ruc }}
     steps:
+      - name: Tapar la dirección y la llave de la hoja (antes de todo)
+        run: |
+          D=$(jq -r '.inputs.destino // ""' "$GITHUB_EVENT_PATH"); L=$(jq -r '.inputs.llave // ""' "$GITHUB_EVENT_PATH")
+          [ -n "$D" ] && echo "::add-mask::$D"; [ -n "$L" ] && echo "::add-mask::$L"
+          [ -n "$D" ] && [ -n "$L" ] || { echo "::error::Falta la llave de la hoja: pida la descarga desde la hoja «Notificaciones · Grupo» (menú 📬) o desde el bot."; exit 1; }
+          { echo "DESTINO=$D"; echo "LLAVE=$L"; } >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            notificaciones/scripts
+            retenciones/scripts
+            scripts/por_empresa.py
+            empresas.json
+          sparse-checkout-cone-mode: false
 
       - name: Descargar buzón (notificaciones y mensajes)
         env:
@@ -139,26 +156,8 @@ jobs:
           if [ "$PDF" = "false" ]; then extra="$extra --sin-pdf"; fi
           if [ "$PDF_MENSAJES" = "true" ]; then extra="$extra --pdf-mensajes"; fi
           if [ -z "$DESDE" ] && [ "$SOLO_NUEVAS" = "true" ]; then extra="$extra --solo-nuevas"; fi
-          python3 notificaciones/scripts/descargar_buzon.py --salida notificaciones/datos --desde "$DESDE" $extra
+          python3 notificaciones/scripts/descargar_buzon.py --desde "$DESDE" $extra
 
-      - name: Guardar en el repositorio
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.diario || inputs.guardar) }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          [ -d notificaciones/datos ] || { echo "Sin datos para guardar."; exit 0; }
-          git add notificaciones/datos
-          git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
-          git commit -m "Notificaciones buzon ${{ matrix.ruc }} [skip ci]"
-          logrado=0
-          for intento in 1 2 3 4 5 6 7 8; do
-            if git push; then logrado=1; break; fi
-            echo "Push rechazado, reintentando con rebase (intento $intento)..."
-            git fetch origin "$GITHUB_REF_NAME"
-            git rebase "origin/$GITHUB_REF_NAME"
-            sleep $((intento * 2 + RANDOM % 5))
-          done
-          [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir notificaciones/datos"; exit 1; }
 
   # Todas las empresas una tras otra en UNA máquina (GitHub cobra cada máquina aparte, mínimo 1 min).
   # Se usa cuando existe el secreto del repositorio SUNAT_CLAVES (una línea por empresa: RUC USUARIO CLAVE);
@@ -170,7 +169,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
+      - name: Tapar la dirección y la llave de la hoja (antes de todo)
+        run: |
+          D=$(jq -r '.inputs.destino // ""' "$GITHUB_EVENT_PATH"); L=$(jq -r '.inputs.llave // ""' "$GITHUB_EVENT_PATH")
+          [ -n "$D" ] && echo "::add-mask::$D"; [ -n "$L" ] && echo "::add-mask::$L"
+          [ -n "$D" ] && [ -n "$L" ] || { echo "::error::Falta la llave de la hoja: pida la descarga desde la hoja «Notificaciones · Grupo» (menú 📬) o desde el bot."; exit 1; }
+          { echo "DESTINO=$D"; echo "LLAVE=$L"; } >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            notificaciones/scripts
+            retenciones/scripts
+            scripts/por_empresa.py
+            empresas.json
+          sparse-checkout-cone-mode: false
 
       - name: Descargar buzón (notificaciones y mensajes) de todas las empresas
         env:
@@ -186,23 +198,5 @@ jobs:
           if [ "$PDF" = "false" ]; then extra="$extra --sin-pdf"; fi
           if [ "$PDF_MENSAJES" = "true" ]; then extra="$extra --pdf-mensajes"; fi
           if [ -z "$DESDE" ] && [ "$SOLO_NUEVAS" = "true" ]; then extra="$extra --solo-nuevas"; fi
-          python3 scripts/por_empresa.py --rucs "$LISTA" --minutos 30 -- python3 notificaciones/scripts/descargar_buzon.py --salida notificaciones/datos --desde "$DESDE" $extra
+          python3 scripts/por_empresa.py --rucs "$LISTA" --minutos 30 -- python3 notificaciones/scripts/descargar_buzon.py --desde "$DESDE" $extra
 
-      - name: Guardar en el repositorio
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.diario || inputs.guardar) }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          [ -d notificaciones/datos ] || { echo "Sin datos para guardar."; exit 0; }
-          git add notificaciones/datos
-          git diff --cached --quiet && { echo "Sin cambios."; exit 0; }
-          git commit -m "Notificaciones buzon todas [skip ci]"
-          logrado=0
-          for intento in 1 2 3 4 5 6 7 8; do
-            if git push; then logrado=1; break; fi
-            echo "Push rechazado, reintentando con rebase (intento $intento)..."
-            git fetch origin "$GITHUB_REF_NAME"
-            git rebase "origin/$GITHUB_REF_NAME"
-            sleep $((intento * 2 + RANDOM % 5))
-          done
-          [ "$logrado" -eq 1 ] || { echo "ERROR: no se pudo subir notificaciones/datos"; exit 1; }

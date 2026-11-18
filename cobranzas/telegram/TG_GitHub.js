@@ -291,6 +291,7 @@ function TG_confirmarDescarga_(ctx, acc, op) {
   var inputs = p.inputs(acc);
   try {
     if (acc.proyecto === 'detracciones') TG_detPedir_(inputs);   // va por la hoja de Detracciones (pone la llave)
+    else if (acc.proyecto === 'notificaciones') TG_notPedir_(cfg, inputs);   // va por la hoja de Notificaciones (pone la llave)
     else TG_gh_(cfg, '/actions/workflows/' + p.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: inputs });
   } catch (e) {
     return TG_enviar_(ctx.chatId, '⚠️ No se pudo pedir la descarga: ' + TG_esc_(e.message));
@@ -381,5 +382,30 @@ function TG_detPedir_(inputs) {
   var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true }), j;
   try { j = JSON.parse(r.getContentText()); } catch (e) { throw new Error('la hoja de Detracciones respondió raro (HTTP ' + r.getResponseCode() + ')'); }
   if (!j.ok) throw new Error('hoja de Detracciones: ' + (j.error || '?'));
+  return j;
+}
+
+/**
+ * El Buzón SUNAT ya no se guarda en GitHub (el repositorio es público): el robot manda lo bajado a la hoja
+ * «Notificaciones · Grupo» con una llave que pone esa hoja. Por eso la descarga se le pide a la hoja (su aplicación
+ * web, ?pedir=1) con la clave del metadato 'NOT_PUENTE'; la dirección la deja la hoja al publicarse ('NOT_WEB').
+ */
+function TG_notPedir_(cfg, inputs) {
+  if (!cfg.idNotificaciones) throw new Error('falta el ID de la hoja de Notificaciones en la configuración del bot');
+  var libro = SpreadsheetApp.openById(cfg.idNotificaciones);
+  var w = libro.createDeveloperMetadataFinder().withKey('NOT_WEB').find();
+  if (!w.length) throw new Error('la hoja de Notificaciones aún no registró su aplicación web (se registra al publicarla)');
+  var m = libro.createDeveloperMetadataFinder().withKey('NOT_PUENTE').find(), k = m.length ? String(m[0].getValue() || '') : '';
+  if (k.length < 40) {
+    k = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+    m.forEach(function (x) { try { x.remove(); } catch (e) {} });
+    libro.addDeveloperMetadata('NOT_PUENTE', k, SpreadsheetApp.DeveloperMetadataVisibility.DOCUMENT);
+  }
+  var q = { pedir: '1', k: k, empresa: inputs.empresa || 'todas', desde: inputs.desde || '', diario: inputs.diario || '',
+    solo_nuevas: inputs.solo_nuevas === undefined ? '' : String(inputs.solo_nuevas), pdf: inputs.pdf === undefined ? '' : String(inputs.pdf) };
+  var url = 'https://script.google.com/macros/s/' + w[0].getValue() + '/exec?' + Object.keys(q).map(function (x) { return x + '=' + encodeURIComponent(q[x]); }).join('&');
+  var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true }), j;
+  try { j = JSON.parse(r.getContentText()); } catch (e) { throw new Error('la hoja de Notificaciones respondió raro (HTTP ' + r.getResponseCode() + ')'); }
+  if (!j.ok) throw new Error('hoja de Notificaciones: ' + (j.error || '?'));
   return j;
 }

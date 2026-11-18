@@ -94,7 +94,8 @@ function NOT_pedirDiario_(cfg) {
   var p = NOT_api_(cfg, '/actions/workflows/' + NOT_WORKFLOW_DIARIO_ + '/dispatches');
   p.method = 'post';
   p.contentType = 'application/json';
-  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: 'todas', desde: NOT_mesesAtras_(2), pdf: cfg.bajarPdf ? 'true' : 'false', diario: 'true' } });
+  var w = NOT_nuevaLlave_();   // el robot manda lo bajado a esta hoja (Web.js), no al repositorio
+  p.payload = JSON.stringify({ ref: cfg.rama, inputs: { empresa: 'todas', desde: NOT_mesesAtras_(2), pdf: cfg.bajarPdf ? 'true' : 'false', diario: 'true', destino: w.destino, llave: w.llave } });
   var r = UrlFetchApp.fetch(p.url, p);
   if (r.getResponseCode() !== 204) throw new Error('GitHub respondio HTTP ' + r.getResponseCode() +
     ' (el token necesita permiso "Actions: Read and write").');
