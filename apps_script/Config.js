@@ -25,6 +25,8 @@ function onOpen() {
     .addItem('3. Ejecutar "solo reintentar fallidas" (todas las empresas)', 'menuEjecutarSoloReintentarFallidas')
     .addItem('Ejecutar UNA sola empresa...', 'menuEjecutarUnaEmpresa')
     .addItem('⚡ Actualizar solo reporte SIRE (rápido, sin PDF/XML)...', 'menuSoloReporteSire')
+    .addItem('🧪 Prueba: reporte SIRE directo desde Apps Script (sin GitHub)...', 'menuSireDirecto')
+    .addItem('🧪 Borrar credenciales de la prueba directa', 'menuSireDirectoBorrar')
     .addSeparator()
     .addItem('4. Importar resultados a Drive (periodo actual)', 'menuImportarPeriodoActual')
     .addItem('5. Importar resultados a Drive (periodo especifico)...', 'menuImportarPeriodoEspecifico')
