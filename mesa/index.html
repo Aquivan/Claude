@@ -231,6 +231,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <span style="flex:1"></span>
   <button onclick="calc()" title="Calculadora (también con la tecla F2) · Alt+clic en cualquier monto de la pantalla lo pasa a la calculadora">🧮 Calculadora</button>
   <button id="bRecalc" onclick="recalcularAhora()" title="Recalcular Cobranzas en este momento (saldos, Consulta, Panel) sin esperar">⚡ Recalcular ahora</button>
+  <button onclick="sireRapido()" title="Pide a SUNAT SOLO el registro de compras y/o ventas del SIRE (rápido, sin PDF/XML) de la empresa elegida arriba (o de todas). Tarda unos minutos; al terminar Cobranzas se recalcula y, con 🔁 Actualizar sola, aparece aquí.">⚡ Traer de SUNAT</button>
   <button onclick="cargar(true)" title="Volver a leer facturas, vouchers y cruces">🔄 Recargar</button>
   <label id="lAuto" title="Revisa cada 3 minutos si Cobranzas se recalculó o entraron vouchers; si hay algo nuevo recarga sola, sin perder filtros ni el estado de cuenta abierto. Nunca mientras tenga cambios sin guardar o esté eligiendo." style="color:var(--tx,#111);font-size:12px;white-space:nowrap"><input type="checkbox" id="cAuto" onchange="autoCambio()"> 🔁 Actualizar sola</label><span id="auHace" style="font-size:11px;color:var(--gr)"></span>
   <button id="bAparte" onclick="aparte()" title="Abrir en una pestaña del navegador (pantalla completa, otro monitor o celular)">↗ Ventana aparte</button>
@@ -501,6 +502,23 @@ window.addEventListener('message', function (e) {
     responder({ ok: true, r: r });
   }).MESA_ruc(TK, m.fn, m.args || []);
 });
+
+/* ------------------------------------------------ ⚡ Traer de SUNAT (registro de compras / ventas, solo reporte) */
+function sireRapido() {
+  var emp = $('fEmp').value, nom = emp ? ($('fEmp').selectedOptions[0] || {}).textContent : 'todas las empresas';
+  var hoy = new Date(), per = hoy.getFullYear() + ('0' + (hoy.getMonth() + 1)).slice(-2);
+  modal('<h3>⚡ Traer de SUNAT el registro (solo reporte)</h3><p style="color:#475569">Pide a SUNAT el registro de compras y/o ventas del SIRE, sin PDF ni XML. Tarda unos minutos; al terminar la Liquidación IGV y Cobranzas se actualizan solas' + (AU.on ? ' y esta Mesa también (🔁 Actualizar sola está activa).' : '. Active <b>🔁 Actualizar sola</b> para que aparezca aquí sin recargar.') + '</p>' +
+    '<label>Empresa</label><div><b>' + esc(nom) + '</b> <span style="color:#64748B">(se cambia con el filtro «Empresa» de arriba)</span></div>' +
+    '<label>Periodo (AAAAMM)</label><input id="srPer" value="' + per + '" style="width:120px">' +
+    '<label>Registro</label><select id="srTip"><option value="ambos">Compras y ventas</option><option value="compra">Solo compras</option><option value="venta">Solo ventas</option></select>' +
+    '<p><button onclick="sireRapidoPedir()">⚡ Pedir a SUNAT</button> <button onclick="cerrarModal()">Cancelar</button></p><div id="srMsg"></div>');
+}
+function sireRapidoPedir() {
+  $('srMsg').textContent = '⏳ Pidiendo…';
+  R.withFailureHandler(function (e) { $('srMsg').innerHTML = '<span style="color:#B91C1C">❌ ' + esc(e && e.message || e) + '</span>'; })
+    .withSuccessHandler(function (r) { $('srMsg').innerHTML = '✅ Pedido: ' + esc(r.texto) + '.<br>En unos minutos queda en la Liquidación IGV y en Cobranzas.'; estado('⚡ Registro SIRE pedido a SUNAT: ' + r.texto); })
+    .MESA_sireRapido(TK, $('fEmp').value, $('srPer').value, $('srTip').value);
+}
 
 /* ------------------------------------------------ 🔁 Actualizar sola */
 var AU = { on: false, huella: '', en: 0, ocupado: false, pend: false, toque: 0, t: 0 };
