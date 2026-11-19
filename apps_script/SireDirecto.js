@@ -56,9 +56,10 @@ function SDIR_guardarCred(ruc, c) {
  * pasos: cada etapa con sus segundos (para comparar con GitHub).
  */
 function SDIR_probar(ruc, periodo, tipo, buscar, t0Global) {
+  if (!t0Global) SDIR_avance_('Iniciando…');
   if (tipo === 'ambos') return SDIR_probarAmbos_(ruc, periodo, buscar);
   var t0 = t0Global || Date.now(), tPaso = Date.now(), pasos = [];
-  var paso = function (t) { var n = Date.now(); pasos.push({ t: t, s: Math.round((n - tPaso) / 100) / 10 }); tPaso = n; };
+  var paso = function (t) { var n = Date.now(); pasos.push({ t: t, s: Math.round((n - tPaso) / 100) / 10 }); tPaso = n; SDIR_avance_((tipo === 'venta' ? 'Ventas' : 'Compras') + ' · ' + t + ' ✓'); };
   try {
     ruc = String(ruc || '').replace(/\D/g, '');
     periodo = String(periodo || '').replace(/\D/g, '');
@@ -154,6 +155,10 @@ function SDIR_probarAmbos_(ruc, periodo, buscar) {
   return out;
 }
 
+/** Avance en vivo de la prueba (la ventana lo pregunta cada 2 s mientras espera). */
+function SDIR_avance_(t) { try { CacheService.getUserCache().put('sdir_avance', String(t).slice(0, 300), 600); } catch (e) {} }
+function SDIR_avance() { try { return CacheService.getUserCache().get('sdir_avance') || ''; } catch (e) { return ''; } }
+
 /* ------------------------------------------------ API SIRE */
 
 function SDIR_token_(ruc, c) {
@@ -235,6 +240,8 @@ function SDIR_esperar_(token, ticket, periodo, t0) {
     var data = SDIR_json_(SDIR_BASE_ + '/rvierce/gestionprocesosmasivos/web/masivo/consultaestadotickets',
       { perIni: periodo, perFin: periodo, page: 1, perPage: 50, numTicket: ticket }, token);
     var reg = (data.registros || []).filter(function (r) { return r.numTicket === ticket || (r.detalleTicket && r.detalleTicket.numTicket === ticket); })[0];
+    var est = reg ? ((reg.desEstadoProceso || '') + (reg.detalleTicket && reg.detalleTicket.desEstadoEnvio ? ' / ' + reg.detalleTicket.desEstadoEnvio : '')).trim() : 'aún no aparece en la lista de SUNAT';
+    SDIR_avance_('⏳ Esperando a SUNAT (ticket ' + ticket + '): ' + (est || 'en proceso') + ' · ' + Math.round((Date.now() - t0) / 1000) + ' s');
     if (reg) {
       var det = reg.detalleTicket || {}, desc = ((det.desEstadoEnvio || '') + ' ' + (reg.desEstadoProceso || '')).toLowerCase();
       if (desc.indexOf('error') >= 0) throw new Error('SUNAT reportó error en el ticket ' + ticket + ': ' + JSON.stringify(reg).slice(0, 400));
@@ -352,7 +359,7 @@ var SDIR_HTML_ = [
   'google.script.run.withSuccessHandler(function(d){D=d;$("per").value=d.periodo;$("emp").innerHTML=d.empresas.map(function(e){return"<option value=\\""+e.ruc+"\\">"+esc(e.nombre)+" ("+e.ruc+")"+(d.conCred.indexOf(e.ruc)>=0?" 🔑":"")+"</option>"}).join("")||"<option value=\\"\\">(escriba el RUC)</option>";marcarCred()}).SDIR_datos();',
   '$("emp").onchange=marcarCred;$("rucM").oninput=marcarCred;',
   'function probar(){var r=ruc();if(r.length!==11)return alert("Elija la empresa o escriba su RUC.");',
-  ' var go=function(){$("bP").disabled=true;var t0=Date.now(),tm=setInterval(function(){$("out").innerHTML="⏳ Hablando con SUNAT… "+Math.round((Date.now()-t0)/1000)+" s"},1000);',
+  ' var go=function(){$("bP").disabled=true;var t0=Date.now(),av="",n=0,tm=setInterval(function(){$("out").innerHTML="⏳ Hablando con SUNAT… "+Math.round((Date.now()-t0)/1000)+" s"+(av?"<div class=m style=color:#475569>"+esc(av)+"</div>":"");if(++n%2===0)google.script.run.withSuccessHandler(function(t){av=t}).SDIR_avance()},1000);',
   '  google.script.run.withFailureHandler(function(e){clearInterval(tm);$("bP").disabled=false;$("out").innerHTML="<div class=e>❌ "+esc(e.message)+"</div>"}).withSuccessHandler(function(x){clearInterval(tm);$("bP").disabled=false;pintar(x)}).SDIR_probar(r,$("per").value,$("tip").value,$("bus").value)};',
   ' if($("cred").style.display==="block"){var c={u:$("cu").value,c:$("cc").value,id:$("ci").value,s:$("cs").value};if(!c.u||!c.c||!c.id||!c.s)return alert("Complete las 4 credenciales.");',
   '  google.script.run.withFailureHandler(function(e){alert(e.message)}).withSuccessHandler(function(){D.conCred.push(r);$("cc").value="";$("cs").value="";$("cred").style.display="none";go()}).SDIR_guardarCred(r,c);return}',
