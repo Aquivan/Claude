@@ -98,8 +98,13 @@ function SDIR_probar(ruc, periodo, tipo, buscar, t0Global) {
       var nombre = a.nombre.indexOf('__') >= 0 ? a.nombre.split('__').pop() : a.nombre;
       paso('⬇️ Archivo bajado (' + Math.round(blob.getBytes().length / 1024) + ' KB)');
       var partes;
-      try { partes = Utilities.unzip(blob.setContentType('application/zip')); zipMetodo = 'Utilities.unzip'; }
-      catch (e) { partes = SDIR_unzip_(blob); zipMetodo = 'lector propio (Utilities.unzip falló: ' + String(e.message || e).slice(0, 80) + ')'; }
+      // Primero el lector propio (Utilities.unzip a veces «abre» los ZIP de SUNAT pero entrega el contenido vacío o dañado).
+      try { partes = SDIR_unzip_(blob); zipMetodo = 'lector propio'; }
+      catch (e) { partes = Utilities.unzip(blob.setContentType('application/zip')); zipMetodo = 'Utilities.unzip (el propio falló: ' + String(e.message || e).slice(0, 80) + ')'; }
+      if (!SDIR_tieneSire_(partes)) {   // si no salió nada legible, se prueba con el otro método
+        try { var otro = zipMetodo === 'lector propio' ? Utilities.unzip(blob.setContentType('application/zip')) : SDIR_unzip_(blob);
+          if (SDIR_tieneSire_(otro)) { partes = otro; zipMetodo = zipMetodo === 'lector propio' ? 'Utilities.unzip' : 'lector propio'; } } catch (e2) {}
+      }
       paso('📦 ZIP abierto con ' + zipMetodo);
       partes.forEach(function (p, k) {
         var nomP = String(p.getName() || ''), bytes = p.getBytes().length;
@@ -289,6 +294,11 @@ function SDIR_unzip_(blob) {
     out.push(Utilities.ungzip(Utilities.newBlob(gz, 'application/x-gzip', nombre + '.gz')).setName(nombre));
   }
   return out;
+}
+
+/** ¿Alguno de los archivos del ZIP es un registro del SIRE (texto separado por «|»)? */
+function SDIR_tieneSire_(partes) {
+  return (partes || []).some(function (p) { try { var t = p.getDataAsString('UTF-8'); return t.length > 20 && t.split(/\r?\n/)[0].indexOf('|') >= 0; } catch (e) { return false; } });
 }
 
 /** Cuenta los comprobantes del TXT del SIRE (separado por «|», con encabezado) y busca «FN01-80» si se pidió. */
