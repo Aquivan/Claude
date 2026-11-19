@@ -55,8 +55,9 @@ function SDIR_guardarCred(ruc, c) {
  * → {ok, pasos:[{t, s}], total, modo, filas, encontrado:[{...}], url, aviso} o {error, pasos}
  * pasos: cada etapa con sus segundos (para comparar con GitHub).
  */
-function SDIR_probar(ruc, periodo, tipo, buscar) {
-  var t0 = Date.now(), tPaso = t0, pasos = [];
+function SDIR_probar(ruc, periodo, tipo, buscar, t0Global) {
+  if (tipo === 'ambos') return SDIR_probarAmbos_(ruc, periodo, buscar);
+  var t0 = t0Global || Date.now(), tPaso = Date.now(), pasos = [];
   var paso = function (t) { var n = Date.now(); pasos.push({ t: t, s: Math.round((n - tPaso) / 100) / 10 }); tPaso = n; };
   try {
     ruc = String(ruc || '').replace(/\D/g, '');
@@ -119,6 +120,29 @@ function SDIR_probar(ruc, periodo, tipo, buscar) {
     console.warn('Prueba SIRE directa ' + ruc + ' ' + tipo + ' ' + periodo + ': ' + (e && e.message || e));
     return { ok: false, error: String(e && e.message || e).slice(0, 700), pasos: pasos, total: Math.round((Date.now() - t0) / 1000) };
   }
+}
+
+/** Compras y luego ventas, en la misma ejecución (Apps Script corta a los 6 minutos: si no alcanza, se retoma). */
+function SDIR_probarAmbos_(ruc, periodo, buscar) {
+  var t0 = Date.now(), out = { ok: true, pasos: [], filas: 0, encontrado: [], partes: [] };
+  var nom = { compra: 'Compras', venta: 'Ventas' };
+  ['compra', 'venta'].some(function (t) {
+    var r = SDIR_probar(ruc, periodo, t, buscar, t0);
+    (r.pasos || []).forEach(function (p) { out.pasos.push({ t: nom[t] + ' · ' + p.t, s: p.s }); });
+    if (r.error || r.pendiente) {
+      out.ok = false; out.pendiente = r.pendiente; out.error = r.error ? nom[t] + ': ' + r.error : '';
+      out.aviso = r.aviso ? nom[t] + ': ' + r.aviso : ''; return true;
+    }
+    out.filas += r.filas || 0;
+    out.encontrado = out.encontrado.concat(r.encontrado || []);
+    out.partes.push(nom[t] + ' ' + (r.filas || 0) + ' (' + (r.modo === 'oficial' ? 'presentado' : r.modo) + ')');
+    if (r.url) out.url = out.url || r.url;
+    if (r.zip) out.zip = r.zip;
+    return false;
+  });
+  out.modo = out.partes.join(' · ');
+  out.total = Math.round((Date.now() - t0) / 1000);
+  return out;
 }
 
 /* ------------------------------------------------ API SIRE */
@@ -298,7 +322,7 @@ var SDIR_HTML_ = [
   '<div style="color:#475569">Baja el registro del SIRE <b>directo desde Google</b>, sin GitHub, para medir si es más rápido. <b>No cambia nada</b> en las liquidaciones: solo mide, cuenta y guarda el archivo en Drive («SIRE · prueba directa»).</div>',
   '<div class="fila"><div><label>Empresa</label><select id="emp"></select><input id="rucM" placeholder="o escriba el RUC" style="margin-top:4px"></div>',
   '<div><label>Periodo (AAAAMM)</label><input id="per"></div></div>',
-  '<div class="fila"><div><label>Registro</label><select id="tip"><option value="compra">Compras</option><option value="venta">Ventas</option></select></div>',
+  '<div class="fila"><div><label>Registro</label><select id="tip"><option value="ambos">Compras y ventas</option><option value="compra">Solo compras</option><option value="venta">Solo ventas</option></select></div>',
   '<div><label>Buscar un comprobante (opcional)</label><input id="bus" placeholder="ej. FN01-80"></div></div>',
   '<div id="cred" style="display:none"><b>🔑 Credenciales de esta empresa</b> <span style="color:#64748B;font-size:12px">(se guardan solo para usted; no se muestran ni se suben a ningún lado)</span>',
   '<div class="fila"><div><label>Usuario SOL</label><input id="cu" autocomplete="off"></div><div><label>Clave SOL</label><input id="cc" type="password" autocomplete="new-password"></div></div>',
