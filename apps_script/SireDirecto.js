@@ -92,7 +92,7 @@ function SDIR_probar(ruc, periodo, tipo, buscar, t0Global) {
     paso('⏱ SUNAT generó el reporte');
     if (!archivos.length) return { ok: true, pasos: pasos, total: Math.round((Date.now() - t0) / 1000), modo: modo, filas: 0, aviso: 'SUNAT dice que no hay comprobantes en ' + periodo + '.' };
 
-    var carpeta = SDIR_carpeta_(), filas = 0, encontrados = [], zipMetodo = '', url = '';
+    var carpeta = SDIR_carpeta_(), filas = 0, encontrados = [], zipMetodo = '', url = '', lista = [];
     archivos.forEach(function (a) {
       var blob = SDIR_bajarArchivo_(token, a, libro);
       var nombre = a.nombre.indexOf('__') >= 0 ? a.nombre.split('__').pop() : a.nombre;
@@ -101,18 +101,21 @@ function SDIR_probar(ruc, periodo, tipo, buscar, t0Global) {
       try { partes = Utilities.unzip(blob.setContentType('application/zip')); zipMetodo = 'Utilities.unzip'; }
       catch (e) { partes = SDIR_unzip_(blob); zipMetodo = 'lector propio (Utilities.unzip falló: ' + String(e.message || e).slice(0, 80) + ')'; }
       paso('📦 ZIP abierto con ' + zipMetodo);
-      partes.forEach(function (p) {
-        if (!/\.txt$/i.test(p.getName() || '')) return;
+      partes.forEach(function (p, k) {
+        var nomP = String(p.getName() || ''), bytes = p.getBytes().length;
+        lista.push((nomP.split('/').pop() || 'archivo ' + (k + 1)) + ' (' + bytes + ' B)');
+        if (/\/$/.test(nomP) || !bytes) return;   // carpeta o archivo vacío
         var txt = p.getDataAsString('UTF-8');
-        if (txt.indexOf('�') >= 0) txt = p.getDataAsString('ISO-8859-1');
+        if (txt.indexOf('\uFFFD') >= 0) txt = p.getDataAsString('ISO-8859-1');
+        if (txt.split(/\r?\n/)[0].indexOf('|') < 0) return;   // no es un registro del SIRE (texto separado por «|»)
         var r = SDIR_leerTxt_(txt, buscar);
         filas += r.filas; encontrados = encontrados.concat(r.encontrados);
-        url = carpeta.createFile(Utilities.newBlob(txt, 'text/plain', ruc + '_' + tipo + '_' + periodo + '_' + (p.getName() || 'reporte.txt'))).getUrl();
+        url = carpeta.createFile(Utilities.newBlob(txt, 'text/plain', ruc + '_' + tipo + '_' + periodo + '_' + (nomP.split('/').pop() || 'reporte') + (/\.txt$/i.test(nomP) ? '' : '.txt'))).getUrl();
       });
       carpeta.createFile(blob.setName(ruc + '_' + tipo + '_' + periodo + '_' + nombre));
     });
     paso('📄 Leído y guardado en Drive');
-    var res = { ok: true, pasos: pasos, total: Math.round((Date.now() - t0) / 1000), modo: modo, filas: filas, encontrado: encontrados.slice(0, 10), url: url, zip: zipMetodo };
+    var res = { ok: true, pasos: pasos, total: Math.round((Date.now() - t0) / 1000), modo: modo, filas: filas, encontrado: encontrados.slice(0, 10), url: url, zip: zipMetodo, archivos: lista };
     console.log('Prueba SIRE directa ' + ruc + ' ' + tipo + ' ' + periodo + ': ' + JSON.stringify({ total: res.total, modo: modo, filas: filas, zip: zipMetodo, pasos: pasos }));
     return res;
   } catch (e) {
@@ -138,6 +141,7 @@ function SDIR_probarAmbos_(ruc, periodo, buscar) {
     out.partes.push(nom[t] + ' ' + (r.filas || 0) + ' (' + (r.modo === 'oficial' ? 'presentado' : r.modo) + ')');
     if (r.url) out.url = out.url || r.url;
     if (r.zip) out.zip = r.zip;
+    out.archivos = (out.archivos || []).concat((r.archivos || []).map(function (a) { return nom[t] + ': ' + a; }));
     return false;
   });
   out.modo = out.partes.join(' · ');
@@ -347,6 +351,7 @@ var SDIR_HTML_ = [
   ' if(x.error)h="<div class=e>❌ "+esc(x.error)+"</div>"+h;',
   ' if(x.aviso)h="<div>⚠️ "+esc(x.aviso)+"</div>"+h;',
   ' if(x.ok&&x.filas!=null)h="<div>✅ <b>"+x.filas+"</b> comprobante(s) · "+esc(x.modo)+(x.zip?" · ZIP: "+esc(x.zip):"")+(x.url?" · <a href=\\""+esc(x.url)+"\\" target=_blank>ver TXT en Drive</a>":"")+"</div>"+h;',
+  ' if(x.archivos&&x.archivos.length)h+="<div class=m>📦 En el ZIP: "+esc(x.archivos.join(" · "))+"</div>";',
   ' if(x.ok&&$("bus").value.trim())h+=(x.encontrado&&x.encontrado.length?"<div class=m>🔎 Encontrado: "+x.encontrado.map(function(e){return esc(e.serie+"-"+e.numero+" · "+e.fecha+" · "+e.ruc+" "+e.nombre+" · "+e.moneda+" "+e.total)}).join("<br>")+"</div>":"<div class=m>🔎 <b>"+esc($("bus").value)+"</b> no está en lo que SUNAT entregó para ese periodo.</div>");',
   ' $("out").innerHTML=h}',
   '</script></body></html>'
