@@ -43,7 +43,7 @@ function SDIR_guardarCred(ruc, c) {
   ruc = String(ruc || '').replace(/\D/g, '');
   if (ruc.length !== 11) throw new Error('RUC inválido.');
   c = c || {};
-  var o = { u: String(c.u || '').trim(), c: String(c.c || ''), id: String(c.id || '').trim(), s: String(c.s || '').trim() };
+  var o = { u: SDIR_usuario_(ruc, c.u), c: String(c.c || ''), id: String(c.id || '').trim(), s: String(c.s || '').trim() };
   if (!o.u || !o.c || !o.id || !o.s) throw new Error('Faltan datos: usuario SOL, clave SOL, client_id y client_secret.');
   PropertiesService.getUserProperties().setProperty('SDIR_' + ruc, JSON.stringify(o));
   return true;
@@ -129,15 +129,25 @@ function SDIR_token_(ruc, c) {
     var r;
     try {
       r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/x-www-form-urlencoded', muteHttpExceptions: true,
-        payload: { grant_type: 'password', scope: 'https://api-sire.sunat.gob.pe', client_id: c.id, client_secret: c.s, username: ruc + c.u, password: c.c } });
+        payload: { grant_type: 'password', scope: 'https://api-sire.sunat.gob.pe', client_id: c.id, client_secret: c.s, username: ruc + SDIR_usuario_(ruc, c.u), password: c.c } });
     } catch (e) { ultimo = 'red: ' + e.message; Utilities.sleep(i * 3000); continue; }
     var cod = r.getResponseCode(), t = r.getContentText();
     if (cod === 200) { var d = JSON.parse(t); if (d.access_token) return d.access_token; ultimo = 'sin access_token'; }
-    else if (cod === 400 || cod === 401) throw new Error('SUNAT rechazó las credenciales (' + cod + '): ' + t.slice(0, 300));
+    else if (cod === 400 || cod === 401) throw new Error(/autenticacion del usuario|access_denied/i.test(t)
+      ? 'SUNAT no aceptó el USUARIO SOL o la CLAVE SOL de esta empresa (el client_id sí lo reconoció). Revise: el usuario es solo el usuario SOL (sin el RUC delante), la clave SOL es la vigente y ese usuario es de la empresa ' + ruc + ' y tiene acceso al SIRE. Corríjalo con 🔑 Cambiar credenciales.'
+      : /client|invalid_client|unauthorized_client/i.test(t)
+        ? 'SUNAT no reconoce el client_id / client_secret (deben ser de la empresa ' + ruc + ', con el servicio MIGE RCE y RVIE - SIRE). Corríjalo con 🔑 Cambiar credenciales.'
+        : 'SUNAT rechazó las credenciales (' + cod + '): ' + t.slice(0, 300));
     else ultimo = 'HTTP ' + cod + ': ' + t.slice(0, 200);
     Utilities.sleep(i * 3000);
   }
   throw new Error('No se pudo obtener el token de SUNAT: ' + ultimo);
+}
+
+/** Usuario SOL sin espacios, en mayúsculas y sin el RUC delante (si se escribió «20615366791USUARIO», queda «USUARIO»). */
+function SDIR_usuario_(ruc, u) {
+  u = String(u || '').replace(/\s+/g, '').toUpperCase();
+  return u.indexOf(ruc) === 0 && u.length > 11 ? u.slice(11) : u;
 }
 
 /** GET a la API SIRE con los mismos reintentos que sire_client.py (429 y 5xx). Devuelve la respuesta. */
