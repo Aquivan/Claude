@@ -105,7 +105,15 @@ function SDIR_probar(ruc, periodo, tipo, buscar, t0Global) {
       if (archivos === 'pendiente') return { ok: false, pendiente: true, ticket: ticket, pasos: pasos, total: Math.round((Date.now() - t0) / 1000),
         aviso: 'SUNAT todavía genera el nuevo reporte. Pulse ▶ Probar de nuevo en un rato: se retoma el mismo pedido.' };
       paso('⏱ SUNAT generó el nuevo reporte');
-      bajados = archivos.map(function (a) { return { a: a, b: SDIR_bajarArchivo_(token, a, libro) }; });
+      try { bajados = archivos.map(function (a) { return { a: a, b: SDIR_bajarArchivo_(token, a, libro) }; }); }
+      catch (eB2) {
+        // Dos reportes «terminados» al instante y ninguno entrega su archivo: es lo que hace SUNAT cuando el registro
+        // está VACÍO (p. ej. un mes sin ventas: a veces da el archivo con solo los títulos, a veces error 500).
+        paso('ℹ️ SUNAT tampoco entregó el nuevo archivo');
+        return { ok: true, pasos: pasos, total: Math.round((Date.now() - t0) / 1000), modo: modo, filas: 0, vacioProbable: true,
+          aviso: 'SUNAT dio el reporte por terminado al instante pero no entrega el archivo: es lo que hace cuando ' + (tipo === 'venta' ? 'no hay ventas' : 'no hay compras') +
+            ' en ' + periodo + ' (registro vacío). Se toma como 0; si sabe que sí hay comprobantes, pruebe más tarde.' };
+      }
     }
     bajados.forEach(function (x) {
       var a = x.a, blob = x.b;
@@ -159,7 +167,8 @@ function SDIR_probarAmbos_(ruc, periodo, buscar) {
     }
     out.filas += r.filas || 0;
     out.encontrado = out.encontrado.concat(r.encontrado || []);
-    out.partes.push(nom[t] + ' ' + (r.filas || 0) + ' (' + (r.modo === 'oficial' ? 'presentado' : r.modo) + ')');
+    out.partes.push(nom[t] + ' ' + (r.filas || 0) + ' (' + (r.modo === 'oficial' ? 'presentado' : r.modo) + (r.vacioProbable ? ', registro vacío' : '') + ')');
+    if (r.aviso) out.aviso = (out.aviso ? out.aviso + ' · ' : '') + nom[t] + ': ' + r.aviso;
     if (r.url) out.url = out.url || r.url;
     if (r.zip) out.zip = r.zip;
     out.archivos = (out.archivos || []).concat((r.archivos || []).map(function (a) { return nom[t] + ': ' + a; }));
