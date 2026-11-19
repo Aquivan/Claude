@@ -94,8 +94,21 @@ function SDIR_probar(ruc, periodo, tipo, buscar, t0Global) {
     if (!archivos.length) return { ok: true, pasos: pasos, total: Math.round((Date.now() - t0) / 1000), modo: modo, filas: 0, aviso: 'SUNAT dice que no hay comprobantes en ' + periodo + '.' };
 
     var carpeta = SDIR_carpeta_(), filas = 0, encontrados = [], zipMetodo = '', url = '', lista = [];
-    archivos.forEach(function (a) {
-      var blob = SDIR_bajarArchivo_(token, a, libro);
+    // A veces SUNAT da el reporte por terminado pero su archivo responde «error 500» una y otra vez: se pide UN reporte nuevo
+    // (como el robot de GitHub, scripts/sire_client.py), que suele salir al instante.
+    var bajados;
+    try { bajados = archivos.map(function (a) { return { a: a, b: SDIR_bajarArchivo_(token, a, libro) }; }); }
+    catch (eB) {
+      paso('⚠️ SUNAT no entregó el archivo (' + String(eB.message || eB).replace(/^.*?: /, '').slice(0, 60) + '): se pide otro reporte');
+      ticket = SDIR_pedirORetomar_(function () { return pedir(modo); }); paso('🎫 Nuevo pedido a SUNAT (ticket ' + ticket + ')');
+      archivos = SDIR_esperar_(token, ticket, periodo, t0);
+      if (archivos === 'pendiente') return { ok: false, pendiente: true, ticket: ticket, pasos: pasos, total: Math.round((Date.now() - t0) / 1000),
+        aviso: 'SUNAT todavía genera el nuevo reporte. Pulse ▶ Probar de nuevo en un rato: se retoma el mismo pedido.' };
+      paso('⏱ SUNAT generó el nuevo reporte');
+      bajados = archivos.map(function (a) { return { a: a, b: SDIR_bajarArchivo_(token, a, libro) }; });
+    }
+    bajados.forEach(function (x) {
+      var a = x.a, blob = x.b;
       var nombre = a.nombre.indexOf('__') >= 0 ? a.nombre.split('__').pop() : a.nombre;
       paso('⬇️ Archivo bajado (' + Math.round(blob.getBytes().length / 1024) + ' KB)');
       var partes;
@@ -138,9 +151,11 @@ function SDIR_probarAmbos_(ruc, periodo, buscar) {
   ['compra', 'venta'].some(function (t) {
     var r = SDIR_probar(ruc, periodo, t, buscar, t0);
     (r.pasos || []).forEach(function (p) { out.pasos.push({ t: nom[t] + ' · ' + p.t, s: p.s }); });
-    if (r.error || r.pendiente) {
-      out.ok = false; out.pendiente = r.pendiente; out.error = r.error ? nom[t] + ': ' + r.error : '';
-      out.aviso = r.aviso ? nom[t] + ': ' + r.aviso : ''; return true;
+    if (r.error || r.pendiente) {   // se sigue con el otro registro: lo que sí salió no se pierde
+      if (r.error) out.error = (out.error ? out.error + ' · ' : '') + nom[t] + ': ' + r.error;
+      if (r.pendiente) { out.pendiente = true; out.aviso = (out.aviso ? out.aviso + ' · ' : '') + nom[t] + ': ' + r.aviso; }
+      out.partes.push(nom[t] + (r.pendiente ? ' ⏳ pendiente en SUNAT' : ' ❌'));
+      return false;
     }
     out.filas += r.filas || 0;
     out.encontrado = out.encontrado.concat(r.encontrado || []);
@@ -151,6 +166,7 @@ function SDIR_probarAmbos_(ruc, periodo, buscar) {
     return false;
   });
   out.modo = out.partes.join(' · ');
+  if (out.error || out.pendiente) out.ok = out.partes.some(function (x) { return /\(/.test(x); });
   out.total = Math.round((Date.now() - t0) / 1000);
   return out;
 }
@@ -259,13 +275,13 @@ function SDIR_esperar_(token, ticket, periodo, t0) {
 function SDIR_bajarArchivo_(token, a, libro) {
   var params = { nomArchivoReporte: a.nombre, codTipoArchivoReporte: a.codTipoArchivo, codLibro: libro, perTributario: a.perTributario, codProceso: a.codProceso, numTicket: a.numTicket };
   var ultimo = '';
-  for (var i = 0; i < 3; i++) {
+  for (var i = 0; i < 2; i++) {   // corto: si no sale, conviene más pedir un reporte nuevo que seguir insistiendo
     try {
       var b = SDIR_get_(SDIR_BASE_ + '/rvierce/gestionprocesosmasivos/web/masivo/archivoreporte', params, token, '*/*').getBlob();
       if (b.getBytes().length) return b;
       ultimo = 'archivo vacío (0 bytes)';
     } catch (e) { ultimo = e.message; }
-    if (i < 2) Utilities.sleep(i ? 30000 : 10000);
+    if (i < 1) Utilities.sleep(5000);
   }
   throw new Error('SUNAT no entregó el archivo ' + a.nombre + ': ' + ultimo);
 }
