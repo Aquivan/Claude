@@ -10,7 +10,7 @@
  *   doGet ?previo=1&k=CLAVE&rucs=..&periodo=AAAAMM → lanza el robot para esas empresas y ese periodo.
  *
  * La CLAVE la crea Cobranzas en los metadatos de esta hoja ('DEC_PUENTE'; no se ven y no van al repositorio).
- * Un mismo pedido (empresas + periodo) no se repite en 10 horas.
+ * Un mismo pedido (empresas + periodo) no se repite en 4 horas (Cobranzas verifica ~2 h antes del aviso y a las 15 h).
  */
 
 function DEC_registrarWeb_() {
@@ -42,7 +42,7 @@ function DEC_previo_(p) {
   try { hechos = JSON.parse(props.getProperty('DEC_PREVIOS') || '{}'); } catch (e) { hechos = {}; }
   var ahora = Date.now(), clv = per + '|' + rucs.join(',');
   Object.keys(hechos).forEach(function (k) { if (ahora - hechos[k] > 24 * 3600 * 1000) delete hechos[k]; });
-  if (hechos[clv] && ahora - hechos[clv] < 10 * 3600 * 1000) return { ok: true, repetido: true, mensaje: 'Ya se pidió hace poco.' };
+  if (hechos[clv] && ahora - hechos[clv] < 4 * 3600 * 1000) return { ok: true, repetido: true, mensaje: 'Ya se pidió hace poco.' };
   DEC_pedir_(DEC_cfg_(), { empresa: rucs.join(','), desde: per, hasta: per });
   hechos[clv] = ahora;
   props.setProperty('DEC_PREVIOS', JSON.stringify(hechos));

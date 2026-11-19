@@ -408,10 +408,19 @@ function TGV_previo_(ss) {
   var prm = TGV_param_(ss);
   var hora = Number(Utilities.formatDate(new Date(), 'America/Lima', 'H'));
   var hoyTxt = Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd'), props = PropertiesService.getScriptProperties();
-  if (prm.hora < 2 || hora < prm.hora - 2 || hora >= prm.hora || props.getProperty('TGV_PREVIO') === hoyTxt) return;
-  props.setProperty('TGV_PREVIO', hoyTxt);
+  // Dos verificaciones al día: ~2 h antes del aviso (para que el aviso ya no traiga lo presentado) y a las 15 h
+  // (lo presentado durante el día se marca el mismo día).
+  var turno = hora >= prm.hora - 2 && hora < prm.hora && prm.hora >= 2 ? 'manana' : hora >= 15 && hora < 18 ? 'tarde' : '';
+  if (!turno || props.getProperty('TGV_PREVIO_' + turno) === hoyTxt) return;
+  props.setProperty('TGV_PREVIO_' + turno, hoyTxt);
+  props.setProperty('TGV_PREVIO_T', String(Date.now()));
   var porPer = {}, sire = {};
-  TGV_deHoy_(TGV_lista_(ss, null), prm).forEach(function (x) {
+  // TODO lo pendiente que vence pronto o venció hace poco (no solo lo que «toca» avisar hoy): así ninguna empresa ya
+  // presentada se queda sin verificar hasta el día de su aviso.
+  var maxDias = Math.max.apply(null, prm.dias.igv.concat(prm.dias.sire, [0]));
+  TGV_lista_(ss, null).filter(function (x) {
+    return !x.sinCronograma && !x.presentado && x.faltan <= maxDias && -x.faltan <= prm.despues;
+  }).forEach(function (x) {
     if (x.ob === 'sire') { (sire[x.periodo] = sire[x.periodo] || {})[x.ruc] = true; return; }
     if (x.ob !== 'igv' && x.ob !== 'plame') return;
     (porPer[x.periodo] = porPer[x.periodo] || {})[x.ruc] = true;
@@ -502,6 +511,10 @@ function TGV_avisar_(ss, destinos) {
   var hoyTxt = Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd');
   var hora = Number(Utilities.formatDate(new Date(), 'America/Lima', 'H'));
   if (props.getProperty('TGV_DIA') === hoyTxt || hora < prm.hora || hora > prm.hora + 3) return;
+  // Si la verificación en SUNAT se pidió hace menos de 40 min, el robot puede no haber terminado: se espera
+  // (el vigía vuelve a pasar) para no avisar «por presentar» algo que ya estaba presentado. Máximo hasta 2 h después.
+  var tPrev = Number(props.getProperty('TGV_PREVIO_T') || 0);
+  if (tPrev && Date.now() - tPrev < 40 * 60000 && hora < prm.hora + 2) return;
   props.setProperty('TGV_DIA', hoyTxt);
   TGV_cronogramaAlDia_(ss);
   var lista = TGV_lista_(ss, TG_ctxDatos_(ss));
