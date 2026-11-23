@@ -104,8 +104,9 @@ function TGNV_alBoton_(ctx, datos) {
 
 var TGNV_LECTORES_ = [
   { nom: 'Gemini', prov: 'Gemini (Google)' },
-  { nom: 'Kimi K3.1 Pro', prov: 'NVIDIA · Kimi K3.1 Pro', nvidia: true },
   { nom: 'Nemotron Super VL', prov: 'NVIDIA · Nemotron 3.5 Super VL (lee imágenes)', nvidia: true },
+  { nom: 'Muse Glimmer', prov: 'NVIDIA · Muse Glimmer (lee imágenes)', nvidia: true },
+  { nom: 'Kimi K3.1 Pro', prov: 'NVIDIA · Kimi K3.1 Pro', nvidia: true },   // al final: el más lento
 ];
 var TGNV_CAMPOS_ = [['banco', 'Banco'], ['fecha', 'Fecha'], ['operacion', 'N° operación'], ['moneda', 'Moneda'], ['monto', 'Monto'],
   ['ordenante', 'Quién paga'], ['beneficiario', 'Beneficiario'], ['ruc_beneficiario', 'RUC beneficiario'], ['cuenta_destino', 'Cuenta destino']];
@@ -122,7 +123,7 @@ function TGNV_voucher_(ctx, blob, mime) {
   var esPdf = /pdf/i.test(mime);
   PropertiesService.getScriptProperties().setProperty('TGNV_VCH', JSON.stringify({ chat: String(ctx.chatId), id: f.getId(), mime: mime, i: 0, res: [], enCurso: null, t0: Date.now(), pdf: esPdf }));
   TGNV_programarV_(2000);
-  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ', <b>Kimi K3.1 Pro</b> y <b>Nemotron Super VL</b>') + ' en segundo plano: normalmente 1 a 3 minutos (hasta 15 si NVIDIA está saturado). Le aviso al terminar cada uno. No se guarda nada en la hoja.' +
+  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ', <b>Nemotron Super VL</b>, <b>Muse Glimmer</b> y <b>Kimi K3.1 Pro</b>') + ' en segundo plano: normalmente 1 a 3 minutos (hasta 15 si NVIDIA está saturado). Le aviso al terminar cada uno. No se guarda nada en la hoja.' +
     (esPdf ? '\n<i>Es un PDF: NVIDIA solo lee imágenes; para compararlo mande una foto o captura del voucher.</i>' : ''));
 }
 
