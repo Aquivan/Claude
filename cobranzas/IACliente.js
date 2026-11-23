@@ -23,11 +23,11 @@ var IA_PROVEEDORES_ = {
   // NVIDIA (build.nvidia.com): una sola clave «nvapi-…» para todos; modelos abiertos GRATIS para probar (≈40 pedidos/min).
   // La lista gratuita cambia cada pocas semanas: menú 🧠 Asistente IA → 🟩 Modelos gratis de NVIDIA (los prueba con su clave)
   // y el que elija ahí queda en «NVIDIA · modelo elegido».
-  'NVIDIA · Kimi K3.1 Pro': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'moonshotai/kimi-k3.1-pro', imagen: true, sinFormatoJson: true, pausa: 1600 },
-  'NVIDIA · Nemotron 3.5 Super VL (lee imágenes)': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'nvidia/nemotron-3.5-super-vl-120b-a12b', imagen: true, sinFormatoJson: true, pausa: 1600 },
-  'NVIDIA · Muse Glimmer (lee imágenes)': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'meta/muse-glimmer-30b', imagen: true, sinFormatoJson: true, pausa: 1600 },
-  'NVIDIA · Mistral Large 4': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'mistralai/mistral-large-4-1t-a52b', imagen: false, sinFormatoJson: true, pausa: 1600 },
-  'NVIDIA · modelo elegido': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'moonshotai/kimi-k3.1-pro', modeloProp: 'IA_NVIDIA_MODELO', imagen: true, sinFormatoJson: true, pausa: 1600 },
+  'NVIDIA · Kimi K3.1 Pro': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', sinPensar: true, modelo: 'moonshotai/kimi-k3.1-pro', imagen: true, sinFormatoJson: true, pausa: 1600 },
+  'NVIDIA · Nemotron 3.5 Super VL (lee imágenes)': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', sinPensar: true, modelo: 'nvidia/nemotron-3.5-super-vl-120b-a12b', imagen: true, sinFormatoJson: true, pausa: 1600 },
+  'NVIDIA · Muse Glimmer (lee imágenes)': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', sinPensar: true, modelo: 'meta/muse-glimmer-30b', imagen: true, sinFormatoJson: true, pausa: 1600 },
+  'NVIDIA · Mistral Large 4': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', sinPensar: true, modelo: 'mistralai/mistral-large-4-1t-a52b', imagen: false, sinFormatoJson: true, pausa: 1600 },
+  'NVIDIA · modelo elegido': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', sinPensar: true, modelo: 'moonshotai/kimi-k3.1-pro', modeloProp: 'IA_NVIDIA_MODELO', imagen: true, sinFormatoJson: true, pausa: 1600 },
 };
 
 function IA_nombresProveedores_() {
@@ -61,6 +61,10 @@ function IA_llamar_(opts) {
     resp = UrlFetchApp.fetch(pet.url, pet.params);
     code = resp.getResponseCode();
     if (code === 429 || code >= 500) { Utilities.sleep(pet.prov.pausa * 3); continue; }
+    // Si el modelo no acepta la opción «sin pensar», se repite sin ella (una vez).
+    if (code === 400 && pet.prov.sinPensar && !opts.sinKwargs && /chat_template|thinking|kwargs/i.test(resp.getContentText())) {
+      opts = Object.assign({}, opts, { sinKwargs: true }); pet = IA_peticion_(opts); intento--; continue;
+    }
     break;
   }
   return IA_respuesta_(pet, resp);
@@ -97,6 +101,11 @@ function IA_peticion_(opts) {
       model: modelo, temperature: 0.1, max_tokens: maxTokens,
       messages: [{ role: 'system', content: opts.sistema }, { role: 'user', content: contenido }],
     };
+    // Modelos que «razonan» (NVIDIA: Kimi, Nemotron…): para leer y extraer datos no hace falta pensar, y así responden en segundos.
+    if (prov.sinPensar && !opts.pensar) {
+      carga.messages[0].content = '/no_think\n' + opts.sistema;   // Nemotron
+      if (!opts.sinKwargs) carga.chat_template_kwargs = { thinking: false, enable_thinking: false };   // Kimi, DeepSeek, Qwen…
+    }
     if (json && !prov.sinFormatoJson) carga.response_format = { type: 'json_object' };   // algunos (NVIDIA) no lo aceptan: igual se pide JSON en el texto
   }
   return { url: url, prov: prov, json: json, proveedor: opts.proveedor,
