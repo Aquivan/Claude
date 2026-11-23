@@ -420,7 +420,8 @@ var IMP_SISTEMA_MAPA_ = 'Eres contador en Perú. Te doy las primeras filas de un
 
 function IMP_mapearConIA_(ia, filas) {
   var txt = filas.slice(0, 12).map(function (r, i) { return 'Fila ' + i + ': ' + (r || []).map(function (x, j) { return j + '=' + String(x).slice(0, 30); }).join(' | '); }).join('\n');
-  var r = IA_llamar_({ proveedor: ia.proveedor, clave: ia.clave, maxTokens: 600, sistema: IMP_SISTEMA_MAPA_, texto: txt });
+  var om = { proveedor: ia.proveedor, clave: ia.clave, maxTokens: 600, sistema: IMP_SISTEMA_MAPA_, texto: txt };
+  var r = typeof IAT_conRespaldo_ === 'function' ? IAT_conRespaldo_('analisis', function () { return IA_llamar_(om); }, om) : IA_llamar_(om);   // 🤖 respaldo
   var m = {};
   Object.keys(r.columnas || {}).forEach(function (k) { if (r.columnas[k] != null && r.columnas[k] !== '') m[k] = Number(r.columnas[k]); });
   if (m.monto == null || (m.op == null && m.cod == null)) throw new Error('Ni la IA encontró las columnas de N° de operación y monto.');
@@ -444,8 +445,9 @@ function IMP_leerConIA_(sh, a) {
   if (!ia.clave) throw new Error('Para leer fotos o PDF falta la clave de IA (🧠 Asistente IA → 🔑 Guardar clave de IA).');
   if (/pdf/i.test(a.mime) && ia.proveedor.indexOf('Gemini') < 0) throw new Error('Los PDF solo los lee Gemini; elija Gemini en la fila 11 de 🤝 Conciliar con IA o suba una foto.');
   IMP_estado_(sh, 'La IA está leyendo ' + a.nombre + '…');
-  var r = IA_llamar_({ proveedor: ia.proveedor, clave: ia.clave, maxTokens: 8000, sistema: IMP_SISTEMA_DOC_,
-    texto: 'Extrae los pagos y documentos de este archivo: ' + a.nombre, adjunto: { mime: a.mime, base64: a.base64 } });
+  var oDoc = { proveedor: ia.proveedor, clave: ia.clave, maxTokens: 8000, sistema: IMP_SISTEMA_DOC_,
+    texto: 'Extrae los pagos y documentos de este archivo: ' + a.nombre, adjunto: { mime: a.mime, base64: a.base64 } };
+  var r = typeof IAT_docs_ === 'function' ? IAT_docs_(function () { return IA_llamar_(oDoc); }, oDoc) : IA_llamar_(oDoc);   // 🤖 respaldo NVIDIA → Groq
   return (r.filas || []).map(function (f, i) {
     var docs = [];
     (f.documentos || []).forEach(function (d) {

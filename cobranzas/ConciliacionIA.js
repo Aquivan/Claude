@@ -429,7 +429,8 @@ function CIA_preguntarIA_(ia, grupoVouchers, docs, contra) {
         d.retencion.toFixed(2) + ' | ' + d.detraccion.toFixed(2) + ' | ' + d.pagado.toFixed(2) + ' | ' + d.saldo.toFixed(2) + ' | ' + d.moneda;
     }).join('\n'),
   ].join('\n');
-  var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: CIA_SISTEMA_, texto: texto, maxTokens: 8000 });
+  var oc = { proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: CIA_SISTEMA_, texto: texto, maxTokens: 8000 };
+  var r = typeof IAT_conRespaldo_ === 'function' ? IAT_conRespaldo_('analisis', function () { return IA_llamar_(oc); }, oc) : IA_llamar_(oc);   // 🤖 respaldo
   var res = {};
   (Array.isArray(r.asignaciones) ? r.asignaciones : []).forEach(function (a) {
     var k = parseInt(String(a.voucher || '').replace(/\D/g, ''), 10) - 1;
@@ -468,7 +469,8 @@ function CIA_iaRucs_(ia, vouchers, directorio, porCobrar) {
         (p.beneficiarioNombre || '') + ' | ' + (p.descripcion || '');
     }).join('\n'),
   ].join('\n');
-  var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: CIA_SISTEMA_RUC_, texto: texto, maxTokens: 8000 });
+  var or = { proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: CIA_SISTEMA_RUC_, texto: texto, maxTokens: 8000 };
+  var r = typeof IAT_conRespaldo_ === 'function' ? IAT_conRespaldo_('analisis', function () { return IA_llamar_(or); }, or) : IA_llamar_(or);   // 🤖 respaldo
   var validos = {};
   directorio.forEach(function (d) { validos[d.ruc] = true; });
   var res = {};

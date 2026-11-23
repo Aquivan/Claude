@@ -134,8 +134,24 @@ function TGG_clave_() {
   return k;
 }
 
-/** Una sola llamada con el texto y TODOS los archivos (fotos y PDF). */
+/** Una sola llamada con el texto y TODOS los archivos (fotos y PDF). Si Gemini no responde: 🤖 respaldo NVIDIA → Groq (/ia, TG_IATareas.js). */
 function TGG_gemini_(texto, archivos, sistema) {
+  if (typeof IAT_docs_ !== 'function') return TGG_geminiSolo_(texto, archivos, sistema);
+  return IAT_docs_(function () { return TGG_geminiSolo_(texto, archivos, sistema); }, {
+    sistema: sistema || TGG_SISTEMA_, texto: texto, maxTokens: 16000,
+    adjuntosFn: function () {
+      var out = [];
+      (archivos || []).slice(0, 10).forEach(function (a, i) {
+        try {
+          var x = ANX_blob_(a), mime = x.mime || x.blob.getContentType();
+          if (/^image\/|pdf|^audio\//i.test(mime)) out.push({ mime: /pdf/i.test(mime) ? 'application/pdf' : mime, base64: Utilities.base64Encode(x.blob.getBytes()), etiqueta: 'Archivo ' + (i + 1) + ' (' + (x.nombre || 'sin nombre') + ')' });
+        } catch (e) {}
+      });
+      return out;
+    } });
+}
+
+function TGG_geminiSolo_(texto, archivos, sistema) {
   var partes = [{ text: texto }];
   (archivos || []).slice(0, 10).forEach(function (a, i) {
     try {

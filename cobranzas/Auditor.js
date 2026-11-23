@@ -752,8 +752,8 @@ function AUD_auditarExp_(e, ia, contador, pura) {
     if (contador.consultas > 0) Utilities.sleep(IA_PROVEEDORES_[ia.proveedor].pausa);
     contador.consultas++;
     try {
-      var r = IA_llamar_({ proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: AUD_sistema_(pura),
-        texto: AUD_texto_(e, sin, ds, pura), maxTokens: 16000 });
+      var oa = { proveedor: ia.proveedor, modelo: ia.modelo, clave: ia.clave, sistema: AUD_sistema_(pura), texto: AUD_texto_(e, sin, ds, pura), maxTokens: 16000 };
+      var r = typeof IAT_conRespaldo_ === 'function' ? IAT_conRespaldo_('analisis', function () { return IA_llamar_(oa); }, oa) : IA_llamar_(oa);   // 🤖 respaldo
       var v = AUD_verificar_(r, sin, ds);
       out.props = out.props.concat(v.props);
       out.sinFactura = out.sinFactura.concat(v.sinFactura);
