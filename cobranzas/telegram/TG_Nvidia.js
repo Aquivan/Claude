@@ -122,7 +122,7 @@ function TGNV_voucher_(ctx, blob, mime) {
   var esPdf = /pdf/i.test(mime);
   PropertiesService.getScriptProperties().setProperty('TGNV_VCH', JSON.stringify({ chat: String(ctx.chatId), id: f.getId(), mime: mime, i: 0, res: [], enCurso: null, t0: Date.now(), pdf: esPdf }));
   TGNV_programarV_(2000);
-  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ', <b>Kimi K3.1 Pro</b> y <b>Nemotron Super VL</b>') + ' en segundo plano (1 a 5 minutos). No se guarda nada en la hoja.' +
+  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ', <b>Kimi K3.1 Pro</b> y <b>Nemotron Super VL</b>') + ' en segundo plano: normalmente 1 a 3 minutos (hasta 15 si NVIDIA está saturado). Le aviso al terminar cada uno. No se guarda nada en la hoja.' +
     (esPdf ? '\n<i>Es un PDF: NVIDIA solo lee imágenes; para compararlo mande una foto o captura del voucher.</i>' : ''));
 }
 
@@ -138,7 +138,8 @@ function TGNV_leerPaso() {
   if (!est) return;
   var lectores = est.pdf ? TGNV_LECTORES_.slice(0, 1) : TGNV_LECTORES_;
   if (est.enCurso != null) { est.res.push({ nom: lectores[est.enCurso].nom, error: 'no respondió a tiempo' }); est.i++; est.enCurso = null; }
-  if (est.i >= lectores.length || Date.now() - est.t0 > 30 * 60000) {
+  if (est.i >= lectores.length || Date.now() - est.t0 > 15 * 60000) {
+    lectores.slice(est.i).forEach(function (L) { est.res.push({ nom: L.nom, error: 'no se alcanzó (NVIDIA muy lento hoy)' }); });
     p.deleteProperty('TGNV_VCH');
     ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGNV_leerPaso') ScriptApp.deleteTrigger(t); });
     try { DriveApp.getFileById(est.id).setTrashed(true); } catch (e) {}
@@ -147,7 +148,7 @@ function TGNV_leerPaso() {
   var L = lectores[est.i];
   est.enCurso = est.i;
   p.setProperty('TGNV_VCH', JSON.stringify(est));
-  TGNV_programarV_(7 * 60000);   // vigía
+  TGNV_programarV_(6.5 * 60000);   // vigía
   var t1 = Date.now(), r;
   try {
     var blob = DriveApp.getFileById(est.id).getBlob();
@@ -158,6 +159,7 @@ function TGNV_leerPaso() {
   } catch (e) { r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, error: String(e.message || e).slice(0, 120) }; }
   est.res.push(r); est.i++; est.enCurso = null;
   p.setProperty('TGNV_VCH', JSON.stringify(est));
+  if (est.i < lectores.length) TG_enviar_(est.chat, '⏳ ' + (r.error ? '❌ ' : '✅ ') + r.nom + (r.error ? ' falló' : ' leyó el voucher en ' + r.s + ' s') + ' · sigue ' + lectores[est.i].nom + '…', null, { silencioso: true });
   TGNV_programarV_(2000);
 }
 
