@@ -81,10 +81,13 @@ jobs:
                   print('================ ' + f + ' (ARCHIVO NUEVO) ================')
                   shutil.copy(os.path.join(cambios, f), os.path.join(hoja, f)); continue
               actual = open(vivo, encoding='utf-8').read()
-              esperado = open(buscar(f, base_raiz) or os.path.join(base, f), encoding='utf-8').read()
+              ruta_base = buscar(f, base_raiz) or os.path.join(base, f)
               nuevo = open(os.path.join(cambios, f), encoding='utf-8').read()
               if actual == nuevo: print(f + ': ya tiene el cambio'); continue
-              if actual.strip() != esperado.strip():
+              # Archivo que agregó una subida anterior de esta misma carpeta y aún no está en el respaldo semanal: es nuestro, se actualiza.
+              esperado = open(ruta_base, encoding='utf-8').read() if os.path.exists(ruta_base) else None
+              if esperado is None: print(f + ': lo agregó una subida anterior (aún no está en el respaldo); se actualiza')
+              elif actual.strip() != esperado.strip():
                   errores.append(f + ': el código de la hoja no es el del respaldo (¿se cambió a mano?)'); continue
               print('================ ' + f + ' ================')
               sys.stdout.writelines(difflib.unified_diff(actual.splitlines(True), nuevo.splitlines(True), 'hoja/' + f, 'nuevo/' + f, n=1))
