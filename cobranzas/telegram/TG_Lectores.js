@@ -29,7 +29,8 @@ function LECT_cfg_() {
   var modelo = {};
   Object.keys(LECT_NOMBRES_).forEach(function (p) { modelo[p] = (c.modelo && c.modelo[p] != null) ? String(c.modelo[p]) : LECT_MODELO_DEF_[p]; });
   // 🧠 razonar: el modelo «piensa» antes de responder (más preciso en números difíciles, pero tarda más). Gemini no lo usa aquí.
-  var razonar = { gemini: false, nvidia: !!(c.razonar && c.razonar.nvidia), groq: !!(c.razonar && c.razonar.groq) };
+  // NVIDIA razona POR DEFECTO (pedido del usuario: precisión antes que rapidez); se apaga solo si se elige expresamente.
+  var razonar = { gemini: false, nvidia: !(c.razonar && c.razonar.nvidia === false), groq: !!(c.razonar && c.razonar.groq) };
   return { orden: orden, apagados: (c.apagados || []).filter(function (p) { return LECT_NOMBRES_[p]; }), modelo: modelo, razonar: razonar };
 }
 
