@@ -96,3 +96,91 @@ function TGNV_alBoton_(ctx, datos) {
   try { CIA_nvElegir(datos.id); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message)); }
   TG_enviar_(ctx.chatId, '✅ El 🧠 Asistente IA usará <code>' + TG_esc_(datos.id) + '</code> (fila 11: «NVIDIA · modelo elegido»).');
 }
+
+/* ============================================================ 🧾 voucher con «nvidia»: Gemini vs NVIDIA */
+
+var TGNV_LECTORES_ = [
+  { nom: 'Gemini', prov: 'Gemini (Google)' },
+  { nom: 'Kimi K3.1 Pro', prov: 'NVIDIA · Kimi K3.1 Pro', nvidia: true },
+  { nom: 'Nemotron Super VL', prov: 'NVIDIA · Nemotron 3.5 Super VL (lee imágenes)', nvidia: true },
+];
+var TGNV_CAMPOS_ = [['banco', 'Banco'], ['fecha', 'Fecha'], ['operacion', 'N° operación'], ['moneda', 'Moneda'], ['monto', 'Monto'],
+  ['ordenante', 'Quién paga'], ['beneficiario', 'Beneficiario'], ['ruc_beneficiario', 'RUC beneficiario'], ['cuenta_destino', 'Cuenta destino']];
+var TGNV_SISTEMA_ = 'Eres un lector de comprobantes bancarios de Perú (vouchers de depósito o transferencia: BCP, BBVA, Interbank, Scotiabank, BN, cajas). ' +
+  'Lee la imagen y responde SOLO un JSON con: banco, fecha (dd/mm/aaaa), operacion (número de operación tal cual), moneda (PEN o USD), ' +
+  'monto (número con punto decimal, sin separador de miles), ordenante (quién paga), beneficiario (a quién se paga), ruc_beneficiario (11 dígitos si aparece), ' +
+  'cuenta_destino (si aparece). Si un dato no está, pon "". No inventes nada.';
+
+/** Foto (o PDF) con «nvidia» en el texto: se lee con Gemini y con los modelos de NVIDIA que leen imágenes, en segundo plano. No escribe en ninguna hoja. */
+function TGNV_voucher_(ctx, blob, mime) {
+  if (!ctx.usuario || ctx.usuario.rol !== 'admin') return TG_enviar_(ctx.chatId, 'La comparación con NVIDIA es solo para administradores.');
+  if (!CIA_nvClave_()) return TG_enviar_(ctx.chatId, '🟩 Primero mande su clave de NVIDIA (nvapi-…) en un mensaje solo.');
+  var f = IMP_carpeta_(ctx.ss).createFile(blob.setName('nvidia prueba ' + Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HHmmss')));
+  var esPdf = /pdf/i.test(mime);
+  PropertiesService.getScriptProperties().setProperty('TGNV_VCH', JSON.stringify({ chat: String(ctx.chatId), id: f.getId(), mime: mime, i: 0, res: [], enCurso: null, t0: Date.now(), pdf: esPdf }));
+  TGNV_programarV_(2000);
+  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ', <b>Kimi K3.1 Pro</b> y <b>Nemotron Super VL</b>') + ' en segundo plano (1 a 5 minutos). No se guarda nada en la hoja.' +
+    (esPdf ? '\n<i>Es un PDF: NVIDIA solo lee imágenes; para compararlo mande una foto o captura del voucher.</i>' : ''));
+}
+
+function TGNV_programarV_(ms) {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGNV_leerPaso') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('TGNV_leerPaso').timeBased().after(ms).create();
+}
+
+/** Disparador: un lector por ejecución (con vigía: si uno se cuelga, se anota y sigue). */
+function TGNV_leerPaso() {
+  var p = PropertiesService.getScriptProperties(), est;
+  try { est = JSON.parse(p.getProperty('TGNV_VCH') || 'null'); } catch (e) { est = null; }
+  if (!est) return;
+  var lectores = est.pdf ? TGNV_LECTORES_.slice(0, 1) : TGNV_LECTORES_;
+  if (est.enCurso != null) { est.res.push({ nom: lectores[est.enCurso].nom, error: 'no respondió a tiempo' }); est.i++; est.enCurso = null; }
+  if (est.i >= lectores.length || Date.now() - est.t0 > 30 * 60000) {
+    p.deleteProperty('TGNV_VCH');
+    ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGNV_leerPaso') ScriptApp.deleteTrigger(t); });
+    try { DriveApp.getFileById(est.id).setTrashed(true); } catch (e) {}
+    return TGNV_compararMostrar_(est);
+  }
+  var L = lectores[est.i];
+  est.enCurso = est.i;
+  p.setProperty('TGNV_VCH', JSON.stringify(est));
+  TGNV_programarV_(7 * 60000);   // vigía
+  var t1 = Date.now(), r;
+  try {
+    var blob = DriveApp.getFileById(est.id).getBlob();
+    var clave = L.nvidia ? CIA_nvClave_() : (p.getProperty('CIA_KEY_GEMINIGOOGLE') || IA_clave_('Gemini (Google)'));
+    var d = IA_llamar_({ proveedor: L.prov, clave: clave, sistema: TGNV_SISTEMA_, texto: 'Lee este voucher.', maxTokens: 800,
+      adjunto: { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime } });
+    r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, d: d || {} };
+  } catch (e) { r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, error: String(e.message || e).slice(0, 120) }; }
+  est.res.push(r); est.i++; est.enCurso = null;
+  p.setProperty('TGNV_VCH', JSON.stringify(est));
+  TGNV_programarV_(2000);
+}
+
+function TGNV_norm_(c, v) {
+  var t = String(v == null ? '' : v).trim().toUpperCase();
+  if (c === 'monto') { var n = parseFloat(t.replace(/[^\d.,-]/g, '').replace(/,(?=\d{3}\b)/g, '').replace(',', '.')); return isNaN(n) ? '' : n.toFixed(2); }
+  if (c === 'operacion' || c === 'ruc_beneficiario' || c === 'cuenta_destino') return t.replace(/[^0-9A-Z]/g, '').replace(/^0+/, '');
+  if (c === 'fecha') { var m = t.match(/(\d{1,2})\D(\d{1,2})\D(\d{2,4})/); return m ? ('0' + m[1]).slice(-2) + '/' + ('0' + m[2]).slice(-2) + '/' + (m[3].length === 2 ? '20' + m[3] : m[3]) : t; }
+  return t.replace(/\s+/g, ' ');
+}
+
+function TGNV_compararMostrar_(est) {
+  var res = est.res, base = res.filter(function (x) { return x.nom === 'Gemini' && x.d; })[0];
+  var lineas = ['🧪 <b>Lectura del voucher: Gemini vs NVIDIA</b>', ''];
+  res.forEach(function (x) { lineas.push((x.error ? '❌ ' : '✅ ') + '<b>' + TG_esc_(x.nom) + '</b>' + (x.s != null ? ' · ' + x.s + ' s' : '') + (x.error ? ' — ' + TG_esc_(x.error) : '')); });
+  lineas.push('');
+  TGNV_CAMPOS_.forEach(function (c) {
+    var vals = res.filter(function (x) { return x.d; }).map(function (x) { return { nom: x.nom, v: String(x.d[c[0]] == null ? '' : x.d[c[0]]).trim() }; });
+    if (!vals.some(function (v) { return v.v; })) return;
+    var ref = base ? TGNV_norm_(c[0], base.d[c[0]]) : null;
+    lineas.push('<b>' + c[1] + '</b>');
+    vals.forEach(function (v) {
+      var marca = v.nom === 'Gemini' || ref == null ? '•' : (TGNV_norm_(c[0], v.v) === ref ? '✅' : '⚠️');
+      lineas.push('  ' + marca + ' ' + TG_esc_(v.nom) + ': ' + (v.v ? '<code>' + TG_esc_(v.v.slice(0, 60)) + '</code>' : '—'));
+    });
+  });
+  lineas.push('', '<i>✅ = igual a Gemini · ⚠️ = distinto (revise la foto: Gemini también puede equivocarse). No se guardó nada.</i>');
+  TG_enviar_(est.chat, lineas.join('\n'));
+}
