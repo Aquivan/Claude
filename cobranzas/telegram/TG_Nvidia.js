@@ -153,7 +153,7 @@ function TGNV_leerPaso() {
   try {
     var blob = DriveApp.getFileById(est.id).getBlob();
     var clave = L.nvidia ? CIA_nvClave_() : (p.getProperty('CIA_KEY_GEMINIGOOGLE') || IA_clave_('Gemini (Google)'));
-    var d = IA_llamar_({ proveedor: L.prov, clave: clave, sistema: TGNV_SISTEMA_, texto: 'Lee este voucher.', maxTokens: 800,
+    var d = IA_llamar_({ proveedor: L.prov, clave: clave, sistema: TGNV_SISTEMA_, texto: 'Lee este voucher. Responde solo el JSON, sin explicar.', maxTokens: L.nvidia ? 6000 : 800,
       adjunto: { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime } });
     r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, d: d || {} };
   } catch (e) { r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, error: String(e.message || e).slice(0, 120) }; }
