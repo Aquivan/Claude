@@ -128,6 +128,7 @@ function TG_manejar_(u) {
     try { var me = MESA_textoEnlace_('Telegram · ' + (nombre || chatId)); return TG_enviar_(chatId, '🧩 <b>Mesa de conciliación</b> (facturas ↔ vouchers): <a href="' + me.url + '">abrir</a>. Vale 6 horas desde el último uso; no la reenvíe.'); }
     catch (err) { return TG_enviar_(chatId, '⚠️ ' + TG_esc_(err.message)); }
   }
+  if (LECT_tg_(ctx, texto)) return;   // 🧾 «lectores»: qué IA lee los vouchers y en qué orden (TG_Lectores.js)
   if (TGRL_tg_(ctx, texto)) return;   // 🔁 "volver a leer Originales 2666" (TG_Releer.js)
   if (CTV_tg_(ctx, texto)) return;   // 🔁 "cambia el último a foto" (TG_CambiarTipo.js)
   if (TGQ_RX_.test(texto)) return TGQ_tg_(ctx, texto);   // 📋 "procesados hoy sonia" (TG_Procesados.js)
@@ -262,6 +263,7 @@ function TG_comando_(ctx, texto) {
     case 'honorarios': return TG_enviarHonorarios_(ctx, arg);
     case 'estado': return TG_enviarEstado_(ctx, arg);
     case 'descargar': return TG_asistenteDescarga_(ctx, null);
+    case 'lectores': case 'lector': return LECT_tg_(ctx, 'lectores ' + (arg || '')) || TG_enviar_(chatId, 'Solo para administradores.');   // 🧾 lectores de vouchers (TG_Lectores.js)
     case 'nvidia': return TGNV_comando_(ctx);   // 🟩 probar modelos gratis de NVIDIA y elegir uno (TG_Nvidia.js)
     case 'sire': return TGS_comandoTG_(ctx, arg);   // ⚡ SIRE solo reporte (rápido): /sire granix 202601-202609
     case 'ruc': return TG_enviar_(chatId, RPN_consulta_(ctx.ss, arg, { origen: 'tg', chat: chatId }));   // 🔎 RUC por nombre
@@ -518,6 +520,7 @@ function TG_alBoton_(ss, q) {
     case 'archivo': return TG_mandarArchivo_(ctx, datos.id, datos.titulo);
     case 'descarga': return TG_confirmarDescarga_(ctx, datos, op);
     case 'venc': return TGV_alBoton_(ctx, datos);
+    case 'lect': return LECT_alBoton_(ctx, datos);   // 🧾 lectores de vouchers: subir, apagar, modelo (TG_Lectores.js)
     case 'nvusar': return TGNV_alBoton_(ctx, datos);   // 🟩 usar este modelo de NVIDIA (TG_Nvidia.js)
     case 'entrega': return TGE_alBotonTG_(ctx, datos, op, partes[1]);
     case 'procesar': return TGP_alBotonTG_(ctx, op, partes[1]);

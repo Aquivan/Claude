@@ -11,5 +11,6 @@ antes se guarda una copia del código de la hoja como artefacto de la corrida (9
 | `src/PV_Puente.js` (nuevo) + `src/Diagnostico.js` | 🌐 Puente con el **Portal web de Vouchers** (`vouchers_portal/`): `doGet` con `?portal=1` responde SOLO JSON a 🔁 releer con IA, ↩️ deshacer y ⚡ procesar, con una clave que el portal deja en los metadatos de la hoja. |
 | `src/AyudaVouchers.js` | ❓ Ayuda: cómo entran los vouchers por el 🌐 portal web. |
 | `src/Gemini.js` | Si el modelo principal está saturado (429/5xx) o no existe (404), pasa al momento al siguiente: 3.6 Flash → 3.8 Flash → 3.5 Flash‑Lite (cambiable con la propiedad del script `MODELOS_GEMINI`). Solo si todos están ocupados espera 15 s y 30 s. |
+| `src/Lectores.js` (nuevo) + `src/Gemini.js` + `src/SheetWriter.js` + `src/PV_Puente.js` | 🧾 **Respaldo automático entre IAs**: si Gemini falla, lee NVIDIA y luego Groq (orden, modelos y claves se eligen por Telegram con «lectores» en Cobranzas; esta hoja los pide por el 🧠 asistente y los guarda 10 min). Solo imágenes; los PDF los lee Gemini. Nota en el N° de operación cuando no lo leyó Gemini. |
 
 Después del próximo respaldo semanal, `vouchers_bot_respaldo/` ya trae estos cambios.
