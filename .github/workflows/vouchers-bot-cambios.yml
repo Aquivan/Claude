@@ -36,6 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0   # historial: para reconocer versiones que ya subió este mismo flujo
           sparse-checkout: |
             vouchers_bot_cambios
             vouchers_bot_respaldo
@@ -71,6 +72,15 @@ jobs:
           def buscar(nombre, donde=hoja):
               for raiz, _, fs in os.walk(donde):
                   if nombre in fs: return os.path.join(raiz, nombre)
+          import subprocess
+          def ya_subido(nombre, texto):
+              # ¿Lo que tiene la hoja es alguna versión anterior de vouchers_bot_cambios/src/<nombre>? (entonces lo subió este flujo, no alguien a mano)
+              ruta = cambios + '/' + nombre
+              shas = subprocess.run(['git', 'log', '--format=%H', '--', ruta], capture_output=True, text=True).stdout.split()
+              for sha in shas[:60]:
+                  r = subprocess.run(['git', 'show', sha + ':' + ruta], capture_output=True, text=True)
+                  if r.returncode == 0 and r.stdout.strip() == texto.strip(): return True
+              return False
           base_raiz = 'vouchers_bot_respaldo'   # el respaldo guarda cada archivo donde está en la hoja (raíz o src/)
           errores = []
           for f in sorted(os.listdir(cambios)):
@@ -87,6 +97,8 @@ jobs:
               # Archivo que agregó una subida anterior de esta misma carpeta y aún no está en el respaldo semanal: es nuestro, se actualiza.
               esperado = open(ruta_base, encoding='utf-8').read() if os.path.exists(ruta_base) else None
               if esperado is None: print(f + ': lo agregó una subida anterior (aún no está en el respaldo); se actualiza')
+              elif actual.strip() != esperado.strip() and ya_subido(f, actual):
+                  print(f + ': la hoja tiene una versión anterior subida por este flujo; se actualiza')
               elif actual.strip() != esperado.strip():
                   errores.append(f + ': el código de la hoja no es el del respaldo (¿se cambió a mano?)'); continue
               print('================ ' + f + ' ================')
