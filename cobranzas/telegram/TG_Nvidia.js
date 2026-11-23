@@ -149,14 +149,35 @@ function TGNV_voucher_(ctx, blob, mime, m) {
     var med = m.photo.filter(function (x) { return Math.max(x.width || 0, x.height || 0) <= 1300; }).pop();
     if (med && med !== m.photo[m.photo.length - 1]) { try { blob = TG_bajarArchivo_(med.file_id, 'voucher.jpg'); mime = 'image/jpeg'; } catch (e) {} }
   }
-  if (!ctx.usuario || ctx.usuario.rol !== 'admin') return TG_enviar_(ctx.chatId, 'La comparación con NVIDIA es solo para administradores.');
+  if (!ctx.usuario || ctx.usuario.rol !== 'admin') return TG_enviar_(ctx.chatId, 'La comparación de lectores es solo para administradores.');
   if (!CIA_nvClave_()) return TG_enviar_(ctx.chatId, '🟩 Primero mande su clave de NVIDIA (nvapi-…) en un mensaje solo.');
-  var f = IMP_carpeta_(ctx.ss).createFile(blob.setName('nvidia prueba ' + Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HHmmss')));
+  var f = IMP_carpeta_(ctx.ss).createFile(blob.setName('comparar voucher ' + Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HHmmss')));
   var esPdf = /pdf/i.test(mime);
-  PropertiesService.getScriptProperties().setProperty('TGNV_VCH', JSON.stringify({ chat: String(ctx.chatId), id: f.getId(), mime: mime, i: 0, res: [], enCurso: null, t0: Date.now(), pdf: esPdf }));
-  TGNV_programarV_(2000);
-  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ', <b>Nemotron Super VL</b> (NVIDIA) y <b>Groq</b>, con las instrucciones reales del lector de vouchers,') + ' en segundo plano: normalmente menos de 1 minuto (más si NVIDIA está saturado). No se guarda nada en la hoja.' +
-    (esPdf ? '\n<i>Es un PDF: NVIDIA solo lee imágenes; para compararlo mande una foto o captura del voucher.</i>' : ''));
+  var est = { chat: String(ctx.chatId), id: f.getId(), mime: mime, i: 0, res: [], enCurso: null, t0: Date.now(), pdf: esPdf };
+  PropertiesService.getScriptProperties().setProperty('TGNV_VCH', JSON.stringify(est));
+  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ', <b>Nemotron Super VL</b> (NVIDIA) y <b>Groq</b>') +
+    ' (instrucciones reales del lector). Le respondo apenas terminen, normalmente en unos segundos. No se guarda nada en la hoja.' +
+    (esPdf ? '\n<i>Es un PDF: NVIDIA y Groq solo leen imágenes; para compararlo mande una foto o captura del voucher.</i>' : ''), null, { silencioso: true });
+  TGNV_leerTodo_(est);
+}
+
+/**
+ * Lee con todos AHORA, uno tras otro, y responde apenas terminan (sin esperas entre lectores). Antes deja un VIGÍA
+ * programado: si algún modelo se cuelga y Google corta esta ejecución, el vigía lo marca «no respondió a tiempo»
+ * y sigue con los que faltan (TGNV_leerPaso).
+ */
+function TGNV_leerTodo_(est) {
+  var p = PropertiesService.getScriptProperties();
+  var lectores = est.pdf ? TGNV_LECTORES_.slice(0, 1) : TGNV_LECTORES_;
+  TGNV_programarV_(6.5 * 60000);   // vigía
+  while (est.i < lectores.length) {
+    est.enCurso = est.i;
+    p.setProperty('TGNV_VCH', JSON.stringify(est));
+    est.res.push(TGNV_leerUno_(est, lectores[est.i]));
+    est.i++; est.enCurso = null;
+    p.setProperty('TGNV_VCH', JSON.stringify(est));
+  }
+  TGNV_terminar_(est);
 }
 
 function TGNV_programarV_(ms) {
@@ -164,49 +185,53 @@ function TGNV_programarV_(ms) {
   ScriptApp.newTrigger('TGNV_leerPaso').timeBased().after(ms).create();
 }
 
-/** Disparador: un lector por ejecución (con vigía: si uno se cuelga, se anota y sigue). */
+function TGNV_terminar_(est) {
+  PropertiesService.getScriptProperties().deleteProperty('TGNV_VCH');
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGNV_leerPaso') ScriptApp.deleteTrigger(t); });
+  try { DriveApp.getFileById(est.id).setTrashed(true); } catch (e) {}
+  TGNV_compararMostrar_(est);
+}
+
+/** Vigía: solo corre si la lectura en el momento se cortó. Marca el que se colgó y sigue con el resto. */
 function TGNV_leerPaso() {
   var p = PropertiesService.getScriptProperties(), est;
   try { est = JSON.parse(p.getProperty('TGNV_VCH') || 'null'); } catch (e) { est = null; }
   if (!est) return;
   var lectores = est.pdf ? TGNV_LECTORES_.slice(0, 1) : TGNV_LECTORES_;
   if (est.enCurso != null) { est.res.push({ nom: lectores[est.enCurso].nom, error: 'no respondió a tiempo' }); est.i++; est.enCurso = null; }
-  if (est.i >= lectores.length || Date.now() - est.t0 > 15 * 60000) {
-    lectores.slice(est.i).forEach(function (L) { est.res.push({ nom: L.nom, error: 'no se alcanzó (NVIDIA muy lento hoy)' }); });
-    p.deleteProperty('TGNV_VCH');
-    ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGNV_leerPaso') ScriptApp.deleteTrigger(t); });
-    try { DriveApp.getFileById(est.id).setTrashed(true); } catch (e) {}
-    return TGNV_compararMostrar_(est);
+  if (Date.now() - est.t0 > 15 * 60000) {
+    lectores.slice(est.i).forEach(function (L) { est.res.push({ nom: L.nom, error: 'no se alcanzó (muy lento hoy)' }); });
+    est.i = lectores.length;
   }
-  var L = lectores[est.i];
-  est.enCurso = est.i;
-  p.setProperty('TGNV_VCH', JSON.stringify(est));
-  TGNV_programarV_(6.5 * 60000);   // vigía
-  var t1 = Date.now(), r;
+  TGNV_leerTodo_(est);
+}
+
+/** Un lector: → {nom, s, d} o {nom, s, error} */
+function TGNV_leerUno_(est, L) {
+  var p = PropertiesService.getScriptProperties(), t1 = Date.now(), nom = L.nom;
   try {
     var blob = DriveApp.getFileById(est.id).getBlob();
+    var adjunto = { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime };
+    var pedido = 'Analiza este comprobante y responde SOLO el JSON del formato indicado.';
     var clave = L.nvidia ? CIA_nvClave_() : L.groq ? TGNV_groqClave_() : (p.getProperty('CIA_KEY_GEMINIGOOGLE') || IA_clave_('Gemini (Google)'));
     if (L.groq && !clave) throw new Error('no hay clave de Groq (menú 🤖 Telegram → 🎤 Clave de Groq)');
-    var modeloL = L.groq ? TGNV_groqModelo_(clave) : '';
-    if (modeloL) L.nom = 'Groq · ' + modeloL.split('/').pop();
-    // Las MISMAS instrucciones del lector real de vouchers (TG_PromptVoucher.js); si faltaran, las cortas de prueba.
-    var instr = typeof TGNV_PROMPT_VOUCHER_ === 'string' && TGNV_PROMPT_VOUCHER_ ? TGNV_PROMPT_VOUCHER_ : TGNV_SISTEMA_;
-    if (L.groq) instr = TGNV_PROMPT_CORTO_;
-    if (L.groq) {   // directo, para leer cuánto le queda del límite gratis (cabeceras de Groq)
-      var pet = IA_peticion_({ proveedor: L.prov, clave: clave, modelo: modeloL, sinKwargs: true, sistema: instr,   // Groq no acepta chat_template_kwargs (basta /no_think) texto: 'Analiza este comprobante y responde SOLO el JSON del formato indicado.', maxTokens: 1500,
-        adjunto: { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime } });
+    var d;
+    if (L.groq) {
+      var modeloG = TGNV_groqModelo_(clave);
+      nom = 'Groq · ' + modeloG.split('/').pop();
+      // Groq gratis: instrucciones resumidas (las completas no caben) y sin chat_template_kwargs (no lo acepta; basta /no_think).
+      var pet = IA_peticion_({ proveedor: L.prov, clave: clave, modelo: modeloG, sinKwargs: true, sistema: TGNV_PROMPT_CORTO_, texto: pedido, maxTokens: 1500, adjunto: adjunto });
       var rg = UrlFetchApp.fetch(pet.url, pet.params), hd = rg.getHeaders() || {};
       var h = function (k) { return hd[k] || hd[k.toLowerCase()] || ''; };
       est.limGroq = { tokMin: h('x-ratelimit-limit-tokens'), tokQueda: h('x-ratelimit-remaining-tokens'), reqDia: h('x-ratelimit-limit-requests'), reqQueda: h('x-ratelimit-remaining-requests') };
-      var d = IA_respuesta_(pet, rg);
-    } else var d = IA_llamar_({ proveedor: L.prov, clave: clave, modelo: modeloL, sistema: instr, texto: 'Analiza este comprobante y responde SOLO el JSON del formato indicado.', maxTokens: L.nvidia || L.groq ? 4000 : 2000,
-      adjunto: { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime } });
-    r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, d: d || {} };
-  } catch (e) { r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, error: String(e.message || e).slice(0, 120) }; }
-  est.res.push(r); est.i++; est.enCurso = null;
-  p.setProperty('TGNV_VCH', JSON.stringify(est));
-  if (est.i < lectores.length) TG_enviar_(est.chat, '⏳ ' + (r.error ? '❌ ' : '✅ ') + r.nom + (r.error ? ' falló' : ' leyó el voucher en ' + r.s + ' s') + ' · sigue ' + lectores[est.i].nom + '…', null, { silencioso: true });
-  TGNV_programarV_(2000);
+      d = IA_respuesta_(pet, rg);
+    } else {
+      // Las MISMAS instrucciones del lector real de vouchers (TG_PromptVoucher.js); si faltaran, las cortas de prueba.
+      var instr = typeof TGNV_PROMPT_VOUCHER_ === 'string' && TGNV_PROMPT_VOUCHER_ ? TGNV_PROMPT_VOUCHER_ : TGNV_SISTEMA_;
+      d = IA_llamar_({ proveedor: L.prov, clave: clave, sistema: instr, texto: pedido, maxTokens: L.nvidia ? 4000 : 2000, adjunto: adjunto });
+    }
+    return { nom: nom, s: Math.round((Date.now() - t1) / 100) / 10, d: d || {} };
+  } catch (e) { return { nom: nom, s: Math.round((Date.now() - t1) / 100) / 10, error: String(e.message || e).slice(0, 120) }; }
 }
 
 function TGNV_norm_(c, v) {
