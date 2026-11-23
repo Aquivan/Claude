@@ -407,6 +407,7 @@ var TG_COMANDOS_ = [
   ['tc', '💱 Tipo de cambio SUNAT de hoy'],
   ['voucher', '🖼 Foto de un voucher (ej. /voucher Originales!2326)'],
   ['lectores', '🧾 Qué IA lee los vouchers y en qué orden (administradores)'],
+  ['modelos', '🔭 Modelos de IA nuevos: buscarlos y probarlos (administradores)'],
   ['recordatorios', '⏰ Mis recordatorios'],
   ['avisos', '🔔 Elegir mis avisos'],
   ['olvidar', '🧹 Empezar una conversación nueva'],

@@ -223,7 +223,7 @@ function LECT_ver() {
   var cfg = LECT_cfg_(), uso = null;
   try { uso = LECT_puente_('lectores', {}); } catch (e) { uso = { error: e.message }; }
   return { cfg: cfg, nombres: LECT_NOMBRES_, def: LECT_MODELO_DEF_, uso: uso,
-    clave: { gemini: true, nvidia: !!CIA_nvClave_(), groq: !!TGNV_groqClave_() } };
+    clave: { gemini: true, nvidia: !!CIA_nvClave_(), groq: !!TGNV_groqClave_() }, vig: VIG_ultimoHoja_() };
 }
 
 /** Guarda lo elegido en la ventana. quien: correo de quien lo cambió (queda en el registro). */

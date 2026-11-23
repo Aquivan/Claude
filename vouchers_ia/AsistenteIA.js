@@ -171,6 +171,8 @@ function VIA_menuLectores() {
 function VIA_lectVer() { var r = VIA_llamar_('lect_ver', {}); if (r.error) throw new Error(r.error); return r; }
 function VIA_lectGuardar(cfg) { var r = VIA_llamar_('lect_guardar', { cfg: cfg, quien: VIA_quien_() }); if (r.error) throw new Error(r.error); return r; }
 function VIA_lectModelos(p) { var r = VIA_llamar_('lect_modelos', { p: p }); if (r.error) throw new Error(r.error); return r; }
+function VIA_lectBuscar() { var r = VIA_llamar_('lect_buscar', {}); if (r.error) throw new Error(r.error); return r; }
+function VIA_lectProbar(soloNuevos) { var r = VIA_llamar_('lect_probar', { soloNuevos: !!soloNuevos }); if (r.error) throw new Error(r.error); return r; }
 
 function VIA_rucEscribir(ids) { try { return VIA_aplicar(ids, false); } catch (e) { return { error: e.message }; } }
 function VIA_rucExternos(filas, todos) { try { return VIA_llamar_('rucexternos', { filas: filas, todos: !!todos }); } catch (e) { return { error: e.message }; } }
