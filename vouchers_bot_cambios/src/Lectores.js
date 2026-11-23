@@ -22,6 +22,7 @@
 // ============================================================
 
 var LEC_NOMBRES_ = { gemini: 'Gemini', nvidia: 'NVIDIA', groq: 'Groq' };
+var LEC_ACHICADA_ = {};   // la última foto achicada para Groq (en esta ejecución)
 
 function LEC_cfg_() {
   const cache = CacheService.getScriptCache();
@@ -63,7 +64,14 @@ function LEC_leer_(base64, mimeType, esPDF, totalPaginasLote) {
         arr = g.vouchers; modelo = g.modelo;
       } else {
         if (esPDF && !imagen) imagen = LEC_pdfAImagen_(base64);
-        arr = esPDF ? LEC_openai_(p, cfg[p], imagen, 'image/jpeg', true) : LEC_openai_(p, cfg[p], base64, mimeType, false);
+        if (esPDF) arr = LEC_openai_(p, cfg[p], imagen, 'image/jpeg', true);
+        else if (p === 'groq' && base64.length > 450000) {   // foto grande (~330 KB o más): Groq gratis la rechaza; se achica a 1280 px
+          if (!LEC_ACHICADA_[base64.length]) {
+            LEC_ACHICADA_ = {};
+            LEC_ACHICADA_[base64.length] = LEC_vistaPrevia_(base64, mimeType, 1280);
+          }
+          arr = LEC_openai_(p, cfg[p], LEC_ACHICADA_[base64.length], 'image/jpeg', false);
+        } else arr = LEC_openai_(p, cfg[p], base64, mimeType, false);
         modelo = cfg[p].modelo;
       }
       const quien = LEC_NOMBRES_[p] + ' · ' + String(modelo || '').split('/').pop();
@@ -135,11 +143,15 @@ function LEC_hayRespaldo_() {
 // Una página de PDF -> imagen JPG (base64), para NVIDIA y Groq que no leen PDF.
 // Es lo mismo que hace la hoja para la miniatura de la celda (ImageInsert.js):
 // archivo temporal en Drive, su vista previa en buena resolución y se borra.
-function LEC_pdfAImagen_(base64Pdf) {
+function LEC_pdfAImagen_(base64Pdf) { return LEC_vistaPrevia_(base64Pdf, MimeType.PDF, 1600); }
+
+// Imagen o PDF -> JPG de 'lado' px como máximo (vista previa de Drive). Sirve también para ACHICAR fotos
+// grandes: Groq gratis rechaza las fotos de alta resolución («Request too large»: cuenta más tokens).
+function LEC_vistaPrevia_(base64, mime, lado) {
   const token = ScriptApp.getOAuthToken();
   let tmp = null;
   try {
-    tmp = DriveApp.createFile(Utilities.newBlob(Utilities.base64Decode(base64Pdf), MimeType.PDF, 'lector_respaldo_tmp.pdf'));
+    tmp = DriveApp.createFile(Utilities.newBlob(Utilities.base64Decode(base64), mime, 'lector_respaldo_tmp'));
     const id = tmp.getId(), esperas = [700, 900, 1200, 1600, 2200, 3000];
     let url = '';
     for (let i = 0; i < esperas.length && !url; i++) {
@@ -149,14 +161,14 @@ function LEC_pdfAImagen_(base64Pdf) {
           { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
         if (r.getResponseCode() === 200) {
           const j = JSON.parse(r.getContentText());
-          if (j.thumbnailLink) url = j.thumbnailLink.replace(/=s\d+/, '=s1600');
+          if (j.thumbnailLink) url = j.thumbnailLink.replace(/=s\d+/, '=s' + lado);
         }
       } catch (e) {}
     }
-    if (!url) url = 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1600';
+    if (!url) url = 'https://drive.google.com/thumbnail?id=' + id + '&sz=w' + lado;
     const img = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
     if (img.getResponseCode() !== 200 || img.getBlob().getBytes().length < 2000)
-      throw new Error('no se pudo convertir la página del PDF en imagen (HTTP ' + img.getResponseCode() + ')');
+      throw new Error('no se pudo convertir en imagen (HTTP ' + img.getResponseCode() + ')');
     return Utilities.base64Encode(img.getBlob().getBytes());
   } finally {
     if (tmp) { try { tmp.setTrashed(true); } catch (e) {} }
