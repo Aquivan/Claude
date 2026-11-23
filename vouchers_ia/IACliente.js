@@ -20,10 +20,13 @@ var IA_PROVEEDORES_ = {
   'OpenAI (ChatGPT)': { tipo: 'openai', url: 'https://api.openai.com/v1/chat/completions', modelo: 'gpt-5.4-nano', imagen: true, pausa: 1000 },
   'DeepSeek':         { tipo: 'openai', url: 'https://api.deepseek.com/chat/completions', modelo: 'deepseek-chat', imagen: false, pausa: 1000 },
   'OpenRouter':       { tipo: 'openai', url: 'https://openrouter.ai/api/v1/chat/completions', modelo: 'qwen/qwen3.8-flash', imagen: true, pausa: 1500 },
-  // NVIDIA (build.nvidia.com): clave «nvapi-…»; varios modelos abiertos gratis para PROBAR (≈40 pedidos/min, créditos limitados).
-  // Una sola clave para los dos (se guarda como NVIDIA). DeepSeek V4.1 Flash = texto, rápido · Kimi K3 = también lee imágenes.
-  'NVIDIA · DeepSeek V4.1 Flash': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'deepseek-ai/deepseek-v4.1-flash', imagen: false, pausa: 1600 },
-  'NVIDIA · Kimi K3': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'moonshotai/kimi-k3', imagen: true, pausa: 1600 },
+  // NVIDIA (build.nvidia.com): una sola clave «nvapi-…» para todos; modelos abiertos GRATIS para probar (≈40 pedidos/min).
+  // La lista gratuita cambia cada pocas semanas: menú 🧠 Asistente IA → 🟩 Modelos gratis de NVIDIA (los prueba con su clave)
+  // y el que elija ahí queda en «NVIDIA · modelo elegido».
+  'NVIDIA · DeepSeek V4.1 Flash': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'deepseek-ai/deepseek-v4.1-flash', imagen: false, sinFormatoJson: true, pausa: 1600 },
+  'NVIDIA · Nemotron 3.5 Super VL (lee imágenes)': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'nvidia/nemotron-3.5-super-vl-120b-a12b', imagen: true, sinFormatoJson: true, pausa: 1600 },
+  'NVIDIA · Mistral Large 4': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'mistralai/mistral-large-4-1t-a52b', imagen: false, sinFormatoJson: true, pausa: 1600 },
+  'NVIDIA · modelo elegido': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'deepseek-ai/deepseek-v4.1-flash', modeloProp: 'IA_NVIDIA_MODELO', imagen: true, sinFormatoJson: true, pausa: 1600 },
 };
 
 function IA_nombresProveedores_() {
@@ -55,7 +58,7 @@ function IA_llamar_(opts) {
   if (!prov) throw new Error('Proveedor de IA desconocido: ' + opts.proveedor);
   var clave = IA_clave_(opts.proveedor);
   if (!clave) throw new Error('Falta la clave de ' + opts.proveedor + ' (menú 🧠 Asistente IA → 🔑 Guardar clave de IA)');
-  var modelo = String(opts.modelo || '').trim() || prov.modelo;
+  var modelo = String(opts.modelo || '').trim() || (prov.modeloProp && PropertiesService.getScriptProperties().getProperty(prov.modeloProp)) || prov.modelo;
   var json = opts.json !== false;
   var maxTokens = opts.maxTokens || 1500;
   var url, carga, headers = {};
@@ -80,7 +83,7 @@ function IA_llamar_(opts) {
       model: modelo, temperature: 0.1, max_tokens: maxTokens,
       messages: [{ role: 'system', content: opts.sistema }, { role: 'user', content: contenido }],
     };
-    if (json) carga.response_format = { type: 'json_object' };
+    if (json && !prov.sinFormatoJson) carga.response_format = { type: 'json_object' };   // algunos (NVIDIA) no lo aceptan: igual se pide JSON en el texto
   }
 
   var params = { method: 'post', contentType: 'application/json', headers: headers, payload: JSON.stringify(carga), muteHttpExceptions: true };
