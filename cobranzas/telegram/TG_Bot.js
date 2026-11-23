@@ -352,7 +352,7 @@ function TG_alArchivo_(ctx, m, texto) {
   if (!/^image\/|pdf|spreadsheet|csv|excel|text\//i.test(mime) && !/\.(xlsx|csv|txt|pdf|jpe?g|png)$/i.test(nombre)) {
     return TG_enviar_(chatId, '⚠️ Ese tipo de archivo (' + TG_esc_(mime) + ') no lo puedo leer. Mande foto, PDF, Excel (.xlsx), CSV o texto.');
   }
-  if (/^\s*nvidia\b/i.test(texto || '') && /^image\/|pdf/i.test(mime)) return TGNV_voucher_(ctx, blob, mime, m);   // 🧪 «nvidia»: comparar lectura Gemini vs NVIDIA (TG_Nvidia.js)
+  if (/^\s*(nvidia|comparar)\b/i.test(texto || '') && /^image\/|pdf/i.test(mime)) return TGNV_voucher_(ctx, blob, mime, m);   // 🧪 «nvidia»: comparar lectura Gemini vs NVIDIA (TG_Nvidia.js)
   // Se guarda en la carpeta temporal de importaciones (se borra sola a los 7 días), como el 💬 Chat de la hoja.
   var grupo = m.media_group_id ? 'g' + m.media_group_id : 'm' + m.message_id;
   var marca = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HHmm');
