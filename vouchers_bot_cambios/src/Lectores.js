@@ -13,7 +13,7 @@
 // Si Cobranzas no responde, se usa solo Gemini (como siempre).
 //
 // NVIDIA y Groq solo leen IMÁGENES: a ellos cada página del PDF se les
-// manda convertida en imagen (vista previa de Drive, LEC_pdfAImagen_). Un
+// manda convertida en imagen (vista previa de Drive a 2048 px, LEC_pdfAImagen_). Un
 // lote de varias páginas lo lee Gemini; si falla, PdfProcessor.js lo pide
 // página por página y ahí entran los de respaldo.
 // Cuando el voucher NO lo leyó Gemini (o Gemini falló antes), la celda
@@ -102,16 +102,17 @@ function LEC_openai_(p, c, base64, mimeType, dePdf) {
   const url = p === 'nvidia' ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
   const sistema = (p === 'groq' && c.prompt) ? c.prompt : (dePdf ? PROMPT_PDF : PROMPT_IMAGEN);
   const carga = {
-    model: c.modelo, temperature: 0.1, max_tokens: p === 'groq' ? 1500 : 4000,
+    // 🧠 c.razonar (se elige en «lectores»): piensa antes de responder; necesita más espacio para su razonamiento.
+    model: c.modelo, temperature: 0.1, max_tokens: p === 'groq' ? (c.razonar ? 4000 : 1500) : (c.razonar ? 16000 : 4000),
     messages: [
-      { role: 'system', content: '/no_think\n' + sistema },   // sin «razonar»: para leer datos no hace falta y responde en segundos
+      { role: 'system', content: (c.razonar ? '' : '/no_think\n') + sistema },   // sin «razonar» responde en segundos
       { role: 'user', content: [
         { type: 'text', text: 'Analiza este comprobante y responde SOLO el JSON del formato indicado.' },
-        { type: 'image_url', image_url: { url: 'data:' + mimeType + ';base64,' + base64 } }
+        { type: 'image_url', image_url: p === 'nvidia' ? { url: 'data:' + mimeType + ';base64,' + base64, detail: 'high' } : { url: 'data:' + mimeType + ';base64,' + base64 } }   // NVIDIA: la imagen en detalle ALTO (no la reduce)
       ] }
     ]
   };
-  if (p === 'nvidia') carga.chat_template_kwargs = { thinking: false, enable_thinking: false };
+  if (p === 'nvidia' && !c.razonar) carga.chat_template_kwargs = { thinking: false, enable_thinking: false };
   const pedir = function () {
     return UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', headers: { Authorization: 'Bearer ' + c.clave },
       payload: JSON.stringify(carga), muteHttpExceptions: true });
@@ -119,6 +120,11 @@ function LEC_openai_(p, c, base64, mimeType, dePdf) {
   let r = pedir(), code = r.getResponseCode(), cuerpo = r.getContentText();
   if (code === 400 && carga.chat_template_kwargs && /kwargs|template/i.test(cuerpo)) {   // ese modelo no acepta el ajuste: sin él
     delete carga.chat_template_kwargs;
+    r = pedir(); code = r.getResponseCode(); cuerpo = r.getContentText();
+  }
+  const img = carga.messages[1].content[1].image_url;
+  if (code === 400 && img.detail && /detail/i.test(cuerpo)) {   // otro modelo elegido que no acepta «detalle alto»: sin él
+    delete img.detail;
     r = pedir(); code = r.getResponseCode(); cuerpo = r.getContentText();
   }
   if (code !== 200) throw new Error('HTTP ' + code + (code === 429 ? ' (sin cupo por ahora)' : '') + ': ' + cuerpo.substring(0, 120));
@@ -143,7 +149,7 @@ function LEC_hayRespaldo_() {
 // Una página de PDF -> imagen JPG (base64), para NVIDIA y Groq que no leen PDF.
 // Es lo mismo que hace la hoja para la miniatura de la celda (ImageInsert.js):
 // archivo temporal en Drive, su vista previa en buena resolución y se borra.
-function LEC_pdfAImagen_(base64Pdf) { return LEC_vistaPrevia_(base64Pdf, MimeType.PDF, 1600); }
+function LEC_pdfAImagen_(base64Pdf) { return LEC_vistaPrevia_(base64Pdf, MimeType.PDF, 2048); }   // 2048 px: lo más nítido que conviene (NVIDIA recomienda hasta ~2048)
 
 // Imagen o PDF -> JPG de 'lado' px como máximo (vista previa de Drive). Sirve también para ACHICAR fotos
 // grandes: Groq gratis rechaza las fotos de alta resolución («Request too large»: cuenta más tokens).

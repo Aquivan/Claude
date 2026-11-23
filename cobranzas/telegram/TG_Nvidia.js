@@ -206,10 +206,13 @@ function TGNV_leerPaso() {
 /** Un lector: → {nom, s, d} o {nom, s, error} */
 function TGNV_leerUno_(est, L) {
   var p = PropertiesService.getScriptProperties(), t1 = Date.now(), nom = L.nom;
+  // Lo mismo que usa el respaldo automático (🧾 lectores): modelo elegido, 🧠 razonar y, para NVIDIA, imagen en detalle alto.
+  var lc = typeof LECT_cfg_ === 'function' ? LECT_cfg_() : { modelo: {}, razonar: {} }, pensar = !!(L.nvidia ? lc.razonar.nvidia : L.groq ? lc.razonar.groq : false);
+  if (pensar) nom += ' 🧠';
   try {
     var adjunto;
     var bytes = DriveApp.getFileById(est.id).getSize();
-    if (est.pdf && (L.nvidia || L.groq)) adjunto = { base64: TGNV_vistaPrevia_(est, 1600), mime: 'image/jpeg' };   // no leen PDF: la página como imagen
+    if (est.pdf && (L.nvidia || L.groq)) adjunto = { base64: TGNV_vistaPrevia_(est, 2048), mime: 'image/jpeg' };   // no leen PDF: la página como imagen
     else if (L.groq && bytes > 330000) adjunto = { base64: TGNV_vistaPrevia_(est, 1280), mime: 'image/jpeg' };   // Groq gratis rechaza fotos grandes
     else { var blob = DriveApp.getFileById(est.id).getBlob(); adjunto = { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime }; }
     var pedido = 'Analiza este comprobante y responde SOLO el JSON del formato indicado.';
@@ -218,9 +221,9 @@ function TGNV_leerUno_(est, L) {
     var d;
     if (L.groq) {
       var modeloG = TGNV_groqModelo_(clave);
-      nom = 'Groq · ' + modeloG.split('/').pop();
+      nom = 'Groq · ' + modeloG.split('/').pop() + (pensar ? ' 🧠' : '');
       // Groq gratis: instrucciones resumidas (las completas no caben) y sin chat_template_kwargs (no lo acepta; basta /no_think).
-      var pet = IA_peticion_({ proveedor: L.prov, clave: clave, modelo: modeloG, sinKwargs: true, sistema: TGNV_PROMPT_CORTO_, texto: pedido, maxTokens: 1500, adjunto: adjunto });
+      var pet = IA_peticion_({ proveedor: L.prov, clave: clave, modelo: modeloG, sinKwargs: true, pensar: pensar, sistema: TGNV_PROMPT_CORTO_, texto: pedido, maxTokens: pensar ? 4000 : 1500, adjunto: adjunto });
       var rg = UrlFetchApp.fetch(pet.url, pet.params), hd = rg.getHeaders() || {};
       var h = function (k) { return hd[k] || hd[k.toLowerCase()] || ''; };
       est.limGroq = { tokMin: h('x-ratelimit-limit-tokens'), tokQueda: h('x-ratelimit-remaining-tokens'), reqDia: h('x-ratelimit-limit-requests'), reqQueda: h('x-ratelimit-remaining-requests') };
@@ -228,7 +231,8 @@ function TGNV_leerUno_(est, L) {
     } else {
       // Las MISMAS instrucciones del lector real de vouchers (TG_PromptVoucher.js); si faltaran, las cortas de prueba.
       var instr = typeof TGNV_PROMPT_VOUCHER_ === 'string' && TGNV_PROMPT_VOUCHER_ ? TGNV_PROMPT_VOUCHER_ : TGNV_SISTEMA_;
-      d = IA_llamar_({ proveedor: L.prov, clave: clave, sistema: instr, texto: pedido, maxTokens: L.nvidia ? 4000 : 2000, adjunto: adjunto });
+      d = IA_llamar_({ proveedor: L.prov, clave: clave, sistema: instr, texto: pedido, maxTokens: L.nvidia ? (pensar ? 16000 : 4000) : 2000, adjunto: adjunto,
+        modelo: L.nvidia ? (lc.modelo.nvidia || '') : '', pensar: pensar, detalle: L.nvidia ? 'high' : '' });
     }
     return { nom: nom, s: Math.round((Date.now() - t1) / 100) / 10, d: d || {} };
   } catch (e) { return { nom: nom, s: Math.round((Date.now() - t1) / 100) / 10, error: String(e.message || e).slice(0, 120) }; }
