@@ -23,10 +23,10 @@ var IA_PROVEEDORES_ = {
   // NVIDIA (build.nvidia.com): una sola clave «nvapi-…» para todos; modelos abiertos GRATIS para probar (≈40 pedidos/min).
   // La lista gratuita cambia cada pocas semanas: menú 🧠 Asistente IA → 🟩 Modelos gratis de NVIDIA (los prueba con su clave)
   // y el que elija ahí queda en «NVIDIA · modelo elegido».
-  'NVIDIA · DeepSeek V4.1 Flash': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'deepseek-ai/deepseek-v4.1-flash', imagen: false, sinFormatoJson: true, pausa: 1600 },
+  'NVIDIA · Kimi K3.1 Pro': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'moonshotai/kimi-k3.1-pro', imagen: true, sinFormatoJson: true, pausa: 1600 },
   'NVIDIA · Nemotron 3.5 Super VL (lee imágenes)': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'nvidia/nemotron-3.5-super-vl-120b-a12b', imagen: true, sinFormatoJson: true, pausa: 1600 },
   'NVIDIA · Mistral Large 4': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'mistralai/mistral-large-4-1t-a52b', imagen: false, sinFormatoJson: true, pausa: 1600 },
-  'NVIDIA · modelo elegido': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'deepseek-ai/deepseek-v4.1-flash', modeloProp: 'IA_NVIDIA_MODELO', imagen: true, sinFormatoJson: true, pausa: 1600 },
+  'NVIDIA · modelo elegido': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'moonshotai/kimi-k3.1-pro', modeloProp: 'IA_NVIDIA_MODELO', imagen: true, sinFormatoJson: true, pausa: 1600 },
 };
 
 function IA_nombresProveedores_() {
