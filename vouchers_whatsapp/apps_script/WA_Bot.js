@@ -72,7 +72,7 @@ function WA_cerrarTandaYa_(de, marca) {
   var n = WA_acuse_(hoja, datos, de);
   // La marca se borra recién ahora: si esta ejecución se cortara antes, la revisión de cada minuto la cierra igual.
   if (props.getProperty(k) === marca) props.deleteProperty(k);
-  if (n) WA_procesarAhora_();   // ⚡ procesa y avisa el resultado en esta misma ejecución
+  if (n) WA_procesarAhora_(de);   // ⚡ procesa y avisa el resultado en esta misma ejecución
 }
 
 function WA_procesarAvisoSolo_(aviso) {

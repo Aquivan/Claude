@@ -75,8 +75,16 @@ function WA_acuse_(hoja, datos, de) {
  * ⚡ Procesar YA y avisar el resultado en la MISMA ejecución (no espera la revisión de cada minuto).
  * Si otra ejecución ya está pidiendo procesar, queda la marca para que la siguiente revisión lo haga.
  */
-function WA_procesarAhora_() {
-  if (!WA_procesarYa_()) { WA_props_().setProperty('WA_PROCESAR_PEND', '1'); return; }
+function WA_procesarAhora_(de) {
+  WA_ULT_FALLO_ = '';
+  if (!WA_procesarYa_()) {
+    WA_props_().setProperty('WA_PROCESAR_PEND', '1');
+    if (de) WA_enviarTexto_(de, '⏳ La hoja de Vouchers está terminando otra tanda; procesa la suya apenas termine (en 1 a 2 minutos).');
+    return;
+  }
+  if (de && WA_ULT_FALLO_) {   // ⚠️ que la persona sepa por qué demora (antes esperaba en silencio la vuelta de 10 min)
+    WA_enviarTexto_(de, '⚠️ No pude procesar al instante: ' + WA_ULT_FALLO_ + '.\nLo reintento solo en 1 minuto; si sigue fallando, entra en la vuelta automática (máx. 10 min).');
+  }
   try {
     var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues();
     if (WA_revisarCola_(hoja, datos, Date.now())) WA_props_().setProperty('WA_HAY_COLA', '1');
@@ -185,6 +193,8 @@ function WA_avisarResultados_(hoja, datos) {
 
 // Pide a la hoja de Vouchers que procese YA (su acción remota "procesar"), en vez de esperar
 // su revisión de cada 10 min. Nunca dos a la vez: la hoja de Vouchers no usa bloqueos.
+var WA_ULT_FALLO_ = '';   // por qué falló el último «procesar al instante» (para avisarle a la persona)
+
 function WA_procesarYa_() {
   var url = WA_prop_('WA_PROCESAR_URL');
   if (!url) return false;
@@ -200,10 +210,14 @@ function WA_procesarYa_() {
       // ⚡ La hoja de Vouchers no respondió bien: se reintenta en la revisión del minuto siguiente (no se espera su vuelta de 10 min).
       console.error('Procesar al instante: la hoja de Vouchers no respondió JSON (HTTP ' + r.getResponseCode() + '): ' + r.getContentText().replace(/<[^>]+>/g, ' ').slice(0, 300));
       p.setProperty('WA_PROCESAR_PEND', '1');
-      p.setProperty('WA_PROCESAR_ERROR', Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' HTTP ' + r.getResponseCode());
+      var cuerpo = r.getContentText().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      WA_ULT_FALLO_ = 'la hoja de Vouchers respondió HTTP ' + r.getResponseCode() + (/inicia|sign in|acceso|access|permiso|authoriz/i.test(cuerpo) ? ' (pide permiso o inicio de sesión)' : '') +
+        (cuerpo ? ' · ' + cuerpo.slice(0, 120) : '');
+      p.setProperty('WA_PROCESAR_ERROR', Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' ' + WA_ULT_FALLO_);
     } else if (j.tiempos && j.tiempos.total) p.setProperty('WA_ULT_TIEMPOS', JSON.stringify({ en: Date.now(), t: j.tiempos }));
   } catch (e) {
     console.error('Procesar al instante falló: ' + e.message);
+    WA_ULT_FALLO_ = /timed? ?out|tiempo/i.test(e.message) ? 'la hoja de Vouchers tardó demasiado en responder (sigue procesando; le mando el resultado al terminar)' : String(e.message).slice(0, 150);
     p.setProperty('WA_PROCESAR_PEND', '1');   // ⚡ se reintenta en la revisión del minuto siguiente
     p.setProperty('WA_PROCESAR_ERROR', Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' ' + String(e.message).slice(0, 120));
   } finally {
