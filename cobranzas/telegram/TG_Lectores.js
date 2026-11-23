@@ -12,7 +12,7 @@
  * Las claves son las ya guardadas: NVIDIA (mensaje nvapi-…), Groq (🎤 Clave de Groq); Gemini usa la de la hoja de Vouchers.
  * En las hojas: menú 🧠 Asistente IA → 🧾 Lectores de vouchers (LectoresVista.html), en Cobranzas y en la hoja de Vouchers
  *   (allá la ventana es la misma, copiada al desplegar; sus llamadas pasan por el canal vch: lect_ver / lect_guardar / lect_modelos).
- * NVIDIA y Groq solo leen IMÁGENES: los PDF los lee siempre Gemini. Funciones LECT_.
+ * NVIDIA y Groq no leen PDF: la hoja de Vouchers les manda cada página convertida en imagen. Funciones LECT_.
  */
 
 var LECT_PROP_ = 'LECT_CFG';
@@ -109,7 +109,7 @@ function LECT_textoPanel_(cfg) {
     lineas.push('', '📊 <b>Hoy leyeron</b>: ' + t + (u.fallos ? ' · ❌ ninguno pudo: ' + u.fallos : ''));
     if (uso.ultimo) lineas.push('<i>Último respaldo: ' + TG_esc_(uso.ultimo) + '</i>');
   } else if (uso && uso.error) lineas.push('', '<i>(La hoja de Vouchers no informó su uso: ' + TG_esc_(String(uso.error).slice(0, 120)) + ')</i>');
-  lineas.push('', '<i>NVIDIA y Groq solo leen imágenes; los PDF los lee Gemini. Recuerde: el uso gratis de NVIDIA es para pruebas según sus condiciones.</i>',
+  lineas.push('', '<i>Los PDF también: a NVIDIA y Groq se les manda cada página como imagen. Recuerde: el uso gratis de NVIDIA es para pruebas según sus condiciones.</i>',
     '<i>También por texto: <code>lectores nvidia gemini groq</code> · <code>lectores modelo groq &lt;id&gt;</code></i>');
   return lineas.join('\n');
 }

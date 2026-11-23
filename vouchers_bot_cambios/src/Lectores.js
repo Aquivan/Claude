@@ -12,7 +12,10 @@
 // el puente del portal (PV_Puente.js, op=lectores).
 // Si Cobranzas no responde, se usa solo Gemini (como siempre).
 //
-// NVIDIA y Groq solo leen IMÁGENES: los PDF los lee siempre Gemini.
+// NVIDIA y Groq solo leen IMÁGENES: a ellos cada página del PDF se les
+// manda convertida en imagen (vista previa de Drive, LEC_pdfAImagen_). Un
+// lote de varias páginas lo lee Gemini; si falla, PdfProcessor.js lo pide
+// página por página y ahí entran los de respaldo.
 // Cuando el voucher NO lo leyó Gemini (o Gemini falló antes), la celda
 // del N° de operación queda con una NOTA que dice quién lo leyó.
 // Funciones LEC_.
@@ -38,23 +41,29 @@ function LEC_cfg_() {
 
 function LEC_leer_(base64, mimeType, esPDF, totalPaginasLote) {
   const cfg = LEC_cfg_();
+  // PDF de VARIAS páginas juntas (lote): solo Gemini; si falla, PdfProcessor.js lo vuelve a pedir página por página
+  // y ahí sí entran los de respaldo (cada página se convierte en imagen).
+  const loteVarias = esPDF && totalPaginasLote && totalPaginasLote > 1;
   let orden = (cfg.orden || ['gemini']).filter(function (p) {
     if (p === 'gemini') return true;
-    return !esPDF && cfg[p] && cfg[p].clave && cfg[p].modelo;
+    return !loteVarias && cfg[p] && cfg[p].clave && cfg[p].modelo;
   });
   if (!orden.length) orden = ['gemini'];
+  let imagen = null;   // la página del PDF como imagen (se hace una sola vez, la primera vez que se necesita)
 
   const fallas = [];
   let ultimoError = null;
   for (let i = 0; i < orden.length; i++) {
-    const p = orden[i], hayOtro = i < orden.length - 1;
+    // En un lote de varias páginas, si hay respaldo, Gemini no espera: PdfProcessor.js reintenta página por página.
+    const p = orden[i], hayOtro = i < orden.length - 1 || (loteVarias && (cfg.orden || []).some(function (x) { return x !== 'gemini' && cfg[x] && cfg[x].clave && cfg[x].modelo; }));
     try {
       let arr, modelo;
       if (p === 'gemini') {
         const g = llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, { sinEsperas: hayOtro, modelo: cfg.gemini && cfg.gemini.modelo });
         arr = g.vouchers; modelo = g.modelo;
       } else {
-        arr = LEC_openai_(p, cfg[p], base64, mimeType);
+        if (esPDF && !imagen) imagen = LEC_pdfAImagen_(base64);
+        arr = esPDF ? LEC_openai_(p, cfg[p], imagen, 'image/jpeg', true) : LEC_openai_(p, cfg[p], base64, mimeType, false);
         modelo = cfg[p].modelo;
       }
       const quien = LEC_NOMBRES_[p] + ' · ' + String(modelo || '').split('/').pop();
@@ -81,9 +90,9 @@ function LEC_leer_(base64, mimeType, esPDF, totalPaginasLote) {
 // NVIDIA y Groq hablan el mismo idioma (formato OpenAI). Groq gratis no
 // acepta las instrucciones completas (muy largas): usa las resumidas que
 // manda Cobranzas.
-function LEC_openai_(p, c, base64, mimeType) {
+function LEC_openai_(p, c, base64, mimeType, dePdf) {
   const url = p === 'nvidia' ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
-  const sistema = (p === 'groq' && c.prompt) ? c.prompt : PROMPT_IMAGEN;
+  const sistema = (p === 'groq' && c.prompt) ? c.prompt : (dePdf ? PROMPT_PDF : PROMPT_IMAGEN);
   const carga = {
     model: c.modelo, temperature: 0.1, max_tokens: p === 'groq' ? 1500 : 4000,
     messages: [
@@ -115,6 +124,43 @@ function LEC_openai_(p, c, base64, mimeType) {
   const arr = parsearTextoVouchers_(texto);
   if (!arr.length && !/^\s*(```json\s*)?\[\s*\]/.test(texto)) throw new Error('respuesta sin JSON legible');
   return arr;
+}
+
+// ¿Hay algún lector de respaldo prendido y con clave? (PdfProcessor.js: si el lote falla, reintentar página por página)
+function LEC_hayRespaldo_() {
+  const cfg = LEC_cfg_();
+  return (cfg.orden || []).some(function (p) { return p !== 'gemini' && cfg[p] && cfg[p].clave && cfg[p].modelo; });
+}
+
+// Una página de PDF -> imagen JPG (base64), para NVIDIA y Groq que no leen PDF.
+// Es lo mismo que hace la hoja para la miniatura de la celda (ImageInsert.js):
+// archivo temporal en Drive, su vista previa en buena resolución y se borra.
+function LEC_pdfAImagen_(base64Pdf) {
+  const token = ScriptApp.getOAuthToken();
+  let tmp = null;
+  try {
+    tmp = DriveApp.createFile(Utilities.newBlob(Utilities.base64Decode(base64Pdf), MimeType.PDF, 'lector_respaldo_tmp.pdf'));
+    const id = tmp.getId(), esperas = [700, 900, 1200, 1600, 2200, 3000];
+    let url = '';
+    for (let i = 0; i < esperas.length && !url; i++) {
+      Utilities.sleep(esperas[i]);
+      try {
+        const r = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '?fields=thumbnailLink',
+          { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+        if (r.getResponseCode() === 200) {
+          const j = JSON.parse(r.getContentText());
+          if (j.thumbnailLink) url = j.thumbnailLink.replace(/=s\d+/, '=s1600');
+        }
+      } catch (e) {}
+    }
+    if (!url) url = 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1600';
+    const img = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+    if (img.getResponseCode() !== 200 || img.getBlob().getBytes().length < 2000)
+      throw new Error('no se pudo convertir la página del PDF en imagen (HTTP ' + img.getResponseCode() + ')');
+    return Utilities.base64Encode(img.getBlob().getBytes());
+  } finally {
+    if (tmp) { try { tmp.setTrashed(true); } catch (e) {} }
+  }
 }
 
 // Cuántos leyó cada uno hoy (lo muestra «lectores» en Telegram) y el último respaldo.

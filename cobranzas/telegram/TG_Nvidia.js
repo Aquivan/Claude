@@ -155,9 +155,9 @@ function TGNV_voucher_(ctx, blob, mime, m) {
   var esPdf = /pdf/i.test(mime);
   var est = { chat: String(ctx.chatId), id: f.getId(), mime: mime, i: 0, res: [], enCurso: null, t0: Date.now(), pdf: esPdf };
   PropertiesService.getScriptProperties().setProperty('TGNV_VCH', JSON.stringify(est));
-  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ', <b>Nemotron Super VL</b> (NVIDIA) y <b>Groq</b>') +
+  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>, <b>Nemotron Super VL</b> (NVIDIA) y <b>Groq</b>' +
     ' (instrucciones reales del lector). Le respondo apenas terminen. No se guarda nada en la hoja.' +
-    (esPdf ? '\n<i>Es un PDF: NVIDIA y Groq solo leen imágenes; para compararlo mande una foto o captura del voucher.</i>' : ''), null, { silencioso: true });
+    (esPdf ? '\n<i>Es un PDF: a NVIDIA y Groq les mando la primera página convertida en imagen (como hará el respaldo automático).</i>' : ''), null, { silencioso: true });
   TGNV_leerTodo_(est);
 }
 
@@ -168,7 +168,7 @@ function TGNV_voucher_(ctx, blob, mime, m) {
  */
 function TGNV_leerTodo_(est) {
   var p = PropertiesService.getScriptProperties();
-  var lectores = est.pdf ? TGNV_LECTORES_.slice(0, 1) : TGNV_LECTORES_;
+  var lectores = TGNV_LECTORES_;   // PDF: a NVIDIA y Groq se les manda la 1.ª página como imagen (TGNV_pdfImagen_)
   TGNV_programarV_(6.5 * 60000);   // vigía
   while (est.i < lectores.length) {
     est.enCurso = est.i;
@@ -197,7 +197,7 @@ function TGNV_leerPaso() {
   var p = PropertiesService.getScriptProperties(), est;
   try { est = JSON.parse(p.getProperty('TGNV_VCH') || 'null'); } catch (e) { est = null; }
   if (!est) return;
-  var lectores = est.pdf ? TGNV_LECTORES_.slice(0, 1) : TGNV_LECTORES_;
+  var lectores = TGNV_LECTORES_;   // PDF: a NVIDIA y Groq se les manda la 1.ª página como imagen (TGNV_pdfImagen_)
   if (est.enCurso != null) { est.res.push({ nom: lectores[est.enCurso].nom, error: 'no respondió a tiempo' }); est.i++; est.enCurso = null; }
   if (Date.now() - est.t0 > 15 * 60000) {
     lectores.slice(est.i).forEach(function (L) { est.res.push({ nom: L.nom, error: 'no se alcanzó (muy lento hoy)' }); });
@@ -210,8 +210,9 @@ function TGNV_leerPaso() {
 function TGNV_leerUno_(est, L) {
   var p = PropertiesService.getScriptProperties(), t1 = Date.now(), nom = L.nom;
   try {
-    var blob = DriveApp.getFileById(est.id).getBlob();
-    var adjunto = { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime };
+    var adjunto;
+    if (est.pdf && (L.nvidia || L.groq)) adjunto = { base64: TGNV_pdfImagen_(est), mime: 'image/jpeg' };   // no leen PDF: la página como imagen
+    else { var blob = DriveApp.getFileById(est.id).getBlob(); adjunto = { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime }; }
     var pedido = 'Analiza este comprobante y responde SOLO el JSON del formato indicado.';
     var clave = L.nvidia ? CIA_nvClave_() : L.groq ? TGNV_groqClave_() : (p.getProperty('CIA_KEY_GEMINIGOOGLE') || IA_clave_('Gemini (Google)'));
     if (L.groq && !clave) throw new Error('no hay clave de Groq (menú 🤖 Telegram → 🎤 Clave de Groq)');
@@ -232,6 +233,24 @@ function TGNV_leerUno_(est, L) {
     }
     return { nom: nom, s: Math.round((Date.now() - t1) / 100) / 10, d: d || {} };
   } catch (e) { return { nom: nom, s: Math.round((Date.now() - t1) / 100) / 10, error: String(e.message || e).slice(0, 120) }; }
+}
+
+/** 1.ª página del PDF como imagen JPG (vista previa de Drive a 1600 px; el archivo ya está en Drive). Se guarda en memoria para el siguiente lector. */
+function TGNV_pdfImagen_(est) {
+  var c = CacheService.getScriptCache(), k = 'tgnv_img_' + est.id, b64 = c.get(k);
+  if (b64) return b64;
+  var token = ScriptApp.getOAuthToken(), url = '', esperas = [0, 800, 1200, 1800, 2500];
+  for (var i = 0; i < esperas.length && !url; i++) {
+    if (esperas[i]) Utilities.sleep(esperas[i]);
+    var r = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + est.id + '?fields=thumbnailLink', { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+    if (r.getResponseCode() === 200) { var j = JSON.parse(r.getContentText()); if (j.thumbnailLink) url = j.thumbnailLink.replace(/=s\d+/, '=s1600'); }
+  }
+  if (!url) url = 'https://drive.google.com/thumbnail?id=' + est.id + '&sz=w1600';
+  var img = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+  if (img.getResponseCode() !== 200 || img.getBlob().getBytes().length < 2000) throw new Error('no pude convertir el PDF en imagen (HTTP ' + img.getResponseCode() + ')');
+  b64 = Utilities.base64Encode(img.getBlob().getBytes());
+  try { if (b64.length < 95000) c.put(k, b64, 900); } catch (e) {}
+  return b64;
 }
 
 function TGNV_norm_(c, v) {
