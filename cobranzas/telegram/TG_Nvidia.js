@@ -292,7 +292,7 @@ function TGNV_compararMostrar_(est) {
   var res = est.res, gm = est.modo === 'gemini';
   var base = gm ? null : res.filter(function (x) { return x.d && /^Gemini/.test(x.nom); })[0];
   var lineas = [gm ? '🧪 <b>Lectura del voucher: todos los Gemini gratis</b>' : '🧪 <b>Lectura del voucher: Gemini vs NVIDIA y Groq</b>', ''];
-  res.forEach(function (x) { lineas.push((x.error ? '❌ ' : '✅ ') + '<b>' + TG_esc_(x.nom) + '</b>' + (x.s != null ? ' · ' + x.s + ' s' : '') + (x.error ? ' — ' + TG_esc_(x.error) : '')); });
+  res.forEach(function (x) { lineas.push((x.error ? '❌ ' : '✅ ') + '<b>' + TG_esc_(x.nom) + '</b>' + (x.s != null ? ' · ' + x.s + ' s' : '') + (x.error ? ' — ' + TG_esc_(TGNV_errorCorto_(x.error)) : '')); });
   lineas.push('');
   TGNV_CAMPOS_.forEach(function (c) {
     var vals = res.filter(function (x) { return x.d; }).map(function (x) { return { nom: x.nom, v: String(x.d[c[0]] == null ? '' : x.d[c[0]]).trim() }; });
@@ -327,4 +327,14 @@ function TGNV_geminiDisponibles_() {
   } catch (e) {}
   if (!ids) return { si: TGNV_GEMINI_GRATIS_.slice(), no: [] };   // no se pudo ver la lista: se prueban todos (el que no exista dará error)
   return { si: TGNV_GEMINI_GRATIS_.filter(function (x) { return ids.indexOf(x[0]) >= 0; }), no: TGNV_GEMINI_GRATIS_.filter(function (x) { return ids.indexOf(x[0]) < 0; }).map(function (x) { return x[1]; }) };
+}
+
+/** Error de la IA en palabras simples (el JSON completo no se entiende en el chat). */
+function TGNV_errorCorto_(e) {
+  e = String(e || '');
+  if (/\b503\b|overload|high demand|UNAVAILABLE/i.test(e)) return 'saturado en este momento (Google, 503): intente más tarde';
+  if (/\b429\b/.test(e)) return 'sin cupo por ahora (429)';
+  if (/\b404\b|not found/i.test(e)) return 'no disponible para su clave (404)';
+  if (/\b413\b|too large/i.test(e)) return 'imagen demasiado grande para su límite gratis';
+  return e.slice(0, 120);
 }
