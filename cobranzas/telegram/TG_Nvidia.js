@@ -106,6 +106,7 @@ var TGNV_LECTORES_ = [
   { nom: 'Gemini', prov: 'Gemini (Google)' },
   { nom: 'Nemotron Super VL', prov: 'NVIDIA · Nemotron 3.5 Super VL (lee imágenes)', nvidia: true },
   { nom: 'Groq', prov: 'Groq · visión', groq: true },
+  { nom: 'Kimi K3.1 Pro (sin razonar)', prov: 'NVIDIA · Kimi K3.1 Pro', nvidia: true },   // PRUEBA temporal: ver su tiempo sin razonamiento (al final por ser el más lento)
 ];
 
 // Groq gratis acepta pocos tokens por minuto: no caben las instrucciones completas (~6.000 tokens). Estas son las reglas esenciales.
@@ -155,8 +156,8 @@ function TGNV_voucher_(ctx, blob, mime, m) {
   var esPdf = /pdf/i.test(mime);
   var est = { chat: String(ctx.chatId), id: f.getId(), mime: mime, i: 0, res: [], enCurso: null, t0: Date.now(), pdf: esPdf };
   PropertiesService.getScriptProperties().setProperty('TGNV_VCH', JSON.stringify(est));
-  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ', <b>Nemotron Super VL</b> (NVIDIA) y <b>Groq</b>') +
-    ' (instrucciones reales del lector). Le respondo apenas terminen, normalmente en unos segundos. No se guarda nada en la hoja.' +
+  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ', <b>Nemotron Super VL</b> (NVIDIA), <b>Groq</b> y, por prueba, <b>Kimi K3.1 Pro</b> sin razonar') +
+    ' (instrucciones reales del lector). Le respondo apenas terminen (Kimi puede tardar más). No se guarda nada en la hoja.' +
     (esPdf ? '\n<i>Es un PDF: NVIDIA y Groq solo leen imágenes; para compararlo mande una foto o captura del voucher.</i>' : ''), null, { silencioso: true });
   TGNV_leerTodo_(est);
 }
