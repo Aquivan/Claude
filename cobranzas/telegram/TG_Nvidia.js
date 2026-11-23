@@ -144,11 +144,8 @@ var TGNV_SISTEMA_ = 'Eres un lector de comprobantes bancarios de Perú (vouchers
 
 /** Foto (o PDF) con «nvidia» en el texto: se lee con Gemini y con los modelos de NVIDIA que leen imágenes, en segundo plano. No escribe en ninguna hoja. */
 function TGNV_voucher_(ctx, blob, mime, m) {
-  // Foto MEDIANA (~1280 px) en vez de la más grande: se lee igual de bien y los modelos la procesan mucho más rápido.
-  if (m && m.photo && m.photo.length > 1) {
-    var med = m.photo.filter(function (x) { return Math.max(x.width || 0, x.height || 0) <= 1300; }).pop();
-    if (med && med !== m.photo[m.photo.length - 1]) { try { blob = TG_bajarArchivo_(med.file_id, 'voucher.jpg'); mime = 'image/jpeg'; } catch (e) {} }
-  }
+  // La foto tal cual llega (la más grande): es la que lee la hoja de Vouchers, así la prueba es igual a lo real.
+  // Para Groq, si es grande, se achica a 1280 px (TGNV_vistaPrevia_), igual que hace el respaldo automático.
   if (!ctx.usuario || ctx.usuario.rol !== 'admin') return TG_enviar_(ctx.chatId, 'La comparación de lectores es solo para administradores.');
   if (!CIA_nvClave_()) return TG_enviar_(ctx.chatId, '🟩 Primero mande su clave de NVIDIA (nvapi-…) en un mensaje solo.');
   var f = IMP_carpeta_(ctx.ss).createFile(blob.setName('comparar voucher ' + Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HHmmss')));
@@ -211,7 +208,9 @@ function TGNV_leerUno_(est, L) {
   var p = PropertiesService.getScriptProperties(), t1 = Date.now(), nom = L.nom;
   try {
     var adjunto;
-    if (est.pdf && (L.nvidia || L.groq)) adjunto = { base64: TGNV_pdfImagen_(est), mime: 'image/jpeg' };   // no leen PDF: la página como imagen
+    var bytes = DriveApp.getFileById(est.id).getSize();
+    if (est.pdf && (L.nvidia || L.groq)) adjunto = { base64: TGNV_vistaPrevia_(est, 1600), mime: 'image/jpeg' };   // no leen PDF: la página como imagen
+    else if (L.groq && bytes > 330000) adjunto = { base64: TGNV_vistaPrevia_(est, 1280), mime: 'image/jpeg' };   // Groq gratis rechaza fotos grandes
     else { var blob = DriveApp.getFileById(est.id).getBlob(); adjunto = { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime }; }
     var pedido = 'Analiza este comprobante y responde SOLO el JSON del formato indicado.';
     var clave = L.nvidia ? CIA_nvClave_() : L.groq ? TGNV_groqClave_() : (p.getProperty('CIA_KEY_GEMINIGOOGLE') || IA_clave_('Gemini (Google)'));
@@ -235,19 +234,19 @@ function TGNV_leerUno_(est, L) {
   } catch (e) { return { nom: nom, s: Math.round((Date.now() - t1) / 100) / 10, error: String(e.message || e).slice(0, 120) }; }
 }
 
-/** 1.ª página del PDF como imagen JPG (vista previa de Drive a 1600 px; el archivo ya está en Drive). Se guarda en memoria para el siguiente lector. */
-function TGNV_pdfImagen_(est) {
-  var c = CacheService.getScriptCache(), k = 'tgnv_img_' + est.id, b64 = c.get(k);
+/** Vista previa JPG de Drive (lado px): 1.ª página de un PDF o foto achicada (el archivo ya está en Drive). Se guarda en memoria para el siguiente lector. */
+function TGNV_vistaPrevia_(est, lado) {
+  var c = CacheService.getScriptCache(), k = 'tgnv_img_' + lado + '_' + est.id, b64 = c.get(k);
   if (b64) return b64;
   var token = ScriptApp.getOAuthToken(), url = '', esperas = [0, 800, 1200, 1800, 2500];
   for (var i = 0; i < esperas.length && !url; i++) {
     if (esperas[i]) Utilities.sleep(esperas[i]);
     var r = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + est.id + '?fields=thumbnailLink', { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
-    if (r.getResponseCode() === 200) { var j = JSON.parse(r.getContentText()); if (j.thumbnailLink) url = j.thumbnailLink.replace(/=s\d+/, '=s1600'); }
+    if (r.getResponseCode() === 200) { var j = JSON.parse(r.getContentText()); if (j.thumbnailLink) url = j.thumbnailLink.replace(/=s\d+/, '=s' + lado); }
   }
-  if (!url) url = 'https://drive.google.com/thumbnail?id=' + est.id + '&sz=w1600';
+  if (!url) url = 'https://drive.google.com/thumbnail?id=' + est.id + '&sz=w' + lado;
   var img = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
-  if (img.getResponseCode() !== 200 || img.getBlob().getBytes().length < 2000) throw new Error('no pude convertir el PDF en imagen (HTTP ' + img.getResponseCode() + ')');
+  if (img.getResponseCode() !== 200 || img.getBlob().getBytes().length < 2000) throw new Error('no pude convertir en imagen (HTTP ' + img.getResponseCode() + ')');
   b64 = Utilities.base64Encode(img.getBlob().getBytes());
   try { if (b64.length < 95000) c.put(k, b64, 900); } catch (e) {}
   return b64;
