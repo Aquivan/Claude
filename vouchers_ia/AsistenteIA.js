@@ -164,6 +164,14 @@ function VIA_vcoVer() { var r = VIA_llamar_('vco_ver', {}); if (r.error) throw n
 function VIA_vcoCopiar(id) { return VIA_llamar_('vco_copiar', { id: id, quien: VIA_quien_() }); }
 function VIA_vcoDeshacer() { return VIA_llamar_('vco_deshacer', { quien: VIA_quien_() }); }
 
+/** 🧾 Lectores de vouchers (qué IA lee y en qué orden): la misma ventana de Cobranzas (LectoresVista.html, copiada al desplegar). */
+function VIA_menuLectores() {
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutputFromFile('asistente_ia/LectoresVista').setWidth(640).setHeight(560), '🧾 Lectores de vouchers');
+}
+function VIA_lectVer() { var r = VIA_llamar_('lect_ver', {}); if (r.error) throw new Error(r.error); return r; }
+function VIA_lectGuardar(cfg) { var r = VIA_llamar_('lect_guardar', { cfg: cfg, quien: VIA_quien_() }); if (r.error) throw new Error(r.error); return r; }
+function VIA_lectModelos(p) { var r = VIA_llamar_('lect_modelos', { p: p }); if (r.error) throw new Error(r.error); return r; }
+
 function VIA_rucEscribir(ids) { try { return VIA_aplicar(ids, false); } catch (e) { return { error: e.message }; } }
 function VIA_rucExternos(filas, todos) { try { return VIA_llamar_('rucexternos', { filas: filas, todos: !!todos }); } catch (e) { return { error: e.message }; } }
 function VIA_rucOpciones(nombre) { try { return VIA_llamar_('rucopciones', { nombre: nombre }); } catch (e) { return { error: e.message }; } }

@@ -14,7 +14,7 @@ name: Asistente IA en hoja Vouchers
 on:
   push:
     branches: [claude/python-codes-izve18]
-    paths: ['vouchers_ia/**', 'cobranzas/ChatPanel.html', 'cobranzas/VcoVista.html', 'cobranzas/RucVista.html', 'cobranzas/ConciliacionIA.js', '.github/workflows/asistente-vouchers.yml']
+    paths: ['vouchers_ia/**', 'cobranzas/ChatPanel.html', 'cobranzas/VcoVista.html', 'cobranzas/RucVista.html', 'cobranzas/LectoresVista.html', 'cobranzas/ConciliacionIA.js', '.github/workflows/asistente-vouchers.yml']
   workflow_dispatch:
     inputs:
       accion:
@@ -135,12 +135,18 @@ jobs:
           if faltan or re.search(r'\bRUCV_\w+', rv):
               print('::error::RucVista.html usa una función que vouchers_ia no tiene: VIA_' + ', VIA_'.join(faltan)); sys.exit(1)
           open(os.path.join(d, carpeta, 'RucVista.html'), 'w', encoding='utf-8').write(rv)
+          # 🧾 La misma ventana de Lectores de vouchers de Cobranzas (LECT_x pasa a VIA_lectX, que le piden a Cobranzas por el canal vch).
+          lv = open('cobranzas/LectoresVista.html', encoding='utf-8').read()
+          lv = lv.replace('.LECT_ver()', '.VIA_lectVer()').replace('.LECT_guardarHoja(', '.VIA_lectGuardar(').replace('.LECT_modelosHoja(', '.VIA_lectModelos(')
+          if re.search(r'\bLECT_\w+\(', lv):
+              print('::error::LectoresVista.html usa una función LECT_ nueva: agréguela a vouchers_ia.'); sys.exit(1)
+          open(os.path.join(d, carpeta, 'LectoresVista.html'), 'w', encoding='utf-8').write(lv)
           # El menu: los mismos items del menu 🧠 Asistente IA de Cobranzas (CIA_agregarMenu_).
           cia = open('cobranzas/ConciliacionIA.js', encoding='utf-8').read()
           bloque = re.search(r'function CIA_agregarMenu_\(\)\s*\{(.*?)\.addToUi\(\)', cia, re.S).group(1)
           aqui = {'CHAT_menuAbrir': 'VIA_menuAbrirChat', 'CIA_menuResumen': 'VIA_menuResumen',
                   'menuAnalizarIAProcesados': 'VIA_menuProcesados', 'IA_menuRetirar': 'VIA_menuRetirar',
-                  'menuIdentificarRucFilas': 'VIA_menuIdentificarRuc', 'MESA_menuAbrir': 'VIA_menuMesa', 'VCO_menuAbrir': 'VIA_menuVco', 'CTV_menuCambiar': 'VIA_menuCambiarTipo'}
+                  'menuIdentificarRucFilas': 'VIA_menuIdentificarRuc', 'MESA_menuAbrir': 'VIA_menuMesa', 'VCO_menuAbrir': 'VIA_menuVco', 'CTV_menuCambiar': 'VIA_menuCambiarTipo', 'LECT_menuAbrir': 'VIA_menuLectores'}
           pest = {'CIA_': '🤝 Conciliar con IA', 'IMP_': '🤝 Importar'}
           lineas, extra = [], []
           for m in re.finditer(r"\.addItem\('((?:[^'\\]|\\.)*)',\s*'(\w+)'\)|\.addSeparator\(\)", bloque):

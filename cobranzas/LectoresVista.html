@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html><head><base target="_top"><meta charset="utf-8">
+<!-- 🧾 Lectores de vouchers: la MISMA ventana en Cobranzas (LECT_x) y en la hoja de Vouchers (asistente-vouchers.yml la copia con VIA_lectX). -->
+<style>
+  body { font-family: Arial, sans-serif; font-size: 13px; margin: 12px; color: #222; }
+  h3 { margin: 0 0 6px; font-size: 15px; }
+  .nota { color: #555; font-size: 12px; margin: 4px 0 10px; }
+  .fila { display: flex; align-items: center; gap: 8px; border: 1px solid #ddd; border-radius: 6px; padding: 8px; margin-bottom: 6px; background: #fafafa; }
+  .fila.off { opacity: .55; }
+  .num { width: 22px; font-weight: bold; text-align: center; }
+  .nom { width: 120px; font-weight: bold; }
+  .mod { flex: 1; display: flex; gap: 4px; }
+  .mod input { flex: 1; font-size: 12px; padding: 3px; }
+  button { cursor: pointer; font-size: 12px; padding: 3px 7px; }
+  .flechas button { padding: 1px 6px; }
+  .aviso { color: #b45309; font-size: 12px; }
+  .uso { background: #eef6ff; border-radius: 6px; padding: 6px 8px; margin: 8px 0; font-size: 12px; }
+  .pie { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  .ok { color: #15803d; } .err { color: #b91c1c; }
+  .lista { font-size: 12px; margin-top: 4px; }
+  .lista span { display: inline-block; border: 1px solid #ccc; border-radius: 10px; padding: 1px 7px; margin: 2px; cursor: pointer; background: #fff; }
+</style></head>
+<body>
+<h3>🧾 Qué IA lee los vouchers y en qué orden</h3>
+<div class="nota">Lee la primera prendida; si falla (saturada, sin cupo o caída), pasa <b>al momento</b> a la siguiente.
+  NVIDIA y Groq solo leen fotos: los PDF los lee Gemini. Si no lo leyó Gemini, la celda del N° de operación queda con una nota.
+  Lo mismo se cambia en Telegram con «lectores».</div>
+<div id="filas">Cargando…</div>
+<div id="uso" class="uso" style="display:none"></div>
+<div class="nota">Modelo vacío = automático. Para probar uno antes, mande al bot una foto con la palabra «comparar».
+  Según sus condiciones, el uso gratis de NVIDIA es para pruebas.</div>
+<div class="pie"><span id="msg"></span><button onclick="google.script.host.close()">Cerrar</button><button id="bG" onclick="guardar()"><b>💾 Guardar</b></button></div>
+<script>
+var D = null, orden = [], apagados = [], modelo = {};
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function msg(t, cls) { var m = document.getElementById('msg'); m.className = cls || ''; m.textContent = t || ''; }
+function fallo(e) { msg('❌ ' + (e && e.message || e), 'err'); document.getElementById('bG').disabled = false; }
+function cargar(d) {
+  if (d && d.error) return fallo(d.error);
+  D = d; orden = d.cfg.orden.slice(); apagados = d.cfg.apagados.slice(); modelo = JSON.parse(JSON.stringify(d.cfg.modelo));
+  pintar();
+  var u = d.uso || {}, box = document.getElementById('uso');
+  if (u.ok) {
+    var h = u.hoy || {};
+    box.innerHTML = '📊 <b>Hoy leyeron</b>: ' + Object.keys(d.nombres).map(function (p) { return esc(d.nombres[p].split(' ')[0]) + ' ' + (h[p] || 0); }).join(' · ') +
+      (h.fallos ? ' · ❌ ninguno pudo: ' + h.fallos : '') + (u.ultimo ? '<br><i>Último respaldo: ' + esc(u.ultimo) + '</i>' : '');
+    box.style.display = '';
+  } else if (u.error) { box.innerHTML = '<i>La hoja de Vouchers no informó su uso: ' + esc(u.error) + '</i>'; box.style.display = ''; }
+}
+function pintar() {
+  var n = 0;
+  document.getElementById('filas').innerHTML = orden.map(function (p, i) {
+    var off = apagados.indexOf(p) >= 0, falta = !D.clave[p];
+    return '<div class="fila' + (off ? ' off' : '') + '"><span class="num">' + (off ? '⏸' : ++n) + '</span>' +
+      '<span class="flechas"><button title="Subir" onclick="mover(' + i + ',-1)"' + (i ? '' : ' disabled') + '>▲</button>' +
+      '<button title="Bajar" onclick="mover(' + i + ',1)"' + (i < orden.length - 1 ? '' : ' disabled') + '>▼</button></span>' +
+      '<span class="nom">' + esc(D.nombres[p]) + (falta ? '<br><span class="aviso">⚠️ falta su clave</span>' : '') + '</span>' +
+      '<span class="mod"><input id="m_' + p + '" value="' + esc(modelo[p]) + '" placeholder="automático" onchange="modelo[\'' + p + '\']=this.value.trim()">' +
+      '<button onclick="verModelos(\'' + p + '\')">🔧 Ver</button></span>' +
+      '<label><input type="checkbox" ' + (off ? '' : 'checked') + ' onchange="prender(\'' + p + '\',this.checked)"> Prendido</label></div>' +
+      '<div class="lista" id="l_' + p + '"></div>';
+  }).join('');
+}
+function mover(i, d) {
+  var j = i + d; if (j < 0 || j >= orden.length) return;
+  var t = orden[i]; orden[i] = orden[j]; orden[j] = t;
+  pintar();
+}
+function prender(p, si) {
+  if (si) apagados = apagados.filter(function (x) { return x !== p; });
+  else if (apagados.indexOf(p) < 0) {
+    if (orden.filter(function (x) { return x !== p && apagados.indexOf(x) < 0; }).length === 0) { msg('Debe quedar al menos uno prendido.', 'err'); return pintar(); }
+    apagados.push(p);
+  }
+  pintar();
+}
+function verModelos(p) {
+  var l = document.getElementById('l_' + p); l.textContent = 'Buscando los modelos que leen imágenes…';
+  google.script.run.withSuccessHandler(function (ids) {
+    if (ids && ids.error) { l.textContent = '❌ ' + ids.error; return; }
+    ids = (ids && ids.ids) || ids || [];
+    l.innerHTML = (ids.length ? 'Toque uno: ' : 'No encontré otros. ') + '<span onclick="elegir(\'' + p + '\',\'\')">🤖 automático</span>' +
+      ids.map(function (id) { return '<span onclick="elegir(\'' + p + '\',\'' + esc(id) + '\')">' + esc(id) + '</span>'; }).join('');
+  }).withFailureHandler(function (e) { l.textContent = '❌ ' + (e.message || e); }).LECT_modelosHoja(p);
+}
+function elegir(p, id) { modelo[p] = id; document.getElementById('m_' + p).value = id; document.getElementById('l_' + p).innerHTML = ''; }
+function guardar() {
+  orden.forEach(function (p) { var i = document.getElementById('m_' + p); if (i) modelo[p] = i.value.trim(); });
+  document.getElementById('bG').disabled = true; msg('Guardando…');
+  google.script.run.withSuccessHandler(function (d) {
+    document.getElementById('bG').disabled = false;
+    if (d && d.error) return fallo(d.error);
+    cargar(d); msg('✅ Guardado. La hoja de Vouchers lo usa desde ya.', 'ok');
+  }).withFailureHandler(fallo).LECT_guardarHoja({ orden: orden, apagados: apagados, modelo: modelo });
+}
+google.script.run.withSuccessHandler(cargar).withFailureHandler(fallo).LECT_ver();
+</script>
+</body></html>

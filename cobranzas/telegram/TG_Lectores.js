@@ -10,6 +10,8 @@
  *   lectores modelo groq <id>         → usar ese modelo (también: modelo nvidia <id>, modelo gemini <id>)
  *   lectores modelo gemini auto       → volver al modelo automático
  * Las claves son las ya guardadas: NVIDIA (mensaje nvapi-…), Groq (🎤 Clave de Groq); Gemini usa la de la hoja de Vouchers.
+ * En las hojas: menú 🧠 Asistente IA → 🧾 Lectores de vouchers (LectoresVista.html), en Cobranzas y en la hoja de Vouchers
+ *   (allá la ventana es la misma, copiada al desplegar; sus llamadas pasan por el canal vch: lect_ver / lect_guardar / lect_modelos).
  * NVIDIA y Groq solo leen IMÁGENES: los PDF los lee siempre Gemini. Funciones LECT_.
  */
 
@@ -133,7 +135,20 @@ function LECT_panel_(ctx, aviso, editar) {
 function LECT_modelos_(ctx, p) {
   TG_accion_(ctx.chatId, 'typing');
   var ids = [], cfg = LECT_cfg_();
-  try {
+  try { ids = LECT_listaModelos_(p); }
+  catch (e) { return TG_enviar_(ctx.chatId, '⚠️ No pude ver los modelos de ' + LECT_NOMBRES_[p] + ': ' + TG_esc_(e.message)); }
+  var b = function (t, d) { return [{ text: t, callback_data: 'k:' + TG_guardarBoton_(d, 21600) }]; };
+  var teclado = [b('🤖 Automático' + (!cfg.modelo[p] || cfg.modelo[p] === LECT_MODELO_DEF_[p] ? ' ✓' : ''), { t: 'lect', a: 'modelo', p: p, m: '' })]
+    .concat(ids.map(function (id) { return b((cfg.modelo[p] === id ? '✓ ' : '') + id.slice(0, 55), { t: 'lect', a: 'modelo', p: p, m: id }); }));
+  TG_enviar_(ctx.chatId, '🔧 <b>Modelo de ' + LECT_NOMBRES_[p] + '</b> para leer vouchers (ahora: <code>' + TG_esc_(cfg.modelo[p] || 'automático') + '</code>)\n' +
+    (ids.length ? 'Estos leen imágenes y su clave los ve hoy. Toque uno:' : 'No encontré otros modelos que lean imágenes.') +
+    '\n<i>Antes de cambiarlo puede compararlo mandando una foto con la palabra «comparar».</i>', teclado);
+}
+
+/** Modelos que leen imágenes que la clave ve HOY (máx. 12). */
+function LECT_listaModelos_(p) {
+  var ids = [];
+  {
     if (p === 'nvidia') {
       var r = UrlFetchApp.fetch('https://integrate.api.nvidia.com/v1/models', { headers: { Authorization: 'Bearer ' + CIA_nvClave_() }, muteHttpExceptions: true });
       ids = (JSON.parse(r.getContentText()).data || []).map(function (x) { return String(x.id); })
@@ -149,14 +164,8 @@ function LECT_modelos_(ctx, p) {
         .map(function (m) { return String(m.name).replace(/^models\//, ''); })
         .filter(function (id) { return /^gemini-\d/.test(id) && !/tts|image|embed|audio|live|thinking|exp|robotics|computer/i.test(id); });
     }
-  } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ No pude ver los modelos de ' + LECT_NOMBRES_[p] + ': ' + TG_esc_(e.message)); }
-  ids = ids.sort().reverse().slice(0, 12);
-  var b = function (t, d) { return [{ text: t, callback_data: 'k:' + TG_guardarBoton_(d, 21600) }]; };
-  var teclado = [b('🤖 Automático' + (!cfg.modelo[p] || cfg.modelo[p] === LECT_MODELO_DEF_[p] ? ' ✓' : ''), { t: 'lect', a: 'modelo', p: p, m: '' })]
-    .concat(ids.map(function (id) { return b((cfg.modelo[p] === id ? '✓ ' : '') + id.slice(0, 55), { t: 'lect', a: 'modelo', p: p, m: id }); }));
-  TG_enviar_(ctx.chatId, '🔧 <b>Modelo de ' + LECT_NOMBRES_[p] + '</b> para leer vouchers (ahora: <code>' + TG_esc_(cfg.modelo[p] || 'automático') + '</code>)\n' +
-    (ids.length ? 'Estos leen imágenes y su clave los ve hoy. Toque uno:' : 'No encontré otros modelos que lean imágenes.') +
-    '\n<i>Antes de cambiarlo puede compararlo mandando una foto con la palabra «comparar».</i>', teclado);
+  }
+  return ids.sort().reverse().slice(0, 12);
 }
 
 function LECT_alBoton_(ctx, d) {
@@ -183,4 +192,42 @@ function LECT_alBoton_(ctx, d) {
   } else return;
   LECT_guardar_(cfg);
   LECT_panel_(ctx, '✅ Guardado.', true);
+}
+
+/* ------------------------------------------------ 🧾 ventana en la hoja (Cobranzas y, por el canal vch, la hoja de Vouchers) */
+
+function LECT_menuAbrir() {
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutputFromFile('LectoresVista').setWidth(640).setHeight(560), '🧾 Lectores de vouchers');
+}
+
+/** Lo que muestra la ventana: configuración, nombres, si falta clave y el uso de hoy (nunca las claves). */
+function LECT_ver() {
+  var cfg = LECT_cfg_(), uso = null;
+  try { uso = LECT_puente_('lectores', {}); } catch (e) { uso = { error: e.message }; }
+  return { cfg: cfg, nombres: LECT_NOMBRES_, def: LECT_MODELO_DEF_, uso: uso,
+    clave: { gemini: true, nvidia: !!CIA_nvClave_(), groq: !!TGNV_groqClave_() } };
+}
+
+/** Guarda lo elegido en la ventana. quien: correo de quien lo cambió (queda en el registro). */
+function LECT_guardarHoja(nuevo, quien) {
+  var c = LECT_cfg_(), n = nuevo || {};
+  var orden = (n.orden || []).filter(function (p, i, a) { return LECT_NOMBRES_[p] && a.indexOf(p) === i; });
+  Object.keys(LECT_NOMBRES_).forEach(function (p) { if (orden.indexOf(p) < 0) orden.push(p); });
+  var apagados = (n.apagados || []).filter(function (p) { return LECT_NOMBRES_[p]; });
+  if (orden.filter(function (p) { return apagados.indexOf(p) < 0; }).length === 0) throw new Error('Debe quedar al menos un lector prendido.');
+  Object.keys(LECT_NOMBRES_).forEach(function (p) {
+    var m = n.modelo && n.modelo[p] != null ? String(n.modelo[p]).trim() : c.modelo[p];
+    if (m && !/^[\w.\-\/:]{2,120}$/.test(m)) throw new Error('Nombre de modelo no válido: ' + m);
+    c.modelo[p] = m || LECT_MODELO_DEF_[p];
+  });
+  c.orden = orden.filter(function (p) { return apagados.indexOf(p) < 0; }).concat(orden.filter(function (p) { return apagados.indexOf(p) >= 0; }));
+  c.apagados = apagados;
+  LECT_guardar_(c);
+  console.log('🧾 Lectores cambiados desde la hoja por ' + (quien || Session.getActiveUser().getEmail() || '?') + ': ' + JSON.stringify(c));
+  return LECT_ver();
+}
+
+function LECT_modelosHoja(p) {
+  if (!LECT_NOMBRES_[p]) throw new Error('Lector desconocido.');
+  return LECT_listaModelos_(p);
 }
