@@ -25,6 +25,7 @@ var IA_PROVEEDORES_ = {
   // y el que elija ahí queda en «NVIDIA · modelo elegido».
   'NVIDIA · Kimi K3.1 Pro': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'moonshotai/kimi-k3.1-pro', imagen: true, sinFormatoJson: true, pausa: 1600 },
   'NVIDIA · Nemotron 3.5 Super VL (lee imágenes)': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'nvidia/nemotron-3.5-super-vl-120b-a12b', imagen: true, sinFormatoJson: true, pausa: 1600 },
+  'NVIDIA · Muse Glimmer (lee imágenes)': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'meta/muse-glimmer-30b', imagen: true, sinFormatoJson: true, pausa: 1600 },
   'NVIDIA · Mistral Large 4': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'mistralai/mistral-large-4-1t-a52b', imagen: false, sinFormatoJson: true, pausa: 1600 },
   'NVIDIA · modelo elegido': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'moonshotai/kimi-k3.1-pro', modeloProp: 'IA_NVIDIA_MODELO', imagen: true, sinFormatoJson: true, pausa: 1600 },
 };
