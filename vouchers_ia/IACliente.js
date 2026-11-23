@@ -11,7 +11,7 @@
 // ============================================================
 
 // tipo 'gemini' = API propia de Google; 'openai' = formato estandar
-// (/chat/completions) que aceptan Groq, Qwen, ChatGPT, DeepSeek, OpenRouter.
+// (/chat/completions) que aceptan Groq, Qwen, ChatGPT, DeepSeek, OpenRouter y NVIDIA.
 // El modelo se puede cambiar en la pestaña del asistente sin tocar codigo.
 var IA_PROVEEDORES_ = {
   'Gemini (Google)':  { tipo: 'gemini', modelo: 'gemini-3.5-flash-lite', imagen: true, pdf: true, pausa: 4500 },
@@ -20,6 +20,10 @@ var IA_PROVEEDORES_ = {
   'OpenAI (ChatGPT)': { tipo: 'openai', url: 'https://api.openai.com/v1/chat/completions', modelo: 'gpt-5.4-nano', imagen: true, pausa: 1000 },
   'DeepSeek':         { tipo: 'openai', url: 'https://api.deepseek.com/chat/completions', modelo: 'deepseek-chat', imagen: false, pausa: 1000 },
   'OpenRouter':       { tipo: 'openai', url: 'https://openrouter.ai/api/v1/chat/completions', modelo: 'qwen/qwen3.8-flash', imagen: true, pausa: 1500 },
+  // NVIDIA (build.nvidia.com): clave «nvapi-…»; varios modelos abiertos gratis para PROBAR (≈40 pedidos/min, créditos limitados).
+  // Una sola clave para los dos (se guarda como NVIDIA). DeepSeek V4.1 Flash = texto, rápido · Kimi K3 = también lee imágenes.
+  'NVIDIA · DeepSeek V4.1 Flash': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'deepseek-ai/deepseek-v4.1-flash', imagen: false, pausa: 1600 },
+  'NVIDIA · Kimi K3': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', modelo: 'moonshotai/kimi-k3', imagen: true, pausa: 1600 },
 };
 
 function IA_nombresProveedores_() {
@@ -27,6 +31,7 @@ function IA_nombresProveedores_() {
 }
 
 function IA_propClave_(proveedor) {
+  if (/^NVIDIA/.test(String(proveedor))) return 'IA_KEY_NVIDIA';   // una clave nvapi-… sirve para todos los modelos de NVIDIA
   return 'IA_KEY_' + String(proveedor).replace(/[^A-Za-z]/g, '').toUpperCase();
 }
 

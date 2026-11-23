@@ -66,11 +66,14 @@ function CIA_menuResumen() {
   CHAT_menuAbrir();
 }
 
+/** Dónde se guarda la clave de cada IA (los modelos de NVIDIA comparten una sola clave). */
+function CIA_propClave_(prov) { return /^NVIDIA/.test(prov) ? 'CIA_KEY_NVIDIA' : 'CIA_KEY_' + prov.replace(/[^A-Za-z]/g, '').toUpperCase(); }
+
 /** IA elegida en la fila 11 de esta pestaña y su clave propia. */
 function CIA_ia_(sh) {
   var prov = String(sh.getRange('B11').getValue() || '').trim();
   if (!IA_PROVEEDORES_[prov]) prov = 'Gemini (Google)';
-  var clave = PropertiesService.getScriptProperties().getProperty('CIA_KEY_' + prov.replace(/[^A-Za-z]/g, '').toUpperCase()) || '';
+  var clave = PropertiesService.getScriptProperties().getProperty(CIA_propClave_(prov)) || '';
   return { proveedor: prov, modelo: '', clave: clave };
 }
 
@@ -83,7 +86,8 @@ function CIA_menuGuardarClave() {
   if (r.getSelectedButton() !== ui.Button.OK) return;
   var k = String(r.getResponseText() || '').trim();
   if (!k) { ui.alert('No se guardó: la clave estaba vacía.'); return; }
-  PropertiesService.getScriptProperties().setProperty('CIA_KEY_' + ia.proveedor.replace(/[^A-Za-z]/g, '').toUpperCase(), k);
+  if (/^NVIDIA/.test(ia.proveedor) && !/^nvapi-/.test(k)) { ui.alert('Esa clave no parece de NVIDIA (empieza con nvapi-). No se guardó.'); return; }
+  PropertiesService.getScriptProperties().setProperty(CIA_propClave_(ia.proveedor), k);
   ui.alert('Clave de ' + ia.proveedor + ' guardada para el 🧠 Asistente IA.');
 }
 
@@ -176,6 +180,8 @@ function CIA_asegurarModo_(sh) {
     sh.getRange('B11').setValue('Gemini (Google)').setBackground('#FFF8E1')
       .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(IA_nombresProveedores_()).build());
   }
+  // la lista de IA se renueva siempre (así aparecen las nuevas, p. ej. NVIDIA), sin cambiar la elegida
+  try { sh.getRange('B11').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(IA_nombresProveedores_()).build()); } catch (e) {}
 }
 
 function CIA_leerParam_(sh, cfg) {
