@@ -955,17 +955,17 @@ function CIA_nvCandidatos_() {
 
 /** Prueba una tanda de modelos a la vez (pedido corto) → [{id, ok, s, nota, error}] */
 function CIA_nvProbarLote_(clave, lote) {
-  var t1 = Date.now();
-  var resp = UrlFetchApp.fetchAll(lote.map(function (id) {
-    return { url: 'https://integrate.api.nvidia.com/v1/chat/completions', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-      headers: { Authorization: 'Bearer ' + clave },
-      payload: JSON.stringify({ model: id, max_tokens: 20, temperature: 0, messages: [{ role: 'user', content: 'Responde solo: {"ok":true}' }] }) };
-  }));
-  var ms = Date.now() - t1;
-  return resp.map(function (x, k) {
-    var cod = x.getResponseCode();
-    return { id: lote[k], ok: cod === 200, cod: cod, s: Math.round(ms / 100) / 10, nota: CIA_nvNota_(lote[k]),
-      error: cod === 200 ? '' : cod === 404 ? 'no disponible gratis para su clave' : cod === 429 ? 'límite de pedidos, pruebe en 1 min' : cod === 401 || cod === 403 ? 'la clave no tiene permiso para este modelo' : 'error ' + cod };
+  // De a uno (no fetchAll): así el tiempo es el de CADA modelo y uno lento no infla a los demás.
+  return lote.map(function (id) {
+    var t1 = Date.now(), x, cod;
+    try {
+      x = UrlFetchApp.fetch('https://integrate.api.nvidia.com/v1/chat/completions', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+        headers: { Authorization: 'Bearer ' + clave },
+        payload: JSON.stringify({ model: id, max_tokens: 20, temperature: 0, messages: [{ role: 'user', content: 'Responde solo: {"ok":true}' }] }) });
+      cod = x.getResponseCode();
+    } catch (e) { cod = -1; }
+    return { id: id, ok: cod === 200, cod: cod, s: Math.round((Date.now() - t1) / 100) / 10, nota: CIA_nvNota_(id),
+      error: cod === 200 ? '' : cod === 404 ? 'no disponible gratis para su clave' : cod === 429 ? 'límite de pedidos, pruebe en 1 min' : cod === 401 || cod === 403 ? 'la clave no tiene permiso para este modelo' : cod === 504 || cod === -1 ? 'NVIDIA no respondió (saturado)' : 'error ' + cod };
   });
 }
 
@@ -987,18 +987,7 @@ function CIA_nvProbar(topeMs) {
       lote.forEach(function (id) { res.push({ id: id, ok: false, cod: 0, s: 0, nota: CIA_nvNota_(id), error: 'no se alcanzó a probar (repita la prueba)' }); });
       break;
     }
-    var t1 = Date.now();
-    var resp = UrlFetchApp.fetchAll(lote.map(function (id) {
-      return { url: 'https://integrate.api.nvidia.com/v1/chat/completions', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-        headers: { Authorization: 'Bearer ' + clave },
-        payload: JSON.stringify({ model: id, max_tokens: 20, temperature: 0, messages: [{ role: 'user', content: 'Responde solo: {"ok":true}' }] }) };
-    }));
-    var ms = Date.now() - t1;
-    resp.forEach(function (x, k) {
-      var cod = x.getResponseCode();
-      res.push({ id: lote[k], ok: cod === 200, cod: cod, s: Math.round(ms / 100) / 10, nota: CIA_nvNota_(lote[k]),
-        error: cod === 200 ? '' : cod === 404 ? 'no disponible gratis para su clave' : cod === 429 ? 'límite de pedidos, pruebe en 1 min' : cod === 401 || cod === 403 ? 'la clave no tiene permiso para este modelo' : 'error ' + cod });
-    });
+    res = res.concat(CIA_nvProbarLote_(clave, lote));
   }
   res.sort(function (a, b) { return (b.ok - a.ok) || a.s - b.s; });
   return { total: todos.length, probados: res, elegido: PropertiesService.getScriptProperties().getProperty('IA_NVIDIA_MODELO') || '', segundos: Math.round((Date.now() - t0) / 1000) };
