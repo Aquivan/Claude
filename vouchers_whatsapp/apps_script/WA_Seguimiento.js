@@ -194,12 +194,18 @@ function WA_procesarYa_() {
   try {
     var t0 = Date.now(), r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
     console.log('Procesar al instante: HTTP ' + r.getResponseCode() + ' ' + r.getContentText().slice(0, 300));
-    try {   // ⏱ en qué se fue el tiempo (lo dice la hoja de Vouchers): se agrega al mensaje del resultado
-      var t = (JSON.parse(r.getContentText()) || {}).tiempos;
-      if (t && t.total) p.setProperty('WA_ULT_TIEMPOS', JSON.stringify({ en: Date.now(), t: t }));
-    } catch (e2) {}
+    var j = null;
+    try { j = JSON.parse(r.getContentText()); } catch (e2) {}
+    if (!j || r.getResponseCode() !== 200) {
+      // ⚡ La hoja de Vouchers no respondió bien: se reintenta en la revisión del minuto siguiente (no se espera su vuelta de 10 min).
+      console.error('Procesar al instante: la hoja de Vouchers no respondió JSON (HTTP ' + r.getResponseCode() + '): ' + r.getContentText().replace(/<[^>]+>/g, ' ').slice(0, 300));
+      p.setProperty('WA_PROCESAR_PEND', '1');
+      p.setProperty('WA_PROCESAR_ERROR', Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' HTTP ' + r.getResponseCode());
+    } else if (j.tiempos && j.tiempos.total) p.setProperty('WA_ULT_TIEMPOS', JSON.stringify({ en: Date.now(), t: j.tiempos }));
   } catch (e) {
     console.error('Procesar al instante falló: ' + e.message);
+    p.setProperty('WA_PROCESAR_PEND', '1');   // ⚡ se reintenta en la revisión del minuto siguiente
+    p.setProperty('WA_PROCESAR_ERROR', Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' ' + String(e.message).slice(0, 120));
   } finally {
     p.deleteProperty('WA_PROCESANDO');
   }

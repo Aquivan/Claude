@@ -180,6 +180,7 @@ function WA_menuEstado() {
   lineas.push('Autorizados: ' + (WA_permitidos_().join(', ') || 'FALTA'));
   lineas.push('Aplicación web: ' + (WA_urlApp_() || 'sin publicar'));
   lineas.push('Revisión cada minuto: ' + (ScriptApp.getProjectTriggers().some(function (x) { return x.getHandlerFunction() === 'WA_cadaMinuto'; }) ? 'activa' : 'INACTIVA'));
+  if (WA_prop_('WA_PROCESAR_ERROR')) lineas.push('Último fallo de «procesar al instante»: ' + WA_prop_('WA_PROCESAR_ERROR') + ' (se reintenta solo al minuto)');
   var ult = WA_prop_('WA_ULTIMO');
   lineas.push('Último aviso recibido: ' + (ult || 'ninguno todavía'));
   SpreadsheetApp.getUi().alert('📲 Estado', lineas.join('\n'), SpreadsheetApp.getUi().ButtonSet.OK);
