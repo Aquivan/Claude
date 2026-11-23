@@ -105,6 +105,13 @@ function IA_llamar_(opts) {
   } else {
     var ch = (cuerpo.choices || [])[0];
     texto = ch && ch.message ? (ch.message.content || '') : '';
+    // Modelos que «razonan» (Kimi, Nemotron, DeepSeek R…): a veces el resultado queda en su razonamiento y la respuesta vacía.
+    if (!String(texto).trim() && ch && ch.message) {
+      texto = ch.message.reasoning_content || ch.message.reasoning || '';
+      var ult = String(texto).lastIndexOf('{');   // del razonamiento vale el ÚLTIMO JSON (lo anterior son borradores)
+      if (pet.json && ult > 0) texto = String(texto).slice(ult);
+    }
+    if (!String(texto).trim()) throw new Error('IA ' + pet.proveedor + ' respondió vacío' + (ch && ch.finish_reason ? ' (motivo: ' + ch.finish_reason + (ch.finish_reason === 'length' ? ', se quedó sin espacio para responder' : '') + ')' : ''));
   }
   if (!json) return String(texto).trim();
   return IA_extraerJson_(texto);
