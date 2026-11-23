@@ -949,7 +949,7 @@ function CIA_nvCandidatos_() {
   var todos = (JSON.parse(r.getContentText()).data || []).map(function (m) { return String(m.id); });
   var rango = function (id) { for (var i = 0; i < CIA_NV_ORDEN_.length; i++) if (CIA_NV_ORDEN_[i].test(id)) return i; return 99; };
   var cand = todos.filter(function (id) { return CIA_NV_INTERES_.test(id) && !/embed|rerank|safety|guard|translate|parse|reward|calibration|diffusion/i.test(id); })
-    .sort(function (a, b) { return rango(a) - rango(b); }).slice(0, 12);
+    .sort(function (a, b) { return rango(a) - rango(b); }).slice(0, 6);   // los 6 más útiles (los demás casi nunca convienen y alargan la prueba)
   return { clave: clave, total: todos.length, cand: cand };
 }
 

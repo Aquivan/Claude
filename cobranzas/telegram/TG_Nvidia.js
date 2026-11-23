@@ -42,7 +42,7 @@ function TGNV_probar_(ctx) {
   if (!c.cand.length) return TG_enviar_(ctx.chatId, '⚠️ Su clave ve ' + c.total + ' modelos pero ninguno de los que interesan (DeepSeek, Kimi, GLM, Nemotron, Mistral…).');
   PropertiesService.getScriptProperties().setProperty('TGNV_EST', JSON.stringify({ chat: String(ctx.chatId), total: c.total, cand: c.cand, i: 0, res: [], enCurso: null, t0: Date.now() }));
   TGNV_programar_(3000);
-  TG_enviar_(ctx.chatId, '⏳ Probando ' + c.cand.length + ' modelos gratis de NVIDIA (de ' + c.total + ' que ve su clave), de a 3, en segundo plano. Le aviso aquí en unos minutos.');
+  TG_enviar_(ctx.chatId, '⏳ Probando ' + c.cand.length + ' modelos gratis de NVIDIA (de ' + c.total + ' que ve su clave), de a 3, en segundo plano. Le aviso tras cada tanda; si NVIDIA está lento puede tardar hasta 15 min.');
 }
 
 function TGNV_programar_(ms) {
@@ -59,7 +59,8 @@ function TGNV_paso() {
     est.enCurso.forEach(function (id) { est.res.push({ id: id, ok: false, s: 0, nota: CIA_nvNota_(id), error: 'no respondió a tiempo (muy lento o saturado)' }); });
     est.i += est.enCurso.length; est.enCurso = null;
   }
-  if (est.i >= est.cand.length || Date.now() - est.t0 > 30 * 60000) {
+  if (est.i >= est.cand.length || Date.now() - est.t0 > 15 * 60000) {
+    est.cand.slice(est.i).forEach(function (id) { est.res.push({ id: id, ok: false, s: 0, nota: CIA_nvNota_(id), error: 'no se alcanzó a probar (NVIDIA muy lento hoy)' }); });
     p.deleteProperty('TGNV_EST');
     ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGNV_paso') ScriptApp.deleteTrigger(t); });
     return TGNV_mostrar_({ chatId: est.chat }, est);
@@ -67,12 +68,14 @@ function TGNV_paso() {
   var lote = est.cand.slice(est.i, est.i + 3);
   est.enCurso = lote;
   p.setProperty('TGNV_EST', JSON.stringify(est));
-  TGNV_programar_(7 * 60000);   // vigía: si esta ejecución muere, la próxima sigue
+  TGNV_programar_(6.5 * 60000);   // vigía: si esta ejecución muere (Google corta a los 6 min), la próxima sigue
   var res;
   try { res = CIA_nvProbarLote_(CIA_nvClave_(), lote); }
   catch (e) { res = lote.map(function (id) { return { id: id, ok: false, s: 0, nota: CIA_nvNota_(id), error: String(e.message || e).slice(0, 80) }; }); }
   est.res = est.res.concat(res); est.i += lote.length; est.enCurso = null;
   p.setProperty('TGNV_EST', JSON.stringify(est));
+  // avance: lo que ya respondió (para no esperar al final)
+  if (est.i < est.cand.length) TG_enviar_(est.chat, '⏳ NVIDIA ' + est.i + ' de ' + est.cand.length + ': ' + res.map(function (x) { return (x.ok ? '✅ ' : '❌ ') + x.id.split('/').pop() + (x.ok ? ' ' + x.s + ' s' : ''); }).join(' · '), null, { silencioso: true });
   TGNV_programar_(2000);
 }
 
