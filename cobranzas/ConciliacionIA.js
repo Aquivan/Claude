@@ -940,6 +940,35 @@ var CIA_NV_ORDEN_ = [/deepseek-v4/i, /kimi/i, /super-vl/i, /mistral-large/i, /gl
  * Con tope de tiempo (Google corta a los 6 min; desde Telegram corre en segundo plano): de a 4 a la vez,
  * los que no alcanzan quedan «no se alcanzó a probar».
  */
+/** {clave, total, cand}: los modelos que su clave ve hoy y, de ellos, los que interesan (en orden de utilidad). */
+function CIA_nvCandidatos_() {
+  var clave = CIA_nvClave_();
+  if (!clave) throw new Error('Primero guarde la clave de NVIDIA: elija una IA «NVIDIA · …» en la fila 11 y use 🔑 Guardar clave de IA (o mándela al bot de Telegram).');
+  var r = UrlFetchApp.fetch('https://integrate.api.nvidia.com/v1/models', { headers: { Authorization: 'Bearer ' + clave }, muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) throw new Error('NVIDIA respondió ' + r.getResponseCode() + ' al pedir la lista de modelos: ' + r.getContentText().slice(0, 200));
+  var todos = (JSON.parse(r.getContentText()).data || []).map(function (m) { return String(m.id); });
+  var rango = function (id) { for (var i = 0; i < CIA_NV_ORDEN_.length; i++) if (CIA_NV_ORDEN_[i].test(id)) return i; return 99; };
+  var cand = todos.filter(function (id) { return CIA_NV_INTERES_.test(id) && !/embed|rerank|safety|guard|translate|parse|reward|calibration|diffusion/i.test(id); })
+    .sort(function (a, b) { return rango(a) - rango(b); }).slice(0, 12);
+  return { clave: clave, total: todos.length, cand: cand };
+}
+
+/** Prueba una tanda de modelos a la vez (pedido corto) → [{id, ok, s, nota, error}] */
+function CIA_nvProbarLote_(clave, lote) {
+  var t1 = Date.now();
+  var resp = UrlFetchApp.fetchAll(lote.map(function (id) {
+    return { url: 'https://integrate.api.nvidia.com/v1/chat/completions', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { Authorization: 'Bearer ' + clave },
+      payload: JSON.stringify({ model: id, max_tokens: 20, temperature: 0, messages: [{ role: 'user', content: 'Responde solo: {"ok":true}' }] }) };
+  }));
+  var ms = Date.now() - t1;
+  return resp.map(function (x, k) {
+    var cod = x.getResponseCode();
+    return { id: lote[k], ok: cod === 200, cod: cod, s: Math.round(ms / 100) / 10, nota: CIA_nvNota_(lote[k]),
+      error: cod === 200 ? '' : cod === 404 ? 'no disponible gratis para su clave' : cod === 429 ? 'límite de pedidos, pruebe en 1 min' : cod === 401 || cod === 403 ? 'la clave no tiene permiso para este modelo' : 'error ' + cod };
+  });
+}
+
 function CIA_nvProbar(topeMs) {
   var t0 = Date.now(); topeMs = topeMs || 240000;
   var clave = CIA_nvClave_();
