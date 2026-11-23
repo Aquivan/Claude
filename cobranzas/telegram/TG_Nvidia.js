@@ -193,7 +193,7 @@ function TGNV_leerPaso() {
     var instr = typeof TGNV_PROMPT_VOUCHER_ === 'string' && TGNV_PROMPT_VOUCHER_ ? TGNV_PROMPT_VOUCHER_ : TGNV_SISTEMA_;
     if (L.groq) instr = TGNV_PROMPT_CORTO_;
     if (L.groq) {   // directo, para leer cuánto le queda del límite gratis (cabeceras de Groq)
-      var pet = IA_peticion_({ proveedor: L.prov, clave: clave, modelo: modeloL, sistema: instr, texto: 'Analiza este comprobante y responde SOLO el JSON del formato indicado.', maxTokens: 1500,
+      var pet = IA_peticion_({ proveedor: L.prov, clave: clave, modelo: modeloL, sinKwargs: true, sistema: instr,   // Groq no acepta chat_template_kwargs (basta /no_think) texto: 'Analiza este comprobante y responde SOLO el JSON del formato indicado.', maxTokens: 1500,
         adjunto: { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime } });
       var rg = UrlFetchApp.fetch(pet.url, pet.params), hd = rg.getHeaders() || {};
       var h = function (k) { return hd[k] || hd[k.toLowerCase()] || ''; };
