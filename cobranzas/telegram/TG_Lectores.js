@@ -17,7 +17,8 @@
 
 var LECT_PROP_ = 'LECT_CFG';
 var LECT_NOMBRES_ = { gemini: 'Gemini (Google)', nvidia: 'NVIDIA', groq: 'Groq' };
-var LECT_MODELO_DEF_ = { gemini: '', nvidia: 'nvidia/nemotron-3.5-super-vl-120b-a12b', groq: '' };   // '' = automático
+// Gemini 4 Hydrogen: el mejor Gemini gratis (nov. 2026; leyó bien los números difíciles en «comparar gemini»). Si se satura, la hoja pasa sola a 3.6 Flash, 3.8 Flash y Flash-Lite.
+var LECT_MODELO_DEF_ = { gemini: 'gemini-4-hydrogen', nvidia: 'nvidia/nemotron-3.5-super-vl-120b-a12b', groq: '' };   // '' = automático
 var LECT_RX_ = /^\s*\/?lectore?s?(\s|$)/i;
 
 function LECT_cfg_() {
@@ -27,7 +28,7 @@ function LECT_cfg_() {
   var orden = (c.orden || ['gemini', 'nvidia', 'groq']).filter(function (p) { return LECT_NOMBRES_[p]; });
   Object.keys(LECT_NOMBRES_).forEach(function (p) { if (orden.indexOf(p) < 0) orden.push(p); });
   var modelo = {};
-  Object.keys(LECT_NOMBRES_).forEach(function (p) { modelo[p] = (c.modelo && c.modelo[p] != null) ? String(c.modelo[p]) : LECT_MODELO_DEF_[p]; });
+  Object.keys(LECT_NOMBRES_).forEach(function (p) { modelo[p] = (c.modelo && c.modelo[p]) ? String(c.modelo[p]) : LECT_MODELO_DEF_[p]; });   // vacío = el de por defecto
   // 🧠 razonar: el modelo «piensa» antes de responder (más preciso en números difíciles, pero tarda más). Gemini no lo usa aquí.
   // NVIDIA razona POR DEFECTO (pedido del usuario: precisión antes que rapidez); se apaga solo si se elige expresamente.
   var razonar = { gemini: false, nvidia: !(c.razonar && c.razonar.nvidia === false), groq: !!(c.razonar && c.razonar.groq) };
