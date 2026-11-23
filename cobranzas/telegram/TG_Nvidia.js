@@ -108,6 +108,17 @@ var TGNV_LECTORES_ = [
   { nom: 'Groq', prov: 'Groq · visión', groq: true },
 ];
 
+// 🆓 «comparar gemini»: los modelos de Gemini con versión GRATIS (página de precios de Google, nov. 2026), del más nuevo al más liviano.
+// Solo se prueban los que la clave ve hoy (los demás se informan como «no disponible»).
+var TGNV_GEMINI_GRATIS_ = [
+  ['gemini-4-hydrogen', 'Gemini 4 Hydrogen'], ['gemini-3.8-flash', 'Gemini 3.8 Flash'], ['gemini-3.6-flash', 'Gemini 3.6 Flash'],
+  ['gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite'], ['gemini-3.1-flash-lite', 'Gemini 3.1 Flash-Lite'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite']
+];
+var TGNV_GEMINI_HOJA_ = 'gemini-3.6-flash';   // el que usa la hoja de Vouchers si no se eligió otro en 🧾 lectores (CFG.MODELO_GEMINI)
+
+/** Lectores de esta prueba (se guardan en est: así el vigía usa los mismos). */
+function TGNV_lectoresDe_(est) { return est.lect || TGNV_LECTORES_; }
+
 // Groq gratis acepta pocos tokens por minuto: no caben las instrucciones completas (~6.000 tokens). Estas son las reglas esenciales.
 var TGNV_PROMPT_CORTO_ = 'Eres contador experto en vouchers bancarios de Perú. Lee el comprobante y devuelve SOLO un array JSON:\n' +
   '[{"fecha":"DD/MM/YYYY","nOperacion":"","banco":"","moneda":"PEN|USD","monto":0,"proveedor":"","idCliente":"","cliente":"","descripcion":""}]\n' +
@@ -144,13 +155,26 @@ var TGNV_SISTEMA_ = 'Eres un lector de comprobantes bancarios de Perú (vouchers
 
 /** Foto (o PDF) con «nvidia» en el texto: se lee con Gemini y con los modelos de NVIDIA que leen imágenes, en segundo plano. No escribe en ninguna hoja. */
 function TGNV_voucher_(ctx, blob, mime, m) {
+  var modoGemini = /gemini/i.test(String((m && (m.caption || m.text)) || ''));   // «comparar gemini»: todos los Gemini gratis
   // La foto tal cual llega (la más grande): es la que lee la hoja de Vouchers, así la prueba es igual a lo real.
   // Para Groq, si es grande, se achica a 1280 px (TGNV_vistaPrevia_), igual que hace el respaldo automático.
   if (!ctx.usuario || ctx.usuario.rol !== 'admin') return TG_enviar_(ctx.chatId, 'La comparación de lectores es solo para administradores.');
-  if (!CIA_nvClave_()) return TG_enviar_(ctx.chatId, '🟩 Primero mande su clave de NVIDIA (nvapi-…) en un mensaje solo.');
+  if (!modoGemini && !CIA_nvClave_()) return TG_enviar_(ctx.chatId, '🟩 Primero mande su clave de NVIDIA (nvapi-…) en un mensaje solo.');
   var f = IMP_carpeta_(ctx.ss).createFile(blob.setName('comparar voucher ' + Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HHmmss')));
   var esPdf = /pdf/i.test(mime);
   var est = { chat: String(ctx.chatId), id: f.getId(), mime: mime, i: 0, res: [], enCurso: null, t0: Date.now(), pdf: esPdf };
+  if (modoGemini) {
+    var g = TGNV_geminiDisponibles_();
+    est.modo = 'gemini'; est.noDisp = g.no;
+    est.lect = g.si.map(function (x) { return { nom: x[1], prov: 'Gemini (Google)', modelo: x[0] }; });
+    if (!est.lect.length) return TG_enviar_(ctx.chatId, '⚠️ Su clave de Gemini no ve hoy ninguno de los modelos gratis.');
+    PropertiesService.getScriptProperties().setProperty('TGNV_VCH', JSON.stringify(est));
+    TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>' + est.lect.length + ' modelos gratis de Gemini</b> (' + est.lect.map(function (x) { return x.nom.replace('Gemini ', ''); }).join(', ') +
+      '), uno tras otro, con las instrucciones reales del lector. Gemini 4 piensa antes de responder: puede tardar más. Le respondo apenas terminen. No se guarda nada.', null, { silencioso: true });
+    return TGNV_leerTodo_(est);
+  }
+  var gh = (typeof LECT_cfg_ === 'function' && LECT_cfg_().modelo.gemini) || TGNV_GEMINI_HOJA_;   // el MISMO Gemini que lee en la hoja
+  est.lect = [{ nom: 'Gemini · ' + gh.replace(/^gemini-/, ''), prov: 'Gemini (Google)', modelo: gh, base: true }].concat(TGNV_LECTORES_.slice(1));
   PropertiesService.getScriptProperties().setProperty('TGNV_VCH', JSON.stringify(est));
   TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>, <b>Nemotron Super VL</b> (NVIDIA) y <b>Groq</b>' +
     ' (instrucciones reales del lector). Le respondo apenas terminen. No se guarda nada en la hoja.' +
@@ -165,7 +189,7 @@ function TGNV_voucher_(ctx, blob, mime, m) {
  */
 function TGNV_leerTodo_(est) {
   var p = PropertiesService.getScriptProperties();
-  var lectores = TGNV_LECTORES_;   // PDF: a NVIDIA y Groq se les manda la 1.ª página como imagen (TGNV_pdfImagen_)
+  var lectores = TGNV_lectoresDe_(est);   // PDF: a NVIDIA y Groq se les manda la 1.ª página como imagen (TGNV_vistaPrevia_)
   TGNV_programarV_(6.5 * 60000);   // vigía
   while (est.i < lectores.length) {
     est.enCurso = est.i;
@@ -194,7 +218,7 @@ function TGNV_leerPaso() {
   var p = PropertiesService.getScriptProperties(), est;
   try { est = JSON.parse(p.getProperty('TGNV_VCH') || 'null'); } catch (e) { est = null; }
   if (!est) return;
-  var lectores = TGNV_LECTORES_;   // PDF: a NVIDIA y Groq se les manda la 1.ª página como imagen (TGNV_pdfImagen_)
+  var lectores = TGNV_lectoresDe_(est);   // PDF: a NVIDIA y Groq se les manda la 1.ª página como imagen (TGNV_vistaPrevia_)
   if (est.enCurso != null) { est.res.push({ nom: lectores[est.enCurso].nom, error: 'no respondió a tiempo' }); est.i++; est.enCurso = null; }
   if (Date.now() - est.t0 > 15 * 60000) {
     lectores.slice(est.i).forEach(function (L) { est.res.push({ nom: L.nom, error: 'no se alcanzó (muy lento hoy)' }); });
@@ -231,8 +255,8 @@ function TGNV_leerUno_(est, L) {
     } else {
       // Las MISMAS instrucciones del lector real de vouchers (TG_PromptVoucher.js); si faltaran, las cortas de prueba.
       var instr = typeof TGNV_PROMPT_VOUCHER_ === 'string' && TGNV_PROMPT_VOUCHER_ ? TGNV_PROMPT_VOUCHER_ : TGNV_SISTEMA_;
-      d = IA_llamar_({ proveedor: L.prov, clave: clave, sistema: instr, texto: pedido, maxTokens: L.nvidia ? (pensar ? 16000 : 4000) : 2000, adjunto: adjunto,
-        modelo: L.nvidia ? (lc.modelo.nvidia || '') : '', pensar: pensar, detalle: L.nvidia ? 'high' : '' });
+      d = IA_llamar_({ proveedor: L.prov, clave: clave, sistema: instr, texto: pedido, maxTokens: L.nvidia ? (pensar ? 16000 : 4000) : 16000, adjunto: adjunto,   // Gemini 4 piensa: su razonamiento también cuenta
+        modelo: L.nvidia ? (lc.modelo.nvidia || '') : (L.modelo || ''), pensar: pensar, detalle: L.nvidia ? 'high' : '' });
     }
     return { nom: nom, s: Math.round((Date.now() - t1) / 100) / 10, d: d || {} };
   } catch (e) { return { nom: nom, s: Math.round((Date.now() - t1) / 100) / 10, error: String(e.message || e).slice(0, 120) }; }
@@ -265,23 +289,42 @@ function TGNV_norm_(c, v) {
 }
 
 function TGNV_compararMostrar_(est) {
-  var res = est.res, base = res.filter(function (x) { return x.nom === 'Gemini' && x.d; })[0];
-  var lineas = ['🧪 <b>Lectura del voucher: Gemini vs NVIDIA y Groq</b>', ''];
+  var res = est.res, gm = est.modo === 'gemini';
+  var base = gm ? null : res.filter(function (x) { return x.d && /^Gemini/.test(x.nom); })[0];
+  var lineas = [gm ? '🧪 <b>Lectura del voucher: todos los Gemini gratis</b>' : '🧪 <b>Lectura del voucher: Gemini vs NVIDIA y Groq</b>', ''];
   res.forEach(function (x) { lineas.push((x.error ? '❌ ' : '✅ ') + '<b>' + TG_esc_(x.nom) + '</b>' + (x.s != null ? ' · ' + x.s + ' s' : '') + (x.error ? ' — ' + TG_esc_(x.error) : '')); });
   lineas.push('');
   TGNV_CAMPOS_.forEach(function (c) {
     var vals = res.filter(function (x) { return x.d; }).map(function (x) { return { nom: x.nom, v: String(x.d[c[0]] == null ? '' : x.d[c[0]]).trim() }; });
     if (!vals.some(function (v) { return v.v; })) return;
     var ref = base ? TGNV_norm_(c[0], base.d[c[0]]) : null;
+    if (gm) {   // sin «el bueno»: vale lo que dice la MAYORÍA (si hay empate, nadie es referencia)
+      var cuenta = {}; vals.forEach(function (v) { var k = TGNV_norm_(c[0], v.v); cuenta[k] = (cuenta[k] || 0) + 1; });
+      var orden = Object.keys(cuenta).sort(function (a, b) { return cuenta[b] - cuenta[a]; });
+      ref = orden.length && (orden.length === 1 || cuenta[orden[0]] > cuenta[orden[1]]) ? orden[0] : null;
+    }
     lineas.push('<b>' + c[1] + '</b>');
     vals.forEach(function (v) {
-      var marca = v.nom === 'Gemini' || ref == null ? '•' : (TGNV_norm_(c[0], v.v) === ref ? '✅' : '⚠️');
+      var marca = (base && v.nom === base.nom) || ref == null ? '•' : (TGNV_norm_(c[0], v.v) === ref ? '✅' : '⚠️');
       lineas.push('  ' + marca + ' ' + TG_esc_(v.nom) + ': ' + (v.v ? '<code>' + TG_esc_(v.v.slice(0, 60)) + '</code>' : '—'));
     });
   });
   if (est.limGroq && (est.limGroq.reqQueda || est.limGroq.tokQueda))
     lineas.push('', '📊 <b>Groq gratis</b>: le quedan ' + (est.limGroq.reqQueda || '?') + ' de ' + (est.limGroq.reqDia || '?') + ' pedidos hoy · ' +
       (est.limGroq.tokQueda || '?') + ' de ' + (est.limGroq.tokMin || '?') + ' tokens este minuto. <i>Groq usó instrucciones resumidas (las completas no caben en su límite gratis).</i>');
-  lineas.push('', '<i>✅ = igual a Gemini · ⚠️ = distinto (revise la foto: Gemini también puede equivocarse). No se guardó nada.</i>');
+  if (gm && est.noDisp && est.noDisp.length) lineas.push('', '<i>No disponibles hoy para su clave: ' + TG_esc_(est.noDisp.join(', ')) + '</i>');
+  lineas.push('', gm ? '<i>✅ = igual a lo que leyó la mayoría · ⚠️ = distinto (revise la foto: la mayoría también puede equivocarse). Para usar uno en la hoja: /lectores → 🔧 Modelo de Gemini. No se guardó nada.</i>'
+    : '<i>✅ = igual a Gemini (el mismo modelo que lee en la hoja) · ⚠️ = distinto (revise la foto: Gemini también puede equivocarse). No se guardó nada.</i>');
   TG_enviar_(est.chat, lineas.join('\n'));
+}
+
+/** Modelos gratis de Gemini que la clave ve hoy → {si: [[id, nombre]], no: [nombre]} */
+function TGNV_geminiDisponibles_() {
+  var k = PropertiesService.getScriptProperties().getProperty('CIA_KEY_GEMINIGOOGLE') || IA_clave_('Gemini (Google)'), ids = null;
+  try {
+    var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=300', { headers: { 'x-goog-api-key': k }, muteHttpExceptions: true });
+    if (r.getResponseCode() === 200) ids = (JSON.parse(r.getContentText()).models || []).map(function (m) { return String(m.name).replace(/^models\//, ''); });
+  } catch (e) {}
+  if (!ids) return { si: TGNV_GEMINI_GRATIS_.slice(), no: [] };   // no se pudo ver la lista: se prueban todos (el que no exista dará error)
+  return { si: TGNV_GEMINI_GRATIS_.filter(function (x) { return ids.indexOf(x[0]) >= 0; }), no: TGNV_GEMINI_GRATIS_.filter(function (x) { return ids.indexOf(x[0]) < 0; }).map(function (x) { return x[1]; }) };
 }
