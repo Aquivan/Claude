@@ -47,6 +47,7 @@ function onOpen() {
     .addItem('Números autorizados', 'WA_menuNumeros')
     .addItem('🏷 Preguntar de quién son los vouchers (sí/no)', 'WA_menuPreguntarNombre')
     .addItem('Conectar app a la cuenta (si no llegan mensajes)', 'WA_menuSuscribir')
+    .addItem('Volver a registrar el número del bot (si WhatsApp dice «Invitar a WhatsApp»)', 'WA_menuRegistrar')
     .addToUi();
 }
 
@@ -168,8 +169,13 @@ function WA_menuEstado() {
   lineas.push('Token: ' + (t ? 'guardado' : 'FALTA'));
   lineas.push('Número (ID): ' + (id || 'FALTA'));
   if (t && id) {
-    var r = WA_graph_('GET', id + '?fields=display_phone_number,verified_name,quality_rating');
+    var r = WA_graph_('GET', id + '?fields=display_phone_number,verified_name,quality_rating,status,platform_type,account_mode,code_verification_status,name_status');
     lineas.push(r.ok ? 'Meta: ✅ ' + (r.datos.display_phone_number || '') + ' · ' + (r.datos.verified_name || '') : 'Meta: ❌ ' + r.error);
+    if (r.ok) {
+      var d = r.datos, conectado = String(d.status || '').toUpperCase() === 'CONNECTED' && String(d.platform_type || '').toUpperCase() === 'CLOUD_API';
+      lineas.push('Número en WhatsApp: ' + (conectado ? '✅ conectado' : '❌ ' + (d.status || 'sin estado') + ' / ' + (d.platform_type || 'sin plataforma') +
+        ' → use «Volver a registrar el número del bot»') + (d.account_mode ? ' · modo ' + d.account_mode : ''));
+    }
   }
   lineas.push('Autorizados: ' + (WA_permitidos_().join(', ') || 'FALTA'));
   lineas.push('Aplicación web: ' + (WA_urlApp_() || 'sin publicar'));
@@ -193,6 +199,27 @@ function WA_menuSuscribir() {
   if (!waba) { ui.alert('Falta el "Identificador de la cuenta de WhatsApp Business". Póngalo en "1. Configurar".'); return; }
   var r = WA_graph_('POST', waba + '/subscribed_apps', {});
   ui.alert(r.ok ? '✅ La app quedó conectada a la cuenta de WhatsApp. Mande un voucher de prueba.' : '❌ Meta respondió: ' + r.error);
+}
+
+/**
+ * Si Meta desconectó el número del bot, WhatsApp lo muestra como «Invita a … a WhatsApp» y los mensajes quedan con un ✓.
+ * Se vuelve a registrar en la Cloud API (POST /{id}/register) con un PIN de 6 dígitos que escribe la persona:
+ * si el número ya tenía verificación en dos pasos, debe ser ESE PIN; si no tenía, este queda como su PIN.
+ */
+function WA_menuRegistrar() {
+  var ui = SpreadsheetApp.getUi(), id = WA_prop_('WA_PHONE_ID');
+  if (!id || !WA_prop_('WA_TOKEN')) { ui.alert('Falta el token o el ID del número: use «1. Configurar».'); return; }
+  var r = ui.prompt('Volver a registrar el número del bot',
+    'Escriba un PIN de 6 dígitos (verificación en dos pasos del número del bot).\n' +
+    'Si ya le puso un PIN antes, debe ser ese mismo; si nunca le puso, este quedará como su PIN (anótelo).', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var pin = r.getResponseText().replace(/\D/g, '');
+  if (pin.length !== 6) { ui.alert('El PIN debe tener 6 dígitos.'); return; }
+  var x = WA_graph_('POST', id + '/register', { messaging_product: 'whatsapp', pin: pin });
+  if (!x.ok) { ui.alert('❌ Meta respondió: ' + x.error + '\n\nSi dice que el PIN no coincide, use el PIN que le puso antes. Si es un número de prueba de Meta, revise en developers.facebook.com → su app → WhatsApp → Configuración de la API que el número siga ahí.'); return; }
+  var s2 = WA_prop_('WA_WABA_ID') ? WA_graph_('POST', WA_prop_('WA_WABA_ID') + '/subscribed_apps', {}) : { ok: true };
+  ui.alert('✅ Número registrado de nuevo' + (s2.ok ? ' y app conectada a la cuenta' : ' (la conexión de la app falló: ' + s2.error + ')') +
+    '.\nMande «hola» al bot desde su celular: debe salir con ✓✓.');
 }
 
 function WA_menuInstante() {
