@@ -23,6 +23,8 @@ var IA_PROVEEDORES_ = {
   // NVIDIA (build.nvidia.com): una sola clave «nvapi-…» para todos; modelos abiertos GRATIS para probar (≈40 pedidos/min).
   // La lista gratuita cambia cada pocas semanas: menú 🧠 Asistente IA → 🟩 Modelos gratis de NVIDIA (los prueba con su clave)
   // y el que elija ahí queda en «NVIDIA · modelo elegido».
+  // Groq con un modelo que LEE IMÁGENES (Qwen 3.x de 27B, Muse…): el modelo exacto lo elige la prueba del bot según lo que tenga la clave hoy.
+  'Groq · visión': { tipo: 'openai', url: 'https://api.groq.com/openai/v1/chat/completions', modelo: 'qwen/qwen3.8-27b', modeloProp: 'IA_GROQ_VISION', imagen: true, sinFormatoJson: true, sinPensar: true, pausa: 1500 },
   'NVIDIA · Kimi K3.1 Pro': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', sinPensar: true, modelo: 'moonshotai/kimi-k3.1-pro', imagen: true, sinFormatoJson: true, pausa: 1600 },
   'NVIDIA · Nemotron 3.5 Super VL (lee imágenes)': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', sinPensar: true, modelo: 'nvidia/nemotron-3.5-super-vl-120b-a12b', imagen: true, sinFormatoJson: true, pausa: 1600 },
   'NVIDIA · Muse Glimmer (lee imágenes)': { tipo: 'openai', url: 'https://integrate.api.nvidia.com/v1/chat/completions', sinPensar: true, modelo: 'meta/muse-glimmer-30b', imagen: true, sinFormatoJson: true, pausa: 1600 },

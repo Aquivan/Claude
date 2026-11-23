@@ -105,7 +105,27 @@ function TGNV_alBoton_(ctx, datos) {
 var TGNV_LECTORES_ = [
   { nom: 'Gemini', prov: 'Gemini (Google)' },
   { nom: 'Nemotron Super VL', prov: 'NVIDIA · Nemotron 3.5 Super VL (lee imágenes)', nvidia: true },
+  { nom: 'Groq', prov: 'Groq · visión', groq: true },
 ];
+
+/** Clave de Groq (la de 🎤 audios sirve) y el modelo que lee imágenes que tenga HOY (se busca en su lista; 6 h en memoria). */
+function TGNV_groqClave_() {
+  var p = PropertiesService.getScriptProperties();
+  return p.getProperty('GROQ_KEY') || p.getProperty('IA_KEY_GROQ') || p.getProperty('CIA_KEY_GROQ') || '';
+}
+function TGNV_groqModelo_(clave) {
+  var c = CacheService.getScriptCache(), m = c.get('tgnv_groq_vis');
+  if (m) return m;
+  var r = UrlFetchApp.fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: 'Bearer ' + clave }, muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) throw new Error('Groq respondió ' + r.getResponseCode() + ' al pedir sus modelos');
+  var ids = (JSON.parse(r.getContentText()).data || []).map(function (x) { return String(x.id); });
+  var pref = [/qwen\/qwen3\.\d+-27b/i, /muse/i, /llama-4-maverick/i, /llama-4-scout/i, /vision|-vl/i];
+  for (var i = 0; i < pref.length && !m; i++) m = ids.filter(function (id) { return pref[i].test(id); }).sort().pop();
+  if (!m) throw new Error('su clave de Groq no tiene hoy ningún modelo que lea imágenes');
+  PropertiesService.getScriptProperties().setProperty('IA_GROQ_VISION', m);
+  c.put('tgnv_groq_vis', m, 21600);
+  return m;
+}
 var TGNV_CAMPOS_ = [['banco', 'Banco'], ['fecha', 'Fecha'], ['nOperacion', 'N° operación'], ['moneda', 'Moneda'], ['monto', 'Monto'],
   ['proveedor', 'Proveedor (beneficiario)'], ['cliente', 'Cliente (quién paga)'], ['idCliente', 'RUC del cliente'], ['descripcion', 'Descripción']];
 var TGNV_SISTEMA_ = 'Eres un lector de comprobantes bancarios de Perú (vouchers de depósito o transferencia: BCP, BBVA, Interbank, Scotiabank, BN, cajas). ' +
@@ -126,7 +146,7 @@ function TGNV_voucher_(ctx, blob, mime, m) {
   var esPdf = /pdf/i.test(mime);
   PropertiesService.getScriptProperties().setProperty('TGNV_VCH', JSON.stringify({ chat: String(ctx.chatId), id: f.getId(), mime: mime, i: 0, res: [], enCurso: null, t0: Date.now(), pdf: esPdf }));
   TGNV_programarV_(2000);
-  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ' y <b>Nemotron Super VL</b>, con las instrucciones reales del lector de vouchers,') + ' en segundo plano: normalmente menos de 1 minuto (más si NVIDIA está saturado). No se guarda nada en la hoja.' +
+  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ', <b>Nemotron Super VL</b> (NVIDIA) y <b>Groq</b>, con las instrucciones reales del lector de vouchers,') + ' en segundo plano: normalmente menos de 1 minuto (más si NVIDIA está saturado). No se guarda nada en la hoja.' +
     (esPdf ? '\n<i>Es un PDF: NVIDIA solo lee imágenes; para compararlo mande una foto o captura del voucher.</i>' : ''));
 }
 
@@ -156,10 +176,13 @@ function TGNV_leerPaso() {
   var t1 = Date.now(), r;
   try {
     var blob = DriveApp.getFileById(est.id).getBlob();
-    var clave = L.nvidia ? CIA_nvClave_() : (p.getProperty('CIA_KEY_GEMINIGOOGLE') || IA_clave_('Gemini (Google)'));
+    var clave = L.nvidia ? CIA_nvClave_() : L.groq ? TGNV_groqClave_() : (p.getProperty('CIA_KEY_GEMINIGOOGLE') || IA_clave_('Gemini (Google)'));
+    if (L.groq && !clave) throw new Error('no hay clave de Groq (menú 🤖 Telegram → 🎤 Clave de Groq)');
+    var modeloL = L.groq ? TGNV_groqModelo_(clave) : '';
+    if (modeloL) L.nom = 'Groq · ' + modeloL.split('/').pop();
     // Las MISMAS instrucciones del lector real de vouchers (TG_PromptVoucher.js); si faltaran, las cortas de prueba.
     var instr = typeof TGNV_PROMPT_VOUCHER_ === 'string' && TGNV_PROMPT_VOUCHER_ ? TGNV_PROMPT_VOUCHER_ : TGNV_SISTEMA_;
-    var d = IA_llamar_({ proveedor: L.prov, clave: clave, sistema: instr, texto: 'Analiza este comprobante y responde SOLO el JSON del formato indicado.', maxTokens: L.nvidia ? 4000 : 2000,
+    var d = IA_llamar_({ proveedor: L.prov, clave: clave, modelo: modeloL, sistema: instr, texto: 'Analiza este comprobante y responde SOLO el JSON del formato indicado.', maxTokens: L.nvidia || L.groq ? 4000 : 2000,
       adjunto: { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime } });
     r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, d: d || {} };
   } catch (e) { r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, error: String(e.message || e).slice(0, 120) }; }
@@ -179,7 +202,7 @@ function TGNV_norm_(c, v) {
 
 function TGNV_compararMostrar_(est) {
   var res = est.res, base = res.filter(function (x) { return x.nom === 'Gemini' && x.d; })[0];
-  var lineas = ['🧪 <b>Lectura del voucher: Gemini vs NVIDIA</b>', ''];
+  var lineas = ['🧪 <b>Lectura del voucher: Gemini vs NVIDIA y Groq</b>', ''];
   res.forEach(function (x) { lineas.push((x.error ? '❌ ' : '✅ ') + '<b>' + TG_esc_(x.nom) + '</b>' + (x.s != null ? ' · ' + x.s + ' s' : '') + (x.error ? ' — ' + TG_esc_(x.error) : '')); });
   lineas.push('');
   TGNV_CAMPOS_.forEach(function (c) {
