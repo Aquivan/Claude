@@ -55,6 +55,7 @@ function CIA_agregarMenu_() {
     .addSeparator()
     .addItem('🔑 Guardar clave de IA (de esta pestaña)', 'CIA_menuGuardarClave')
     .addItem('🧪 Probar conexión con la IA', 'CIA_menuProbar')
+    .addItem('🟩 Modelos gratis de NVIDIA (probarlos con mi clave)', 'CIA_menuNvidia')
     .addSeparator()
     .addItem('🧹 Quitar el asistente anterior (pestaña vieja)', 'IA_menuRetirar')
     .addToUi();
@@ -905,3 +906,80 @@ function CIA_escribirLista_(ss, nombre, titulo, nota, enc, filas, formatos, anch
   anchos.forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   ss.setActiveSheet(sh);
 }
+
+/* ============================================================ 🟩 modelos gratis de NVIDIA */
+
+// Familias que interesan (la lista gratuita cambia seguido: se prueba lo que la clave tiene HOY).
+var CIA_NV_INTERES_ = /deepseek|kimi|moonshot|glm|z-ai|nemotron-3\.5|nemotron-3-ultra|mistral-large|minimax|gemma-4|qwen|step-5|gpt-oss|muse|llama-3\.2-90b-vision/i;
+var CIA_NV_NOTA_ = [
+  [/deepseek/i, 'Texto, razona bien con números: conciliar, analizar, resúmenes.'],
+  [/kimi|moonshot/i, 'Muy bueno en razonamiento largo; algunas versiones leen imágenes.'],
+  [/super-vl|vision|omni|muse|-vl/i, '👁 Lee imágenes: el candidato para probar vouchers.'],
+  [/mistral-large/i, 'Grande y preciso en español; algo más lento.'],
+  [/glm/i, 'Rápido, contexto muy largo; solo texto.'],
+  [/ultra/i, 'El más grande de NVIDIA: preciso pero lento.'],
+  [/lightning|bolt|flash|nano/i, 'Rápido y liviano: tareas simples.'],
+];
+
+function CIA_menuNvidia() {
+  var html = HtmlService.createHtmlOutput(CIA_NV_HTML_).setWidth(820).setHeight(600);
+  SpreadsheetApp.getUi().showModalDialog(html, '🟩 Modelos gratis de NVIDIA');
+}
+
+function CIA_nvClave_() {
+  var p = PropertiesService.getScriptProperties();
+  return p.getProperty('CIA_KEY_NVIDIA') || p.getProperty('IA_KEY_NVIDIA') || '';
+}
+
+/** Lista los modelos que su clave ve hoy y prueba los que interesan (texto corto): ok, segundos y nota. */
+function CIA_nvProbar() {
+  var clave = CIA_nvClave_();
+  if (!clave) throw new Error('Primero guarde la clave de NVIDIA: elija una IA «NVIDIA · …» en la fila 11 y use 🔑 Guardar clave de IA.');
+  var r = UrlFetchApp.fetch('https://integrate.api.nvidia.com/v1/models', { headers: { Authorization: 'Bearer ' + clave }, muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) throw new Error('NVIDIA respondió ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 200));
+  var todos = (JSON.parse(r.getContentText()).data || []).map(function (m) { return String(m.id); });
+  var cand = todos.filter(function (id) { return CIA_NV_INTERES_.test(id) && !/embed|rerank|safety|guard|translate|parse|reward|calibration|diffusion/i.test(id); }).slice(0, 24);
+  var res = [];
+  for (var i = 0; i < cand.length; i += 6) {
+    var lote = cand.slice(i, i + 6), t0 = Date.now();
+    var resp = UrlFetchApp.fetchAll(lote.map(function (id) {
+      return { url: 'https://integrate.api.nvidia.com/v1/chat/completions', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+        headers: { Authorization: 'Bearer ' + clave },
+        payload: JSON.stringify({ model: id, max_tokens: 40, temperature: 0, messages: [{ role: 'user', content: 'Responde solo: {"ok":true}' }] }) };
+    }));
+    var ms = Date.now() - t0;
+    resp.forEach(function (x, k) {
+      var cod = x.getResponseCode(), nota = '';
+      CIA_NV_NOTA_.some(function (n) { if (n[0].test(lote[k])) { nota = n[1]; return true; } return false; });
+      res.push({ id: lote[k], ok: cod === 200, cod: cod, s: Math.round(ms / 100) / 10, nota: nota,
+        error: cod === 200 ? '' : cod === 404 ? 'no disponible gratis para su clave' : cod === 429 ? 'límite de pedidos, pruebe en 1 min' : String(x.getContentText()).slice(0, 90) });
+    });
+  }
+  res.sort(function (a, b) { return (b.ok - a.ok) || a.s - b.s; });
+  return { total: todos.length, probados: res, elegido: PropertiesService.getScriptProperties().getProperty('IA_NVIDIA_MODELO') || '' };
+}
+
+/** «Usar este»: queda como «NVIDIA · modelo elegido» y se pone en la fila 11 de la pestaña. */
+function CIA_nvElegir(id) {
+  if (!/^[\w.\-]+\/[\w.\-]+$/.test(String(id || ''))) throw new Error('Modelo no válido.');
+  PropertiesService.getScriptProperties().setProperty('IA_NVIDIA_MODELO', id);
+  try { CIA_hoja_(SpreadsheetApp.getActiveSpreadsheet()).getRange('B11').setValue('NVIDIA · modelo elegido'); } catch (e) {}
+  return true;
+}
+
+var CIA_NV_HTML_ = [
+  '<!doctype html><html><head><meta charset="utf-8"><style>body{font:13px Arial,sans-serif;margin:0;padding:12px;color:#222}',
+  'table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #E2E8F0;padding:5px;text-align:left;vertical-align:top}th{background:#F1F5F9}',
+  'button{padding:5px 10px;border:0;border-radius:6px;background:#15803D;color:#fff;cursor:pointer}.g{background:#6b7280}.e{color:#B91C1C}.s{color:#64748B;font-size:12px}</style></head><body>',
+  '<div class=s>Pregunta a NVIDIA con su clave qué modelos responden <b>hoy</b> gratis (la lista cambia cada pocas semanas), mide cuánto tardan y le deja elegir uno para el 🧠 Asistente IA.</div>',
+  '<p><button id=b onclick=probar()>▶ Probar ahora</button> <button class=g onclick="google.script.host.close()">Cerrar</button></p><div id=o></div>',
+  '<script>function esc(t){return String(t==null?"":t).replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c]})}',
+  'function probar(){document.getElementById("b").disabled=true;document.getElementById("o").textContent="⏳ Probando (unos 20-60 s)…";',
+  ' google.script.run.withFailureHandler(function(e){document.getElementById("b").disabled=false;document.getElementById("o").innerHTML="<div class=e>❌ "+esc(e.message)+"</div>"}).withSuccessHandler(function(r){document.getElementById("b").disabled=false;',
+  '  var h="<div class=s>Su clave ve "+r.total+" modelos; se probaron "+r.probados.length+" de los que interesan."+(r.elegido?" Elegido ahora: <b>"+esc(r.elegido)+"</b>":"")+"</div><table><tr><th>Modelo</th><th>Resultado</th><th>Tiempo</th><th>Para qué</th><th></th></tr>";',
+  '  r.probados.forEach(function(m){h+="<tr><td>"+esc(m.id)+"</td><td>"+(m.ok?"✅ responde":"<span class=e>❌ "+esc(m.error)+"</span>")+"</td><td>"+m.s+" s</td><td class=s>"+esc(m.nota)+"</td><td>"+(m.ok?"<button onclick=\\"usar(\'"+esc(m.id)+"\')\\">Usar este</button>":"")+"</td></tr>"});',
+  '  document.getElementById("o").innerHTML=h+"</table>"}).CIA_nvProbar()}',
+  'function usar(id){google.script.run.withSuccessHandler(function(){alert("✅ Listo: el 🧠 Asistente IA usará "+id+" (fila 11: NVIDIA · modelo elegido).")}).withFailureHandler(function(e){alert(e.message)}).CIA_nvElegir(id)}',
+  '</script></body></html>'
+].join('\n');
+
