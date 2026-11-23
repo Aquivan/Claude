@@ -33,6 +33,7 @@ function CIA_agregarMenu_() {
     .addItem('🔁 Cambiar Original ↔ Foto (el último o una fila)', 'CTV_menuCambiar')
     .addItem('🔗 Completar Originales con lo trabajado en Fotos', 'VCO_menuAbrir')
     .addItem('🧾 Lectores de vouchers (qué IA lee y en qué orden)', 'LECT_menuAbrir')
+    .addItem('🤖 IA de cada tarea (audios, RUC… y sus respaldos)', 'IAT_menuAbrir')
     .addSeparator()
     .addItem('🔍 Auditor IA: abrir (compras y pagos de todas las empresas)', 'AUD_menuAbrir')
     .addItem('▶ Auditar con IA (según los filtros)', 'AUD_menuAuditar')

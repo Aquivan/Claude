@@ -269,6 +269,10 @@ function VIG_semanal() {
   var b = VIG_buscar_(), props = PropertiesService.getScriptProperties(), ult = null;
   try { ult = JSON.parse(props.getProperty('VIG_ULTIMO') || 'null'); } catch (e) {}
   var hayPruebas = VIG_pruebas_().length > 0;
+  try {   // 🤖 otras tareas (TG_IATareas.js): modelos nuevos de voz (Whisper) y de búsqueda web: solo aviso, se eligen en /ia
+    var otros = IAT_nuevos_();
+    if (otros.length) VIG_enviar_('', '🆕 <b>Modelos nuevos para otras tareas</b>:\n' + otros.join('\n') + '\n\n<i>Para usar uno: /ia → 🔧 en esa tarea.</i>');
+  } catch (e) {}
   if (b.nuevos.length || b.perdidos.length) {
     VIG_enviar_('', '🆕 ' + VIG_textoBusqueda_(b) + (b.nuevos.length && !hayPruebas ? '\n\n📌 Para que los pruebe solo, guarde vouchers de prueba (resultado de «comparar» → 📌).' : ''));
     if (b.nuevos.length && hayPruebas) VIG_probar_('', b.nuevos.concat(VIG_actuales_()), 'modelos nuevos');
@@ -330,9 +334,10 @@ function VIG_panel_(ctx) {
 
 function VIG_tgBuscar_(ctx) {
   TG_accion_(ctx.chatId, 'typing');
-  var r = VIG_buscar_();
+  var r = VIG_buscar_(), otros = [];
+  try { otros = IAT_nuevos_(); } catch (e) {}
   var teclado = r.nuevos.length ? [[{ text: '🧪 Probar los ' + r.nuevos.length + ' nuevos (vs. los que uso)', callback_data: 'k:' + TG_guardarBoton_({ t: 'vig', a: 'probarNuevos', items: r.nuevos.slice(0, 15) }, 21600) }]] : null;
-  TG_enviar_(ctx.chatId, VIG_textoBusqueda_(r), teclado);
+  TG_enviar_(ctx.chatId, VIG_textoBusqueda_(r) + (otros.length ? '\n\n🆕 <b>Otras tareas</b> (/ia):\n' + otros.join('\n') : ''), teclado);
 }
 
 function VIG_tgPruebas_(ctx) {
