@@ -75,6 +75,7 @@ function LEC_leer_(base64, mimeType, esPDF, totalPaginasLote) {
         modelo = cfg[p].modelo;
       }
       const quien = LEC_NOMBRES_[p] + ' · ' + String(modelo || '').split('/').pop();
+      if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.lector = quien;
       const nota = (p !== 'gemini' || fallas.length)
         ? '🤖 Leído por ' + quien + (fallas.length ? '\nAntes fallaron: ' + fallas.join(' | ') : '')
         : '';

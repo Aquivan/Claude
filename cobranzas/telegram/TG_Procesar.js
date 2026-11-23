@@ -792,10 +792,23 @@ async function TGP_separar_(ss, job) {
 }
 
 // Pide a la hoja de Vouchers que procese YA (la misma dirección del "⚡ Procesar al instante" de WhatsApp).
+// Devuelve lo que contesta la hoja (con ⏱ tiempos: total, ia, escribir, lector) o null.
 function TGP_procesarYa_() {
   var url = PropertiesService.getScriptProperties().getProperty('TGP_PROCESAR_URL');
-  if (!url) return;
-  try { UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true }); } catch (e) { console.warn('Procesar al instante: ' + e.message); }
+  if (!url) return null;
+  try {
+    var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+    try { return JSON.parse(r.getContentText()); } catch (e) { return null; }
+  } catch (e) { console.warn('Procesar al instante: ' + e.message); return null; }
+}
+
+/** «⏱ 14 s: leer con IA 6 s · guardar 2 s · resto 6 s (Gemini · gemini-4-hydrogen)» */
+function TGP_textoTiempos_(r, t0) {
+  var t = r && r.tiempos;
+  if (!t || !t.total) return t0 ? '⏱ ' + Math.round((Date.now() - t0) / 1000) + ' s' : '';
+  var resto = Math.max(0, Math.round((t.total - t.ia - t.escribir) * 10) / 10);
+  return '⏱ ' + (t0 ? Math.round((Date.now() - t0) / 1000) + ' s en total · ' : '') + 'en la hoja ' + t.total + ' s: leer con IA ' + t.ia + ' s' +
+    (t.lecturas > 1 ? ' (' + t.lecturas + ' lecturas)' : '') + ' · guardar ' + t.escribir + ' s · resto ' + resto + ' s' + (t.lector ? ' (' + t.lector + ')' : '');
 }
 
 /** ¿Ya están las filas? Completa la factura y avisa. true = terminó. */

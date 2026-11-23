@@ -8,10 +8,19 @@
 // pagina por separado y devolver a que pagina pertenece cada voucher. Para
 // una sola imagen o una sola pagina de PDF, se deja undefined/1 (comportamiento
 // identico al de siempre).
+// ⏱ Tiempos de ESTA ejecución (los devuelve «procesar al instante» para que Telegram y WhatsApp digan en qué se fue el tiempo).
+var TIEMPOS_ = { ia: 0, escribir: 0, lecturas: 0, lector: '' };
+
 function llamarGemini(base64, mimeType, esPDF, totalPaginasLote) {
-  // 🧾 Respaldo automático entre IAs (Lectores.js): Gemini → NVIDIA → Groq, en el orden que se elija por Telegram.
-  if (typeof LEC_leer_ === 'function') return LEC_leer_(base64, mimeType, esPDF, totalPaginasLote);
-  return llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote).vouchers;
+  const t0 = Date.now();
+  try {
+    // 🧾 Respaldo automático entre IAs (Lectores.js): Gemini → NVIDIA → Groq, en el orden que se elija por Telegram.
+    if (typeof LEC_leer_ === 'function') return LEC_leer_(base64, mimeType, esPDF, totalPaginasLote);
+    return llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote).vouchers;
+  } finally {
+    TIEMPOS_.ia += Date.now() - t0;
+    TIEMPOS_.lecturas++;
+  }
 }
 
 // Solo Gemini (con sus modelos de reserva). opc.sinEsperas: no esperar 15+30 s si

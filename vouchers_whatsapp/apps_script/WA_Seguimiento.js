@@ -177,6 +177,7 @@ function WA_avisarResultados_(hoja, datos) {
       return (n + 1) + '. ' + String(datos[i][4]).slice(0, 40) + '\n' + datos[i][7];
     }).join('\n\n');
     if (txt.length > 3900) txt = txt.slice(0, 3850) + '\n\n… (vea el resto en la hoja de Vouchers)';
+    txt += WA_textoTiempos_(datos, filas);
     WA_enviarTexto_(de, txt);
     filas.forEach(function (i) { hoja.getRange(i + 1, 11).setValue('resultado'); });
   });
@@ -191,12 +192,28 @@ function WA_procesarYa_() {
   if (Date.now() - desde < 6 * 60 * 1000) return false;
   p.setProperty('WA_PROCESANDO', String(Date.now()));
   try {
-    var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+    var t0 = Date.now(), r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
     console.log('Procesar al instante: HTTP ' + r.getResponseCode() + ' ' + r.getContentText().slice(0, 300));
+    try {   // ⏱ en qué se fue el tiempo (lo dice la hoja de Vouchers): se agrega al mensaje del resultado
+      var t = (JSON.parse(r.getContentText()) || {}).tiempos;
+      if (t && t.total) p.setProperty('WA_ULT_TIEMPOS', JSON.stringify({ en: Date.now(), t: t }));
+    } catch (e2) {}
   } catch (e) {
     console.error('Procesar al instante falló: ' + e.message);
   } finally {
     p.deleteProperty('WA_PROCESANDO');
   }
   return true;
+}
+
+/** «⏱ 25 s desde que llegó · en la hoja 12 s: leer con IA 6 s · guardar 1 s · resto 5 s» (si la última medición es de esta tanda). */
+function WA_textoTiempos_(datos, filas) {
+  try {
+    var x = JSON.parse(WA_prop_('WA_ULT_TIEMPOS') || 'null');
+    if (!x || Date.now() - x.en > 10 * 60 * 1000) return '';
+    var t = x.t, resto = Math.max(0, Math.round((t.total - t.ia - t.escribir) * 10) / 10);
+    var llego = Math.min.apply(null, filas.map(function (i) { return new Date(datos[i][0]).getTime(); }).filter(function (n) { return n > 0; }));
+    return '\n\n_⏱ ' + (isFinite(llego) ? Math.round((Date.now() - llego) / 1000) + ' s desde que llegó · ' : '') + 'en la hoja ' + t.total + ' s: leer con IA ' + t.ia +
+      ' s · guardar ' + t.escribir + ' s · resto ' + resto + ' s_';
+  } catch (e) { return ''; }
 }
