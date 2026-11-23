@@ -100,12 +100,23 @@ function escribirFilaVoucher(ctx, voucher, nombreArchivo, numeroPagina, estadoCo
     origen
   ];
 
-  // --- ESCRITURA SIEMPRE CELDA POR CELDA ---
+  // ⚡ Primero la fila COMPLETA de una sola vez (1 escritura en vez de 14: varios segundos menos por voucher).
+  // Si falla (una columna tipada por una "Tabla" de Sheets), recién ahí se escribe celda por celda como siempre.
+  const tEscribir = Date.now();
+  let filaOk = false;
+  try {
+    hoja.getRange(fila, 1, 1, filaValores.length).setValues([filaValores]);
+    filaOk = true;
+  } catch (eFila) {
+    Logger.log('  Fila ' + fila + ' de una vez no se pudo (' + eFila.message + '): se escribe celda por celda.');
+  }
+
+  // --- ESCRITURA CELDA POR CELDA (solo si la fila completa falló) ---
   // Si una columna puntual esta tipada de forma incompatible por una
   // "Tabla" de Sheets, esa celda especifica queda vacia (se ve en el log),
   // pero las demas columnas se escriben normalmente y el procesamiento
   // NUNCA se detiene.
-  for (let c = 0; c < filaValores.length; c++) {
+  for (let c = 0; c < filaValores.length && !filaOk; c++) {
     try {
       hoja.getRange(fila, c + 1).setValue(filaValores[c]);
     } catch (eCelda) {
@@ -121,6 +132,12 @@ function escribirFilaVoucher(ctx, voucher, nombreArchivo, numeroPagina, estadoCo
   flushSeguro_();
 
   aplicarFormatoNumerico_(hoja, fila);
+  if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.escribir += Date.now() - tEscribir;   // ⏱ Diagnostico.js
+
+  // 🧾 Si este voucher NO lo leyó Gemini (o Gemini falló antes), nota en el N° de operación: quién lo leyó (Lectores.js).
+  if (voucher._lector) {
+    try { hoja.getRange(fila, 2).setNote(voucher._lector); } catch (eNota) {}
+  }
 
   ctx.ultimaFila = fila;
 

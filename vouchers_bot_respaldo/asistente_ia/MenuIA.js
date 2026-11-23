@@ -7,9 +7,11 @@ function VIA_menu_() {
     .addItem('💬 Chat con la IA (preguntas, fotos, PDF, Excel)', 'VIA_menuAbrirChat')
     .addItem('📰 Resumen de cobranzas y pagos con IA', 'VIA_menuResumen')
     .addItem('📋 Analizar vouchers procesados (factura, empresa, retención)', 'VIA_menuProcesados')
-    .addItem('🔎 Identificar RUC de los proveedores (filas seleccionadas)', 'VIA_menuIdentificarRuc')
+    .addItem('🔎 Identificar RUC de los proveedores (vouchers sin RUC)', 'VIA_menuIdentificarRuc')
     .addItem('🔁 Cambiar Original ↔ Foto (el último o una fila)', 'VIA_menuCambiarTipo')
     .addItem('🔗 Completar Originales con lo trabajado en Fotos', 'VIA_menuVco')
+    .addItem('🧾 Lectores de vouchers (qué IA lee y en qué orden)', 'VIA_menuLectores')
+    .addItem('🤖 IA de cada tarea (audios, RUC… y sus respaldos)', 'VIA_menuIAT')
     .addSeparator()
     .addItem('🔍 Auditor IA: abrir (compras y pagos de todas las empresas) ↗', 'VIA_m_AUD_menuAbrir')
     .addItem('▶ Auditar con IA (según los filtros) ↗', 'VIA_m_AUD_menuAuditar')
@@ -33,6 +35,7 @@ function VIA_menu_() {
     .addSeparator()
     .addItem('🔑 Guardar clave de IA (de esta pestaña) ↗', 'VIA_m_CIA_menuGuardarClave')
     .addItem('🧪 Probar conexión con la IA ↗', 'VIA_m_CIA_menuProbar')
+    .addItem('🟩 Modelos gratis de NVIDIA (probarlos con mi clave) ↗', 'VIA_m_CIA_menuNvidia')
     .addSeparator()
     .addItem('🧹 Quitar el asistente anterior (pestaña vieja)', 'VIA_menuRetirar')
     .addToUi();
@@ -57,3 +60,4 @@ function VIA_m_IMP_menuDeshacer() { VIA_abrirCobranzas_('🤝 Importar', 'Esto s
 function VIA_m_IMP_menuBorrar() { VIA_abrirCobranzas_('🤝 Importar', 'Esto se trabaja en Cuentas por Cobrar y Pagar: allí use 🧠 Asistente IA → 🧹 Borrar importación y archivos subidos.'); }
 function VIA_m_CIA_menuGuardarClave() { VIA_abrirCobranzas_('🤝 Conciliar con IA', 'Esto se trabaja en Cuentas por Cobrar y Pagar: allí use 🧠 Asistente IA → 🔑 Guardar clave de IA (de esta pestaña).'); }
 function VIA_m_CIA_menuProbar() { VIA_abrirCobranzas_('🤝 Conciliar con IA', 'Esto se trabaja en Cuentas por Cobrar y Pagar: allí use 🧠 Asistente IA → 🧪 Probar conexión con la IA.'); }
+function VIA_m_CIA_menuNvidia() { VIA_abrirCobranzas_('🤝 Conciliar con IA', 'Esto se trabaja en Cuentas por Cobrar y Pagar: allí use 🧠 Asistente IA → 🟩 Modelos gratis de NVIDIA (probarlos con mi clave).'); }

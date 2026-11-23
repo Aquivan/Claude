@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html><head><base target="_top"><meta charset="utf-8">
+<!-- 🧾 Lectores de vouchers: la MISMA ventana en Cobranzas (LECT_x) y en la hoja de Vouchers (asistente-vouchers.yml la copia con VIA_lectX). -->
+<style>
+  body { font-family: Arial, sans-serif; font-size: 13px; margin: 12px; color: #222; }
+  h3 { margin: 0 0 6px; font-size: 15px; }
+  .nota { color: #555; font-size: 12px; margin: 4px 0 10px; }
+  .fila { display: flex; align-items: center; gap: 8px; border: 1px solid #ddd; border-radius: 6px; padding: 8px; margin-bottom: 6px; background: #fafafa; }
+  .fila.off { opacity: .55; }
+  .num { width: 22px; font-weight: bold; text-align: center; }
+  .nom { width: 120px; font-weight: bold; }
+  .mod { flex: 1; display: flex; gap: 4px; }
+  .mod input { flex: 1; font-size: 12px; padding: 3px; }
+  button { cursor: pointer; font-size: 12px; padding: 3px 7px; }
+  .flechas button { padding: 1px 6px; }
+  .aviso { color: #b45309; font-size: 12px; }
+  .uso { background: #eef6ff; border-radius: 6px; padding: 6px 8px; margin: 8px 0; font-size: 12px; }
+  .pie { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  .ok { color: #15803d; } .err { color: #b91c1c; }
+  .lista { font-size: 12px; margin-top: 4px; }
+  .lista span { display: inline-block; border: 1px solid #ccc; border-radius: 10px; padding: 1px 7px; margin: 2px; cursor: pointer; background: #fff; }
+</style></head>
+<body>
+<h3>🧾 Qué IA lee los vouchers y en qué orden</h3>
+<div class="nota">Lee la primera prendida; si falla (saturada, sin cupo o caída), pasa <b>al momento</b> a la siguiente.
+  Los PDF también: a NVIDIA y Groq se les manda cada página convertida en imagen. Si no lo leyó Gemini, la celda del N° de operación queda con una nota.
+  Lo mismo se cambia en Telegram con «lectores».</div>
+<div id="filas">Cargando…</div>
+<div id="uso" class="uso" style="display:none"></div>
+<div class="nota">🧠 <b>Razonar</b>: la IA piensa antes de responder; es más precisa con números difíciles (muchos ceros), pero tarda más (10 a 40 s). Como el respaldo solo entra cuando Gemini falla, conviene más precisión que rapidez: NVIDIA viene con 🧠 Razonar prendido. NVIDIA siempre recibe la imagen en detalle alto y las páginas de PDF a 2048 px.<br>Modelo vacío = automático. Para probar uno antes, mande al bot una foto con la palabra «comparar».
+  Según sus condiciones, el uso gratis de NVIDIA es para pruebas.</div>
+<div class="uso" id="vig"><b>🔭 Vigía de modelos</b>: cada lunes reviso si Gemini, NVIDIA o Groq sacaron modelos nuevos que leen imágenes, los pruebo con sus 📌 vouchers de prueba y aviso por Telegram (nunca cambio solo).
+  <div id="vigInfo" style="margin:4px 0"></div>
+  <button onclick="vigBuscar()">🔭 Buscar modelos nuevos ahora</button> <button onclick="vigProbar(false)">🧪 Probar todos ahora</button>
+  <pre id="vigRes" style="white-space:pre-wrap;font-size:11px;max-height:160px;overflow:auto;margin:6px 0 0"></pre></div>
+<div class="pie"><span id="msg"></span><button onclick="google.script.host.close()">Cerrar</button><button id="bG" onclick="guardar()"><b>💾 Guardar</b></button></div>
+<script>
+var D = null, orden = [], apagados = [], modelo = {}, razonar = {};
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function msg(t, cls) { var m = document.getElementById('msg'); m.className = cls || ''; m.textContent = t || ''; }
+function fallo(e) { msg('❌ ' + (e && e.message || e), 'err'); document.getElementById('bG').disabled = false; }
+function cargar(d) {
+  if (d && d.error) return fallo(d.error);
+  D = d; orden = d.cfg.orden.slice(); apagados = d.cfg.apagados.slice(); modelo = JSON.parse(JSON.stringify(d.cfg.modelo)); razonar = JSON.parse(JSON.stringify(d.cfg.razonar || {}));
+  pintar();
+  var u = d.uso || {}, box = document.getElementById('uso');
+  if (u.ok) {
+    var h = u.hoy || {};
+    box.innerHTML = '📊 <b>Hoy leyeron</b>: ' + Object.keys(d.nombres).map(function (p) { return esc(d.nombres[p].split(' ')[0]) + ' ' + (h[p] || 0); }).join(' · ') +
+      (h.fallos ? ' · ❌ ninguno pudo: ' + h.fallos : '') + (u.ultimo ? '<br><i>Último respaldo: ' + esc(u.ultimo) + '</i>' : '');
+    box.style.display = '';
+  } else if (u.error) { box.innerHTML = '<i>La hoja de Vouchers no informó su uso: ' + esc(u.error) + '</i>'; box.style.display = ''; }
+  pintarVig(d.vig || {});
+}
+function pintar() {
+  var n = 0;
+  document.getElementById('filas').innerHTML = orden.map(function (p, i) {
+    var off = apagados.indexOf(p) >= 0, falta = !D.clave[p];
+    return '<div class="fila' + (off ? ' off' : '') + '"><span class="num">' + (off ? '⏸' : ++n) + '</span>' +
+      '<span class="flechas"><button title="Subir" onclick="mover(' + i + ',-1)"' + (i ? '' : ' disabled') + '>▲</button>' +
+      '<button title="Bajar" onclick="mover(' + i + ',1)"' + (i < orden.length - 1 ? '' : ' disabled') + '>▼</button></span>' +
+      '<span class="nom">' + esc(D.nombres[p]) + (falta ? '<br><span class="aviso">⚠️ falta su clave</span>' : '') + '</span>' +
+      '<span class="mod"><input id="m_' + p + '" value="' + esc(modelo[p]) + '" placeholder="automático" onchange="modelo[\'' + p + '\']=this.value.trim()">' +
+      '<button onclick="verModelos(\'' + p + '\')">🔧 Ver</button></span>' +
+      '<span><label><input type="checkbox" ' + (off ? '' : 'checked') + ' onchange="prender(\'' + p + '\',this.checked)"> Prendido</label>' +
+      (p === 'gemini' ? '' : '<br><label title="Piensa antes de responder: más preciso con números difíciles, pero tarda más (10 a 40 s)"><input type="checkbox" ' + (razonar[p] ? 'checked' : '') +
+        ' onchange="razonar[\'' + p + '\']=this.checked"> 🧠 Razonar</label>') + '</span></div>' +
+      '<div class="lista" id="l_' + p + '"></div>';
+  }).join('');
+}
+function mover(i, d) {
+  var j = i + d; if (j < 0 || j >= orden.length) return;
+  var t = orden[i]; orden[i] = orden[j]; orden[j] = t;
+  pintar();
+}
+function prender(p, si) {
+  if (si) apagados = apagados.filter(function (x) { return x !== p; });
+  else if (apagados.indexOf(p) < 0) {
+    if (orden.filter(function (x) { return x !== p && apagados.indexOf(x) < 0; }).length === 0) { msg('Debe quedar al menos uno prendido.', 'err'); return pintar(); }
+    apagados.push(p);
+  }
+  pintar();
+}
+function verModelos(p) {
+  var l = document.getElementById('l_' + p); l.textContent = 'Buscando los modelos que leen imágenes…';
+  google.script.run.withSuccessHandler(function (ids) {
+    if (ids && ids.error) { l.textContent = '❌ ' + ids.error; return; }
+    ids = (ids && ids.ids) || ids || [];
+    l.innerHTML = (ids.length ? 'Toque uno: ' : 'No encontré otros. ') + '<span onclick="elegir(\'' + p + '\',\'\')">🤖 automático</span>' +
+      ids.map(function (id) { return '<span onclick="elegir(\'' + p + '\',\'' + esc(id) + '\')">' + esc(id) + '</span>'; }).join('');
+  }).withFailureHandler(function (e) { l.textContent = '❌ ' + (e.message || e); }).VIA_lectModelos(p);
+}
+function elegir(p, id) { modelo[p] = id; document.getElementById('m_' + p).value = id; document.getElementById('l_' + p).innerHTML = ''; }
+function guardar() {
+  orden.forEach(function (p) { var i = document.getElementById('m_' + p); if (i) modelo[p] = i.value.trim(); });
+  document.getElementById('bG').disabled = true; msg('Guardando…');
+  google.script.run.withSuccessHandler(function (d) {
+    document.getElementById('bG').disabled = false;
+    if (d && d.error) return fallo(d.error);
+    cargar(d); msg('✅ Guardado. La hoja de Vouchers lo usa desde ya.', 'ok');
+  }).withFailureHandler(fallo).VIA_lectGuardar({ orden: orden, apagados: apagados, modelo: modelo, razonar: razonar });
+}
+function fecha(ms) { var x = new Date(ms); return x.toLocaleDateString('es-PE') + ' ' + x.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }); }
+function pintarVig(v) {
+  var u = v.ultimo, h = '📌 Vouchers de prueba: <b>' + (v.pruebas || 0) + '</b>' + ((v.pruebas || 0) < 3 ? ' <i>(guárdelos en Telegram: resultado de «comparar» → 📌)</i>' : '') +
+    ' · 🔭 Última revisión: ' + (v.buscado ? fecha(v.buscado) : 'todavía no');
+  if (u && u.rk) {
+    h += '<br>🧪 Última prueba (' + fecha(u.fecha) + (u.motivo ? ', ' + esc(u.motivo) : '') + '):<br>' + u.rk.filter(function (x) { return !x.noDisp; }).slice(0, 6).map(function (x, i) {
+      return (['🥇', '🥈', '🥉'][i] || (i + 1) + '.') + ' ' + esc(D.nombres[x.p].split(' ')[0]) + ' <code>' + esc(x.m.split('/').pop()) + '</code> · ' + (x.pct >= 0 ? '<b>' + x.pct + '%</b>' : '—') + ' · ' + x.seg + ' s' + (x.enUso ? ' ⭐ en uso' : '');
+    }).join('<br>') + '<br><i>Para usar uno: escriba su nombre en «Modelo» arriba y 💾 Guardar (o ⭐ en Telegram).</i>';
+  }
+  document.getElementById('vigInfo').innerHTML = h;
+}
+function vigBuscar() {
+  var r = document.getElementById('vigRes'); r.textContent = 'Revisando qué modelos ven hoy sus claves…';
+  google.script.run.withSuccessHandler(function (x) { r.textContent = x && x.error ? '❌ ' + x.error : x.texto; })
+    .withFailureHandler(function (e) { r.textContent = '❌ ' + (e.message || e); }).VIA_lectBuscar();
+}
+function vigProbar(soloNuevos) {
+  var r = document.getElementById('vigRes'); r.textContent = 'Preparando la prueba…';
+  google.script.run.withSuccessHandler(function (x) { r.textContent = x && x.error ? '❌ ' + x.error : x.texto; })
+    .withFailureHandler(function (e) { r.textContent = '❌ ' + (e.message || e); }).VIA_lectProbar(!!soloNuevos);
+}
+google.script.run.withSuccessHandler(cargar).withFailureHandler(fallo).VIA_lectVer();
+</script>
+</body></html>

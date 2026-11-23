@@ -8,7 +8,26 @@
 // pagina por separado y devolver a que pagina pertenece cada voucher. Para
 // una sola imagen o una sola pagina de PDF, se deja undefined/1 (comportamiento
 // identico al de siempre).
+// ⏱ Tiempos de ESTA ejecución (los devuelve «procesar al instante» para que Telegram y WhatsApp digan en qué se fue el tiempo).
+var TIEMPOS_ = { ia: 0, escribir: 0, lecturas: 0, lector: '' };
+
 function llamarGemini(base64, mimeType, esPDF, totalPaginasLote) {
+  const t0 = Date.now();
+  try {
+    // 🧾 Respaldo automático entre IAs (Lectores.js): Gemini → NVIDIA → Groq, en el orden que se elija por Telegram.
+    if (typeof LEC_leer_ === 'function') return LEC_leer_(base64, mimeType, esPDF, totalPaginasLote);
+    return llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote).vouchers;
+  } finally {
+    TIEMPOS_.ia += Date.now() - t0;
+    TIEMPOS_.lecturas++;
+  }
+}
+
+// Solo Gemini (con sus modelos de reserva). opc.sinEsperas: no esperar 15+30 s si
+// todos estan ocupados (hay otro lector de respaldo). opc.modelo: probar ese primero.
+// Devuelve { vouchers, modelo }.
+function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
+  opc = opc || {};
   if (!CFG.API_KEY) {
     throw new Error('Falta configurar la API Key de Gemini (menu "🔑 Configurar API Key de Gemini").');
   }
@@ -22,7 +41,7 @@ function llamarGemini(base64, mimeType, esPDF, totalPaginasLote) {
     contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64 } }] }],
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 8192,
+      maxOutputTokens: 32768,   // Gemini 4 piensa antes de responder y ese razonamiento también cuenta aquí
       responseMimeType: 'application/json'
     }
   };
@@ -30,8 +49,8 @@ function llamarGemini(base64, mimeType, esPDF, totalPaginasLote) {
   // Si el modelo principal esta saturado (429/5xx) o no existe para la clave (404),
   // se pasa AL MOMENTO al siguiente de la lista, en vez de esperar 20-90 s.
   // Solo si todos estan ocupados se espera un poco y se vuelve a probar.
-  const modelos = modelosGemini_();
-  const ESPERAS = [15000, 30000];
+  const modelos = opc.maxModelos ? modelosGemini_(opc.modelo).slice(0, opc.maxModelos) : modelosGemini_(opc.modelo);
+  const ESPERAS = opc.sinEsperas ? [] : [15000, 30000];
 
   for (let vuelta = 0; vuelta <= ESPERAS.length; vuelta++) {
     for (let m = 0; m < modelos.length; m++) {
@@ -47,7 +66,7 @@ function llamarGemini(base64, mimeType, esPDF, totalPaginasLote) {
 
       if (code === 200) {
         if (m > 0) Logger.log('Leido con ' + modelos[m] + ' (el principal estaba ocupado).');
-        return parsearRespuestaGemini_(resp);
+        return { vouchers: parsearRespuestaGemini_(resp), modelo: modelos[m] };
       }
       if (code === 429 || code >= 500 || code === 404) {
         Logger.log('Modelo ' + modelos[m] + ': HTTP ' + code + '. Se prueba el siguiente.');
@@ -66,9 +85,10 @@ function llamarGemini(base64, mimeType, esPDF, totalPaginasLote) {
 
 // Modelos a probar en orden. Se puede cambiar sin tocar codigo con la propiedad
 // del script MODELOS_GEMINI (ej. "gemini-3.8-flash,gemini-3.6-flash").
-function modelosGemini_() {
+// primero: el modelo elegido por Telegram («lectores modelo gemini ...»), si hay.
+function modelosGemini_(primero) {
   const prop = PropertiesService.getScriptProperties().getProperty('MODELOS_GEMINI') || '';
-  const lista = (prop ? prop.split(',') : [CFG.MODELO_GEMINI, 'gemini-3.8-flash', 'gemini-3.5-flash-lite'])
+  const lista = (primero ? [String(primero)] : []).concat(prop ? prop.split(',') : [CFG.MODELO_GEMINI, 'gemini-3.8-flash', 'gemini-3.5-flash-lite'])
     .map(function (x) { return String(x).trim(); }).filter(Boolean);
   const cache = CacheService.getScriptCache();
   const vistos = {};
@@ -90,7 +110,13 @@ function parsearRespuestaGemini_(resp) {
                   json.candidates[0].content && json.candidates[0].content.parts &&
                   json.candidates[0].content.parts[0] &&
                   json.candidates[0].content.parts[0].text) || '';
-  const limpio = texto.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+  return parsearTextoVouchers_(texto);
+}
+
+// Texto de la IA (JSON, a veces con ```json o con texto alrededor) -> arreglo de vouchers.
+// Lo usan Gemini y los lectores de respaldo (Lectores.js).
+function parsearTextoVouchers_(texto) {
+  const limpio = String(texto || '').replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
 
   try {
     const datos   = JSON.parse(limpio);

@@ -74,9 +74,26 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
       const loteBlob   = Utilities.newBlob([...new Int8Array(loteBytes)], MimeType.PDF, 'lote_' + (loteInicio + 1) + '.pdf');
       const loteBase64 = Utilities.base64Encode(loteBlob.getBytes());
 
-      const vouchersLote = numPaginasLote > 1
-        ? llamarGemini(loteBase64, 'application/pdf', true, numPaginasLote)
-        : llamarGemini(loteBase64, 'application/pdf', true);
+      let vouchersLote;
+      try {
+        vouchersLote = numPaginasLote > 1
+          ? llamarGemini(loteBase64, 'application/pdf', true, numPaginasLote)
+          : llamarGemini(loteBase64, 'application/pdf', true);
+      } catch (eGemini) {
+        // 🧾 Lectores de respaldo (Lectores.js): el lote de varias paginas solo lo lee Gemini. Si fallo y hay
+        // NVIDIA o Groq prendidos, se pide pagina por pagina: cada una prueba Gemini y luego los de respaldo
+        // (que la reciben convertida en imagen).
+        if (numPaginasLote <= 1 || typeof LEC_hayRespaldo_ !== 'function' || !LEC_hayRespaldo_()) throw eGemini;
+        Logger.log('Lote pag. ' + (loteInicio + 1) + '-' + loteFin + ': Gemini fallo (' + eGemini.message + '). Se lee pagina por pagina con los lectores de respaldo.');
+        vouchersLote = [];
+        for (let k = 0; k < numPaginasLote; k++) {
+          const unoDoc = await PDFLib.PDFDocument.create();
+          const [pagUno] = await unoDoc.copyPages(pdfDoc, [indicesLote[k]]);
+          unoDoc.addPage(pagUno);
+          const unoB64 = Utilities.base64Encode(Utilities.newBlob([...new Int8Array(await unoDoc.save())], MimeType.PDF, 'pag.pdf').getBytes());
+          (llamarGemini(unoB64, 'application/pdf', true) || []).forEach(function (v) { v.pagina = k + 1; vouchersLote.push(v); });
+        }
+      }
 
       // Se agrupan los resultados por la pagina relativa (1..numPaginasLote)
       // que Gemini indico en cada voucher. Si viene sin "pagina" (lote de
