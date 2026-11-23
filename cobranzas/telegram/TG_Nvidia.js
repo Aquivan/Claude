@@ -32,28 +32,53 @@ function TGNV_comando_(ctx) {
 }
 
 /**
- * La prueba corre en SEGUNDO PLANO (un disparador en unos segundos): algunos modelos gigantes tardan y el bot no puede
- * quedarse esperando (Telegram reintenta y Google corta). Al terminar llega el resultado.
+ * La prueba corre en SEGUNDO PLANO y POR TANDAS (3 modelos por ejecución): si un modelo de NVIDIA no contesta, Google corta esa
+ * ejecución sin aviso; por eso antes de cada tanda queda programada la siguiente (vigía): si la tanda murió, esos modelos se
+ * anotan «no respondió a tiempo» y se sigue con el resto. Al terminar llega la tabla.
  */
 function TGNV_probar_(ctx) {
-  PropertiesService.getScriptProperties().setProperty('TGNV_PEND', String(ctx.chatId));
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGNV_correr') ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger('TGNV_correr').timeBased().after(5000).create();
-  TG_enviar_(ctx.chatId, '⏳ Probando los modelos gratis de NVIDIA en segundo plano. Le aviso aquí en 1 a 4 minutos (puede seguir usando el bot).');
+  var c;
+  try { c = CIA_nvCandidatos_(); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ NVIDIA: ' + TG_esc_(e.message)); }
+  if (!c.cand.length) return TG_enviar_(ctx.chatId, '⚠️ Su clave ve ' + c.total + ' modelos pero ninguno de los que interesan (DeepSeek, Kimi, GLM, Nemotron, Mistral…).');
+  PropertiesService.getScriptProperties().setProperty('TGNV_EST', JSON.stringify({ chat: String(ctx.chatId), total: c.total, cand: c.cand, i: 0, res: [], enCurso: null, t0: Date.now() }));
+  TGNV_programar_(3000);
+  TG_enviar_(ctx.chatId, '⏳ Probando ' + c.cand.length + ' modelos gratis de NVIDIA (de ' + c.total + ' que ve su clave), de a 3, en segundo plano. Le aviso aquí en unos minutos.');
 }
 
-/** Disparador: hace la prueba y manda el resultado al chat que la pidió. */
-function TGNV_correr() {
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGNV_correr') ScriptApp.deleteTrigger(t); });
-  var p = PropertiesService.getScriptProperties(), chatId = p.getProperty('TGNV_PEND');
-  if (!chatId) return;
-  p.deleteProperty('TGNV_PEND');
-  TGNV_mostrar_({ chatId: chatId });
+function TGNV_programar_(ms) {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGNV_paso') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('TGNV_paso').timeBased().after(ms).create();
 }
 
-function TGNV_mostrar_(ctx) {
-  var r;
-  try { r = CIA_nvProbar(270000); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ NVIDIA: ' + TG_esc_(e.message)); }
+/** Disparador: una tanda por ejecución. */
+function TGNV_paso() {
+  var p = PropertiesService.getScriptProperties(), est;
+  try { est = JSON.parse(p.getProperty('TGNV_EST') || 'null'); } catch (e) { est = null; }
+  if (!est) return;
+  if (est.enCurso) {   // la ejecución anterior murió esperando a esos modelos
+    est.enCurso.forEach(function (id) { est.res.push({ id: id, ok: false, s: 0, nota: CIA_nvNota_(id), error: 'no respondió a tiempo (muy lento o saturado)' }); });
+    est.i += est.enCurso.length; est.enCurso = null;
+  }
+  if (est.i >= est.cand.length || Date.now() - est.t0 > 30 * 60000) {
+    p.deleteProperty('TGNV_EST');
+    ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGNV_paso') ScriptApp.deleteTrigger(t); });
+    return TGNV_mostrar_({ chatId: est.chat }, est);
+  }
+  var lote = est.cand.slice(est.i, est.i + 3);
+  est.enCurso = lote;
+  p.setProperty('TGNV_EST', JSON.stringify(est));
+  TGNV_programar_(7 * 60000);   // vigía: si esta ejecución muere, la próxima sigue
+  var res;
+  try { res = CIA_nvProbarLote_(CIA_nvClave_(), lote); }
+  catch (e) { res = lote.map(function (id) { return { id: id, ok: false, s: 0, nota: CIA_nvNota_(id), error: String(e.message || e).slice(0, 80) }; }); }
+  est.res = est.res.concat(res); est.i += lote.length; est.enCurso = null;
+  p.setProperty('TGNV_EST', JSON.stringify(est));
+  TGNV_programar_(2000);
+}
+
+function TGNV_mostrar_(ctx, est) {
+  var res = est.res.slice().sort(function (a, b) { return (b.ok - a.ok) || a.s - b.s; });
+  var r = { total: est.total, probados: res, elegido: PropertiesService.getScriptProperties().getProperty('IA_NVIDIA_MODELO') || '', segundos: Math.round((Date.now() - est.t0) / 1000) };
   var ok = r.probados.filter(function (m) { return m.ok; }), no = r.probados.filter(function (m) { return !m.ok; });
   var html = '🟩 <b>Modelos gratis de NVIDIA hoy</b> (su clave ve ' + r.total + '; probé ' + r.probados.length + ' en ' + r.segundos + ' s)\n' +
     (r.elegido ? 'Elegido ahora: <code>' + TG_esc_(r.elegido) + '</code>\n' : '') + '\n' +
