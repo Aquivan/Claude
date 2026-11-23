@@ -105,25 +105,28 @@ function TGNV_alBoton_(ctx, datos) {
 var TGNV_LECTORES_ = [
   { nom: 'Gemini', prov: 'Gemini (Google)' },
   { nom: 'Nemotron Super VL', prov: 'NVIDIA · Nemotron 3.5 Super VL (lee imágenes)', nvidia: true },
-  { nom: 'Muse Glimmer', prov: 'NVIDIA · Muse Glimmer (lee imágenes)', nvidia: true },
-  { nom: 'Kimi K3.1 Pro', prov: 'NVIDIA · Kimi K3.1 Pro', nvidia: true },   // al final: el más lento
 ];
-var TGNV_CAMPOS_ = [['banco', 'Banco'], ['fecha', 'Fecha'], ['operacion', 'N° operación'], ['moneda', 'Moneda'], ['monto', 'Monto'],
-  ['ordenante', 'Quién paga'], ['beneficiario', 'Beneficiario'], ['ruc_beneficiario', 'RUC beneficiario'], ['cuenta_destino', 'Cuenta destino']];
+var TGNV_CAMPOS_ = [['banco', 'Banco'], ['fecha', 'Fecha'], ['nOperacion', 'N° operación'], ['moneda', 'Moneda'], ['monto', 'Monto'],
+  ['proveedor', 'Proveedor (beneficiario)'], ['cliente', 'Cliente (quién paga)'], ['idCliente', 'RUC del cliente'], ['descripcion', 'Descripción']];
 var TGNV_SISTEMA_ = 'Eres un lector de comprobantes bancarios de Perú (vouchers de depósito o transferencia: BCP, BBVA, Interbank, Scotiabank, BN, cajas). ' +
   'Lee la imagen y responde SOLO un JSON con: banco, fecha (dd/mm/aaaa), operacion (número de operación tal cual), moneda (PEN o USD), ' +
   'monto (número con punto decimal, sin separador de miles), ordenante (quién paga), beneficiario (a quién se paga), ruc_beneficiario (11 dígitos si aparece), ' +
   'cuenta_destino (si aparece). Si un dato no está, pon "". No inventes nada.';
 
 /** Foto (o PDF) con «nvidia» en el texto: se lee con Gemini y con los modelos de NVIDIA que leen imágenes, en segundo plano. No escribe en ninguna hoja. */
-function TGNV_voucher_(ctx, blob, mime) {
+function TGNV_voucher_(ctx, blob, mime, m) {
+  // Foto MEDIANA (~1280 px) en vez de la más grande: se lee igual de bien y los modelos la procesan mucho más rápido.
+  if (m && m.photo && m.photo.length > 1) {
+    var med = m.photo.filter(function (x) { return Math.max(x.width || 0, x.height || 0) <= 1300; }).pop();
+    if (med && med !== m.photo[m.photo.length - 1]) { try { blob = TG_bajarArchivo_(med.file_id, 'voucher.jpg'); mime = 'image/jpeg'; } catch (e) {} }
+  }
   if (!ctx.usuario || ctx.usuario.rol !== 'admin') return TG_enviar_(ctx.chatId, 'La comparación con NVIDIA es solo para administradores.');
   if (!CIA_nvClave_()) return TG_enviar_(ctx.chatId, '🟩 Primero mande su clave de NVIDIA (nvapi-…) en un mensaje solo.');
   var f = IMP_carpeta_(ctx.ss).createFile(blob.setName('nvidia prueba ' + Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HHmmss')));
   var esPdf = /pdf/i.test(mime);
   PropertiesService.getScriptProperties().setProperty('TGNV_VCH', JSON.stringify({ chat: String(ctx.chatId), id: f.getId(), mime: mime, i: 0, res: [], enCurso: null, t0: Date.now(), pdf: esPdf }));
   TGNV_programarV_(2000);
-  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ', <b>Nemotron Super VL</b>, <b>Muse Glimmer</b> y <b>Kimi K3.1 Pro</b>') + ' en segundo plano: normalmente 1 a 3 minutos (hasta 15 si NVIDIA está saturado). Le aviso al terminar cada uno. No se guarda nada en la hoja.' +
+  TG_enviar_(ctx.chatId, '🧪 Leyendo el voucher con <b>Gemini</b>' + (esPdf ? '' : ' y <b>Nemotron Super VL</b>, con las instrucciones reales del lector de vouchers,') + ' en segundo plano: normalmente menos de 1 minuto (más si NVIDIA está saturado). No se guarda nada en la hoja.' +
     (esPdf ? '\n<i>Es un PDF: NVIDIA solo lee imágenes; para compararlo mande una foto o captura del voucher.</i>' : ''));
 }
 
@@ -154,7 +157,9 @@ function TGNV_leerPaso() {
   try {
     var blob = DriveApp.getFileById(est.id).getBlob();
     var clave = L.nvidia ? CIA_nvClave_() : (p.getProperty('CIA_KEY_GEMINIGOOGLE') || IA_clave_('Gemini (Google)'));
-    var d = IA_llamar_({ proveedor: L.prov, clave: clave, sistema: TGNV_SISTEMA_, texto: 'Lee este voucher. Responde solo el JSON, sin explicar.', maxTokens: L.nvidia ? 6000 : 800,
+    // Las MISMAS instrucciones del lector real de vouchers (TG_PromptVoucher.js); si faltaran, las cortas de prueba.
+    var instr = typeof TGNV_PROMPT_VOUCHER_ === 'string' && TGNV_PROMPT_VOUCHER_ ? TGNV_PROMPT_VOUCHER_ : TGNV_SISTEMA_;
+    var d = IA_llamar_({ proveedor: L.prov, clave: clave, sistema: instr, texto: 'Analiza este comprobante y responde SOLO el JSON del formato indicado.', maxTokens: L.nvidia ? 4000 : 2000,
       adjunto: { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime } });
     r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, d: d || {} };
   } catch (e) { r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, error: String(e.message || e).slice(0, 120) }; }
@@ -167,7 +172,7 @@ function TGNV_leerPaso() {
 function TGNV_norm_(c, v) {
   var t = String(v == null ? '' : v).trim().toUpperCase();
   if (c === 'monto') { var n = parseFloat(t.replace(/[^\d.,-]/g, '').replace(/,(?=\d{3}\b)/g, '').replace(',', '.')); return isNaN(n) ? '' : n.toFixed(2); }
-  if (c === 'operacion' || c === 'ruc_beneficiario' || c === 'cuenta_destino') return t.replace(/[^0-9A-Z]/g, '').replace(/^0+/, '');
+  if (c === 'operacion' || c === 'nOperacion' || c === 'idCliente' || c === 'ruc_beneficiario' || c === 'cuenta_destino') return t.replace(/[^0-9A-Z]/g, '').replace(/^0+/, '');
   if (c === 'fecha') { var m = t.match(/(\d{1,2})\D(\d{1,2})\D(\d{2,4})/); return m ? ('0' + m[1]).slice(-2) + '/' + ('0' + m[2]).slice(-2) + '/' + (m[3].length === 2 ? '20' + m[3] : m[3]) : t; }
   return t.replace(/\s+/g, ' ');
 }
