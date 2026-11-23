@@ -171,6 +171,13 @@ function VIA_menuLectores() {
 function VIA_lectVer() { var r = VIA_llamar_('lect_ver', {}); if (r.error) throw new Error(r.error); return r; }
 function VIA_lectGuardar(cfg) { var r = VIA_llamar_('lect_guardar', { cfg: cfg, quien: VIA_quien_() }); if (r.error) throw new Error(r.error); return r; }
 function VIA_lectModelos(p) { var r = VIA_llamar_('lect_modelos', { p: p }); if (r.error) throw new Error(r.error); return r; }
+/** 🤖 IA de cada tarea (audios, RUC…): la misma ventana de Cobranzas (IATVista.html, copiada al desplegar). */
+function VIA_menuIAT() {
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutputFromFile('asistente_ia/IATVista').setWidth(620).setHeight(520), '🤖 IA de cada tarea');
+}
+function VIA_iatVer() { var r = VIA_llamar_('iat_ver', {}); if (r.error) throw new Error(r.error); return r; }
+function VIA_iatGuardar(cfg) { var r = VIA_llamar_('iat_guardar', { cfg: cfg, quien: VIA_quien_() }); if (r.error) throw new Error(r.error); return r; }
+function VIA_iatModelos(t, p) { var r = VIA_llamar_('iat_modelos', { t: t, p: p }); if (r.error) throw new Error(r.error); return r; }
 function VIA_lectBuscar() { var r = VIA_llamar_('lect_buscar', {}); if (r.error) throw new Error(r.error); return r; }
 function VIA_lectProbar(soloNuevos) { var r = VIA_llamar_('lect_probar', { soloNuevos: !!soloNuevos }); if (r.error) throw new Error(r.error); return r; }
 

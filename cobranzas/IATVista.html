@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html><head><base target="_top"><meta charset="utf-8">
+<!-- 🤖 IA de cada tarea: la MISMA ventana en Cobranzas (IAT_x) y en la hoja de Vouchers (asistente-vouchers.yml la copia con VIA_iatX). -->
+<style>
+  body { font-family: Arial, sans-serif; font-size: 13px; margin: 12px; color: #222; }
+  h3 { margin: 0 0 6px; font-size: 15px; } h4 { margin: 12px 0 4px; font-size: 14px; }
+  .nota { color: #555; font-size: 12px; margin: 4px 0 8px; }
+  .fila { display: flex; align-items: center; gap: 8px; border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; margin-bottom: 5px; background: #fafafa; }
+  .fila.off { opacity: .55; }
+  .num { width: 20px; font-weight: bold; text-align: center; } .nom { width: 70px; font-weight: bold; }
+  .mod { flex: 1; display: flex; gap: 4px; } .mod input { flex: 1; font-size: 12px; padding: 3px; }
+  button { cursor: pointer; font-size: 12px; padding: 3px 7px; } .flechas button { padding: 1px 6px; }
+  .uso { color: #555; font-size: 12px; } .err { color: #b91c1c; } .ok { color: #15803d; }
+  .lista { font-size: 12px; } .lista span { display: inline-block; border: 1px solid #ccc; border-radius: 10px; padding: 1px 7px; margin: 2px; cursor: pointer; background: #fff; }
+  .pie { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+</style></head>
+<body>
+<h3>🤖 IA de cada tarea (con respaldo automático)</h3>
+<div class="nota">Usa la primera prendida; si falla (saturada, sin cupo o caída), pasa <b>al momento</b> a la siguiente. Lo mismo se cambia en Telegram con /ia.</div>
+<div id="vou" class="nota"></div>
+<div id="tareas">Cargando…</div>
+<div class="nota">Modelo vacío = automático. 🎤 Groq usa Whisper (hecho para transcribir). 🔎 Groq usa su búsqueda web (modelos gpt-oss o compound).</div>
+<div class="pie"><span id="msg"></span><button onclick="google.script.host.close()">Cerrar</button><button id="bG" onclick="guardar()"><b>💾 Guardar</b></button></div>
+<script>
+var D = null, C = {};
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function msg(t, cls) { var m = document.getElementById('msg'); m.className = cls || ''; m.textContent = t || ''; }
+function fallo(e) { msg('❌ ' + (e && e.message || e), 'err'); document.getElementById('bG').disabled = false; }
+function cargar(d) {
+  if (d && d.error) return fallo(d.error);
+  D = d; C = {};
+  Object.keys(d.tareas).forEach(function (t) { C[t] = JSON.parse(JSON.stringify(d.tareas[t].cfg)); });
+  document.getElementById('vou').innerHTML = '🧾 <b>Vouchers</b>: ' + esc(d.vouchers) + ' · <i>se cambia en 🧠 Asistente IA → 🧾 Lectores de vouchers</i>' +
+    (d.groq ? '' : '<br><span class="err">⚠️ Falta la clave de Groq: sin ella no hay respaldo.</span>');
+  pintar();
+}
+function pintar() {
+  document.getElementById('tareas').innerHTML = Object.keys(C).map(function (t) {
+    var c = C[t], u = D.tareas[t].uso || {}, n = 0;
+    return '<h4>' + esc(D.tareas[t].nom) + '</h4>' + c.orden.map(function (p, i) {
+      var off = c.apagados.indexOf(p) >= 0;
+      return '<div class="fila' + (off ? ' off' : '') + '"><span class="num">' + (off ? '⏸' : ++n) + '</span>' +
+        '<span class="flechas"><button onclick="mover(\'' + t + '\',' + i + ',-1)"' + (i ? '' : ' disabled') + '>▲</button><button onclick="mover(\'' + t + '\',' + i + ',1)"' + (i < c.orden.length - 1 ? '' : ' disabled') + '>▼</button></span>' +
+        '<span class="nom">' + esc(D.nombres[p]) + '</span>' +
+        '<span class="mod"><input id="m_' + t + '_' + p + '" value="' + esc(c.modelo[p]) + '" placeholder="automático"><button onclick="ver(\'' + t + '\',\'' + p + '\')">🔧 Ver</button></span>' +
+        '<span class="uso">hoy ' + (u[p] || 0) + '</span>' +
+        '<label><input type="checkbox" ' + (off ? '' : 'checked') + ' onchange="prender(\'' + t + '\',\'' + p + '\',this.checked)"> Prendido</label></div>' +
+        '<div class="lista" id="l_' + t + '_' + p + '"></div>';
+    }).join('') + (u.fallos ? '<div class="err">❌ hoy ninguno pudo: ' + u.fallos + '</div>' : '') + (u.ultimo ? '<div class="uso"><i>Último respaldo: ' + esc(u.ultimo) + '</i></div>' : '');
+  }).join('');
+}
+function leerModelos() { Object.keys(C).forEach(function (t) { C[t].orden.forEach(function (p) { var i = document.getElementById('m_' + t + '_' + p); if (i) C[t].modelo[p] = i.value.trim(); }); }); }
+function mover(t, i, d) { leerModelos(); var o = C[t].orden, j = i + d; if (j < 0 || j >= o.length) return; var x = o[i]; o[i] = o[j]; o[j] = x; pintar(); }
+function prender(t, p, si) {
+  leerModelos(); var c = C[t];
+  if (si) c.apagados = c.apagados.filter(function (x) { return x !== p; });
+  else if (c.orden.filter(function (x) { return x !== p && c.apagados.indexOf(x) < 0; }).length === 0) { msg('Debe quedar al menos uno prendido.', 'err'); }
+  else c.apagados.push(p);
+  pintar();
+}
+function ver(t, p) {
+  var l = document.getElementById('l_' + t + '_' + p); l.textContent = 'Buscando modelos…';
+  google.script.run.withSuccessHandler(function (ids) {
+    if (ids && ids.error) { l.textContent = '❌ ' + ids.error; return; }
+    ids = (ids && ids.ids) || ids || [];
+    l.innerHTML = 'Toque uno: <span onclick="elegir(\'' + t + '\',\'' + p + '\',\'\')">🤖 automático</span>' + ids.map(function (id) { return '<span onclick="elegir(\'' + t + '\',\'' + p + '\',\'' + esc(id) + '\')">' + esc(id) + '</span>'; }).join('');
+  }).withFailureHandler(function (e) { l.textContent = '❌ ' + (e.message || e); }).IAT_modelosHoja(t, p);
+}
+function elegir(t, p, id) { document.getElementById('m_' + t + '_' + p).value = id; C[t].modelo[p] = id; document.getElementById('l_' + t + '_' + p).innerHTML = ''; }
+function guardar() {
+  leerModelos(); document.getElementById('bG').disabled = true; msg('Guardando…');
+  google.script.run.withSuccessHandler(function (d) { document.getElementById('bG').disabled = false; if (d && d.error) return fallo(d.error); cargar(d); msg('✅ Guardado.', 'ok'); })
+    .withFailureHandler(fallo).IAT_guardarHoja(C);
+}
+google.script.run.withSuccessHandler(cargar).withFailureHandler(fallo).IAT_ver();
+</script>
+</body></html>

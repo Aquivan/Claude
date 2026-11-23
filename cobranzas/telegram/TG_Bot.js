@@ -129,6 +129,7 @@ function TG_manejar_(u) {
     try { var me = MESA_textoEnlace_('Telegram · ' + (nombre || chatId)); return TG_enviar_(chatId, '🧩 <b>Mesa de conciliación</b> (facturas ↔ vouchers): <a href="' + me.url + '">abrir</a>. Vale 6 horas desde el último uso; no la reenvíe.'); }
     catch (err) { return TG_enviar_(chatId, '⚠️ ' + TG_esc_(err.message)); }
   }
+  if (IAT_tg_(ctx, texto)) return;   // 🤖 «ia»: la IA de cada tarea (TG_IATareas.js)
   if (VIG_tg_(ctx, texto) || VIG_tgCorregir_(ctx, texto)) return;   // 🔭 «modelos»: vigía de modelos de IA · «prueba 1 nOperacion=…» (TG_Vigia.js)
   if (LECT_tg_(ctx, texto)) return;   // 🧾 «lectores»: qué IA lee los vouchers y en qué orden (TG_Lectores.js)
   if (TGRL_tg_(ctx, texto)) return;   // 🔁 "volver a leer Originales 2666" (TG_Releer.js)
@@ -266,6 +267,7 @@ function TG_comando_(ctx, texto) {
     case 'honorarios': return TG_enviarHonorarios_(ctx, arg);
     case 'estado': return TG_enviarEstado_(ctx, arg);
     case 'descargar': return TG_asistenteDescarga_(ctx, null);
+    case 'ia': return IAT_tg_(ctx, 'ia') || TG_enviar_(chatId, 'Solo para administradores.');   // 🤖 IA de cada tarea (TG_IATareas.js)
     case 'modelos': case 'modelo': return VIG_tg_(ctx, 'modelos ' + (arg || '')) || TG_enviar_(chatId, 'Solo para administradores.');   // 🔭 vigía de modelos (TG_Vigia.js)
     case 'lectores': case 'lector': return LECT_tg_(ctx, 'lectores ' + (arg || '')) || TG_enviar_(chatId, 'Solo para administradores.');   // 🧾 lectores de vouchers (TG_Lectores.js)
     case 'nvidia': return TGNV_comando_(ctx);   // 🟩 probar modelos gratis de NVIDIA y elegir uno (TG_Nvidia.js)
@@ -403,8 +405,9 @@ function TG_adjDelGrupo_(ss, grupo, uno) {
   return res.slice(0, 10);
 }
 
-/** Nota de voz → texto (Gemini entiende audio). */
+/** Nota de voz → texto: Gemini y, si falla, Groq Whisper (orden y modelos en /ia, TG_IATareas.js). */
 function TG_transcribir_(ss, blob) {
+  if (typeof IAT_transcribir_ === 'function') return IAT_transcribir_(blob);
   var props = PropertiesService.getScriptProperties();
   var clave = props.getProperty('CIA_KEY_GEMINIGOOGLE') || IA_clave_('Gemini (Google)');
   if (!clave) throw new Error('para entender audios hace falta la clave de Gemini (pestaña 🧠 Asistente IA → 🔑).');
@@ -524,6 +527,7 @@ function TG_alBoton_(ss, q) {
     case 'archivo': return TG_mandarArchivo_(ctx, datos.id, datos.titulo);
     case 'descarga': return TG_confirmarDescarga_(ctx, datos, op);
     case 'venc': return TGV_alBoton_(ctx, datos);
+    case 'iat': return IAT_alBoton_(ctx, datos);   // 🤖 IA de cada tarea: orden, prender/apagar, modelo (TG_IATareas.js)
     case 'vig': return VIG_alBoton_(ctx, datos);   // 🔭 vigía de modelos: buscar, probar, usar, pruebas (TG_Vigia.js)
     case 'lect': return LECT_alBoton_(ctx, datos);   // 🧾 lectores de vouchers: subir, apagar, modelo (TG_Lectores.js)
     case 'nvusar': return TGNV_alBoton_(ctx, datos);   // 🟩 usar este modelo de NVIDIA (TG_Nvidia.js)

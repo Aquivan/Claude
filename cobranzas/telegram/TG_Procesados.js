@@ -584,7 +584,10 @@ function TGQ_internet_(nombre) {
     'Responde SOLO JSON: {"ruc":"11 dígitos o vacío","nombre":"razón social tal como figura","fuente":"página donde lo viste (dominio)","seguro":true|false}. ' +
     'Si es una sigla o nombre comercial (ej. SUNAT, DSM), busca la razón social que le corresponde. ' +
     'Si hay varias personas o empresas con nombre parecido y no puedes distinguir, seguro=false. No inventes.';
-  var mw = TGQ_modelosWeb_();
+  // 🤖 orden de /ia (TG_IATareas.js): si Groq va primero o Gemini está apagado
+  var ordenWeb = typeof IAT_orden_ === 'function' ? IAT_orden_('ruc') : ['gemini'];
+  if (ordenWeb[0] === 'groq') { var g0 = IAT_rucGroq_([nombre]); if (g0.hasOwnProperty(nombre)) { IAT_uso_('ruc', 'groq'); return g0[nombre]; } }
+  var mw = ordenWeb.indexOf('gemini') >= 0 ? TGQ_modelosWeb_() : [];
   for (var i = 0; i < mw.length; i++) {
     try {
       var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + mw[i] + ':generateContent', {
@@ -592,11 +595,17 @@ function TGQ_internet_(nombre) {
         payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: pedido }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0 } }) });
       if (r.getResponseCode() !== 200) { if (r.getResponseCode() === 429 || r.getResponseCode() === 404) TGQ_modeloWebMal_(mw[i], r.getResponseCode()); continue; }
       PropertiesService.getScriptProperties().setProperty('TGQ_WEB_OK', mw[i]);
+      if (typeof IAT_uso_ === 'function') IAT_uso_('ruc', 'gemini');
       var cand = (JSON.parse(r.getContentText()).candidates || [])[0];
       var t = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
       var j = t ? IA_extraerJson_(t) : null, ruc = j ? String(j.ruc || '').replace(/\D/g, '') : '';
       return ruc && TGQ_rucValido_(ruc) && j.seguro !== false ? { ruc: ruc, nombre: String(j.nombre || ''), fuente: String(j.fuente || '').slice(0, 80) } : null;
     } catch (e) { Logger.log('Procesados — internet: ' + e.message); }
+  }
+  // 🤖 respaldo: Gemini no pudo buscar → Groq con su búsqueda web
+  if (ordenWeb[0] !== 'groq' && ordenWeb.indexOf('groq') >= 0) {
+    var g1 = IAT_rucGroq_([nombre]);
+    if (g1.hasOwnProperty(nombre)) { IAT_uso_('ruc', 'groq', 'buscó Groq (Gemini no pudo)'); return g1[nombre]; }
   }
   return null;
 }
@@ -640,7 +649,8 @@ function TGQ_iaElige_(ss, elecciones) {
 var TGQ_WEB_MODELOS_ = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite'];
 function TGQ_modelosWeb_() {
   var cache = CacheService.getScriptCache(), bueno = PropertiesService.getScriptProperties().getProperty('TGQ_WEB_OK') || '';
-  var lista = (bueno ? [bueno] : []).concat(TGQ_WEB_MODELOS_, TGG_MODELOS_);
+  var elegido = typeof IAT_cfg_ === 'function' ? IAT_cfg_('ruc').modelo.gemini : '';   // 🤖 el elegido en /ia va primero
+  var lista = (elegido ? [elegido] : []).concat(bueno ? [bueno] : [], TGQ_WEB_MODELOS_, TGG_MODELOS_);
   var vistos = {};
   return lista.filter(function (m) { if (vistos[m]) return false; vistos[m] = 1; return !cache.get('tgq_web_no_' + m); });
 }
@@ -666,7 +676,16 @@ function TGQ_internetVarios_(nombres) {
   // Cada modelo de la lista: los que no respondieron con uno se reintentan con el siguiente (todos en paralelo).
   var pend = nombres.slice(), ok = 0, err = '';
   Object.defineProperty(out, '_intentos', { value: nombres.length });
-  var modelosWeb = TGQ_modelosWeb_();
+  // 🤖 orden de /ia (TG_IATareas.js): Groq primero, o Gemini apagado
+  var ordenW = typeof IAT_orden_ === 'function' ? IAT_orden_('ruc') : ['gemini'];
+  var conGroq = function (nota) {
+    if (!pend.length || ordenW.indexOf('groq') < 0) return;
+    var g = IAT_rucGroq_(pend);
+    Object.keys(g).forEach(function (n) { out[n] = g[n]; ok++; IAT_uso_('ruc', 'groq', nota); });
+    pend = pend.filter(function (n) { return !g.hasOwnProperty(n); });
+  };
+  if (ordenW[0] === 'groq') conGroq('');
+  var modelosWeb = ordenW.indexOf('gemini') >= 0 ? TGQ_modelosWeb_() : [];
   for (var m = 0; m < modelosWeb.length && pend.length; m++) {
     var reqs = pend.map(function (n) {
       return { url: 'https://generativelanguage.googleapis.com/v1beta/models/' + modelosWeb[m] + ':generateContent', method: 'post',
@@ -688,6 +707,7 @@ function TGQ_internetVarios_(nombres) {
       }
       ok++;
       PropertiesService.getScriptProperties().setProperty('TGQ_WEB_OK', modelosWeb[m]);
+      if (typeof IAT_uso_ === 'function') IAT_uso_('ruc', 'gemini');
       try {
         var cand = (JSON.parse(r.getContentText()).candidates || [])[0];
         var t = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
@@ -697,6 +717,7 @@ function TGQ_internetVarios_(nombres) {
     });
     pend = siguen;
   }
+  if (ordenW[0] !== 'groq') conGroq('buscó Groq (Gemini no pudo)');   // 🤖 respaldo
   // Sin búsqueda en internet (falló la llamada): la IA de siempre responde con lo que sabe (entidades del Estado,
   // empresas conocidas: «MINSA ADM.CENTRAL» → Ministerio de Salud). Se marca para verificar y nunca se escribe sin confirmar.
   if (pend.length) {
