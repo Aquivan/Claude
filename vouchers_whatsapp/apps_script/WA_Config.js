@@ -242,13 +242,23 @@ function WA_menuInstante() {
     (WA_prop_('WA_PROCESAR_URL') ? '(Ya hay una guardada; deje vacío para conservarla, o escriba BORRAR.)' : ''),
     ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
-  var v = r.getResponseText().trim();
+  var v = r.getResponseText().replace(/\s+/g, '');   // al copiar del cuadro a veces se cuelan saltos de línea o espacios
   if (!v) return;
   if (/^borrar$/i.test(v)) { WA_props_().deleteProperty('WA_PROCESAR_URL'); ui.alert('Borrada: se vuelve a esperar el proceso de cada 10 min.'); return; }
   if (!/^https:\/\/script\.google\.com\/.+[?&]token=/.test(v)) { ui.alert('Esa dirección no parece la del diagnóstico (debe empezar con https://script.google.com/ y tener token=).'); return; }
   v = /[?&]accion=/.test(v) ? v.replace(/([?&]accion=)[^&]*/, '$1procesar') : v + '&accion=procesar';
   WA_props_().setProperty('WA_PROCESAR_URL', v);
-  ui.alert('✅ Guardado. Desde ahora cada tanda se procesa apenas termina de llegar (≈1 minuto).');
+  WA_props_().deleteProperty('WA_PROCESAR_ERROR');
+  // Prueba en el acto (diagnóstico: no procesa nada)
+  var prueba = '';
+  try {
+    var rp = UrlFetchApp.fetch(v.replace(/([?&]accion=)[^&]*/, '$1diagnostico'), { muteHttpExceptions: true, followRedirects: true }), jp = null;
+    try { jp = JSON.parse(rp.getContentText()); } catch (e) {}
+    prueba = jp ? '✅ Probada: la hoja de Vouchers responde. Desde ahora cada tanda se procesa en segundos.'
+      : '❌ Guardada, pero la hoja de Vouchers respondió HTTP ' + rp.getResponseCode() + '. Abra esa misma dirección en el navegador: si muestra un error de Google, ' +
+        'hay que volver a publicar la aplicación web de la hoja de Vouchers (avísele a soporte).';
+  } catch (e) { prueba = '❌ Guardada, pero no pude probarla: ' + e.message; }
+  ui.alert('⚡ Procesar al instante', prueba, ui.ButtonSet.OK);
 }
 
 function WA_menuPreguntarNombre() {
