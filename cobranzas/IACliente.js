@@ -67,6 +67,9 @@ function IA_llamar_(opts) {
     if (code === 400 && pet.prov.sinPensar && !opts.sinKwargs && /chat_template|thinking|kwargs/i.test(resp.getContentText())) {
       opts = Object.assign({}, opts, { sinKwargs: true }); pet = IA_peticion_(opts); intento--; continue;
     }
+    if (code === 400 && opts.detalle && /detail/i.test(resp.getContentText())) {   // el modelo no acepta «detalle alto»: sin él
+      opts = Object.assign({}, opts, { detalle: '' }); pet = IA_peticion_(opts); intento--; continue;
+    }
     break;
   }
   return IA_respuesta_(pet, resp);
@@ -97,7 +100,7 @@ function IA_peticion_(opts) {
     url = prov.url;
     headers.Authorization = 'Bearer ' + clave;
     var contenido = opts.adjunto
-      ? [{ type: 'text', text: opts.texto }, { type: 'image_url', image_url: { url: 'data:' + opts.adjunto.mime + ';base64,' + opts.adjunto.base64 } }]
+      ? [{ type: 'text', text: opts.texto }, { type: 'image_url', image_url: opts.detalle ? { url: 'data:' + opts.adjunto.mime + ';base64,' + opts.adjunto.base64, detail: opts.detalle } : { url: 'data:' + opts.adjunto.mime + ';base64,' + opts.adjunto.base64 } }]
       : opts.texto;
     carga = {
       model: modelo, temperature: 0.1, max_tokens: maxTokens,

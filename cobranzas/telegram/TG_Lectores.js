@@ -28,7 +28,9 @@ function LECT_cfg_() {
   Object.keys(LECT_NOMBRES_).forEach(function (p) { if (orden.indexOf(p) < 0) orden.push(p); });
   var modelo = {};
   Object.keys(LECT_NOMBRES_).forEach(function (p) { modelo[p] = (c.modelo && c.modelo[p] != null) ? String(c.modelo[p]) : LECT_MODELO_DEF_[p]; });
-  return { orden: orden, apagados: (c.apagados || []).filter(function (p) { return LECT_NOMBRES_[p]; }), modelo: modelo };
+  // 🧠 razonar: el modelo «piensa» antes de responder (más preciso en números difíciles, pero tarda más). Gemini no lo usa aquí.
+  var razonar = { gemini: false, nvidia: !!(c.razonar && c.razonar.nvidia), groq: !!(c.razonar && c.razonar.groq) };
+  return { orden: orden, apagados: (c.apagados || []).filter(function (p) { return LECT_NOMBRES_[p]; }), modelo: modelo, razonar: razonar };
 }
 
 function LECT_guardar_(cfg) {
@@ -47,8 +49,8 @@ function LECT_paraVouchers_() {
   return {
     ok: true, orden: activos,
     gemini: { modelo: cfg.modelo.gemini || '' },
-    nvidia: { clave: CIA_nvClave_(), modelo: cfg.modelo.nvidia || LECT_MODELO_DEF_.nvidia },
-    groq: { clave: groqClave, modelo: groqModelo || 'qwen/qwen3.8-27b', prompt: TGNV_PROMPT_CORTO_ },
+    nvidia: { clave: CIA_nvClave_(), modelo: cfg.modelo.nvidia || LECT_MODELO_DEF_.nvidia, razonar: cfg.razonar.nvidia },
+    groq: { clave: groqClave, modelo: groqModelo || 'qwen/qwen3.8-27b', prompt: TGNV_PROMPT_CORTO_, razonar: cfg.razonar.groq },
   };
 }
 
@@ -59,6 +61,15 @@ function LECT_tg_(ctx, texto) {
   if (!ctx.usuario || ctx.usuario.rol !== 'admin') return false;   // para los demás es una pregunta más (la IA contesta)
   var pal = String(texto).trim().replace(/^\/?\S+\s*/, '').split(/\s+/).filter(Boolean);
   try {
+    if (pal.length && /^razon/i.test(pal[0])) {   // lectores razonar nvidia si|no
+      var pr = LECT_prov_(pal[1]);
+      if (!pr || pr === 'gemini') throw new Error('Diga cuál: <code>lectores razonar nvidia si</code> o <code>lectores razonar groq no</code>');
+      var cr = LECT_cfg_();
+      cr.razonar[pr] = pal[2] ? /^(s|si|sí|1|on)$/i.test(pal[2]) : !cr.razonar[pr];
+      LECT_guardar_(cr);
+      LECT_panel_(ctx, '✅ ' + LECT_NOMBRES_[pr] + (cr.razonar[pr] ? ' ahora <b>razona</b> antes de responder (más preciso, más lento).' : ' ahora responde <b>sin razonar</b> (rápido).'));
+      return true;
+    }
     if (pal.length && /^modelos?$/i.test(pal[0])) {
       var p = LECT_prov_(pal[1]);
       if (!p) throw new Error('Diga de cuál: <code>lectores modelo gemini|nvidia|groq &lt;modelo&gt;</code>');
@@ -98,7 +109,7 @@ function LECT_textoPanel_(cfg) {
   var lineas = ['🧾 <b>Lectores de vouchers</b> (si el primero falla, pasa al siguiente al momento)', ''];
   cfg.orden.forEach(function (p) {
     var off = cfg.apagados.indexOf(p) >= 0;
-    lineas.push((off ? '⏸ ' : (++n) + '. ') + '<b>' + LECT_NOMBRES_[p] + '</b> · <code>' + TG_esc_(cfg.modelo[p] || 'automático') + '</code>' + (off ? ' <i>(apagado)</i>' : ''));
+    lineas.push((off ? '⏸ ' : (++n) + '. ') + '<b>' + LECT_NOMBRES_[p] + '</b> · <code>' + TG_esc_(cfg.modelo[p] || 'automático') + '</code>' + (cfg.razonar[p] ? ' · 🧠 razona' : '') + (off ? ' <i>(apagado)</i>' : ''));
   });
   var faltan = [];
   if (cfg.apagados.indexOf('nvidia') < 0 && !CIA_nvClave_()) faltan.push('NVIDIA: mande su clave nvapi-… en un mensaje solo');
@@ -110,7 +121,8 @@ function LECT_textoPanel_(cfg) {
     if (uso.ultimo) lineas.push('<i>Último respaldo: ' + TG_esc_(uso.ultimo) + '</i>');
   } else if (uso && uso.error) lineas.push('', '<i>(La hoja de Vouchers no informó su uso: ' + TG_esc_(String(uso.error).slice(0, 120)) + ')</i>');
   lineas.push('', '<i>Los PDF también: a NVIDIA y Groq se les manda cada página como imagen. Recuerde: el uso gratis de NVIDIA es para pruebas según sus condiciones.</i>',
-    '<i>También por texto: <code>lectores nvidia gemini groq</code> · <code>lectores modelo groq &lt;id&gt;</code></i>');
+    '<i>🧠 Razonar = piensa antes de responder: más preciso con números difíciles (muchos ceros), pero tarda más (de 10 a 40 s). NVIDIA siempre recibe la imagen en detalle alto.</i>',
+    '<i>También por texto: <code>lectores nvidia gemini groq</code> · <code>lectores modelo groq &lt;id&gt;</code> · <code>lectores razonar nvidia si</code></i>');
   return lineas.join('\n');
 }
 
@@ -121,6 +133,7 @@ function LECT_teclado_(cfg) {
     if (i > 0) fila.push(b('⬆️ ' + nom, { t: 'lect', a: 'subir', p: p }));
     fila.push(b((off ? '▶ Prender ' : '⏸ Apagar ') + nom, { t: 'lect', a: 'onoff', p: p }));
     fila.push(b('🔧 Modelo', { t: 'lect', a: 'modelos', p: p }));
+    if (p !== 'gemini') fila.push(b(cfg.razonar[p] ? '🧠 Razona ✓' : '🧠 Razonar', { t: 'lect', a: 'razonar', p: p }));
     return fila;
   });
 }
@@ -185,6 +198,9 @@ function LECT_alBoton_(ctx, d) {
     }
     // los apagados van al final; los prendidos conservan su orden
     cfg.orden = cfg.orden.filter(function (x) { return cfg.apagados.indexOf(x) < 0; }).concat(cfg.orden.filter(function (x) { return cfg.apagados.indexOf(x) >= 0; }));
+  } else if (d.a === 'razonar') {
+    if (p === 'gemini') return;
+    cfg.razonar[p] = !cfg.razonar[p];
   } else if (d.a === 'modelo') {
     cfg.modelo[p] = d.m || LECT_MODELO_DEF_[p];
     LECT_guardar_(cfg);
@@ -219,6 +235,7 @@ function LECT_guardarHoja(nuevo, quien) {
     var m = n.modelo && n.modelo[p] != null ? String(n.modelo[p]).trim() : c.modelo[p];
     if (m && !/^[\w.\-\/:]{2,120}$/.test(m)) throw new Error('Nombre de modelo no válido: ' + m);
     c.modelo[p] = m || LECT_MODELO_DEF_[p];
+    if (p !== 'gemini' && n.razonar && n.razonar[p] != null) c.razonar[p] = !!n.razonar[p];
   });
   c.orden = orden.filter(function (p) { return apagados.indexOf(p) < 0; }).concat(orden.filter(function (p) { return apagados.indexOf(p) >= 0; }));
   c.apagados = apagados;

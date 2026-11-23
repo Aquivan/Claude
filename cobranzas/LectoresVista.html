@@ -27,17 +27,17 @@
   Lo mismo se cambia en Telegram con «lectores».</div>
 <div id="filas">Cargando…</div>
 <div id="uso" class="uso" style="display:none"></div>
-<div class="nota">Modelo vacío = automático. Para probar uno antes, mande al bot una foto con la palabra «comparar».
+<div class="nota">🧠 <b>Razonar</b>: la IA piensa antes de responder; es más precisa con números difíciles (muchos ceros), pero tarda más (10 a 40 s). Como el respaldo solo entra cuando Gemini falla, conviene más precisión que rapidez. NVIDIA siempre recibe la imagen en detalle alto y las páginas de PDF a 2048 px.<br>Modelo vacío = automático. Para probar uno antes, mande al bot una foto con la palabra «comparar».
   Según sus condiciones, el uso gratis de NVIDIA es para pruebas.</div>
 <div class="pie"><span id="msg"></span><button onclick="google.script.host.close()">Cerrar</button><button id="bG" onclick="guardar()"><b>💾 Guardar</b></button></div>
 <script>
-var D = null, orden = [], apagados = [], modelo = {};
+var D = null, orden = [], apagados = [], modelo = {}, razonar = {};
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function msg(t, cls) { var m = document.getElementById('msg'); m.className = cls || ''; m.textContent = t || ''; }
 function fallo(e) { msg('❌ ' + (e && e.message || e), 'err'); document.getElementById('bG').disabled = false; }
 function cargar(d) {
   if (d && d.error) return fallo(d.error);
-  D = d; orden = d.cfg.orden.slice(); apagados = d.cfg.apagados.slice(); modelo = JSON.parse(JSON.stringify(d.cfg.modelo));
+  D = d; orden = d.cfg.orden.slice(); apagados = d.cfg.apagados.slice(); modelo = JSON.parse(JSON.stringify(d.cfg.modelo)); razonar = JSON.parse(JSON.stringify(d.cfg.razonar || {}));
   pintar();
   var u = d.uso || {}, box = document.getElementById('uso');
   if (u.ok) {
@@ -57,7 +57,9 @@ function pintar() {
       '<span class="nom">' + esc(D.nombres[p]) + (falta ? '<br><span class="aviso">⚠️ falta su clave</span>' : '') + '</span>' +
       '<span class="mod"><input id="m_' + p + '" value="' + esc(modelo[p]) + '" placeholder="automático" onchange="modelo[\'' + p + '\']=this.value.trim()">' +
       '<button onclick="verModelos(\'' + p + '\')">🔧 Ver</button></span>' +
-      '<label><input type="checkbox" ' + (off ? '' : 'checked') + ' onchange="prender(\'' + p + '\',this.checked)"> Prendido</label></div>' +
+      '<span><label><input type="checkbox" ' + (off ? '' : 'checked') + ' onchange="prender(\'' + p + '\',this.checked)"> Prendido</label>' +
+      (p === 'gemini' ? '' : '<br><label title="Piensa antes de responder: más preciso con números difíciles, pero tarda más (10 a 40 s)"><input type="checkbox" ' + (razonar[p] ? 'checked' : '') +
+        ' onchange="razonar[\'' + p + '\']=this.checked"> 🧠 Razonar</label>') + '</span></div>' +
       '<div class="lista" id="l_' + p + '"></div>';
   }).join('');
 }
@@ -91,7 +93,7 @@ function guardar() {
     document.getElementById('bG').disabled = false;
     if (d && d.error) return fallo(d.error);
     cargar(d); msg('✅ Guardado. La hoja de Vouchers lo usa desde ya.', 'ok');
-  }).withFailureHandler(fallo).LECT_guardarHoja({ orden: orden, apagados: apagados, modelo: modelo });
+  }).withFailureHandler(fallo).LECT_guardarHoja({ orden: orden, apagados: apagados, modelo: modelo, razonar: razonar });
 }
 google.script.run.withSuccessHandler(cargar).withFailureHandler(fallo).LECT_ver();
 </script>
