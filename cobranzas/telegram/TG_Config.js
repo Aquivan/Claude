@@ -376,6 +376,15 @@ function TG_conectarWebhook_() {
   return { ok: true, bot: me.result.username };
 }
 
+/** Si la lista de comandos cambió (despliegue nuevo), se la manda a Telegram sola: así aparecen en el botón «Menú» sin reconectar. */
+function TG_comandosAlDia_() {
+  var firma = TG_COMANDOS_.map(function (c) { return c.join('='); }).join('|'), props = PropertiesService.getScriptProperties();
+  if (props.getProperty('TG_COMANDOS_FIRMA') === firma) return;
+  var cmds = TG_COMANDOS_.map(function (c) { return c[0] === 'ayuda' ? { command: c[0], description: c[1], is_ephemeral: true } : { command: c[0], description: c[1] }; });
+  var ok = TG_llamar_('setMyCommands', { commands: cmds }).ok || TG_llamar_('setMyCommands', { commands: TG_COMANDOS_.map(function (c) { return { command: c[0], description: c[1] }; }) }).ok;
+  if (ok) props.setProperty('TG_COMANDOS_FIRMA', firma);
+}
+
 // Comandos que Telegram muestra en el botón "Menú".
 var TG_COMANDOS_ = [
   ['menu', '📋 Menú principal'],
@@ -397,6 +406,7 @@ var TG_COMANDOS_ = [
   ['actualizar', '🔄 Recalcular Cuentas por Cobrar y Pagar'],
   ['tc', '💱 Tipo de cambio SUNAT de hoy'],
   ['voucher', '🖼 Foto de un voucher (ej. /voucher Originales!2326)'],
+  ['lectores', '🧾 Qué IA lee los vouchers y en qué orden (administradores)'],
   ['recordatorios', '⏰ Mis recordatorios'],
   ['avisos', '🔔 Elegir mis avisos'],
   ['olvidar', '🧹 Empezar una conversación nueva'],

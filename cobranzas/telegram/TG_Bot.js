@@ -20,6 +20,7 @@ function doPost(e) {
     var u = JSON.parse(e.postData.contents);
     if (TG_yaVisto_('u' + u.update_id)) return TG_ok_();
     TG_manejar_(u);
+    try { TG_comandosAlDia_(); } catch (err2) {}   // 📋 comandos nuevos al botón «Menú» de Telegram (TG_Config.js)
   } catch (err) {
     console.error('Telegram doPost: ' + (err && err.stack || err));
   }
@@ -212,6 +213,7 @@ function TG_tecladoMenu_(chatId) {
     [{ text: '🧾 Retenciones', callback_data: 'c:retenciones' }, { text: '🧑‍💼 Honorarios', callback_data: 'c:honorarios' }],
     [{ text: '⚙️ Estado descargas', callback_data: 'c:estado' }, { text: '⬇ Descargar de SUNAT', callback_data: 'c:descargar' }],
     [{ text: '🔄 Recalcular cobranzas', callback_data: 'c:actualizar' }, { text: '💱 Tipo de cambio', callback_data: 'c:tc' }],
+    [{ text: '🧾 Lectores de vouchers (qué IA lee)', callback_data: 'c:lectores' }],
     [{ text: '⏰ Recordatorios', callback_data: 'c:recordatorios' }, { text: '🔔 Mis avisos', callback_data: 'c:avisos' }, { text: '❓ Ayuda', callback_data: 'c:ayuda' }],
   ]);
 }
