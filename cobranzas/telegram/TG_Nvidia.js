@@ -31,12 +31,31 @@ function TGNV_comando_(ctx) {
   TGNV_probar_(ctx);
 }
 
-/** Prueba y muestra la tabla, con un botón «Usar» por modelo que respondió. */
+/**
+ * La prueba corre en SEGUNDO PLANO (un disparador en unos segundos): algunos modelos gigantes tardan y el bot no puede
+ * quedarse esperando (Telegram reintenta y Google corta). Al terminar llega el resultado.
+ */
 function TGNV_probar_(ctx) {
+  PropertiesService.getScriptProperties().setProperty('TGNV_PEND', String(ctx.chatId));
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGNV_correr') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('TGNV_correr').timeBased().after(5000).create();
+  TG_enviar_(ctx.chatId, '⏳ Probando los modelos gratis de NVIDIA en segundo plano. Le aviso aquí en 1 a 4 minutos (puede seguir usando el bot).');
+}
+
+/** Disparador: hace la prueba y manda el resultado al chat que la pidió. */
+function TGNV_correr() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGNV_correr') ScriptApp.deleteTrigger(t); });
+  var p = PropertiesService.getScriptProperties(), chatId = p.getProperty('TGNV_PEND');
+  if (!chatId) return;
+  p.deleteProperty('TGNV_PEND');
+  TGNV_mostrar_({ chatId: chatId });
+}
+
+function TGNV_mostrar_(ctx) {
   var r;
-  try { r = CIA_nvProbar(); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message)); }
+  try { r = CIA_nvProbar(270000); } catch (e) { return TG_enviar_(ctx.chatId, '⚠️ NVIDIA: ' + TG_esc_(e.message)); }
   var ok = r.probados.filter(function (m) { return m.ok; }), no = r.probados.filter(function (m) { return !m.ok; });
-  var html = '🟩 <b>Modelos gratis de NVIDIA hoy</b> (su clave ve ' + r.total + '; probé ' + r.probados.length + ')\n' +
+  var html = '🟩 <b>Modelos gratis de NVIDIA hoy</b> (su clave ve ' + r.total + '; probé ' + r.probados.length + ' en ' + r.segundos + ' s)\n' +
     (r.elegido ? 'Elegido ahora: <code>' + TG_esc_(r.elegido) + '</code>\n' : '') + '\n' +
     (ok.length ? ok.map(function (m) { return '✅ <code>' + TG_esc_(m.id) + '</code> · ' + m.s + ' s' + (m.nota ? '\n   <i>' + TG_esc_(m.nota) + '</i>' : ''); }).join('\n') : '❌ Ninguno respondió.') +
     (no.length ? '\n\n<i>No responden: ' + TG_esc_(no.map(function (m) { return m.id.split('/').pop() + ' (' + m.error + ')'; }).join(' · ').slice(0, 600)) + '</i>' : '') +

@@ -932,32 +932,49 @@ function CIA_nvClave_() {
 }
 
 /** Lista los modelos que su clave ve hoy y prueba los que interesan (texto corto): ok, segundos y nota. */
-function CIA_nvProbar() {
+// Orden de prueba: primero lo más útil; los gigantes (lentos) al final.
+var CIA_NV_ORDEN_ = [/deepseek-v4/i, /kimi/i, /super-vl/i, /mistral-large/i, /glm/i, /minimax/i, /gemma-4/i, /qwen/i, /lightning|bolt/i, /step-5/i, /gpt-oss/i, /ultra/i];
+
+/**
+ * Lista los modelos que su clave ve hoy y prueba los que interesan (texto corto): ok, segundos y nota.
+ * Con tope de tiempo (Google corta a los 6 min; desde Telegram corre en segundo plano): de a 4 a la vez,
+ * los que no alcanzan quedan «no se alcanzó a probar».
+ */
+function CIA_nvProbar(topeMs) {
+  var t0 = Date.now(); topeMs = topeMs || 240000;
   var clave = CIA_nvClave_();
-  if (!clave) throw new Error('Primero guarde la clave de NVIDIA: elija una IA «NVIDIA · …» en la fila 11 y use 🔑 Guardar clave de IA.');
+  if (!clave) throw new Error('Primero guarde la clave de NVIDIA: elija una IA «NVIDIA · …» en la fila 11 y use 🔑 Guardar clave de IA (o mándela al bot de Telegram).');
   var r = UrlFetchApp.fetch('https://integrate.api.nvidia.com/v1/models', { headers: { Authorization: 'Bearer ' + clave }, muteHttpExceptions: true });
-  if (r.getResponseCode() !== 200) throw new Error('NVIDIA respondió ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 200));
+  if (r.getResponseCode() !== 200) throw new Error('NVIDIA respondió ' + r.getResponseCode() + ' al pedir la lista de modelos: ' + r.getContentText().slice(0, 200));
   var todos = (JSON.parse(r.getContentText()).data || []).map(function (m) { return String(m.id); });
-  var cand = todos.filter(function (id) { return CIA_NV_INTERES_.test(id) && !/embed|rerank|safety|guard|translate|parse|reward|calibration|diffusion/i.test(id); }).slice(0, 24);
+  var rango = function (id) { for (var i = 0; i < CIA_NV_ORDEN_.length; i++) if (CIA_NV_ORDEN_[i].test(id)) return i; return 99; };
+  var cand = todos.filter(function (id) { return CIA_NV_INTERES_.test(id) && !/embed|rerank|safety|guard|translate|parse|reward|calibration|diffusion/i.test(id); })
+    .sort(function (a, b) { return rango(a) - rango(b); }).slice(0, 12);
   var res = [];
-  for (var i = 0; i < cand.length; i += 6) {
-    var lote = cand.slice(i, i + 6), t0 = Date.now();
+  for (var i = 0; i < cand.length; i += 4) {
+    var lote = cand.slice(i, i + 4);
+    if (Date.now() - t0 > topeMs - 70000) {   // no alcanza otra tanda
+      lote = cand.slice(i);
+      lote.forEach(function (id) { res.push({ id: id, ok: false, cod: 0, s: 0, nota: CIA_nvNota_(id), error: 'no se alcanzó a probar (repita la prueba)' }); });
+      break;
+    }
+    var t1 = Date.now();
     var resp = UrlFetchApp.fetchAll(lote.map(function (id) {
       return { url: 'https://integrate.api.nvidia.com/v1/chat/completions', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
         headers: { Authorization: 'Bearer ' + clave },
-        payload: JSON.stringify({ model: id, max_tokens: 40, temperature: 0, messages: [{ role: 'user', content: 'Responde solo: {"ok":true}' }] }) };
+        payload: JSON.stringify({ model: id, max_tokens: 20, temperature: 0, messages: [{ role: 'user', content: 'Responde solo: {"ok":true}' }] }) };
     }));
-    var ms = Date.now() - t0;
+    var ms = Date.now() - t1;
     resp.forEach(function (x, k) {
-      var cod = x.getResponseCode(), nota = '';
-      CIA_NV_NOTA_.some(function (n) { if (n[0].test(lote[k])) { nota = n[1]; return true; } return false; });
-      res.push({ id: lote[k], ok: cod === 200, cod: cod, s: Math.round(ms / 100) / 10, nota: nota,
-        error: cod === 200 ? '' : cod === 404 ? 'no disponible gratis para su clave' : cod === 429 ? 'límite de pedidos, pruebe en 1 min' : String(x.getContentText()).slice(0, 90) });
+      var cod = x.getResponseCode();
+      res.push({ id: lote[k], ok: cod === 200, cod: cod, s: Math.round(ms / 100) / 10, nota: CIA_nvNota_(lote[k]),
+        error: cod === 200 ? '' : cod === 404 ? 'no disponible gratis para su clave' : cod === 429 ? 'límite de pedidos, pruebe en 1 min' : cod === 401 || cod === 403 ? 'la clave no tiene permiso para este modelo' : 'error ' + cod });
     });
   }
   res.sort(function (a, b) { return (b.ok - a.ok) || a.s - b.s; });
-  return { total: todos.length, probados: res, elegido: PropertiesService.getScriptProperties().getProperty('IA_NVIDIA_MODELO') || '' };
+  return { total: todos.length, probados: res, elegido: PropertiesService.getScriptProperties().getProperty('IA_NVIDIA_MODELO') || '', segundos: Math.round((Date.now() - t0) / 1000) };
 }
+function CIA_nvNota_(id) { var n = ''; CIA_NV_NOTA_.some(function (x) { if (x[0].test(id)) { n = x[1]; return true; } return false; }); return n; }
 
 /** «Usar este»: queda como «NVIDIA · modelo elegido» y se pone en la fila 11 de la pestaña. */
 function CIA_nvElegir(id) {
