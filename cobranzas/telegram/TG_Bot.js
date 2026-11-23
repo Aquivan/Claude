@@ -94,6 +94,7 @@ function TG_manejar_(u) {
   TG_marcarUso_(ss, usuario);
   var ctx = { ss: ss, chatId: chatId, usuario: usuario, nombre: nombre, msgId: m.message_id,
     grupo: grupo, deId: m.from && m.from.id, efimeroId: m.ephemeral_message_id };   // 👻 comando efímero en un grupo
+  if (m.text && TGNV_tg_(ctx, texto)) return;   // 🟩 clave de NVIDIA: se borra el mensaje y se guarda oculta (TG_Nvidia.js) — antes que todo lo demás
   // ↩️ Respondió (citó) un mensaje: la IA recibe ese texto (o solo la parte que citó) para saber de qué habla.
   if (m.reply_to_message) ctx.citado = (m.quote && m.quote.text) || m.reply_to_message.text || m.reply_to_message.caption || '';
   // 🧩 "1 6 9" mientras el robot de Quesito espera la respuesta de un captcha.
@@ -260,6 +261,7 @@ function TG_comando_(ctx, texto) {
     case 'honorarios': return TG_enviarHonorarios_(ctx, arg);
     case 'estado': return TG_enviarEstado_(ctx, arg);
     case 'descargar': return TG_asistenteDescarga_(ctx, null);
+    case 'nvidia': return TGNV_comando_(ctx);   // 🟩 probar modelos gratis de NVIDIA y elegir uno (TG_Nvidia.js)
     case 'sire': return TGS_comandoTG_(ctx, arg);   // ⚡ SIRE solo reporte (rápido): /sire granix 202601-202609
     case 'ruc': return TG_enviar_(chatId, RPN_consulta_(ctx.ss, arg, { origen: 'tg', chat: chatId }));   // 🔎 RUC por nombre
     case 'actualizar': return TG_actualizarCobranzas_(ctx);
@@ -514,6 +516,7 @@ function TG_alBoton_(ss, q) {
     case 'archivo': return TG_mandarArchivo_(ctx, datos.id, datos.titulo);
     case 'descarga': return TG_confirmarDescarga_(ctx, datos, op);
     case 'venc': return TGV_alBoton_(ctx, datos);
+    case 'nvusar': return TGNV_alBoton_(ctx, datos);   // 🟩 usar este modelo de NVIDIA (TG_Nvidia.js)
     case 'entrega': return TGE_alBotonTG_(ctx, datos, op, partes[1]);
     case 'procesar': return TGP_alBotonTG_(ctx, op, partes[1]);
     case 'ctv': return CTV_alBoton_(ctx, datos, op);   // 🔁 Original ↔ Foto (TG_CambiarTipo.js)
