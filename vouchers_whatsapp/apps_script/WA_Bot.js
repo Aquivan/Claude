@@ -49,7 +49,33 @@ var WA_PRIVACIDAD_ =
 // HtmlService (no ContentService): así lo que sigue a la redirección de Apps Script responde 200.
 function WA_ok_(t) { return HtmlService.createHtmlOutput(t); }
 
+// ⚡ Quién mandó archivos en ESTE aviso: su tanda se cierra aquí mismo a los pocos segundos (WA_cerrarTandaYa_),
+// sin esperar la revisión de cada minuto (que Google suele atrasar 1-2 min). La revisión de cada minuto queda de respaldo.
+var WA_TANDAS_AQUI_ = {};
+var WA_ESPERA_RAPIDA_MS_ = 10 * 1000;
+
 function WA_procesarAviso_(aviso) {
+  WA_procesarAvisoSolo_(aviso);
+  Object.keys(WA_TANDAS_AQUI_).forEach(function (de) {
+    try { WA_cerrarTandaYa_(de, WA_TANDAS_AQUI_[de]); } catch (e) { console.error('Cerrar tanda al instante: ' + (e && e.stack || e)); }
+  });
+}
+
+/** Espera 10 s: si no llegó otro archivo de esa persona, cierra su tanda ya (acuse + «¿de quién son?» o procesar). */
+function WA_cerrarTandaYa_(de, marca) {
+  Utilities.sleep(WA_ESPERA_RAPIDA_MS_);
+  var props = WA_props_(), k = 'WA_TANDA_' + de;
+  if (props.getProperty(k) !== marca) return;   // llegó otro archivo (su ejecución la cerrará) o ya la cerró la revisión de cada minuto
+  var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues(), espera = false;
+  try { espera = WA_tandaEnEspera_(hoja, datos, de); } catch (e) { console.error('¿De quién son? ' + e.message); }
+  if (espera) datos = hoja.getDataRange().getValues();
+  var n = WA_acuse_(hoja, datos, de);
+  // La marca se borra recién ahora: si esta ejecución se cortara antes, la revisión de cada minuto la cierra igual.
+  if (props.getProperty(k) === marca) props.deleteProperty(k);
+  if (n) WA_procesarAhora_();   // ⚡ procesa y avisa el resultado en esta misma ejecución
+}
+
+function WA_procesarAvisoSolo_(aviso) {
   (aviso.entry || []).forEach(function (en) {
     (en.changes || []).forEach(function (ch) {
       var v = ch.value || {};
@@ -160,7 +186,9 @@ function WA_procesarMensaje_(m, nombre) {
 
 function WA_anotar_(m, de, nombre, tipo, archivo, kb, estado, resultado, idArchivo) {
   WA_hoja_().appendRow([new Date(), nombre, de, tipo, archivo, kb, estado, resultado, m.id, idArchivo, '']);
-  WA_props_().setProperty('WA_TANDA_' + de, String(Date.now()));
+  var marca = String(Date.now());
+  WA_props_().setProperty('WA_TANDA_' + de, marca);
+  WA_TANDAS_AQUI_[de] = marca;
 }
 
 // Igual que el bot de Telegram: nombre real del PDF, o el comentario, o fecha + quién lo mandó.

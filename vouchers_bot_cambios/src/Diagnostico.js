@@ -658,7 +658,10 @@ function ejecutarProcesamiento_() {
     filasAntes: Math.max(antes - 1, 0),
     filasDespues: Math.max(despues - 1, 0),
     filasNuevas: Math.max(despues - antes, 0),
-    duracionSegundos: Math.round((Date.now() - inicio) / 1000)
+    duracionSegundos: Math.round((Date.now() - inicio) / 1000),
+    // ⏱ en qué se fue el tiempo (segundos): leer con IA, escribir en la hoja, el resto (abrir archivos, imagen, duplicados…)
+    tiempos: { total: Math.round((Date.now() - inicio) / 100) / 10, ia: Math.round(TIEMPOS_.ia / 100) / 10,
+      escribir: Math.round(TIEMPOS_.escribir / 100) / 10, lecturas: TIEMPOS_.lecturas, lector: TIEMPOS_.lector }
   };
 }
 

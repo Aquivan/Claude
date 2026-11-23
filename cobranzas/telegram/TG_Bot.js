@@ -436,7 +436,7 @@ function TG_registrarVouchers_(ctx, adjs) {
   // ⚡ Que la hoja de Vouchers los procese YA y se responda con el resultado (sin esperar su vuelta de 10 min).
   if (hechos.length && PropertiesService.getScriptProperties().getProperty('TGP_PROCESAR_URL')) {
     TG_accion_(ctx.chatId, 'typing');
-    TGP_procesarYa_();
+    var t0 = Date.now(), rp = TGP_procesarYa_();   // ⏱ la hoja dice en qué se fue el tiempo
     var idx = {};
     try { idx = TGU_indiceArchivos_(ctx.ss); } catch (e) {}
     var lineas = hechos.map(function (h) {
@@ -448,7 +448,8 @@ function TG_registrarVouchers_(ctx, adjs) {
           : '✅ <b>' + x.hoja + '!' + x.fila + '</b> · op ' + TG_esc_(x.op) + ' · ' + Number(x.monto || 0).toFixed(2);
       }).join('\n');
     });
-    TG_enviar_(ctx.chatId, '📋 <b>Resultado</b>\n' + lineas.join('\n'), [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]]);
+    var tt = TGP_textoTiempos_(rp, t0);
+    TG_enviar_(ctx.chatId, '📋 <b>Resultado</b>\n' + lineas.join('\n') + (tt ? '\n<i>' + TG_esc_(tt) + '</i>' : ''), [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]]);
     return;
   }
   TG_enviar_(ctx.chatId, (n ? '📥 <b>' + n + ' archivo(s) enviados al Sistema de Vouchers</b> (carpeta de entrada de ' +

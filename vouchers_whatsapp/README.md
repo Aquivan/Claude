@@ -1,5 +1,7 @@
 # 📲 Vouchers por WhatsApp
 
+> ⚡ Rápido: la tanda se cierra 10 s después del último archivo en la misma ejecución que lo recibe (WA_cerrarTandaYa_), sin esperar la revisión de cada minuto (que queda de respaldo a los 30 s). El resultado trae ⏱ en qué se fue el tiempo.
+
 Reenvíe (uno o varios a la vez) las fotos y PDF de vouchers que le llegan por WhatsApp
 al número del bot. Se guardan en las carpetas de **Entrada** del sistema de Vouchers
 (fotos → *Fotos*, PDF → *Originales*), el sistema los procesa como siempre (cada 10 min)
