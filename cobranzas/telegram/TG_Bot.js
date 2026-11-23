@@ -163,6 +163,7 @@ function TG_guardarSesion_(chatId, ses) {
 var TG_ATAJOS_ = {
   '📊 Resumen': '/resumen', '📋 Menú': '/menu', '💰 Por cobrar': '/cobrar', '💸 Por pagar': '/pagar',
   '📬 SUNAT': '/notificaciones', '⬇ Descargar': '/descargar', '❓ Ayuda': '/ayuda',
+  'nvidia': '/nvidia', 'Nvidia': '/nvidia', 'NVIDIA': '/nvidia',   // 🟩 probar modelos de NVIDIA (TG_Nvidia.js)
 };
 
 function TG_tecladoFijo_() {
