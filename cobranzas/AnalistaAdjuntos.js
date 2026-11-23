@@ -149,7 +149,7 @@ var ANX_HERR_ = {
     if (!/^image\/|pdf/i.test(adj.fuente.mime)) throw new Error('A' + n + ' no es foto ni PDF: sus filas ya están en el resultado A' + n);
     var prov = IA_PROVEEDORES_[c.ia.proveedor];
     var blob = adj.fuente.blob;
-    var resp = IA_llamarSeguro_(c.ia, { json: false, maxTokens: 3000,
+    var resp = IA_llamarSeguro_(c.ia, { json: false, maxTokens: 3000, tarea: 'docs',
       sistema: 'Eres auditor contable en Perú. Mira el archivo y responde la pregunta con exactitud, en español, citando lo que se ve. No inventes.',
       adjunto: { mime: /pdf/i.test(adj.fuente.mime) && prov.pdf ? 'application/pdf' : blob.getContentType(), base64: Utilities.base64Encode(blob.getBytes()) },
       texto: String(a.pregunta || 'Describe el documento y todos sus datos.') });

@@ -93,13 +93,26 @@ var ANA_SISTEMA_ = [
  * reintenta (hasta 5 intentos). Si cambia de modelo lo deja anotado en ia.cambioModelo.
  */
 function IA_llamarSeguro_(ia, opts) {
+  // 🤖 Respaldo (TG_IATareas.js, /ia): si la IA principal no responde, NVIDIA y luego Groq. opts.tarea: 'chat' | 'analisis' | 'docs'.
+  if (typeof IAT_conRespaldo_ !== 'function' || opts._sinRespaldo) return IA_llamarSeguroSolo_(ia, opts);
+  var t = opts.tarea || ((opts.adjunto || opts.adjuntos) ? 'docs' : 'analisis');
+  var hay = IAT_orden_(t).length > 1;
+  return IAT_conRespaldo_(t, function () {
+    var o = {}; for (var x in opts) o[x] = opts[x];
+    if (hay) o._conRespaldo = true;   // con respaldo no se espera tanto: se pasa antes al siguiente
+    return IA_llamarSeguroSolo_(ia, o);
+  }, opts);
+}
+
+function IA_llamarSeguroSolo_(ia, opts) {
   var prov = IA_PROVEEDORES_[ia.proveedor] || {};
   var gemini = prov.tipo === 'gemini';
   var sp = PropertiesService.getScriptProperties();
   var probados = {}, ultimo = null;
-  for (var k = 0; k < 5; k++) {
+  for (var k = 0; k < (opts._conRespaldo ? 2 : 5); k++) {
     var o = {};
     for (var x in opts) o[x] = opts[x];
+    delete o._conRespaldo; delete o.tarea;
     o.proveedor = ia.proveedor; o.modelo = ia.modelo; o.clave = ia.clave;
     try { return IA_llamar_(o); } catch (e) {
       ultimo = e;
@@ -116,7 +129,7 @@ function IA_llamarSeguro_(ia, opts) {
         var sinFuerte = otro && sp.getProperty('ANA_SIN_MODELO_FUERTE') === ANA_MODELO_GEMINI_;
         if (!probados[otro] && !sinFuerte) { ia.modelo = otro; ia.modeloAuto = false; ia.cambioModelo = true; continue; }
       }
-      Utilities.sleep(5000 * (k + 1));
+      if (!opts._conRespaldo) Utilities.sleep(5000 * (k + 1));
     }
   }
   throw ultimo;
@@ -513,7 +526,7 @@ function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos, op) {
     consultas++;
     var r;
     try {
-      r = IA_llamarSeguro_(ia, { sistema: sistema, texto: texto, maxTokens: 16000 });
+      r = IA_llamarSeguro_(ia, { sistema: sistema, texto: texto, maxTokens: 16000, tarea: 'chat' });
     } catch (e) {
       if (ia.modeloAuto && /respondió (400|403|404)/.test(e.message)) {   // el modelo más capaz no está en esta cuenta: el de siempre
         ia.modelo = ''; ia.modeloAuto = false; paso--;
@@ -523,7 +536,7 @@ function ANA_preguntar_(ss, pregunta, ia, previas, adjuntos, op) {
       if (!/JSON/i.test(e.message)) throw e;
       // Respondió sin JSON: se le recuerda el protocolo; en el último intento se acepta su texto como respuesta.
       if (!apurar) { conv.push('', 'Tu última respuesta no fue JSON válido. Responde SOLO con el JSON del protocolo.'); continue; }
-      r = { respuesta: IA_llamarSeguro_(ia, { sistema: sistema, texto: texto, json: false, maxTokens: 8000 }), tablas: [] };
+      r = { respuesta: IA_llamarSeguro_(ia, { sistema: sistema, texto: texto, json: false, maxTokens: 8000, tarea: 'chat' }), tablas: [] };
     }
     if (r && r.accion === 'consultar' && Array.isArray(r.consultas) && r.consultas.length && !apurar) {
       conv.push('', 'TÚ PEDISTE: ' + JSON.stringify(r.consultas).slice(0, 2000), 'RESULTADOS:');

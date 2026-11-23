@@ -61,7 +61,7 @@ function TGP_iaLectora_(c, opts) {
       console.warn('Modelo lector ' + lector + ': ' + msg.slice(0, 150) + ' → sigo con el de siempre');
     }
   }
-  return IA_llamarSeguro_(c.ia, opts);
+  return IA_llamarSeguro_(c.ia, opts);   // 🤖 con respaldo NVIDIA → Groq (IA_llamarSeguro_, TG_IATareas.js)
 }
 
 /**
@@ -124,7 +124,7 @@ function TGP_leerVarios_(c, adjs) {
     pend.forEach(function (x, j) {
       var rr = res[j];
       if (!rr || !rr.ok) {   // saturado o error: ese archivo solo, con reintentos y cambio de modelo
-        try { rr = { ok: true, r: IA_llamarSeguro_(c.ia, x.opts) }; } catch (e) { out[x.i] = { error: e.message }; return; }
+        try { rr = { ok: true, r: IA_llamarSeguro_(c.ia, x.opts) }; } catch (e) { out[x.i] = { error: e.message }; return; }   // 🤖 con respaldo
       }
       AUV_cachePut_(cache, 'tgp', x.clave, rr.r);
       out[x.i] = TGP_docsDe_(rr.r, x.mime);
