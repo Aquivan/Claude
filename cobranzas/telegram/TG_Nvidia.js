@@ -114,7 +114,7 @@ var TGNV_GEMINI_GRATIS_ = [
   ['gemini-4-hydrogen', 'Gemini 4 Hydrogen'], ['gemini-3.8-flash', 'Gemini 3.8 Flash'], ['gemini-3.6-flash', 'Gemini 3.6 Flash'],
   ['gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite'], ['gemini-3.1-flash-lite', 'Gemini 3.1 Flash-Lite'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite']
 ];
-var TGNV_GEMINI_HOJA_ = 'gemini-3.6-flash';   // el que usa la hoja de Vouchers si no se eligió otro en 🧾 lectores (CFG.MODELO_GEMINI)
+var TGNV_GEMINI_HOJA_ = 'gemini-4-hydrogen';   // el que usa la hoja de Vouchers si no se eligió otro en 🧾 lectores (LECT_MODELO_DEF_)
 
 /** Lectores de esta prueba (se guardan en est: así el vigía usa los mismos). */
 function TGNV_lectoresDe_(est) { return est.lect || TGNV_LECTORES_; }

@@ -32,7 +32,7 @@ function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
     contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64 } }] }],
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 8192,
+      maxOutputTokens: 32768,   // Gemini 4 piensa antes de responder y ese razonamiento también cuenta aquí
       responseMimeType: 'application/json'
     }
   };
