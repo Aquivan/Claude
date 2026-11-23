@@ -108,6 +108,15 @@ var TGNV_LECTORES_ = [
   { nom: 'Groq', prov: 'Groq · visión', groq: true },
 ];
 
+// Groq gratis acepta pocos tokens por minuto: no caben las instrucciones completas (~6.000 tokens). Estas son las reglas esenciales.
+var TGNV_PROMPT_CORTO_ = 'Eres contador experto en vouchers bancarios de Perú. Lee el comprobante y devuelve SOLO un array JSON:\n' +
+  '[{"fecha":"DD/MM/YYYY","nOperacion":"","banco":"","moneda":"PEN|USD","monto":0,"proveedor":"","idCliente":"","cliente":"","descripcion":""}]\n' +
+  'Reglas: proveedor = quien RECIBE el dinero (beneficiario/titular de la cuenta destino); cliente = quien paga; idCliente = RUC (11 dígitos) de quien paga si aparece. ' +
+  'Pagos de tributos (SUNAT, ESSALUD, ONP, FORM 1662, BOLETA DE PAGO SUNAT): proveedor = "SUNAT" siempre y la empresa que paga va en cliente con su RUC en idCliente. ' +
+  'Pago de servicios (luz, agua, teléfono, recaudación): proveedor = la empresa del servicio. Agentes BCP/BBVA: el agente NO es proveedor; el titular de la cuenta sí. ' +
+  'nOperacion: el número de operación o secuencia (BCP: el de "OP-" o "NRO. OPE."), sin inventar. monto: lo que recibe el beneficiario (sin comisión ni ITF), número con punto decimal y sin miles; ignora asteriscos (S/****1,637.00 = 1637.00). ' +
+  'fecha: DD/MM/YYYY (4/03/26 = 04/03/2026). descripcion: motivo corto (DEPOSITO EN EFECTIVO, TRANSFERENCIA, BOLETA DE PAGO SUNAT…). Si un dato no está, "". No inventes.';
+
 /** Clave de Groq (la de 🎤 audios sirve) y el modelo que lee imágenes que tenga HOY (se busca en su lista; 6 h en memoria). */
 function TGNV_groqClave_() {
   var p = PropertiesService.getScriptProperties();
@@ -182,7 +191,15 @@ function TGNV_leerPaso() {
     if (modeloL) L.nom = 'Groq · ' + modeloL.split('/').pop();
     // Las MISMAS instrucciones del lector real de vouchers (TG_PromptVoucher.js); si faltaran, las cortas de prueba.
     var instr = typeof TGNV_PROMPT_VOUCHER_ === 'string' && TGNV_PROMPT_VOUCHER_ ? TGNV_PROMPT_VOUCHER_ : TGNV_SISTEMA_;
-    var d = IA_llamar_({ proveedor: L.prov, clave: clave, modelo: modeloL, sistema: instr, texto: 'Analiza este comprobante y responde SOLO el JSON del formato indicado.', maxTokens: L.nvidia || L.groq ? 4000 : 2000,
+    if (L.groq) instr = TGNV_PROMPT_CORTO_;
+    if (L.groq) {   // directo, para leer cuánto le queda del límite gratis (cabeceras de Groq)
+      var pet = IA_peticion_({ proveedor: L.prov, clave: clave, modelo: modeloL, sistema: instr, texto: 'Analiza este comprobante y responde SOLO el JSON del formato indicado.', maxTokens: 1500,
+        adjunto: { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime } });
+      var rg = UrlFetchApp.fetch(pet.url, pet.params), hd = rg.getHeaders() || {};
+      var h = function (k) { return hd[k] || hd[k.toLowerCase()] || ''; };
+      est.limGroq = { tokMin: h('x-ratelimit-limit-tokens'), tokQueda: h('x-ratelimit-remaining-tokens'), reqDia: h('x-ratelimit-limit-requests'), reqQueda: h('x-ratelimit-remaining-requests') };
+      var d = IA_respuesta_(pet, rg);
+    } else var d = IA_llamar_({ proveedor: L.prov, clave: clave, modelo: modeloL, sistema: instr, texto: 'Analiza este comprobante y responde SOLO el JSON del formato indicado.', maxTokens: L.nvidia || L.groq ? 4000 : 2000,
       adjunto: { base64: Utilities.base64Encode(blob.getBytes()), mime: est.mime } });
     r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, d: d || {} };
   } catch (e) { r = { nom: L.nom, s: Math.round((Date.now() - t1) / 100) / 10, error: String(e.message || e).slice(0, 120) }; }
@@ -215,6 +232,9 @@ function TGNV_compararMostrar_(est) {
       lineas.push('  ' + marca + ' ' + TG_esc_(v.nom) + ': ' + (v.v ? '<code>' + TG_esc_(v.v.slice(0, 60)) + '</code>' : '—'));
     });
   });
+  if (est.limGroq && (est.limGroq.reqQueda || est.limGroq.tokQueda))
+    lineas.push('', '📊 <b>Groq gratis</b>: le quedan ' + (est.limGroq.reqQueda || '?') + ' de ' + (est.limGroq.reqDia || '?') + ' pedidos hoy · ' +
+      (est.limGroq.tokQueda || '?') + ' de ' + (est.limGroq.tokMin || '?') + ' tokens este minuto. <i>Groq usó instrucciones resumidas (las completas no caben en su límite gratis).</i>');
   lineas.push('', '<i>✅ = igual a Gemini · ⚠️ = distinto (revise la foto: Gemini también puede equivocarse). No se guardó nada.</i>');
   TG_enviar_(est.chat, lineas.join('\n'));
 }
