@@ -50,6 +50,8 @@ function VCH_doPost_(e) {
       case 'lectores': return TGW_json_(LECT_paraVouchers_());   // 🧾 qué IA lee los vouchers y en qué orden, con sus claves (TG_Lectores.js)
       case 'lect_ver': return TGW_json_(LECT_ver());   // 🧾 ventana «Lectores de vouchers» de la hoja de Vouchers (sin claves)
       case 'lect_guardar': return TGW_json_(LECT_guardarHoja(q.cfg, 'Vouchers · ' + String(q.quien || '').slice(0, 60)));
+      case 'lect_buscar': return TGW_json_(LECT_buscarHoja());   // 🔭 vigía de modelos desde la hoja de Vouchers (TG_Vigia.js)
+      case 'lect_probar': return TGW_json_(LECT_probarHoja(!!q.soloNuevos));
       case 'lect_modelos': return TGW_json_({ ids: LECT_modelosHoja(String(q.p || '')) });
       case 'rucandidatos': return TGW_json_(TGQ_rucCandidatos_(ss));   // 📋 vouchers sin RUC para elegir (RucVentana.js)
       case 'rucultimas': return TGW_json_(TGQ_rucUltimas_());   // 📂 búsquedas anteriores (6 h)

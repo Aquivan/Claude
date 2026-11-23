@@ -315,7 +315,14 @@ function TGNV_compararMostrar_(est) {
   if (gm && est.noDisp && est.noDisp.length) lineas.push('', '<i>No disponibles hoy para su clave: ' + TG_esc_(est.noDisp.join(', ')) + '</i>');
   lineas.push('', gm ? '<i>✅ = igual a lo que leyó la mayoría · ⚠️ = distinto (revise la foto: la mayoría también puede equivocarse). Para usar uno en la hoja: /lectores → 🔧 Modelo de Gemini. No se guardó nada.</i>'
     : '<i>✅ = igual a Gemini (el mismo modelo que lee en la hoja) · ⚠️ = distinto (revise la foto: Gemini también puede equivocarse). No se guardó nada.</i>');
-  TG_enviar_(est.chat, lineas.join('\n'));
+  // 📌 guardar este voucher como PRUEBA del 🔭 vigía de modelos, con la lectura que usted diga que es la correcta (TG_Vigia.js)
+  var buenas = res.filter(function (x) { return x.d && (x.d.nOperacion || x.d.monto); }).slice(0, 4);
+  var teclado = buenas.map(function (x) {
+    var d = {}; TGNV_CAMPOS_.forEach(function (c) { if (x.d[c[0]] != null && String(x.d[c[0]]).trim()) d[c[0]] = String(x.d[c[0]]).trim().slice(0, 120); });
+    return [{ text: '📌 Guardar como prueba (correcto: ' + x.nom.replace(/^Gemini · /, 'Gemini ').slice(0, 28) + ')', callback_data: 'k:' + TG_guardarBoton_({ t: 'vig', a: 'guardar', id: est.id, d: d }, 21600) }];
+  });
+  if (teclado.length) lineas.push('<i>📌 Si una lectura está totalmente bien, guárdela como voucher de prueba: el 🔭 vigía la usa para probar modelos nuevos (/modelos).</i>');
+  TG_enviar_(est.chat, lineas.join('\n'), teclado.length ? teclado : null);
 }
 
 /** Modelos gratis de Gemini que la clave ve hoy → {si: [[id, nombre]], no: [nombre]} */

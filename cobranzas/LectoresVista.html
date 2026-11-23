@@ -29,6 +29,10 @@
 <div id="uso" class="uso" style="display:none"></div>
 <div class="nota">🧠 <b>Razonar</b>: la IA piensa antes de responder; es más precisa con números difíciles (muchos ceros), pero tarda más (10 a 40 s). Como el respaldo solo entra cuando Gemini falla, conviene más precisión que rapidez: NVIDIA viene con 🧠 Razonar prendido. NVIDIA siempre recibe la imagen en detalle alto y las páginas de PDF a 2048 px.<br>Modelo vacío = automático. Para probar uno antes, mande al bot una foto con la palabra «comparar».
   Según sus condiciones, el uso gratis de NVIDIA es para pruebas.</div>
+<div class="uso" id="vig"><b>🔭 Vigía de modelos</b>: cada lunes reviso si Gemini, NVIDIA o Groq sacaron modelos nuevos que leen imágenes, los pruebo con sus 📌 vouchers de prueba y aviso por Telegram (nunca cambio solo).
+  <div id="vigInfo" style="margin:4px 0"></div>
+  <button onclick="vigBuscar()">🔭 Buscar modelos nuevos ahora</button> <button onclick="vigProbar(false)">🧪 Probar todos ahora</button>
+  <pre id="vigRes" style="white-space:pre-wrap;font-size:11px;max-height:160px;overflow:auto;margin:6px 0 0"></pre></div>
 <div class="pie"><span id="msg"></span><button onclick="google.script.host.close()">Cerrar</button><button id="bG" onclick="guardar()"><b>💾 Guardar</b></button></div>
 <script>
 var D = null, orden = [], apagados = [], modelo = {}, razonar = {};
@@ -46,6 +50,7 @@ function cargar(d) {
       (h.fallos ? ' · ❌ ninguno pudo: ' + h.fallos : '') + (u.ultimo ? '<br><i>Último respaldo: ' + esc(u.ultimo) + '</i>' : '');
     box.style.display = '';
   } else if (u.error) { box.innerHTML = '<i>La hoja de Vouchers no informó su uso: ' + esc(u.error) + '</i>'; box.style.display = ''; }
+  pintarVig(d.vig || {});
 }
 function pintar() {
   var n = 0;
@@ -94,6 +99,27 @@ function guardar() {
     if (d && d.error) return fallo(d.error);
     cargar(d); msg('✅ Guardado. La hoja de Vouchers lo usa desde ya.', 'ok');
   }).withFailureHandler(fallo).LECT_guardarHoja({ orden: orden, apagados: apagados, modelo: modelo, razonar: razonar });
+}
+function fecha(ms) { var x = new Date(ms); return x.toLocaleDateString('es-PE') + ' ' + x.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }); }
+function pintarVig(v) {
+  var u = v.ultimo, h = '📌 Vouchers de prueba: <b>' + (v.pruebas || 0) + '</b>' + ((v.pruebas || 0) < 3 ? ' <i>(guárdelos en Telegram: resultado de «comparar» → 📌)</i>' : '') +
+    ' · 🔭 Última revisión: ' + (v.buscado ? fecha(v.buscado) : 'todavía no');
+  if (u && u.rk) {
+    h += '<br>🧪 Última prueba (' + fecha(u.fecha) + (u.motivo ? ', ' + esc(u.motivo) : '') + '):<br>' + u.rk.filter(function (x) { return !x.noDisp; }).slice(0, 6).map(function (x, i) {
+      return (['🥇', '🥈', '🥉'][i] || (i + 1) + '.') + ' ' + esc(D.nombres[x.p].split(' ')[0]) + ' <code>' + esc(x.m.split('/').pop()) + '</code> · ' + (x.pct >= 0 ? '<b>' + x.pct + '%</b>' : '—') + ' · ' + x.seg + ' s' + (x.enUso ? ' ⭐ en uso' : '');
+    }).join('<br>') + '<br><i>Para usar uno: escriba su nombre en «Modelo» arriba y 💾 Guardar (o ⭐ en Telegram).</i>';
+  }
+  document.getElementById('vigInfo').innerHTML = h;
+}
+function vigBuscar() {
+  var r = document.getElementById('vigRes'); r.textContent = 'Revisando qué modelos ven hoy sus claves…';
+  google.script.run.withSuccessHandler(function (x) { r.textContent = x && x.error ? '❌ ' + x.error : x.texto; })
+    .withFailureHandler(function (e) { r.textContent = '❌ ' + (e.message || e); }).LECT_buscarHoja();
+}
+function vigProbar(soloNuevos) {
+  var r = document.getElementById('vigRes'); r.textContent = 'Preparando la prueba…';
+  google.script.run.withSuccessHandler(function (x) { r.textContent = x && x.error ? '❌ ' + x.error : x.texto; })
+    .withFailureHandler(function (e) { r.textContent = '❌ ' + (e.message || e); }).LECT_probarHoja(!!soloNuevos);
 }
 google.script.run.withSuccessHandler(cargar).withFailureHandler(fallo).LECT_ver();
 </script>

@@ -20,7 +20,7 @@ function doPost(e) {
     var u = JSON.parse(e.postData.contents);
     if (TG_yaVisto_('u' + u.update_id)) return TG_ok_();
     TG_manejar_(u);
-    try { TG_comandosAlDia_(); } catch (err2) {}   // 📋 comandos nuevos al botón «Menú» de Telegram (TG_Config.js)
+    try { TG_comandosAlDia_(); VIG_asegurar_(); } catch (err2) {}   // + 🔭 el aviso semanal de modelos nuevos (TG_Vigia.js)   // 📋 comandos nuevos al botón «Menú» de Telegram (TG_Config.js)
   } catch (err) {
     console.error('Telegram doPost: ' + (err && err.stack || err));
   }
@@ -129,6 +129,7 @@ function TG_manejar_(u) {
     try { var me = MESA_textoEnlace_('Telegram · ' + (nombre || chatId)); return TG_enviar_(chatId, '🧩 <b>Mesa de conciliación</b> (facturas ↔ vouchers): <a href="' + me.url + '">abrir</a>. Vale 6 horas desde el último uso; no la reenvíe.'); }
     catch (err) { return TG_enviar_(chatId, '⚠️ ' + TG_esc_(err.message)); }
   }
+  if (VIG_tg_(ctx, texto) || VIG_tgCorregir_(ctx, texto)) return;   // 🔭 «modelos»: vigía de modelos de IA · «prueba 1 nOperacion=…» (TG_Vigia.js)
   if (LECT_tg_(ctx, texto)) return;   // 🧾 «lectores»: qué IA lee los vouchers y en qué orden (TG_Lectores.js)
   if (TGRL_tg_(ctx, texto)) return;   // 🔁 "volver a leer Originales 2666" (TG_Releer.js)
   if (CTV_tg_(ctx, texto)) return;   // 🔁 "cambia el último a foto" (TG_CambiarTipo.js)
@@ -265,6 +266,7 @@ function TG_comando_(ctx, texto) {
     case 'honorarios': return TG_enviarHonorarios_(ctx, arg);
     case 'estado': return TG_enviarEstado_(ctx, arg);
     case 'descargar': return TG_asistenteDescarga_(ctx, null);
+    case 'modelos': case 'modelo': return VIG_tg_(ctx, 'modelos ' + (arg || '')) || TG_enviar_(chatId, 'Solo para administradores.');   // 🔭 vigía de modelos (TG_Vigia.js)
     case 'lectores': case 'lector': return LECT_tg_(ctx, 'lectores ' + (arg || '')) || TG_enviar_(chatId, 'Solo para administradores.');   // 🧾 lectores de vouchers (TG_Lectores.js)
     case 'nvidia': return TGNV_comando_(ctx);   // 🟩 probar modelos gratis de NVIDIA y elegir uno (TG_Nvidia.js)
     case 'sire': return TGS_comandoTG_(ctx, arg);   // ⚡ SIRE solo reporte (rápido): /sire granix 202601-202609
@@ -522,6 +524,7 @@ function TG_alBoton_(ss, q) {
     case 'archivo': return TG_mandarArchivo_(ctx, datos.id, datos.titulo);
     case 'descarga': return TG_confirmarDescarga_(ctx, datos, op);
     case 'venc': return TGV_alBoton_(ctx, datos);
+    case 'vig': return VIG_alBoton_(ctx, datos);   // 🔭 vigía de modelos: buscar, probar, usar, pruebas (TG_Vigia.js)
     case 'lect': return LECT_alBoton_(ctx, datos);   // 🧾 lectores de vouchers: subir, apagar, modelo (TG_Lectores.js)
     case 'nvusar': return TGNV_alBoton_(ctx, datos);   // 🟩 usar este modelo de NVIDIA (TG_Nvidia.js)
     case 'entrega': return TGE_alBotonTG_(ctx, datos, op, partes[1]);
