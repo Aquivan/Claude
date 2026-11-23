@@ -49,7 +49,7 @@ function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
   // Si el modelo principal esta saturado (429/5xx) o no existe para la clave (404),
   // se pasa AL MOMENTO al siguiente de la lista, en vez de esperar 20-90 s.
   // Solo si todos estan ocupados se espera un poco y se vuelve a probar.
-  const modelos = modelosGemini_(opc.modelo);
+  const modelos = opc.maxModelos ? modelosGemini_(opc.modelo).slice(0, opc.maxModelos) : modelosGemini_(opc.modelo);
   const ESPERAS = opc.sinEsperas ? [] : [15000, 30000];
 
   for (let vuelta = 0; vuelta <= ESPERAS.length; vuelta++) {

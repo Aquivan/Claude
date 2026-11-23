@@ -52,6 +52,13 @@ function LEC_leer_(base64, mimeType, esPDF, totalPaginasLote) {
   if (!orden.length) orden = ['gemini'];
   let imagen = null;   // la página del PDF como imagen (se hace una sola vez, la primera vez que se necesita)
 
+  // ⚡ Si Gemini estuvo caído (503/429) hace menos de 5 min, se va directo al respaldo y Gemini queda al final
+  // (antes se volvían a probar sus 4 modelos con CADA voucher: 15-17 s perdidos por voucher).
+  const cacheL = CacheService.getScriptCache();
+  if (orden.length > 1 && orden[0] === 'gemini' && cacheL.get('lec_gemini_caido')) {
+    orden = orden.slice(1).concat(['gemini']);
+    Logger.log('Gemini estuvo saturado hace poco: se lee primero con ' + orden[0] + '.');
+  }
   const fallas = [];
   let ultimoError = null;
   for (let i = 0; i < orden.length; i++) {
@@ -60,7 +67,8 @@ function LEC_leer_(base64, mimeType, esPDF, totalPaginasLote) {
     try {
       let arr, modelo;
       if (p === 'gemini') {
-        const g = llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, { sinEsperas: hayOtro, modelo: cfg.gemini && cfg.gemini.modelo });
+        // Con respaldo: solo 2 modelos de Gemini (si están saturados, los otros suelen estarlo también).
+        const g = llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, { sinEsperas: hayOtro, maxModelos: hayOtro ? 2 : 0, modelo: cfg.gemini && cfg.gemini.modelo });
         arr = g.vouchers; modelo = g.modelo;
       } else {
         if (esPDF && !imagen) imagen = LEC_pdfAImagen_(base64);
@@ -89,6 +97,7 @@ function LEC_leer_(base64, mimeType, esPDF, totalPaginasLote) {
       ultimoError = e;
       const msg = String(e && e.message || e);
       fallas.push(LEC_NOMBRES_[p] + ': ' + msg.slice(0, 90));
+      if (p === 'gemini' && /API_SATURADA|HTTP_(429|5\d\d)/.test(msg)) { try { cacheL.put('lec_gemini_caido', '1', 300); } catch (e2) {} }
       Logger.log('Lector ' + LEC_NOMBRES_[p] + ' falló: ' + msg.slice(0, 200) + (hayOtro ? ' → se prueba el siguiente.' : ''));
     }
   }
