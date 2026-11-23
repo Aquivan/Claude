@@ -8,6 +8,7 @@
 //   ?portal=1&k=CLAVE&op=releerEstado&id=..      -> resultado de esa lectura
 //   ?portal=1&k=CLAVE&op=releerAplicar&id=..&i=n -> reemplazar la fila con la opción n
 //   ?portal=1&k=CLAVE&op=deshacer                -> deshacer la última relectura
+//   ?portal=1&k=CLAVE&op=lectores                -> 🧾 tomar el orden nuevo de lectores IA y decir cuántos leyó cada uno hoy
 //   ?portal=1&k=CLAVE&op=conexionIA              -> la conexión del 🧠 Asistente IA con Cobranzas (solo servidor a servidor)
 // Responde JSON (nunca una página: así nadie puede llamar desde aquí otras
 // funciones de la hoja). La CLAVE la genera el portal y la deja en los
@@ -48,6 +49,7 @@ function PVP_get_(p) {
         if (typeof VIA_llamar_ !== 'function' || typeof VIA_clave_ !== 'function') return { ok: false, error: 'Esta hoja no tiene el 🧠 Asistente IA.' };
         return { ok: true, url: VIA_URL_, clave: VIA_clave_() };
       }
+      case 'lectores': return typeof LEC_puente_ === 'function' ? LEC_puente_() : { ok: false, error: 'Esta hoja aún no tiene los lectores de respaldo.' };   // 🧾 Lectores.js
       case 'deshacer': {
         const u = RP_deshacer_();
         return { ok: true, u: u ? { hoja: u.hoja, fila: u.fila } : null };
