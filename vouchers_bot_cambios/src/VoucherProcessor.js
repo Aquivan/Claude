@@ -49,6 +49,10 @@ async function procesarVouchers() {
       while (it.hasNext()) listaArchivos.push(it.next());
 
       if (listaArchivos.length === 0) continue;
+      if (!huboArchivos && typeof REG_anotar_ === 'function') {   // 🩺 si después no aparece su «fin», Google cortó la ejecución
+        REG_anotar_('Vouchers', 'inicio', '', listaArchivos.length + ' archivo(s) en Entrada (' + carpetas.tipo + '): ' +
+          listaArchivos.slice(0, 5).map(function (f) { return f.getName(); }).join(', '));
+      }
       huboArchivos = true;
 
       const hayPDF = listaArchivos.some(function(f) { return TIPOS_PDF.has(f.getMimeType()); });
@@ -106,6 +110,14 @@ async function procesarVouchers() {
     const seg = Math.round((Date.now() - inicioEjecucion) / 1000);
     Logger.log('RESUMEN -> procesados: ' + procesados + ' | errores: ' + conError +
                ' | apartados: ' + apartados + ' | tiempo: ' + seg + 's');
+
+    if (typeof REG_anotar_ === 'function') {   // 🩺 registro técnico: el resumen y lo que pasó (sin claves)
+      const t = typeof TIEMPOS_ !== 'undefined' ? TIEMPOS_ : {};
+      REG_anotar_('Vouchers', tiempoExcedido ? 'fin (pausado por tiempo)' : 'fin', seg,
+        'procesados ' + procesados + ' · errores ' + conError + ' · apartados ' + apartados +
+        ' · IA ' + Math.round((t.ia || 0) / 1000) + ' s en ' + (t.lecturas || 0) + ' lectura(s)' + (t.lector ? ' · último lector ' + t.lector : '') +
+        ' · guardar ' + Math.round((t.escribir || 0) / 1000) + ' s\n' + String(Logger.getLog() || '').slice(-2500));
+    }
 
     if (tiempoExcedido) {
       // Varios archivos (o un PDF largo) y no alcanzo a terminar el lote
