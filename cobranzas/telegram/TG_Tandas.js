@@ -123,11 +123,12 @@ function TGX_vigente_(ss, x) {
 function TGX_deshacer_(ss, x, quien) {
   var libro = SpreadsheetApp.openById(leerConfig_(ss).idVouchers), h = libro.getSheetByName(x.hoja);
   h.deleteRows(x.desde, x.n);
-  var quedan = TGX_tandas_(ss, 200).filter(function (y) { return y.archivo === x.archivo; }).length, papelera = 0;
-  if (!quedan) {
-    [CTV_PROC_.Fotos, CTV_PROC_.Originales].forEach(function (id) {
-      try { var it = DriveApp.getFolderById(id).getFilesByName(x.archivo); while (it.hasNext()) { it.next().setTrashed(true); papelera++; } } catch (e) {}
-    });
+  // Cada pestaña tiene su carpeta de procesados (Fotos ↔ «Fotos — procesadas», Originales ↔ «Originales — procesados»): se mira
+  // SOLO esa. Antes, una tanda con el mismo nombre en la OTRA pestaña dejaba el archivo sin borrar (pasó con «04-11-26 Edit.pdf»).
+  var quedan = TGX_tandas_(ss, 200).filter(function (y) { return y.archivo === x.archivo && y.hoja === x.hoja; }).length, papelera = 0;
+  var carpeta = /foto/i.test(x.hoja) ? CTV_PROC_.Fotos : /original/i.test(x.hoja) ? CTV_PROC_.Originales : '';
+  if (!quedan && carpeta) {
+    try { var it = DriveApp.getFolderById(carpeta).getFilesByName(x.archivo); while (it.hasNext()) { it.next().setTrashed(true); papelera++; } } catch (e) {}
   }
   try { actualizarTodo_(true); } catch (e) {}
   console.log('🗑 Tanda deshecha por ' + quien + ': ' + x.hoja + ' filas ' + x.desde + '-' + x.hasta + ' · ' + x.archivo);
@@ -141,10 +142,10 @@ function TGX_alBoton_(ctx, d) {
   var x = d.x || {};
   var b = function (t, dd, st) { var o = { text: t, callback_data: typeof dd === 'string' ? dd : 'k:' + TG_guardarBoton_(dd, 21600) }; if (st) o.style = st; return o; };
   if (d.a === 'ver') {
-    var otras = TGX_tandas_(ctx.ss, 200).filter(function (y) { return y.archivo === x.archivo && !(y.hoja === x.hoja && y.desde === x.desde); }).length;
+    var otras = TGX_tandas_(ctx.ss, 200).filter(function (y) { return y.archivo === x.archivo && y.hoja === x.hoja && y.desde !== x.desde; }).length;
     return TG_tarjeta_(ctx, '🗑 <b>¿Deshacer esta tanda?</b>\n\n📄 <b>' + TG_esc_(x.archivo) + '</b>\n• Pestaña ' + TG_esc_(x.hoja) + ', filas ' + x.desde + ' a ' + x.hasta + ' (' + x.n + ' fila(s)), con sus imágenes\n' +
       '• Procesada: ' + TG_esc_(x.ini) + (x.fin !== x.ini ? ' → ' + TG_esc_(x.fin) : '') + '\n' +
-      (otras ? '• El archivo NO se borra: hay ' + otras + ' tanda(s) más con ese nombre.' : '• El archivo va a la papelera de Drive (se recupera 30 días).') +
+      (otras ? '• El archivo NO se borra: hay ' + otras + ' tanda(s) más con ese nombre en ' + TG_esc_(x.hoja) + '.' : '• El archivo de la carpeta de procesados de ' + TG_esc_(x.hoja) + ' va a la papelera de Drive (se recupera 30 días).') +
       '\n\n<i>Después se recalcula Cobranzas. Esto no se puede deshacer desde aquí.</i>',
       [[b('🗑 Sí, deshacer', { t: 'tgx', a: 'si', x: x }, 'danger'), b('← No', { t: 'tgx', a: 'lista' }, 'link')]]);
   }
