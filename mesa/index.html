@@ -56,7 +56,32 @@ button.v{background:var(--ve);color:#fff;border-color:var(--ve)}button:disabled{
 input,select{font:inherit;padding:4px 6px;border:1px solid var(--bo);border-radius:6px;background:#fff;min-width:0}
 .seg{display:inline-flex;border:1px solid var(--bo);border-radius:6px;overflow:hidden}.seg button{border:0;border-radius:0;border-right:1px solid var(--bo)}
 .seg button:last-child{border-right:0}.seg button.on{background:var(--az);color:#fff}
-#top{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--bo);background:var(--fo)}
+#top{display:flex;flex-direction:column;gap:5px;padding:6px 8px;border-bottom:1px solid var(--bo);background:var(--fo)}
+#top .fila{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+#top .acc{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}
+#top .filtros{background:#fff;border:1px solid var(--bo);border-radius:8px;padding:4px 6px}
+#top .filtros .et{font-size:11px;font-weight:bold;color:var(--gr);text-transform:uppercase;letter-spacing:.3px}
+#top .grp{display:inline-flex;gap:4px;align-items:center;border:1px solid var(--bo);border-radius:6px;padding:1px 5px;background:#F8FAFC}
+#top .grp input{border:0;background:transparent}
+.oculto{display:none!important}
+#guia{border-bottom:1px solid var(--bo)}#guia.cerrada{display:none}
+.mas{display:none;flex:1 1 100%;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0 0;border-top:1px dashed var(--bo)}.mas.on{display:flex}
+.masB b{background:var(--az);color:#fff;border-radius:9px;padding:0 6px;font-size:11px}.masB b:empty{display:none}
+#xfPop .xl label input{flex:0 0 auto;margin:0}
+/* ▾ filtro tipo Excel */
+.xfB{display:inline-flex;align-items:center;gap:4px;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xfB .xv{font-weight:bold;color:var(--az);overflow:hidden;text-overflow:ellipsis}.xfB.act{border-color:var(--az);background:#EFF6FF}
+#xfPop{position:fixed;z-index:9999;display:none;width:300px;max-width:92vw;background:#fff;border:1px solid #94A3B8;border-radius:6px;box-shadow:0 8px 24px rgba(15,23,42,.25);font-size:13px}
+#xfPop.on{display:block}#xfPop .xo{padding:6px 12px;cursor:pointer;display:flex;gap:8px;align-items:center}#xfPop .xo:hover{background:#F1F5F9}
+#xfPop .xo.sel{font-weight:bold;color:var(--az)}#xfPop hr{border:0;border-top:1px solid #E2E8F0;margin:2px 0}
+#xfPop .xb{padding:6px 10px}#xfPop .xb input{width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid #94A3B8;border-radius:4px}
+#xfPop .xl{max-height:260px;overflow:auto;margin:0 10px;border:1px solid #CBD5E1;border-radius:4px;padding:4px 6px}
+#xfPop .xl label{display:flex;gap:6px;align-items:center;padding:2px 0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#xfPop .xp{display:flex;gap:6px;justify-content:flex-end;padding:8px 10px}#xfPop .xt{padding:6px 12px 0;color:var(--gr);font-size:11px;text-transform:uppercase}
+/* 📱 angosto (celular / Mini App): una columna a la vez */
+#tabsM{display:none}
+@media (max-width:900px){#tabsM{display:flex;gap:4px;padding:4px 8px}#main{grid-template-columns:minmax(0,1fr)!important}#gut{display:none}
+  #main.verV .col:first-of-type{display:none}#main:not(.verV) .col:last-of-type{display:none}#svg{display:none}}
 #top .t{font-weight:bold;font-size:14px;margin-right:4px}
 #top label{color:var(--gr);font-size:11px}
 #ayuda{padding:4px 10px;background:#EFF6FF;color:#1E3A8A;font-size:11.5px;border-bottom:1px solid var(--bo)}
@@ -64,7 +89,7 @@ input,select{font:inherit;padding:4px 6px;border:1px solid var(--bo);border-radi
 .col{display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--bo)}
 .col:first-child{border-left:0;border-right:1px solid var(--bo)}
 .cab{padding:6px 8px;border-bottom:1px solid var(--bo);background:#fff;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.cab h3{margin:0;font-size:13px;flex:1 1 100%}
+.cab h3{margin:0;font-size:13px;margin-right:4px}
 .cab .res{color:var(--gr);font-size:11px;flex:1 1 100%}
 .lista{flex:1;overflow:auto;position:relative}
 .fila{display:grid;gap:2px 8px;padding:5px 8px;border-bottom:1px solid #EEF2F7;cursor:pointer;position:relative;user-select:none}
@@ -222,23 +247,32 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 </head>
 <body>
 <div id="top">
-  <span class="t">🧩 Mesa de conciliación</span>
-  <span class="seg" id="sLado"><button data-v="Por pagar" class="on" onclick="cambiarLado(this)">Por pagar</button><button data-v="Por cobrar" onclick="cambiarLado(this)">Por cobrar</button></span>
-  <span class="seg" id="sModo" title="Qué se cruza con las facturas"><button data-v="v" class="on" onclick="cambiarModo(this)">💳 Vouchers</button><button data-v="r" onclick="cambiarModo(this)">🧾 Retenciones</button><button data-v="e" onclick="cambiarModo(this)" title="Reporte de cuentas por pagar / cobrar: por proveedor o cliente y empresa, con cómo se canceló cada factura">📊 Estado de cuenta</button></span>
-  <label>Empresa</label><select id="fEmp" onchange="pintar()"><option value="">🏢 Todo el grupo</option></select>
-  <label id="lContra">Proveedor</label><input id="fCon" list="dlCon" placeholder="nombre o RUC (vacío = todos)" style="width:230px" oninput="tarde(pintar)"><datalist id="dlCon"></datalist>
-  <label>Desde</label><input type="date" id="fDe" onchange="pintar()"><label>Hasta</label><input type="date" id="fHa" onchange="pintar()">
-  <select id="fMon" onchange="pintar()" title="Moneda"><option value="">PEN y USD</option><option>PEN</option><option>USD</option></select>
-  <span style="flex:1"></span>
-  <button onclick="calc()" title="Calculadora (también con la tecla F2) · Alt+clic en cualquier monto de la pantalla lo pasa a la calculadora">🧮 Calculadora</button>
-  <button id="bRecalc" onclick="recalcularAhora()" title="Recalcular Cobranzas en este momento (saldos, Consulta, Panel) sin esperar">⚡ Recalcular ahora</button>
-  <button onclick="sireRapido()" title="Pide a SUNAT SOLO el registro de compras y/o ventas del SIRE (rápido, sin PDF/XML) de la empresa elegida arriba (o de todas). Tarda unos minutos; al terminar Cobranzas se recalcula y, con 🔁 Actualizar sola, aparece aquí.">⚡ Traer de SUNAT</button>
-  <button onclick="cargar(true)" title="Volver a leer facturas, vouchers y cruces">🔄 Recargar</button>
-  <label id="lAuto" title="Revisa cada 3 minutos si Cobranzas se recalculó o entraron vouchers; si hay algo nuevo recarga sola, sin perder filtros ni el estado de cuenta abierto. Nunca mientras tenga cambios sin guardar o esté eligiendo." style="color:var(--tx,#111);font-size:12px;white-space:nowrap"><input type="checkbox" id="cAuto" onchange="autoCambio()"> 🔁 Actualizar sola</label><span id="auHace" style="font-size:11px;color:var(--gr)"></span>
-  <button id="bAparte" onclick="aparte()" title="Abrir en una pestaña del navegador (pantalla completa, otro monitor o celular)">↗ Ventana aparte</button>
-  <button onclick="ayudaCompleta()">❓</button>
+  <div class="fila">
+    <span class="t">🧩 Mesa de conciliación</span>
+    <span class="seg" id="sLado"><button data-v="Por pagar" class="on" onclick="cambiarLado(this)">Por pagar</button><button data-v="Por cobrar" onclick="cambiarLado(this)">Por cobrar</button></span>
+    <span class="seg" id="sModo" title="Qué se cruza con las facturas"><button data-v="v" class="on" onclick="cambiarModo(this)">💳 Vouchers</button><button data-v="e" onclick="cambiarModo(this)" title="Reporte de cuentas por pagar / cobrar: por proveedor o cliente y empresa, con cómo se canceló cada factura">📊 Estado de cuenta</button></span>
+    <span style="flex:1"></span>
+    <span class="acc">
+      <button id="bRecalc" onclick="recalcularAhora()" title="Recalcular Cobranzas en este momento (saldos, Consulta, Panel) sin esperar">⚡ Recalcular</button>
+      <button onclick="sireRapido()" title="Pide a SUNAT SOLO el registro de compras y/o ventas del SIRE (rápido, sin PDF/XML) de la empresa elegida (o de todas). Tarda unos minutos; al terminar Cobranzas se recalcula y, con 🔁 Actualizar sola, aparece aquí.">⬇ Traer de SUNAT</button>
+      <button onclick="cargar(true)" title="Volver a leer facturas, vouchers y cruces">🔄 Recargar</button>
+      <label id="lAuto" title="Revisa cada 3 minutos si Cobranzas se recalculó o entraron vouchers; si hay algo nuevo recarga sola, sin perder filtros ni el estado de cuenta abierto. Nunca mientras tenga cambios sin guardar o esté eligiendo." style="color:var(--tx,#111);font-size:12px;white-space:nowrap"><input type="checkbox" id="cAuto" onchange="autoCambio()"> 🔁 Actualizar sola</label><span id="auHace" style="font-size:11px;color:var(--gr)"></span>
+      <button onclick="calc()" title="Calculadora (también con la tecla F2) · Alt+clic en cualquier monto de la pantalla lo pasa a la calculadora">🧮</button>
+      <button id="bAparte" onclick="aparte()" title="Abrir en una pestaña del navegador (pantalla completa, otro monitor o celular)">↗</button>
+      <button onclick="guiaVer()" id="bGuia" title="Cómo se usa: pasos y colores (se abre y se cierra)">ℹ️ Cómo se usa</button>
+      <button onclick="ayudaCompleta()" title="Ayuda completa">❓</button>
+    </span>
+  </div>
+  <div class="fila filtros">
+    <span class="et">Filtros</span>
+    <span id="xfEmp"></span><select id="fEmp" onchange="pintar()" style="display:none"><option value="">🏢 Todo el grupo</option></select>
+    <span class="grp"><label id="lContra">Proveedor</label><input id="fCon" list="dlCon" placeholder="nombre o RUC (vacío = todos)" style="width:210px" oninput="S.conSel=null;tarde(pintar)"><datalist id="dlCon"></datalist><span id="xfCon"></span></span>
+    <span class="grp" title="Periodo (fecha del documento o del voucher)"><label>📅 Desde</label><input type="date" id="fDe" onchange="pintar()"><label>hasta</label><input type="date" id="fHa" onchange="pintar()"></span>
+    <span id="xfMon"></span><select id="fMon" onchange="pintar()" title="Moneda" style="display:none"><option value="">PEN y USD</option><option>PEN</option><option>USD</option></select>
+    <button onclick="limpiarFiltros()" title="Quitar todos los filtros de arriba y de las columnas">✖ Limpiar filtros</button>
+  </div>
 </div>
-<div id="ayuda">① Toque un <b>voucher</b> (se marca en azul) · ② toque la(s) <b>factura(s)</b> que paga — o <b>arrastre</b> desde el punto ⦿ de una fila hasta la otra: la línea sigue al mouse · toque una línea para cambiar el monto o quitarla · ③ <b>💾 Guardar</b>. Nada se escribe hasta guardar.</div>
+<div id="guia"><div id="ayuda">① Toque un <b>voucher</b> (se marca en azul) · ② toque la(s) <b>factura(s)</b> que paga — o <b>arrastre</b> desde el punto ⦿ de una fila hasta la otra: la línea sigue al mouse · toque una línea para cambiar el monto o quitarla · ③ <b>💾 Guardar</b>. Nada se escribe hasta guardar.</div>
 <div id="leyenda"><b>Colores:</b>
 <span><i style="background:#16A34A"></i>voucher usado completo</span>
 <span><i style="background:#D97706"></i>al voucher le sobra dinero</span>
@@ -247,7 +281,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 <span><i style="background:#D97706;height:0;border-top:2px dashed #D97706"></i>sugerencia (morada = de la IA)</span>
 <span>línea <b>gruesa</b> = sin guardar · <b>pálida</b> = de otro voucher</span>
 <span><i style="background:#7C3AED;width:5px;height:12px"></i>franja morada = fila con cambios sin guardar</span>
-<span><i style="background:#ECFDF5;border:1px solid #16A34A;height:10px"></i>fondo verde = ya cruzada</span></div>
+<span><i style="background:#ECFDF5;border:1px solid #16A34A;height:10px"></i>fondo verde = ya cruzada</span></div></div>
 <div id="rep">
   <div id="repBar">
     <b>📊 Estado de cuenta</b>
@@ -272,13 +306,14 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <div class="ley"><span>Toque una <b>factura</b> para ver cómo se canceló · toque un <b>voucher</b> (💳) para ver a qué facturas se aplicó · el mismo color = el mismo voucher · <b>⧉2</b> = ese voucher paga 2 facturas</span></div>
   <div id="repCont"></div>
 </div>
+<div id="tabsM" class="seg"><button class="on" onclick="tabM(this,0)">📄 Facturas</button><button onclick="tabM(this,1)">💳 Vouchers</button></div>
 <div id="main">
   <div class="col">
     <div class="cab">
       <h3>📄 Facturas <span id="tF" class="chip"></span></h3>
-      <span class="seg" id="sFac"><button data-v="saldo" class="on" onclick="seg(this)">Con saldo</button><button data-v="todas" onclick="seg(this)">Todas</button><button data-v="canc" onclick="seg(this)">Canceladas</button><button data-v="ret" onclick="seg(this)" title="Facturas con retención mayor al 3% de (Total − N/C): p. ej. anuladas con nota de crédito después de retener">Ret. de más</button></span>
+      <span id="xfFac"></span><span class="seg oculto" id="sFac"><button data-v="saldo" class="on" onclick="seg(this)">Con saldo</button><button data-v="todas" onclick="seg(this)">Todas</button><button data-v="canc" onclick="seg(this)">Canceladas</button><button data-v="ret" onclick="seg(this)" title="Facturas con retención mayor al 3% de (Total − N/C): p. ej. anuladas con nota de crédito después de retener">Ret. de más</button></span>
       <input id="qF" placeholder="🔎 buscar factura, proveedor, monto…" style="flex:1;min-width:120px" oninput="tarde(pintar)">
-      <select id="oF" onchange="pintar()" title="Ordenar facturas"><option value="f">📅 Fecha: más antiguas primero</option><option value="f-">📅 Fecha: más recientes primero</option><option value="n">🔢 Número: menor a mayor</option><option value="n-">🔢 Número: mayor a menor</option><option value="m-">💰 Mayor saldo</option><option value="m">💰 Menor saldo</option><option value="c">🔤 Proveedor / cliente (A-Z)</option></select>
+      <select id="oF" onchange="pintar()" title="Ordenar facturas" class="oculto"><option value="f">📅 Fecha: más antiguas primero</option><option value="f-">📅 Fecha: más recientes primero</option><option value="n">🔢 Número: menor a mayor</option><option value="n-">🔢 Número: mayor a menor</option><option value="m-">💰 Mayor saldo</option><option value="m">💰 Menor saldo</option><option value="c">🔤 Proveedor / cliente (A-Z)</option></select>
       <span class="res" id="rF"></span>
     </div>
     <div class="lista" id="lf"></div>
@@ -287,14 +322,17 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <div class="col">
     <div class="cab">
       <h3 id="hV">💳 Vouchers <span id="tV" class="chip"></span></h3>
-      <span class="seg" id="sRet" style="display:none"><button data-v="todas" class="on" onclick="seg(this)">Todas</button><button data-v="reas" onclick="seg(this)">Reasignadas</button><button data-v="exc" onclick="seg(this)" title="Su factura tiene retención de más">En factura con ret. de más</button></span>
-      <span class="seg" id="sVou"><button data-v="sin" class="on" onclick="seg(this)">Sin aplicar</button><button data-v="todos" onclick="seg(this)">Todos</button><button data-v="apl" onclick="seg(this)">Aplicados</button><button data-v="ruc" onclick="seg(this)">Sin RUC</button><button data-v="conruc" onclick="seg(this)">Con RUC</button><button data-v="conemp" onclick="seg(this)" title="Vouchers que ya dicen qué empresa del grupo paga (o cobra)">Con empresa</button><button data-v="sinemp" onclick="seg(this)" title="Vouchers sin la empresa del grupo que paga (o cobra)">Sin empresa</button><button data-v="nada" onclick="seg(this)" title="Recién procesados que no tienen nada: sin RUC, sin empresa y sin factura">🆕 Sin datos</button></span>
-      <span class="seg" id="sTipos" title="Qué mostrar en la lista (se pueden combinar)"><button data-t="v" class="on" onclick="tipoMostrar(this)">💳 Vouchers</button><button data-t="r" onclick="tipoMostrar(this)" title="Comprobantes de retención (CRE) de SUNAT con sus facturas">🧾 Retenciones</button><button data-t="d" onclick="tipoMostrar(this)" title="Constancias de detracción aplicadas a las facturas">🏦 Detracciones</button><button data-t="m" onclick="tipoMostrar(this)" title="Pagos sin voucher: efectivo, compensación… (✍️ Registro manual)">✍️ Manuales</button><button data-t="n" onclick="tipoMostrar(this)" title="Notas de crédito aplicadas a las facturas">📄 N/C</button></span>
-      <span class="seg" id="sCop" title="Un mismo voucher puede estar en Originales y en Fotos: se cuenta UNA vez (manda Originales)"><button data-v="u" class="on" onclick="seg(this)">Únicos</button><button data-v="a" onclick="seg(this)">Con copias de Fotos</button></span>
+      <span id="xfRet" style="display:none"></span><span class="seg oculto" id="sRet" style="display:none"><button data-v="todas" class="on" onclick="seg(this)">Todas</button><button data-v="reas" onclick="seg(this)">Reasignadas</button><button data-v="exc" onclick="seg(this)" title="Su factura tiene retención de más">En factura con ret. de más</button></span>
+      <span id="xfVou"></span><span class="seg oculto" id="sVou"><button data-v="sin" class="on" onclick="seg(this)">Sin aplicar</button><button data-v="todos" onclick="seg(this)">Todos</button><button data-v="apl" onclick="seg(this)">Aplicados</button><button data-v="ruc" onclick="seg(this)">Sin RUC</button><button data-v="conruc" onclick="seg(this)">Con RUC</button><button data-v="conemp" onclick="seg(this)" title="Vouchers que ya dicen qué empresa del grupo paga (o cobra)">Con empresa</button><button data-v="sinemp" onclick="seg(this)" title="Vouchers sin la empresa del grupo que paga (o cobra)">Sin empresa</button><button data-v="nada" onclick="seg(this)" title="Recién procesados que no tienen nada: sin RUC, sin empresa y sin factura">🆕 Sin datos</button></span>
+      <span id="xfTip"></span><span class="seg oculto" id="sTipos" title="Qué mostrar en la lista (se pueden combinar)"><button data-t="v" class="on" onclick="tipoMostrar(this)">💳 Vouchers</button><button data-t="r" onclick="tipoMostrar(this)" title="Comprobantes de retención (CRE) de SUNAT con sus facturas">🧾 Retenciones</button><button data-t="d" onclick="tipoMostrar(this)" title="Constancias de detracción aplicadas a las facturas">🏦 Detracciones</button><button data-t="m" onclick="tipoMostrar(this)" title="Pagos sin voucher: efectivo, compensación… (✍️ Registro manual)">✍️ Manuales</button><button data-t="n" onclick="tipoMostrar(this)" title="Notas de crédito aplicadas a las facturas">📄 N/C</button></span>
       <input id="qV" placeholder="🔎 buscar op., banco, nombre, monto…" style="flex:1;min-width:120px" oninput="tarde(pintar)">
+      <button class="masB" id="bMasV" onclick="masFiltros('V')" title="Más filtros: copias de Fotos, beneficiario, Identificar RUC">⚙ Más filtros <b id="nMasV"></b></button>
+      <div class="mas" id="masV">
+      <span class="seg" id="sCop" title="Un mismo voucher puede estar en Originales y en Fotos: se cuenta UNA vez (manda Originales)"><button data-v="u" class="on" onclick="seg(this)">Únicos</button><button data-v="a" onclick="seg(this)">Con copias de Fotos</button></span>
       <input id="qB" list="dlB" placeholder="👤 beneficiario (como el filtro de la columna F)" title="Elija un nombre de la lista (como el filtro de la columna «Proveedor (Beneficiario)» de la hoja de Vouchers): muestra todos sus vouchers, con o sin RUC, empresa o factura" style="flex:1;min-width:150px" oninput="tarde(pintar)"><datalist id="dlB"></datalist><button onclick="$('qB').value='';pintar()" title="Quitar el filtro de beneficiario" style="padding:2px 6px">✖</button>
       <button onclick="rucVentana(window._rucVarios || [])" title="Abre aquí mismo la ventana 🔎 Identificar RUC (la del menú 🧠 Asistente IA): agrupa por nombre los vouchers sin RUC que se ven (o los marcados), busca en lo conocido, SUNAT, internet o leyendo el voucher con IA, y escribe el RUC">🔎 Identificar RUC</button>
-      <select id="oV" onchange="pintar()" title="Ordenar vouchers"><option value="f">📅 Fecha: más antiguos primero</option><option value="f-">📅 Fecha: más recientes primero</option><option value="m-">💰 Mayor monto</option><option value="m">💰 Menor monto</option><option value="op">🔢 N° de operación</option><option value="fu">📄 Fila de la hoja</option></select>
+      </div>
+      <select id="oV" onchange="pintar()" title="Ordenar vouchers" class="oculto"><option value="f">📅 Fecha: más antiguos primero</option><option value="f-">📅 Fecha: más recientes primero</option><option value="m-">💰 Mayor monto</option><option value="m">💰 Menor monto</option><option value="op">🔢 N° de operación</option><option value="fu">📄 Fila de la hoja</option></select>
       <span class="res" id="rV"></span>
     </div>
     <div class="lista" id="lv"></div>
@@ -336,6 +374,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
     <div class="pie"><span>Alt+clic en un monto lo trae aquí</span><span>Enter = · Esc cierra</span></div>
   </div></div>
 <div id="modal"><div class="caja" id="mCaja"></div></div>
+<div id="xfPop"></div>
 <div id="ec"><div id="ecBar"><b>📨 Estado de cuenta para enviar</b>
   <label>Desde</label><input type="date" id="ecDe" onchange="ecPintar()"><label>Hasta</label><input type="date" id="ecHa" onchange="ecPintar()">
   <span class="seg" id="ecNiv"><button data-v="res" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">📋 Resumido</button><button data-v="det" class="on" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">🔎 Detallado</button><button data-v="tip" onclick="segOn('ecNiv',this.dataset.v);ecPintar()" title="Todo agrupado por tipo (facturas, N/C, N/D, retenciones, detracciones, pagos…) con el total de cada grupo">📑 Por tipo</button><button data-v="ana" onclick="segOn('ecNiv',this.dataset.v);ecPintar()" title="Análisis de documentos (como Contasis): cada documento con su compromiso, amortizaciones y saldo, en soles y/o dólares">📒 Análisis</button></span>
@@ -625,6 +664,7 @@ function parecido(a, b) {
   return c >= Math.max(1, Math.min(x.length, y.length) * 0.6);
 }
 function contraFiltro() {
+  if (S.conSel && S.conSel.length > 1) return { ruc: '', rucs: S.conSel, nombre: '', txt: '\u0001' };   // ▾ varios elegidos en la lista
   var t = $('fCon').value.trim(); if (!t) return null;
   var r = (t.match(/\b(\d{11}|\d{8})\b/) || [])[1];
   var nombre = t.replace(/·.*$/, '').trim();
@@ -632,7 +672,7 @@ function contraFiltro() {
 }
 function docVisible(d, c, emp) {
   if (emp && d.er !== emp) return false;
-  if (c) { if (c.ruc ? d.cr !== c.ruc : nn(d.cn + ' ' + d.cr).indexOf(c.txt) < 0) return false; }
+  if (c) { if (c.rucs ? c.rucs.indexOf(d.cr) < 0 : c.ruc ? d.cr !== c.ruc : nn(d.cn + ' ' + d.cr).indexOf(c.txt) < 0) return false; }
   var de = $('fDe').value, ha = $('fHa').value, mo = $('fMon').value;
   if (de && d.f < de) return false; if (ha && d.f > ha) return false; if (mo && d.mon !== mo) return false;
   return true;
@@ -647,7 +687,8 @@ function vouVisible(v, c, emp) {
   }
   if (c) {
     var cV = S.lado === 'Por pagar' ? v.br : v.pr;
-    var ok = (c.ruc && cV === c.ruc) || lk.some(function (k) { return S.D[k].cr === (c.ruc || '#'); }) ||
+    var ok = (c.rucs && (c.rucs.indexOf(cV) >= 0 || lk.some(function (k) { return c.rucs.indexOf(S.D[k].cr) >= 0; }))) ||
+      (c.ruc && cV === c.ruc) || lk.some(function (k) { return S.D[k].cr === (c.ruc || '#'); }) ||
       (!cV && parecido(S.lado === 'Por pagar' ? v.bn : (v.us || v.bn), c.nombre)) || (!c.ruc && nn(v.bn + ' ' + v.us).indexOf(c.txt) >= 0);
     if (!ok) return false;
   }
@@ -795,10 +836,13 @@ function pintar() {
 /** Retenciones (CRE), detracciones, pagos manuales y N/C de las facturas visibles, según los botones de filtro. */
 function otrosMovs(c, emp, qv) {
   var T = S.tipos, out = [];
+  var er = segV('sRet');   // 🧾 filtro de retenciones (Tipos ▾ con Retenciones → «Retenciones ▾»): todas / reasignadas / en factura con ret. de más
   if (T.r) Object.keys(S.R).forEach(function (u) {
     var U = S.R[u], d = S.D[U.kOrig]; if (!d) return;
     var ls = S.rl[u] || [];
     if (U.u !== S.actR && !ls.some(function (x) { return S.D[x.k] && docVisible(S.D[x.k], c, emp); })) return;
+    if (U.u !== S.actR && er === 'reas' && !ls.some(function (x) { return x.fila || x.nuevo; })) return;
+    if (U.u !== S.actR && er === 'exc' && !ls.some(function (x) { return x.m > 0.005 && S.D[x.k] && exceso(S.D[x.k]) > 0.05; })) return;
     if (!texto(qv, nn([U.cre, U.op, U.f, ff(U.f), d.doc, d.cn, 'retencion'].join(' ')))) return;
     out.push({ t: 'r', f: U.f, m: ls.reduce(function (s, x) { return s + x.m; }, 0), U: U });
   });
@@ -2414,7 +2458,8 @@ function ayudaCompleta() {
     '<li>Si otra persona cambió el mismo voucher mientras usted trabajaba, ese voucher no se guarda y se le avisa. <b>↩️ Deshacer último guardado</b> vuelve atrás lo suyo.</li>' +
     '<li><b>Ordenar</b>: facturas por fecha, número (serie y correlativo), saldo o nombre; vouchers por fecha, monto, N° de operación o fila de la hoja (en ambos sentidos).</li>' +
     '<li><b>💲 Monto por línea</b>: toque una línea y escriba cuánto de ese voucher va a esa factura (vacío = automático). Se guarda como «01_F001-12=1500.00» en «Tipo y Nº Doc.».</li>' +
-    '<li><b>🧾 Retenciones</b> (arriba): lista cada comprobante de retención con su factura. Si la factura retenida se anuló con nota de crédito, toque el comprobante y luego la otra factura del mismo proveedor: se pasa el monto que indique. «Ret. de más» en Facturas muestra las que tienen retención mayor al 3%. Se guarda en «🔁 Reasignar retenciones», igual que a mano.</li>' +
+    '<li><b>Filtros tipo Excel</b>: Empresa, Moneda, Facturas, Mostrar, Tipos y Retenciones se eligen con ▾ (buscar, Seleccionar todo, casillas, ACEPTAR); Facturas ▾ y Mostrar ▾ traen arriba ORDENAR. En Proveedor, <b>☰ lista</b> permite marcar varios proveedores a la vez. El botón azul indica un filtro distinto al normal; ✖ Limpiar filtros quita todo. ⚙ Más filtros: copias de Fotos, beneficiario e Identificar RUC. ℹ️ Cómo se usa abre o cierra los pasos y colores. En el celular: pestañas Facturas / Vouchers.</li>' +
+    '<li><b>🧾 Retenciones</b> (marque Retenciones en <b>Tipos ▾</b>; aparece «Retenciones ▾»: todas, reasignadas o en factura con ret. de más): cada comprobante de retención con su factura. Si la factura retenida se anuló con nota de crédito, toque el comprobante y luego la otra factura del mismo proveedor: se pasa el monto que indique. «Ret. de más» en Facturas muestra las que tienen retención mayor al 3%. Se guarda en «🔁 Reasignar retenciones», igual que a mano.</li>' +
     '<li><b>✍️ Pago sin voucher</b> (botón en cada factura): efectivo, compensación, retención o detracción manual… Solo fecha, modalidad y monto (lo demás es opcional); se escribe en «✍️ Registro manual».</li>' +
     '<li><b>Únicos / Con copias de Fotos</b>: un voucher que está en Originales y en Fotos se cuenta una sola vez y manda el de <b>Originales</b> (como en todo el sistema). «Con copias de Fotos» muestra debajo, en gris, la copia (con 🖼 para verla); se cruza desde la fila principal.</li>' +
     '<li><b>🎛 Mostrar en la lista</b> (en 💳 Vouchers, botones que se combinan): 💳 Vouchers · 🧾 Retenciones · 🏦 Detracciones · ✍️ Manuales · 📄 N/C. Encienda los que quiera ver juntos; cada uno tiene su color y su línea a la factura. Una retención se pasa a otra factura tocándola y luego tocando la factura; detracciones, manuales y N/C abren la 🔍 ficha de su factura.</li>' +
@@ -2995,6 +3040,120 @@ window.addEventListener('beforeunload', function (e) { if (sucios().length || rS
 /* 📨 Abrir directo en el estado de cuenta de un proveedor o cliente (botón «🪟 Ver en Mini App» de Telegram, TG_EstadoCuenta.js):
    ?ec=RUC&lado=Por cobrar&er=RUC empresa&vis=tip|det|res|ana&tg=1 — en GitHub Pages se leen de la dirección; en Google, con
    google.script.url.getLocation. Con tg=1, ✖ Cerrar del estado de cuenta cierra la Mini App. */
+/* ------------------------------------------------ ▾ filtros tipo Excel (buscar, seleccionar todo, casillas, ordenar, Aceptar/Cancelar)
+   Son una vista nueva sobre los controles de siempre (que siguen en la página, ocultos): Aceptar hace lo mismo que tocar
+   esos botones, así que la lógica de la Mesa no cambia. */
+var XF = {};
+function xfDef(id, d) { XF[id] = d; }
+function xfSeg(segId) { return Array.prototype.slice.call(document.querySelectorAll('#' + segId + ' button')).map(function (b) { return { v: b.dataset.v || b.dataset.t, t: b.textContent.trim(), b: b }; }); }
+function xfSel(sel) { return Array.prototype.slice.call($(sel).options).map(function (o) { return { v: o.value, t: o.textContent.trim() }; }); }
+function xfInit() {
+  xfDef('Fac', { box: 'xfFac', tit: 'Facturas', items: function () { return xfSeg('sFac'); }, val: function () { return [segV('sFac')]; },
+    aplicar: function (v) { var b = xfSeg('sFac').filter(function (x) { return x.v === v[0]; })[0]; if (b) b.b.click(); }, orden: 'oF' });
+  xfDef('Vou', { box: 'xfVou', tit: 'Mostrar', items: function () { return xfSeg('sVou'); }, val: function () { return [segV('sVou')]; },
+    aplicar: function (v) { var b = xfSeg('sVou').filter(function (x) { return x.v === v[0]; })[0]; if (b) b.b.click(); }, orden: 'oV' });
+  xfDef('Ret', { box: 'xfRet', tit: 'Retenciones', items: function () { return xfSeg('sRet'); }, val: function () { return [segV('sRet')]; },
+    aplicar: function (v) { var b = xfSeg('sRet').filter(function (x) { return x.v === v[0]; })[0]; if (b) b.b.click(); } });
+  xfDef('Tip', { box: 'xfTip', tit: 'Tipos', multi: true, items: function () { return xfSeg('sTipos'); }, val: function () { return Object.keys(S.tipos || {}).filter(function (k) { return S.tipos[k]; }); },
+    aplicar: function (v) {
+      if (!v.length) return estado('Deje al menos un tipo marcado.', true);
+      S.tipos = {}; v.forEach(function (t) { S.tipos[t] = 1; });
+      xfSeg('sTipos').forEach(function (x) { x.b.classList.toggle('on', !!S.tipos[x.v]); });
+      if (!S.tipos.v) { S.act = ''; S.selV = {}; } if (!S.tipos.r) S.actR = '';
+      S.verV = 300; pintar(); detalle();
+    } });
+  xfDef('Emp', { box: 'xfEmp', tit: 'Empresa', buscar: true, items: function () { return xfSel('fEmp'); }, val: function () { return [$('fEmp').value]; },
+    aplicar: function (v) { $('fEmp').value = v[0] || ''; pintar(); } });
+  xfDef('Mon', { box: 'xfMon', tit: 'Moneda', items: function () { return xfSel('fMon'); }, val: function () { return [$('fMon').value]; },
+    aplicar: function (v) { $('fMon').value = v[0] || ''; pintar(); } });
+  xfDef('Con', { box: 'xfCon', tit: '', boton: '☰ lista', multi: true, buscar: true, todos: true,
+    items: function () { return Array.prototype.slice.call($('dlCon').options).map(function (o) { var r = (o.value.match(/(\d{11}|\d{8})\s*$/) || [])[1] || o.value; return { v: r, t: o.value }; }); },
+    val: function () { var c = contraFiltro(); return c ? (c.rucs || (c.ruc ? [c.ruc] : [])) : []; },
+    aplicar: function (v, todos) {
+      var it = XF.Con.items();
+      if (!v.length || v.length === it.length) { S.conSel = null; $('fCon').value = ''; }
+      else if (v.length === 1) { S.conSel = null; $('fCon').value = (it.filter(function (x) { return x.v === v[0]; })[0] || { t: v[0] }).t; }
+      else { S.conSel = v.slice(); $('fCon').value = v.length + ' seleccionados'; }
+      pintar();
+    } });
+  xfBotones();
+}
+function xfBotones() {
+  Object.keys(XF).forEach(function (id) {
+    var d = XF[id], box = $(d.box); if (!box) return;
+    var it = d.items(), val = d.val(), sel = it.filter(function (x) { return val.indexOf(x.v) >= 0; });
+    var txt = d.boton || (d.multi ? (sel.length === it.length ? 'Todos' : sel.map(function (x) { return x.t; }).join(', ')) : (sel[0] ? sel[0].t : '—'));
+    var act = id === 'Tip' ? !(val.length === 1 && val[0] === 'v') : d.multi ? sel.length && sel.length < it.length : !!(val[0] && it[0] && val[0] !== it[0].v);
+    box.innerHTML = '<button class="xfB' + (act ? ' act' : '') + '" onclick="xfAbrir(\'' + id + '\', this)" title="Filtrar como en Excel">' + (d.tit ? d.tit + ': ' : '') + '<span class="xv">' + esc(txt) + '</span> ▾</button>';
+  });
+  var vis = function (segId, boxId) { var s0 = $(segId), b0 = $(boxId); if (s0 && b0) b0.style.display = s0.style.display === 'none' ? 'none' : ''; };
+  vis('sVou', 'xfVou'); vis('sTipos', 'xfTip');
+  if ($('xfRet')) $('xfRet').style.display = S.modo === 'e' || !(S.modo === 'r' || (S.tipos && S.tipos.r)) ? 'none' : '';   // solo con Retenciones en Tipos ▾
+  var n = 0; if (segV('sCop') && segV('sCop') !== 'u') n++; if ($('qB') && $('qB').value.trim()) n++;
+  if ($('nMasV')) $('nMasV').textContent = n ? n : '';
+  if ($('bMasV')) $('bMasV').style.display = $('sVou').style.display === 'none' && S.modo === 'r' ? 'none' : '';
+}
+var XFA = null;
+function xfAbrir(id, btn) {
+  var d = XF[id], it = d.items(), val = d.val(), pop = $('xfPop');
+  XFA = { id: id, marcados: {} };
+  (d.multi && !val.length ? it.map(function (x) { return x.v; }) : val).forEach(function (v) { XFA.marcados[v] = 1; });
+  var h = '';
+  if (d.orden) {
+    var o = $(d.orden);
+    h += '<div class="xt">Ordenar</div>' + Array.prototype.slice.call(o.options).map(function (op) {
+      return '<div class="xo' + (op.value === o.value ? ' sel' : '') + '" onclick="xfOrden(\'' + d.orden + '\',\'' + esc(op.value) + '\')">' + esc(op.textContent) + '</div>';
+    }).join('') + '<hr>';
+  }
+  h += '<div class="xt">Filtrar' + (d.tit ? ': ' + esc(d.tit) : '') + '</div>';
+  if (d.buscar || it.length > 8) h += '<div class="xb"><input id="xfQ" placeholder="Buscar" oninput="xfLista()"></div>';
+  h += '<div class="xl" id="xfL"></div><div class="xp"><button onclick="xfAceptar()"><b>ACEPTAR</b></button><button onclick="xfCerrar()">Cancelar</button></div>';
+  pop.innerHTML = h; pop.className = 'on';
+  var r = btn.getBoundingClientRect(), w = Math.min(300, window.innerWidth * 0.92);
+  pop.style.left = Math.max(6, Math.min(r.left, window.innerWidth - w - 6)) + 'px';
+  pop.style.top = Math.min(r.bottom + 4, window.innerHeight - 120) + 'px';
+  pop.style.maxHeight = (window.innerHeight - Math.min(r.bottom + 4, window.innerHeight - 120) - 10) + 'px'; pop.style.overflow = 'auto';
+  xfLista();
+  if ($('xfQ')) $('xfQ').focus();
+}
+function xfLista() {
+  var d = XF[XFA.id], it = d.items(), q = $('xfQ') ? nn($('xfQ').value) : '';
+  var vis = it.filter(function (x) { return !q || nn(x.t + ' ' + x.v).indexOf(q) >= 0; }), tipo = d.multi ? 'checkbox' : 'radio';
+  XFA.vis = vis.map(function (x) { return x.v; });
+  var todos = vis.length && vis.every(function (x) { return XFA.marcados[x.v]; });
+  var h = d.multi ? '<label><input type="checkbox" ' + (todos ? 'checked' : '') + ' onchange="xfTodos(this.checked)"> <b>(Seleccionar todo)</b></label>' : '';
+  h += vis.slice(0, 400).map(function (x) {
+    return '<label title="' + esc(x.t) + '"><input type="' + tipo + '" name="xfR" ' + (XFA.marcados[x.v] ? 'checked' : '') + ' onchange="xfMarca(\'' + esc(String(x.v).replace(/'/g, '')) + '\',this.checked)"> ' + esc(x.t || '(vacío)') + '</label>';
+  }).join('') + (vis.length > 400 ? '<div style="color:var(--gr)">… ' + (vis.length - 400) + ' más: escriba para buscar</div>' : '') + (!vis.length ? '<div style="color:var(--gr)">Nada coincide.</div>' : '');
+  $('xfL').innerHTML = h;
+}
+function xfMarca(v, on) { if (!XF[XFA.id].multi) XFA.marcados = {}; if (on) XFA.marcados[v] = 1; else delete XFA.marcados[v]; if (XF[XFA.id].multi) xfLista(); }
+function xfTodos(on) { XFA.vis.forEach(function (v) { if (on) XFA.marcados[v] = 1; else delete XFA.marcados[v]; }); xfLista(); }
+function xfAceptar() { var d = XF[XFA.id], v = Object.keys(XFA.marcados); xfCerrar(); d.aplicar(v); xfBotones(); }
+function xfCerrar() { $('xfPop').className = ''; }
+function xfOrden(sel, v) { $(sel).value = v; xfCerrar(); pintar(); }
+document.addEventListener('mousedown', function (e) { var p = $('xfPop'); if (p && p.className === 'on' && !p.contains(e.target) && !(e.target.closest && e.target.closest('.xfB'))) xfCerrar(); });
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && $('xfPop') && $('xfPop').className === 'on') xfCerrar(); });
+/* ℹ️ guía (pasos y colores) plegable; recuerda si la cerró */
+function guiaVer(abrir) {
+  var g = $('guia'), cerrada = abrir == null ? !g.classList.contains('cerrada') : !abrir;
+  g.classList.toggle('cerrada', cerrada);
+  try { localStorage.setItem('mesaGuia', cerrada ? '0' : '1'); } catch (e) {}
+}
+function masFiltros(c) { $('mas' + c).classList.toggle('on'); }
+function limpiarFiltros() {
+  $('fEmp').value = ''; $('fCon').value = ''; S.conSel = null; $('fDe').value = ''; $('fHa').value = ''; $('fMon').value = '';
+  if ($('qF')) $('qF').value = ''; if ($('qV')) $('qV').value = ''; if ($('qB')) $('qB').value = '';
+  pintar(); xfBotones();
+}
+function tabM(b, i) { segOn('tabsM', ''); b.className = 'on'; $('main').classList.toggle('verV', i === 1); }
+(function () {
+  var pin0 = pintar;
+  pintar = function () { var r = pin0.apply(this, arguments); try { xfBotones(); } catch (e) {} return r; };
+  var g0 = null; try { g0 = localStorage.getItem('mesaGuia'); } catch (e) {}
+  if (g0 === '0' || (g0 == null && window.innerWidth < 900)) $('guia').classList.add('cerrada');   // en el celular empieza cerrada
+  xfInit();
+})();
 var INI_TG = false;
 function mesaArranque() {
   var seguir = function (p) {
