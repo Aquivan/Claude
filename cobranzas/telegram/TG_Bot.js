@@ -265,7 +265,7 @@ function TG_comando_(ctx, texto) {
     case 'emitirwa': return TGR_emitirWA_(ctx, arg);
     case 'guia': case 'gre': return TGG_atajoTG_(ctx, '/guia ' + arg);   // 🚚 guía de remisión por SUNAT
     case 'pdf': if (TGG_atajoTG_(ctx, '/pdf guía ' + arg)) return; break;   // 📄 PDF de una guía emitida
-    case 'procesados': case 'procesado': return TGQ_tg_(ctx, 'procesados ' + (arg || 'hoy'));   // 📋 vouchers procesados por tanda
+    case 'procesados': case 'procesado': return TGQ_tg_(ctx, 'procesados ' + (arg || ''));   // sin nada = hoy y, si hoy no hay, lo último   // 📋 vouchers procesados por tanda
     case 'honorarios': return TG_enviarHonorarios_(ctx, arg);
     case 'estado': return TG_enviarEstado_(ctx, arg);
     case 'descargar': return TG_asistenteDescarga_(ctx, null);
