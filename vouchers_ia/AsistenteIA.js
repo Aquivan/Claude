@@ -170,6 +170,8 @@ function VIA_menuLectores() {
 }
 function VIA_lectVer() { var r = VIA_llamar_('lect_ver', {}); if (r.error) throw new Error(r.error); return r; }
 function VIA_lectGuardar(cfg) { var r = VIA_llamar_('lect_guardar', { cfg: cfg, quien: VIA_quien_() }); if (r.error) throw new Error(r.error); return r; }
+function VIA_lectAgregar(d) { var r = VIA_llamar_('lect_agregar', { d: d }); if (r.error) throw new Error(r.error); return r; }
+function VIA_lectQuitar(id) { var r = VIA_llamar_('lect_quitar', { id: id }); if (r.error) throw new Error(r.error); return r; }
 function VIA_lectModelos(p) { var r = VIA_llamar_('lect_modelos', { p: p }); if (r.error) throw new Error(r.error); return r; }
 /** 🤖 IA de cada tarea (audios, RUC…): la misma ventana de Cobranzas (IATVista.html, copiada al desplegar). */
 function VIA_menuIAT() {

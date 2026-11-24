@@ -27,6 +27,15 @@
   Lo mismo se cambia en Telegram con «lectores».</div>
 <div id="filas">Cargando…</div>
 <div id="uso" class="uso" style="display:none"></div>
+<details class="uso"><summary><b>➕ Agregar otra IA</b> (cualquier servicio «compatible con OpenAI»: OpenRouter, Mistral, DeepSeek, Together, Cerebras…)</summary>
+  <div style="display:grid;grid-template-columns:70px 1fr;gap:4px;margin-top:6px;align-items:center">
+    <label>Nombre</label><input id="n_nombre" placeholder="OpenRouter">
+    <label>URL</label><input id="n_url" placeholder="https://openrouter.ai/api/v1  (la dirección «base», suele terminar en /v1)">
+    <label>Modelo</label><input id="n_modelo" placeholder="uno que LEA IMÁGENES, p. ej. qwen/qwen2.5-vl-72b-instruct">
+    <label>Clave</label><input id="n_clave" type="password" placeholder="sk-…  (se guarda escondida; nunca se muestra)">
+  </div>
+  <div class="nota">La pruebo antes de guardarla (que responda y que lea imágenes). Queda al final del orden; súbala con ▲ si quiere.</div>
+  <button id="bA" onclick="agregarIA()"><b>➕ Probar y agregar</b></button></details>
 <div class="nota">🧠 <b>Razonar</b>: la IA piensa antes de responder; es más precisa con números difíciles (muchos ceros), pero tarda más (10 a 40 s). Como el respaldo solo entra cuando Gemini falla, conviene más precisión que rapidez: NVIDIA viene con 🧠 Razonar prendido. NVIDIA siempre recibe la imagen en detalle alto y las páginas de PDF a 2048 px.<br>Modelo vacío = automático. Para probar uno antes, mande al bot una foto con la palabra «comparar».
   Según sus condiciones, el uso gratis de NVIDIA es para pruebas.</div>
 <div class="uso" id="vig"><b>🔭 Vigía de modelos</b>: cada lunes reviso si Gemini, NVIDIA o Groq sacaron modelos nuevos que leen imágenes, los pruebo con sus 📌 vouchers de prueba y aviso por Telegram (nunca cambio solo).
@@ -63,10 +72,28 @@ function pintar() {
       '<span class="mod"><input id="m_' + p + '" value="' + esc(modelo[p]) + '" placeholder="automático · varios en orden: 1.º, 2.º, 3.º" onchange="modelo[\'' + p + '\']=this.value.trim()">' +
       '<button onclick="verModelos(\'' + p + '\')">🔧 Ver</button></span>' +
       '<span><label><input type="checkbox" ' + (off ? '' : 'checked') + ' onchange="prender(\'' + p + '\',this.checked)"> Prendido</label>' +
-      (p === 'gemini' ? '' : '<br><label title="Piensa antes de responder: más preciso con números difíciles, pero tarda más (10 a 40 s)"><input type="checkbox" ' + (razonar[p] ? 'checked' : '') +
+      (esExtra(p) ? '<br><button title="Quitar esta IA" onclick="quitarIA(\'' + p + '\')">🗑 Quitar</button>' : p === 'gemini' ? '' : '<br><label title="Piensa antes de responder: más preciso con números difíciles, pero tarda más (10 a 40 s)"><input type="checkbox" ' + (razonar[p] ? 'checked' : '') +
         ' onchange="razonar[\'' + p + '\']=this.checked"> 🧠 Razonar</label>') + '</span></div>' +
       '<div class="lista" id="l_' + p + '"></div>';
   }).join('');
+}
+function esExtra(p) { return /^x\d+$/.test(p); }
+function quitarIA(id) {
+  if (!confirm('¿Quitar ' + D.nombres[id] + ' de los lectores? Se borra también su clave.')) return;
+  msg('Quitando…');
+  google.script.run.withSuccessHandler(function (d) { if (d && d.error) return fallo(d.error); cargar(d); msg(d.aviso || '🗑 Quitada.', 'ok'); })
+    .withFailureHandler(fallo).LECT_quitarHoja(id);
+}
+function agregarIA() {
+  var d = {}; ['nombre', 'url', 'modelo', 'clave'].forEach(function (k) { d[k] = document.getElementById('n_' + k).value.trim(); });
+  if (!d.nombre || !d.url || !d.modelo || !d.clave) return msg('Complete los 4 datos.', 'err');
+  var b = document.getElementById('bA'); b.disabled = true; msg('Probando la conexión…');
+  google.script.run.withSuccessHandler(function (r) {
+    b.disabled = false;
+    if (r && r.error) return fallo(r.error);
+    document.getElementById('n_clave').value = '';
+    cargar(r); msg(r.aviso || '✅ Agregada.', 'ok');
+  }).withFailureHandler(function (e) { b.disabled = false; fallo(e); }).LECT_agregarHoja(d);
 }
 function mover(i, d) {
   var j = i + d; if (j < 0 || j >= orden.length) return;

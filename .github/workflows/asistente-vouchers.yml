@@ -137,7 +137,7 @@ jobs:
           open(os.path.join(d, carpeta, 'RucVista.html'), 'w', encoding='utf-8').write(rv)
           # 🧾 La misma ventana de Lectores de vouchers de Cobranzas (LECT_x pasa a VIA_lectX, que le piden a Cobranzas por el canal vch).
           lv = open('cobranzas/LectoresVista.html', encoding='utf-8').read()
-          lv = lv.replace('.LECT_ver()', '.VIA_lectVer()').replace('.LECT_guardarHoja(', '.VIA_lectGuardar(').replace('.LECT_modelosHoja(', '.VIA_lectModelos(').replace('.LECT_buscarHoja(', '.VIA_lectBuscar(').replace('.LECT_probarHoja(', '.VIA_lectProbar(')
+          lv = lv.replace('.LECT_ver()', '.VIA_lectVer()').replace('.LECT_guardarHoja(', '.VIA_lectGuardar(').replace('.LECT_modelosHoja(', '.VIA_lectModelos(').replace('.LECT_buscarHoja(', '.VIA_lectBuscar(').replace('.LECT_probarHoja(', '.VIA_lectProbar(').replace('.LECT_agregarHoja(', '.VIA_lectAgregar(').replace('.LECT_quitarHoja(', '.VIA_lectQuitar(')
           if re.search(r'\bLECT_\w+\(', lv):
               print('::error::LectoresVista.html usa una función LECT_ nueva: agréguela a vouchers_ia.'); sys.exit(1)
           open(os.path.join(d, carpeta, 'LectoresVista.html'), 'w', encoding='utf-8').write(lv)
