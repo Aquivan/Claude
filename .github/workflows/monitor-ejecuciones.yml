@@ -1,0 +1,60 @@
+# 🩺 Monitor de ejecuciones (monitor/): proyecto Apps Script APARTE que copia la pantalla «Ejecuciones» de todos los
+# proyectos a la hoja «🩺 Ejecuciones (monitor)» cada 5 min, para leerla con el conector de Drive (sin capturas).
+# La primera vez crea el proyecto y guarda monitor/.clasp.json; después solo sube el código.
+# El dueño lo autoriza UNA vez: abrir el proyecto → función «instalar» → ▶ Ejecutar → Permitir.
+
+name: Monitor de ejecuciones
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/python-codes-izve18]
+    paths: ['monitor/**', '.github/workflows/monitor-ejecuciones.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monitor-ejecuciones
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar clasp
+        run: npm install -g @google/clasp@3.3.0
+      - name: Escribir credenciales de clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then echo "::error::Falta el secret CLASPRC_JSON"; exit 1; fi
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+      - name: Crear el proyecto (solo la primera vez)
+        run: |
+          if [ -f monitor/.clasp.json ]; then echo "Ya existe el proyecto."; exit 0; fi
+          mkdir -p /tmp/nuevo && cd /tmp/nuevo
+          clasp create-script --type standalone --title "🩺 Monitor de ejecuciones" --rootDir .
+          test -f .clasp.json || { echo "::error::clasp no creó el proyecto"; exit 1; }
+          python3 -c "import json;c=json.load(open('.clasp.json'));print(json.dumps({'scriptId':c['scriptId'],'rootDir':'.'}))" > "$GITHUB_WORKSPACE/monitor/.clasp.json"
+          cd "$GITHUB_WORKSPACE"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add monitor/.clasp.json
+          git commit -m "Monitor de ejecuciones: proyecto Apps Script creado [skip ci]"
+          for i in 1 2 3 4; do git push && break; git pull --rebase; sleep $((i*3)); done
+      - name: Subir el código
+        run: |
+          cd monitor
+          clasp push --force
+          ID=$(python3 -c "import json;print(json.load(open('.clasp.json'))['scriptId'])")
+          echo "✅ Abra https://script.google.com/d/$ID/edit → función «instalar» → ▶ Ejecutar → Permitir (una sola vez)."
+      - name: Limpiar credenciales
+        if: always()
+        run: rm -rf "$HOME/.clasprc.json" /tmp/nuevo
