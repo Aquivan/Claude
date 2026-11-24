@@ -195,6 +195,12 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 /* 📨 estado de cuenta para enviar */
 #ec{position:fixed;inset:0;background:#E5E7EB;z-index:70;display:none;flex-direction:column}#ec.on{display:flex}
 #ecBar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#fff;border-bottom:1px solid var(--bo);font-size:12.5px}
+#repBar,#ecBar{flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:6px}
+.rb{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.rbT{font-size:14px;margin-right:6px}
+.rb .et{font-size:11px;font-weight:bold;color:var(--gr);text-transform:uppercase;letter-spacing:.3px}
+.bgr{display:inline-flex;border:1px solid var(--bo);border-radius:6px;overflow:hidden;flex-wrap:wrap}.bgr button{border:0;border-radius:0;border-right:1px solid var(--bo)}.bgr button:last-child{border-right:0}
+.fch{display:inline-flex;gap:4px;align-items:center;border:1px solid var(--bo);border-radius:6px;padding:1px 6px;background:#F8FAFC}.fch input{border:0!important;background:transparent}
+.rb .chk{display:inline-flex;gap:4px;align-items:center;color:inherit!important}
 #ecBar label{color:var(--gr)}#ecBar input,#ecBar select{padding:4px 6px}
 #ecScroll{flex:1;overflow:auto;padding:18px}
 #ecHoja{background:#fff;width:820px;max-width:100%;margin:0 auto;padding:30px 34px;box-shadow:0 4px 18px rgba(0,0,0,.15);font:12px Arial,Helvetica,sans-serif;color:#111827;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -214,7 +220,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 #ecHoja .ley{display:flex;flex-wrap:wrap;gap:6px 12px;margin:6px 0 2px;font-size:10.5px;color:#374151}
 #ecHoja .firma{display:flex;gap:30px;margin-top:34px}#ecHoja .firma div{flex:1;border-top:1px solid #111;padding-top:4px;text-align:center;font-size:10.5px;color:#374151}
 @media print{body.ecImp>*:not(#ec){display:none!important}body.ecImp #ecBar{display:none!important}body.ecImp #ec{position:static;display:block;background:#fff}body.ecImp #ecScroll{padding:0;overflow:visible}body.ecImp #ecHoja{box-shadow:none;width:auto;padding:0}@page{size:A4;margin:12mm}}
-@media print{#top,#ayuda,#main,#pie,#repBar button,#repBar select,#repBar input,.seg{display:none!important}body{overflow:visible;height:auto;display:block}#rep{display:block!important;overflow:visible}.grp{break-inside:avoid-page}}
+@media print{#top,#guia,#repBar .rb2,#repBar .et,#main,#pie,#repBar button,#repBar select,#repBar input,.seg{display:none!important}body{overflow:visible;height:auto;display:block}#rep{display:block!important;overflow:visible}.grp{break-inside:avoid-page}}
 /* 🧮 calculadora */
 #calc{position:fixed;right:24px;bottom:70px;width:300px;background:#0F172A;color:#E2E8F0;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.35);z-index:60;display:none;user-select:none;font-family:Arial,sans-serif}
 #calc.on{display:block}#calc.min .cuerpo{display:none}
@@ -284,11 +290,8 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 <span><i style="background:#ECFDF5;border:1px solid #16A34A;height:10px"></i>fondo verde = ya cruzada</span></div></div>
 <div id="rep">
   <div id="repBar">
-    <b>📊 Estado de cuenta</b>
-    <span class="seg" id="eVis" title="Ver lo guardado o cómo quedará con los cruces que hizo en la Mesa y aún no guardó"><button data-v="antes" class="on" onclick="segE(this)">💾 Guardado</button><button data-v="despues" onclick="segE(this)">✏️ Con mis cambios</button><button data-v="comp" onclick="segE(this)">⚖️ Comparar</button></span>
-    <span id="eCamb"></span>
-    <span class="seg" id="eAgr" title="Cómo agrupar"><button data-v="pe" class="on" onclick="segE(this)">Proveedor → Empresa</button><button data-v="ep" onclick="segE(this)">Empresa → Proveedor</button></span>
-    <span class="seg" id="eEst"><button data-v="saldo" class="on" onclick="segE(this)">Con saldo</button><button data-v="todas" onclick="segE(this)">Todas</button><button data-v="canc" onclick="segE(this)">Canceladas</button><button data-v="venc" onclick="segE(this)">Vencidas</button></span>
+   <div class="rb">
+    <b class="rbT">📊 Estado de cuenta</b>
     <span class="seg" id="eDet" title="Cuánto detalle"><button data-v="res" onclick="segE(this)" title="Una línea por proveedor (y empresa) con los totales de cada concepto">📋 Resumen</button><button data-v="fac" class="on" onclick="segE(this)" title="Una línea por factura: total, N/C, retención, detracción, pagado y saldo">🧾 Por factura</button><button data-v="det" onclick="segE(this)" title="Cada factura con sus movimientos y el saldo que va quedando, y los vouchers del proveedor">🔎 Detallado</button><button data-v="tip" onclick="segE(this)" title="Todo agrupado por tipo: facturas, notas de crédito y débito, retenciones, detracciones, pagos (vouchers), pagos manuales, devoluciones y otros, con el total de cada grupo">📑 Por tipo</button><button data-v="ana" onclick="segE(this)" title="Análisis de cuenta tipo Contasis: cada documento con su compromiso, sus amortizaciones y el saldo, en soles y/o dólares, con totales por proveedor y exportación a Excel">📒 Análisis</button></span>
     <span id="anaOpc" style="display:none;gap:4px;align-items:center">
       <select id="eAnaMon" onchange="pintarE()" title="En qué moneda se ven los montos (se convierte con el tipo de cambio del documento)"><option value="ambas">Soles y dólares</option><option value="pen">Solo soles (S/)</option><option value="usd">Solo dólares (US$)</option></select>
@@ -296,11 +299,20 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
       <label title="Mostrar u ocultar la columna Glosa"><input type="checkbox" id="eAnaGlosa" checked onchange="pintarE()"> Glosa</label>
       <button onclick="anaExcel()" title="Descargar el análisis en Excel (.xlsx)">⬇ Excel</button>
     </span>
-    <select id="eSinEmp" onchange="pintarE()" title="Pagos (vouchers) que se suman al saldo a favor: los que dicen qué empresa del grupo pagó, los que no, o ambos"><option value="todos">Vouchers con y sin empresa</option><option value="con">Solo vouchers con empresa</option><option value="sin">Solo vouchers sin empresa</option></select>
-    <select id="eOrd" onchange="pintarE()" title="Orden de los grupos"><option value="s-">Mayor saldo primero</option><option value="n">Nombre (A-Z)</option><option value="v">Más vencido primero</option></select>
-    <input id="eQ" placeholder="🔎 factura, voucher (n° op.), proveedor o monto" style="flex:1;min-width:200px" oninput="tarde(pintarE)">
-    <button onclick="abrirTodo(true)">⊞ Abrir todo</button><button onclick="abrirTodo(false)">⊟ Cerrar todo</button>
-    <button onclick="ecDesdeFiltro()" title="Estado de cuenta formal de UN proveedor o cliente para enviarle (PDF, imagen o copiar)">📨 Para enviar</button><button onclick="copiarE()" title="Copiar el reporte (para pegar en Excel o Sheets)">📋 Copiar</button><button onclick="imprimirE()">🖨 Imprimir / PDF</button>
+    <span style="flex:1"></span>
+    <span class="bgr"><button class="p" onclick="ecDesdeFiltro()" title="Estado de cuenta formal de UN proveedor o cliente para enviarle (PDF, imagen o copiar)">📨 Para enviar</button><button onclick="copiarE()" title="Copiar el reporte (para pegar en Excel o Sheets)">📋 Copiar</button><button onclick="imprimirE()" title="Imprimir o guardar como PDF">🖨 Imprimir</button></span>
+   </div>
+   <div class="rb rb2">
+    <span class="et">Filtros</span><span id="xeVis"></span><span id="xeEst"></span><span id="xeSin"></span><span id="xeAgr"></span><span id="xeOrd"></span>
+    <input id="eQ" placeholder="🔎 factura, voucher (n° op.), proveedor o monto" style="flex:1;min-width:180px" oninput="tarde(pintarE)">
+    <span class="bgr"><button onclick="abrirTodo(true)" title="Abrir todos los grupos">⊞ Abrir</button><button onclick="abrirTodo(false)" title="Cerrar todos los grupos">⊟ Cerrar</button></span>
+    <span id="eCamb"></span>
+   </div>
+    <span class="seg oculto" id="eVis" title="Ver lo guardado o cómo quedará con los cruces que hizo en la Mesa y aún no guardó"><button data-v="antes" class="on" onclick="segE(this)">💾 Guardado</button><button data-v="despues" onclick="segE(this)">✏️ Con mis cambios</button><button data-v="comp" onclick="segE(this)">⚖️ Comparar</button></span>
+    <span class="seg oculto" id="eAgr" title="Cómo agrupar"><button data-v="pe" class="on" onclick="segE(this)">Proveedor → Empresa</button><button data-v="ep" onclick="segE(this)">Empresa → Proveedor</button></span>
+    <span class="seg oculto" id="eEst"><button data-v="saldo" class="on" onclick="segE(this)">Con saldo</button><button data-v="todas" onclick="segE(this)">Todas</button><button data-v="canc" onclick="segE(this)">Canceladas</button><button data-v="venc" onclick="segE(this)">Vencidas</button></span>
+    <select class="oculto" id="eSinEmp" onchange="pintarE()" title="Pagos (vouchers) que se suman al saldo a favor: los que dicen qué empresa del grupo pagó, los que no, o ambos"><option value="todos">Todos (con y sin empresa)</option><option value="con">Solo con empresa</option><option value="sin">Solo sin empresa</option></select>
+    <select class="oculto" id="eOrd" onchange="pintarE()" title="Orden de los grupos"><option value="s-">Mayor saldo primero</option><option value="n">Nombre (A-Z)</option><option value="v">Más vencido primero</option></select>
   </div>
   <div id="repTot"></div>
   <div class="ley"><span>Toque una <b>factura</b> para ver cómo se canceló · toque un <b>voucher</b> (💳) para ver a qué facturas se aplicó · el mismo color = el mismo voucher · <b>⧉2</b> = ese voucher paga 2 facturas</span></div>
@@ -375,20 +387,29 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   </div></div>
 <div id="modal"><div class="caja" id="mCaja"></div></div>
 <div id="xfPop"></div>
-<div id="ec"><div id="ecBar"><b>📨 Estado de cuenta para enviar</b>
-  <label>Desde</label><input type="date" id="ecDe" onchange="ecPintar()"><label>Hasta</label><input type="date" id="ecHa" onchange="ecPintar()">
+<div id="ec"><div id="ecBar">
+ <div class="rb">
+  <b class="rbT">📨 Estado de cuenta para enviar</b>
+  <span class="fch"><span class="et">Desde</span><input type="date" id="ecDe" onchange="ecPintar()"><span>–</span><input type="date" id="ecHa" onchange="ecPintar()" title="Hasta"></span>
   <span class="seg" id="ecNiv"><button data-v="res" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">📋 Resumido</button><button data-v="det" class="on" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">🔎 Detallado</button><button data-v="tip" onclick="segOn('ecNiv',this.dataset.v);ecPintar()" title="Todo agrupado por tipo (facturas, N/C, N/D, retenciones, detracciones, pagos…) con el total de cada grupo">📑 Por tipo</button><button data-v="ana" onclick="segOn('ecNiv',this.dataset.v);ecPintar()" title="Análisis de documentos (como Contasis): cada documento con su compromiso, amortizaciones y saldo, en soles y/o dólares">📒 Análisis</button></span>
   <span id="ecAnaOpc" style="display:none;gap:4px;align-items:center"><select id="ecAnaMon" onchange="ecPintar()"><option value="ambas">Soles y dólares</option><option value="pen">Solo soles (S/)</option><option value="usd">Solo dólares (US$)</option></select>
   <span class="seg" id="ecAnaRes"><button data-v="det" class="on" onclick="segOn('ecAnaRes',this.dataset.v);ecPintar()">Detalle</button><button data-v="res" onclick="segOn('ecAnaRes',this.dataset.v);ecPintar()">Resumir</button></span>
   <label title="Mostrar u ocultar la columna Glosa"><input type="checkbox" id="ecAnaGlosa" checked onchange="ecPintar()"> Glosa</label>
   <button onclick="anaExcel()" title="Descargar este análisis en Excel (.xlsx)">⬇ Excel</button></span>
-  <select id="ecMon" onchange="ecPintar()"></select>
-  <label><input type="checkbox" id="ecConf" checked onchange="ecPintar()"> con conformidad (firma)</label>
-  <select id="ecSinEmp" onchange="ecPintar()" title="Pagos a cuenta que se incluyen"><option value="todos">Vouchers con y sin empresa</option><option value="con">Solo con empresa</option><option value="sin">Solo sin empresa</option></select>
   <span style="flex:1"></span>
-  <button onclick="ecPdf()" title="Descarga el PDF directo (sin la ventana de impresión)">⬇ PDF</button><button onclick="ecImprimir()">🖨 Imprimir</button><button onclick="ecImagen()" title="Descarga la imagen (PNG)">🖼 Imagen</button><button onclick="ecCopiarImagen()" title="Copia la imagen para pegarla en WhatsApp, correo o Word (Ctrl+V)">📋 Copiar imagen</button><button onclick="ecCopiar()" title="Copia el texto (para Excel o correo)">📋 Copiar texto</button><button onclick="ecCerrar()">✖ Cerrar</button>
+  <button onclick="ecCerrar()" title="Volver a la Mesa">✖ Cerrar</button>
+ </div>
+ <div class="rb">
+  <span class="et">Opciones</span><span id="xecMon"></span><span id="xecSin"></span>
+  <label class="chk"><input type="checkbox" id="ecConf" checked onchange="ecPintar()"> Con firma de conformidad</label>
   <button onclick="ecNotaVer()" id="bNota" title="Escribir una nota que sale en el documento (PDF, imagen, impresión, texto y Excel)">📝 Nota</button>
   <span id="ecMsg" style="color:var(--gr)"></span>
+  <span style="flex:1"></span>
+  <span class="et">Enviar como</span>
+  <span class="bgr"><button class="p" onclick="ecPdf()" title="Descarga el PDF directo (sin la ventana de impresión)">⬇ PDF</button><button onclick="ecImagen()" title="Descarga la imagen (PNG)">🖼 Imagen</button><button onclick="ecCopiarImagen()" title="Copia la imagen para pegarla en WhatsApp, correo o Word (Ctrl+V)">📋 Copiar imagen</button><button onclick="ecCopiar()" title="Copia el texto (para Excel o correo)">📋 Copiar texto</button><button onclick="ecImprimir()" title="Imprimir">🖨 Imprimir</button></span>
+ </div>
+  <select class="oculto" id="ecMon" onchange="ecPintar()"></select>
+  <select class="oculto" id="ecSinEmp" onchange="ecPintar()" title="Pagos a cuenta que se incluyen"><option value="todos">Todos (con y sin empresa)</option><option value="con">Solo con empresa</option><option value="sin">Solo sin empresa</option></select>
   <div id="ecNotaBox" style="display:none;width:100%;gap:6px;align-items:flex-start;flex-wrap:wrap">
     <textarea id="ecNota" rows="2" style="flex:1 1 420px;min-width:220px;font:13px Arial;padding:5px" placeholder="📝 Escriba aquí lo que quiera decir (ej.: «Favor confirmar el saldo a favor de S/ 185.40 o devolverlo a la cuenta BCP…»). Sale en el documento." oninput="ecNotaCambio()"></textarea>
     <select id="ecNotaPos" onchange="ecNotaCambio()" title="Dónde sale la nota"><option value="arriba">Arriba (debajo del encabezado)</option><option value="abajo">Abajo (antes de la firma)</option></select>
@@ -1651,7 +1672,7 @@ function rCambios() {
 function cambiarModo(b) {
   segOn('sModo', b.dataset.v); S.modo = b.dataset.v; S.act = ''; S.actR = ''; S.selV = {};
   var e = S.modo === 'e';
-  $('main').style.display = e ? 'none' : ''; $('rep').style.display = e ? 'flex' : 'none'; $('ayuda').style.display = e ? 'none' : '';
+  $('main').style.display = e ? 'none' : ''; $('rep').style.display = e ? 'flex' : 'none'; $('ayuda').style.display = e ? 'none' : ''; $('guia').style.display = e ? 'none' : '';
   if (e) { pintar(); detalle(); return; }
   var r = S.modo === 'r';
   $('sVou').style.display = r ? 'none' : ''; $('sCop').style.display = r ? 'none' : ''; $('sRet').style.display = r ? '' : 'none';
@@ -3076,6 +3097,13 @@ function xfInit() {
       else { S.conSel = v.slice(); $('fCon').value = v.length + ' seleccionados'; }
       pintar();
     } });
+  var xs = function (id, box, tit, alPintar) { xfDef(id, { box: box, tit: tit, items: function () { return xfSeg(id); }, val: function () { return [segV(id)]; },
+    aplicar: function (v) { var b = xfSeg(id).filter(function (x) { return x.v === v[0]; })[0]; if (b) b.b.click(); } }); };
+  var xl = function (id, box, tit, rep) { xfDef(id, { box: box, tit: tit, items: function () { return xfSel(id); }, val: function () { return [$(id).value]; },
+    aplicar: function (v) { $(id).value = v[0] || ''; rep(); } }); };
+  xs('eVis', 'xeVis', 'Ver'); xs('eEst', 'xeEst', 'Facturas'); xs('eAgr', 'xeAgr', 'Agrupar');
+  xl('eSinEmp', 'xeSin', 'Vouchers', function () { pintarE(); }); xl('eOrd', 'xeOrd', 'Orden', function () { pintarE(); });
+  xl('ecMon', 'xecMon', 'Moneda', function () { ecPintar(); }); xl('ecSinEmp', 'xecSin', 'Pagos a cuenta', function () { ecPintar(); });
   xfBotones();
 }
 function xfBotones() {
@@ -3087,7 +3115,8 @@ function xfBotones() {
     box.innerHTML = '<button class="xfB' + (act ? ' act' : '') + '" onclick="xfAbrir(\'' + id + '\', this)" title="Filtrar como en Excel">' + (d.tit ? d.tit + ': ' : '') + '<span class="xv">' + esc(txt) + '</span> ▾</button>';
   });
   var vis = function (segId, boxId) { var s0 = $(segId), b0 = $(boxId); if (s0 && b0) b0.style.display = s0.style.display === 'none' ? 'none' : ''; };
-  vis('sVou', 'xfVou'); vis('sTipos', 'xfTip');
+  vis('sVou', 'xfVou'); vis('sTipos', 'xfTip'); vis('ecMon', 'xecMon');
+  if ($('xecMon') && $('ecMon').style.visibility === 'hidden') $('xecMon').style.display = 'none';
   if ($('xfRet')) $('xfRet').style.display = S.modo === 'e' || !(S.modo === 'r' || (S.tipos && S.tipos.r)) ? 'none' : '';   // solo con Retenciones en Tipos ▾
   var n = 0; if (segV('sCop') && segV('sCop') !== 'u') n++; if ($('qB') && $('qB').value.trim()) n++;
   if ($('nMasV')) $('nMasV').textContent = n ? n : '';
@@ -3150,6 +3179,9 @@ function tabM(b, i) { segOn('tabsM', ''); b.className = 'on'; $('main').classLis
 (function () {
   var pin0 = pintar;
   pintar = function () { var r = pin0.apply(this, arguments); try { xfBotones(); } catch (e) {} return r; };
+  var pe0 = pintarE, ep0 = ecPintar;
+  pintarE = function () { var r = pe0.apply(this, arguments); try { xfBotones(); } catch (e) {} return r; };
+  ecPintar = function () { var r = ep0.apply(this, arguments); try { xfBotones(); } catch (e) {} return r; };
   var g0 = null; try { g0 = localStorage.getItem('mesaGuia'); } catch (e) {}
   if (g0 === '0' || (g0 == null && window.innerWidth < 900)) $('guia').classList.add('cerrada');   // en el celular empieza cerrada
   xfInit();
