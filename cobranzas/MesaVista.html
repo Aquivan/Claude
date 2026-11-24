@@ -219,6 +219,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
     <span class="acc">
       <button id="bRecalc" onclick="recalcularAhora()" title="Recalcular Cobranzas en este momento (saldos, Consulta, Panel) sin esperar">⚡ Recalcular</button>
       <button onclick="sireRapido()" title="Pide a SUNAT SOLO el registro de compras y/o ventas del SIRE (rápido, sin PDF/XML) de la empresa elegida (o de todas). Tarda unos minutos; al terminar Cobranzas se recalcula y, con 🔁 Actualizar sola, aparece aquí.">⬇ Traer de SUNAT</button>
+      <button onclick="iniAbrir()" title="Facturas pendientes de antes del corte (año anterior) o que no están en el SIRE: pegar desde Excel / Contasis / otro programa, elegir del SIRE o escribir una">📥 Saldos iniciales</button>
       <button onclick="cargar(true)" title="Volver a leer facturas, vouchers y cruces">🔄 Recargar</button>
       <label id="lAuto" title="Revisa cada 3 minutos si Cobranzas se recalculó o entraron vouchers; si hay algo nuevo recarga sola, sin perder filtros ni el estado de cuenta abierto. Nunca mientras tenga cambios sin guardar o esté eligiendo." style="color:var(--tx,#111);font-size:12px;white-space:nowrap"><input type="checkbox" id="cAuto" onchange="autoCambio()"> 🔁 Actualizar sola</label><span id="auHace" style="font-size:11px;color:var(--gr)"></span>
       <button onclick="calc()" title="Calculadora (también con la tecla F2) · Alt+clic en cualquier monto de la pantalla lo pasa a la calculadora">🧮</button>
@@ -522,6 +523,125 @@ window.addEventListener('message', function (e) {
   }).MESA_ruc(TK, m.fn, m.args || []);
 });
 
+/* ============================================================ 📥 SALDOS INICIALES Y FACTURAS FUERA DE SIRE (SaldosIniciales.js)
+ * Tres formas de cargar, siempre con vista previa antes de guardar: 📋 pegar o subir un Excel/CSV (de Contasis o cualquier
+ * programa: reconoce las columnas solo), 🔎 elegir del SIRE lo que quedó antes del corte, ✍️ una por una. */
+var INI = { tab: 'pegar', filas: [], info: null };
+var INI_TIPOS = ['01 Factura', '03 Boleta', '08 Nota de débito', '07 Nota de crédito', '14 Servicios públicos', '02 Recibo por honorarios'];
+function iniAbrir() {
+  var emps = (S.data && S.data.empresas || []), e1 = typeof empFiltro() === 'string' ? empFiltro() : '';
+  modal('<h3 style="margin-top:0">📥 Saldos iniciales y facturas fuera de SIRE</h3>' +
+    '<p style="color:#475569;margin:4px 0 8px">Las facturas que el sistema no trae solo: las <b>pendientes al corte</b> (del año anterior) y las que <b>no están en el SIRE</b>. ' +
+    'Entran como cualquier factura: Cobranzas, esta Mesa, Estado de cuenta, Telegram. Si después la misma llega en el SIRE, no se duplica.</p>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px">' +
+    '<label>Empresa <select id="iniEmp">' + (emps.length > 1 ? '<option value="">— elija —</option>' : '') + emps.map(function (e) { return '<option value="' + esc(e.ruc) + '"' + (e.ruc === e1 ? ' selected' : '') + '>' + esc(e.nombre) + '</option>'; }).join('') + '</select></label>' +
+    '<label>Lado <select id="iniLado"><option' + (S.lado === 'Por pagar' ? ' selected' : '') + '>Por pagar</option><option' + (S.lado === 'Por cobrar' ? ' selected' : '') + '>Por cobrar</option></select></label>' +
+    '<label title="Las facturas de antes de esta fecha entran con su saldo a esa fecha; lo pagado antes ya está en ese saldo">Corte <input type="date" id="iniCorte"></label>' +
+    '<span id="iniInfo" style="color:#64748B;font-size:12px"></span></div>' +
+    '<div class="seg" id="iniTabs" style="margin-bottom:8px"><button data-v="pegar" class="on" onclick="iniTab(this.dataset.v)">📋 Pegar o subir Excel</button><button data-v="sire" onclick="iniTab(this.dataset.v)">🔎 Elegir del SIRE</button><button data-v="una" onclick="iniTab(this.dataset.v)">✍️ Una factura</button></div>' +
+    '<div id="iniCuerpo"></div><div id="iniPrev" style="margin-top:8px"></div><div id="iniMsg" style="margin-top:6px"></div>' +
+    '<p><button class="p" id="iniG" onclick="iniGuardar()" disabled>💾 Guardar las marcadas</button> <button onclick="cerrarModal()">Cerrar</button></p>');
+  $('mCaja').style.width = 'min(1150px,97vw)';
+  INI.filas = []; iniTab('pegar');
+  R.withFailureHandler(function () {}).withSuccessHandler(function (r) {
+    INI.info = r; $('iniCorte').value = r.corte;
+    $('iniInfo').innerHTML = (r.filas ? r.filas + ' factura(s) ya cargadas' : 'Aún no hay ninguna') + (r.url ? ' · <a href="' + esc(r.url) + '" target="_blank">ver la hoja</a>' : '') +
+      (r.desde ? ' · Cobranzas controla desde ' + esc(r.desde) : ' · <span title="En ⚙️ Configuración, «Controlar documentos emitidos desde»: así lo antiguo del SIRE no sale como deuda y solo cuenta lo que cargue aquí">💡 ponga la fecha «Controlar documentos emitidos desde» en ⚙️ Configuración</span>');
+  }).MESA_iniInfo(TK);
+}
+function iniTab(t) {
+  INI.tab = t; segOn('iniTabs', t); INI.filas = []; iniPintar(); $('iniMsg').innerHTML = '';
+  var h = '';
+  if (t === 'pegar') h = '<div style="color:#475569;font-size:12.5px;margin-bottom:4px">Copie desde Excel (con los títulos) el análisis de cuenta o la lista de facturas pendientes —de Contasis, Concar, Siscont, otro programa o hecha a mano— y péguela aquí. ' +
+    'Reconoce solo las columnas: RUC, razón social, tipo, serie y número, fechas, moneda, total, amortización y saldo (también el formato agrupado por proveedor). Las ya canceladas (saldo 0) se dejan fuera.</div>' +
+    '<textarea id="iniTxt" rows="7" style="width:100%;box-sizing:border-box;font:12px monospace" placeholder="Pegue aquí (Ctrl+V)…" oninput="tarde(iniVista)"></textarea>' +
+    '<div style="margin-top:4px">o suba el archivo: <input type="file" id="iniArch" accept=".xlsx,.xls,.csv,.txt" onchange="iniArchivo(this)"></div>';
+  if (t === 'sire') h = '<div style="color:#475569;font-size:12.5px;margin-bottom:4px">Facturas que <b>sí están en el SIRE</b> pero son de antes del corte (no entran solas). Marque solo las que seguían <b>pendientes</b> y, si ya se pagó una parte, escriba el saldo.</div>' +
+    '<input id="iniQ" placeholder="🔎 proveedor/cliente, RUC o número (vacío = todas)" style="width:340px"> <button onclick="iniSire()">Buscar en el SIRE</button>';
+  if (t === 'una') h = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px">' +
+    [['iRuc', 'RUC proveedor / cliente'], ['iNom', 'Nombre'], ['iTipo', 'Tipo'], ['iDoc', 'Serie-número (F001-10892)'], ['iFe', 'Fecha emisión', 'date'], ['iVe', 'Vence', 'date'], ['iMon', 'Moneda'], ['iTot', 'Total'], ['iSal', 'Saldo al corte (vacío = total)'], ['iObs', 'Observación']].map(function (x) {
+      var inp = x[0] === 'iTipo' ? '<select id="iTipo">' + INI_TIPOS.map(function (t) { return '<option>' + t + '</option>'; }).join('') + '</select>'
+        : x[0] === 'iMon' ? '<select id="iMon"><option>PEN</option><option>USD</option></select>' : '<input id="' + x[0] + '" type="' + (x[2] || 'text') + '" style="width:100%;box-sizing:border-box">';
+      return '<label style="font-size:12px;color:#475569">' + x[1] + '<br>' + inp + '</label>';
+    }).join('') + '</div><label style="font-size:12px"><input type="checkbox" id="iFuera"> No está en el SIRE (no es saldo del año anterior)</label> <button onclick="iniUna()">Ver cómo queda</button>';
+  $('iniCuerpo').innerHTML = h;
+}
+function iniBase() { return { emp: $('iniEmp').value, lado: $('iniLado').value, corte: $('iniCorte').value }; }
+function iniVista() {
+  var t = $('iniTxt') ? $('iniTxt').value : ''; if (!t.trim()) { INI.filas = []; return iniPintar(); }
+  iniPedirVista(t, null);
+}
+function iniPedirVista(texto, filas) {
+  var b = iniBase(); $('iniMsg').innerHTML = '⏳ Leyendo…';
+  R.withFailureHandler(function (e) { $('iniMsg').innerHTML = '<span style="color:#B91C1C">❌ ' + esc(e.message || e) + '</span>'; }).withSuccessHandler(function (r) {
+    INI.filas = r.filas.map(function (f) { return { f: f, on: true }; });
+    var om = r.omitidas || {}, m = r.mapa || {};
+    $('iniMsg').innerHTML = '<div style="font-size:12px;color:#475569">Columnas reconocidas: ' + (Object.keys(m).length ? Object.keys(m).map(function (k) { return '<b>' + k + '</b>=«' + esc(m[k]) + '»'; }).join(' · ') : '—') +
+      (om.cero ? ' · ' + om.cero + ' ya cancelada(s) se dejan fuera' : '') + (om.sinDoc ? ' · ' + om.sinDoc + ' línea(s) sin documento' : '') + (om.sinRuc ? ' · <span style="color:#B45309">' + om.sinRuc + ' sin RUC</span>' : '') + '</div>' +
+      (r.avisos || []).map(function (a) { return '<div style="color:#B45309">⚠️ ' + esc(a) + '</div>'; }).join('');
+    iniPintar();
+  }).MESA_iniVista(TK, texto || '', filas || null, b.emp, b.lado, b.corte);
+}
+function iniArchivo(inp) {
+  var f = inp.files && inp.files[0]; if (!f) return;
+  var rd = new FileReader();
+  if (/\.(csv|txt)$/i.test(f.name)) { rd.onload = function () { $('iniTxt').value = rd.result; iniVista(); }; return rd.readAsText(f); }
+  var hacer = function () {
+    rd.onload = function () {
+      try {
+        var wb = XLSX.read(new Uint8Array(rd.result), { type: 'array', cellDates: true }), ws = wb.Sheets[wb.SheetNames[0]];
+        var filas = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'dd/mm/yyyy', defval: '' }).slice(0, 5000);
+        $('iniTxt').value = '(' + f.name + ': ' + filas.length + ' filas leídas)'; iniPedirVista('', filas);
+      } catch (e) { $('iniMsg').innerHTML = '<span style="color:#B91C1C">❌ No pude leer el Excel: ' + esc(e.message) + '</span>'; }
+    };
+    rd.readAsArrayBuffer(f);
+  };
+  if (window.XLSX) return hacer();
+  var sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload = hacer;
+  sc.onerror = function () { $('iniMsg').textContent = 'No se pudo cargar el lector de Excel: copie y pegue las celdas.'; }; document.head.appendChild(sc);
+}
+function iniSire() {
+  var b = iniBase(); if (!b.emp) return alert('Elija la empresa.');
+  $('iniMsg').innerHTML = '⏳ Buscando en el SIRE (puede tardar unos segundos)…';
+  R.withFailureHandler(function (e) { $('iniMsg').innerHTML = '<span style="color:#B91C1C">❌ ' + esc(e.message || e) + '</span>'; }).withSuccessHandler(function (r) {
+    INI.filas = r.filas.map(function (f) { return { f: f, on: false }; });
+    $('iniMsg').innerHTML = r.total ? r.total + ' documento(s) del SIRE hasta el ' + esc(r.corte) + (r.total > r.filas.length ? ' (se muestran ' + r.filas.length + ': busque por nombre)' : '') + '. Marque las pendientes.' :
+      'No hay documentos del SIRE de antes del ' + esc(r.corte) + ' para esa empresa' + (b.lado === 'Por pagar' ? ' (compras)' : ' (ventas)') + '. Si son del año anterior, tráigalos con ⬇ Traer de SUNAT (por ejemplo 202512) o use 📋 Pegar.';
+    iniPintar();
+  }).MESA_iniSire(TK, b.emp, b.lado, $('iniQ').value, b.corte);
+}
+function iniUna() {
+  var b = iniBase(), d = (function (t) { var m = String(t).toUpperCase().match(/([A-Z0-9]{4})\s*[-\/ ]\s*0*(\d+)/); return m ? [m[1], m[2]] : null; })($('iDoc').value);
+  if (!b.emp) return alert('Elija la empresa.');
+  if (!/^\d{11}$|^\d{8}$/.test($('iRuc').value.trim())) return alert('Escriba el RUC (11 dígitos) del proveedor o cliente.');
+  if (!d) return alert('Escriba la serie y el número, por ejemplo F001-10892.');
+  if (!(Number($('iTot').value.replace(/,/g, '')) > 0)) return alert('Escriba el total.');
+  var fecha = function (v) { return v ? v.split('-').reverse().join('/') : ''; };
+  INI.filas = [{ on: true, f: [b.emp, b.lado, $('iRuc').value.trim(), $('iNom').value.trim(), $('iTipo').value, d[0], d[1], fecha($('iFe').value), fecha($('iVe').value), $('iMon').value,
+    Number($('iTot').value.replace(/,/g, '')), $('iSal').value.trim() === '' ? '' : Number($('iSal').value.replace(/,/g, '')), fecha(b.corte), $('iFuera').checked ? 'Fuera de SIRE' : 'Manual', $('iObs').value.trim(), ''] }];
+  iniPintar();
+}
+function iniPintar() {
+  var n = INI.filas.filter(function (x) { return x.on; }).length;
+  $('iniG').disabled = !n; $('iniG').textContent = '💾 Guardar ' + (n ? n + ' ' : '') + 'factura(s)';
+  if (!INI.filas.length) { $('iniPrev').innerHTML = ''; return; }
+  var b = iniBase(), editable = INI.tab === 'sire';
+  $('iniPrev').innerHTML = '<div style="max-height:46vh;overflow:auto;border:1px solid #E2E8F0;border-radius:6px"><table class="tf" style="font-size:12px;table-layout:auto"><tr><th><input type="checkbox" ' + (n === INI.filas.length ? 'checked' : '') + ' onchange="INI.filas.forEach(function(x){x.on=this.checked},this);iniPintar()"></th>' +
+    '<th>Empresa</th><th>Lado</th><th>RUC</th><th>Proveedor / cliente</th><th>Tipo</th><th>Documento</th><th>Emisión</th><th>Vence</th><th>Mon.</th><th style="text-align:right">Total</th><th style="text-align:right">Saldo al corte</th><th>Origen</th></tr>' +
+    INI.filas.slice(0, 800).map(function (x, i) {
+      var f = x.f; if (!f[0]) f[0] = b.emp; if (b.lado && INI.tab !== 'pegar') f[1] = b.lado;
+      return '<tr style="' + (x.on ? '' : 'color:#94A3B8') + '"><td><input type="checkbox" ' + (x.on ? 'checked' : '') + ' onchange="INI.filas[' + i + '].on=this.checked;iniPintar()"></td><td>' + esc(nomEmp(f[0]) || '⚠️ falta') + '</td><td>' + esc(f[1]) + '</td><td>' + esc(f[2]) + '</td><td>' + esc(f[3]) + '</td><td>' + esc(String(f[4]).slice(0, 2)) + '</td><td><b>' + esc(f[5] + '-' + f[6]) + '</b></td><td>' + esc(f[7] || '') + '</td><td>' + esc(f[8] || '') + '</td><td>' + esc(f[9]) + '</td>' +
+        '<td style="text-align:right">' + fm(Number(f[10]) || 0) + '</td><td style="text-align:right">' + (editable ? '<input style="width:90px;text-align:right" value="' + esc(f[11] === '' ? '' : f[11]) + '" placeholder="= total" onchange="INI.filas[' + i + '].f[11]=this.value.trim()===\'\'?\'\':Number(this.value.replace(/,/g,\'\'));INI.filas[' + i + '].on=true;iniPintar()">' : (f[11] === '' ? '<span style="color:#64748B">= total</span>' : fm(Number(f[11])))) + '</td><td>' + esc(f[13]) + '</td></tr>';
+    }).join('') + '</table></div>' + (INI.filas.length > 800 ? '<div style="color:#64748B">Se muestran 800 de ' + INI.filas.length + '.</div>' : '');
+}
+function iniGuardar() {
+  var b = iniBase(), sel = INI.filas.filter(function (x) { return x.on; }).map(function (x) { var f = x.f.slice(); if (!f[0]) f[0] = b.emp; if (!f[12]) f[12] = b.corte ? b.corte.split('-').reverse().join('/') : ''; return f; });
+  if (sel.some(function (f) { return !f[0]; })) return alert('Elija la empresa arriba.');
+  $('iniG').disabled = true; $('iniMsg').innerHTML = '⏳ Guardando…';
+  R.withFailureHandler(function (e) { $('iniG').disabled = false; $('iniMsg').innerHTML = '<span style="color:#B91C1C">❌ ' + esc(e.message || e) + '</span>'; }).withSuccessHandler(function (r) {
+    $('iniMsg').innerHTML = '<span style="color:#166534">' + esc(r.mensaje) + '</span>'; INI.filas = []; iniPintar(); estado(r.mensaje); esperarRecalculo();
+  }).MESA_iniGuardar(TK, sel);
+}
 /* ------------------------------------------------ ⚡ Traer de SUNAT (registro de compras / ventas, solo reporte) */
 function sireRapido() {
   var emp = empFiltro(), nom = emp ? empNombres(emp) : 'todas las empresas';
@@ -775,7 +895,7 @@ function pintar() {
     var mod = S.sim.docsC[d.k] && Math.abs(s - d.sal) > 0.005;
     return '<div class="fila' + (ligados[d.k] ? ' unida' : '') + (S.selF[d.k] ? ' sel' : '') + (mod ? ' mod' : '') + '" id="F' + i + '" data-k="' + esc(d.k) + '" onclick="clicF(event,this)"><span class="pto pF" title="Arrastre desde aquí hasta el voucher">⦿</span>' +
       '<input type="checkbox" ' + (S.selF[d.k] ? 'checked' : '') + ' onclick="event.stopPropagation();marcaF(\'' + esc(d.k) + '\',this.checked)" title="Marcar para sumar o para cruzar varias">' +
-      '<div style="min-width:0"><div class="l1">' + (conGrupo ? '<span class="chip c-z">🏢 ' + esc(nomEmp(d.er)) + '</span>' : '') + esc(d.doc) + ' · ' + esc(d.cn) + '</div>' +
+      '<div style="min-width:0"><div class="l1">' + (conGrupo ? '<span class="chip c-z">🏢 ' + esc(nomEmp(d.er)) + '</span>' : '') + (/^📥/.test(d.sire || '') ? '<span class="chip c-a" title="' + esc(d.sire) + ' · hoja «📥 Saldos iniciales»">' + (/fuera/i.test(d.sire) ? '📥 fuera de SIRE' : '📥 saldo inicial') + '</span>' : '') + esc(d.doc) + ' · ' + esc(d.cn) + '</div>' +
       '<div class="l2">' + ff(d.f) + ' · Total ' + d.mon + ' ' + fm(d.tot) + (d.nc ? ' · N/C ' + fm(d.nc) : '') + (retDe(d) ? ' · Ret ' + fm(retDe(d)) + (exceso(d) > 0.05 ? ' <span class="chip c-r" title="Retención mayor al 3% de (Total − N/C)">de más ' + fm(exceso(d)) + '</span>' : '') : '') + (d.det ? ' · Det ' + fm(d.det) : '') + (nL ? ' · 🔗 ' + nL : '') + (d.sire && !/✅/.test(d.sire) ? ' · ' + esc(d.sire) : '') + '</div></div>' +
       '<div class="num"><div class="sal ' + cls + '">' + fm(s) + '</div><div class="l2">' + (mod ? 'antes ' + fm(d.sal) : esc(d.est)) +
       (d.pdf ? ' <button class="ic" title="Ver la factura" onclick="event.stopPropagation();verFactura(\'' + esc(d.k) + '\')">📄</button>' : '') +
