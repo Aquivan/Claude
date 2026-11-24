@@ -70,7 +70,8 @@ var MESA_WEB_FN_ = {
   MESA_rucEstado: MESA_rucEstado, MESA_rucOtro: MESA_rucOtro, MESA_rucElegir: MESA_rucElegir, MESA_version: MESA_version,
   MESA_rucVentana: MESA_rucVentana, MESA_ruc: MESA_ruc, MESA_sireRapido: MESA_sireRapido, MESA_sireEstado: MESA_sireEstado,
   MESA_errorVista: MESA_errorVista, MESA_iniInfo: MESA_iniInfo, MESA_iniVista: MESA_iniVista, MESA_iniSire: MESA_iniSire, MESA_iniGuardar: MESA_iniGuardar,
-  MESA_scpPedir: MESA_scpPedir, MESA_scpEstado: MESA_scpEstado, MESA_scpRuc: MESA_scpRuc, MESA_scpVarias: MESA_scpVarias
+  MESA_scpPedir: MESA_scpPedir, MESA_scpEstado: MESA_scpEstado, MESA_scpRuc: MESA_scpRuc, MESA_scpVarias: MESA_scpVarias,
+  MESA_excluir: MESA_excluir, MESA_excluidas: MESA_excluidas, MESA_incluir: MESA_incluir
 };
 function MESA_doPost_(e) {
   var salida = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
@@ -438,8 +439,10 @@ function MESA_datos_(tk, lado) {
     if ((d.tomados || []).indexOf('factura') >= 0) refsDeCopia[d.otra] = 1;   // la fila principal tenía «Tipo y Nº Doc.» vacío
   });
   var grupo = {}; cfg.grupo.forEach(function (r) { grupo[r] = 1; });
-  var vouchers = [], porId = {};
+  var vouchers = [], porId = {}, excV = {};
+  try { excV = EXC_mapa_(ss)._p || {}; } catch (e) {}   // 🚫 vouchers excluidos (Excluidas.js): tampoco salen en la Mesa
   vch.pagos.forEach(function (p) {
+    if (excV[String(p.id)]) return;
     var pr = p.pagadorRuc || '', br = p.beneficiarioRuc || '';
     // Por pagar: paga una empresa del grupo (o no se sabe). Por cobrar: le pagan a una empresa del grupo.
     if (lado === 'Por pagar' ? (pr && !grupo[pr]) : !(grupo[br] || (!br && pr && !grupo[pr]))) return;

@@ -538,7 +538,7 @@ function iniAbrir() {
     '<label>Lado <select id="iniLado"><option' + (S.lado === 'Por pagar' ? ' selected' : '') + '>Por pagar</option><option' + (S.lado === 'Por cobrar' ? ' selected' : '') + '>Por cobrar</option></select></label>' +
     '<label title="Las facturas de antes de esta fecha entran con su saldo a esa fecha; lo pagado antes ya está en ese saldo">Corte <input type="date" id="iniCorte"></label>' +
     '<span id="iniInfo" style="color:#64748B;font-size:12px"></span></div>' +
-    '<div class="seg" id="iniTabs" style="margin-bottom:8px"><button data-v="pegar" class="on" onclick="iniTab(this.dataset.v)">📋 Pegar o subir Excel</button><button data-v="sire" onclick="iniTab(this.dataset.v)">🔎 Elegir del SIRE</button><button data-v="una" onclick="iniTab(this.dataset.v)">✍️ Una factura</button><button data-v="varias" onclick="iniTab(this.dataset.v)" title="Varias facturas de una vez: un solo ingreso a SUNAT">🔎 Varias de SUNAT</button></div>' +
+    '<div class="seg" id="iniTabs" style="margin-bottom:8px"><button data-v="pegar" class="on" onclick="iniTab(this.dataset.v)">📋 Pegar o subir Excel</button><button data-v="sire" onclick="iniTab(this.dataset.v)">🔎 Elegir del SIRE</button><button data-v="una" onclick="iniTab(this.dataset.v)">✍️ Una factura</button><button data-v="varias" onclick="iniTab(this.dataset.v)" title="Varias facturas de una vez: un solo ingreso a SUNAT">🔎 Varias de SUNAT</button><button data-v="excl" onclick="iniTab(this.dataset.v)" title="Facturas y vouchers que no entran en los reportes">🚫 Excluidas</button></div>' +
     '<div id="iniCuerpo"></div><div id="iniPrev" style="margin-top:8px"></div><div id="iniMsg" style="margin-top:6px"></div>' +
     '<p><button class="p" id="iniG" onclick="iniGuardar()" disabled>💾 Guardar las marcadas</button> <button onclick="cerrarModal()">Cerrar</button></p>');
   $('mCaja').style.width = 'min(1150px,97vw)';
@@ -550,7 +550,7 @@ function iniAbrir() {
   }).MESA_iniInfo(TK);
 }
 function iniTab(t) {
-  INI.tab = t; segOn('iniTabs', t); INI.filas = []; iniPintar(); $('iniMsg').innerHTML = '';
+  INI.tab = t; segOn('iniTabs', t); INI.filas = []; iniPintar(); $('iniMsg').innerHTML = ''; $('iniG').style.display = t === 'excl' ? 'none' : '';
   var h = '';
   if (t === 'pegar') h = '<div style="color:#475569;font-size:12.5px;margin-bottom:4px">Copie desde Excel (con los títulos) el análisis de cuenta o la lista de facturas pendientes —de Contasis, Concar, Siscont, otro programa o hecha a mano— y péguela aquí. ' +
     'Reconoce solo las columnas: RUC, razón social, tipo, serie y número, fechas, moneda, total, amortización y saldo (también el formato agrupado por proveedor). Las ya canceladas (saldo 0) se dejan fuera.</div>' +
@@ -558,6 +558,7 @@ function iniTab(t) {
     '<div style="margin-top:4px">o suba el archivo: <input type="file" id="iniArch" accept=".xlsx,.xls,.csv,.txt" onchange="iniArchivo(this)"></div>';
   if (t === 'sire') h = '<div style="color:#475569;font-size:12.5px;margin-bottom:4px">Facturas que <b>sí están en el SIRE</b> pero son de antes del corte (no entran solas). Marque solo las que seguían <b>pendientes</b> y, si ya se pagó una parte, escriba el saldo.</div>' +
     '<input id="iniQ" placeholder="🔎 proveedor/cliente, RUC o número (vacío = todas)" style="width:340px"> <button onclick="iniSire()">Buscar en el SIRE</button>';
+  if (t === 'excl') { h = '<div id="excLista">⏳ Leyendo…</div>'; setTimeout(excLista, 0); }
   if (t === 'varias') h = '<div style="color:#475569;font-size:12.5px;margin-bottom:4px">Una por línea (hasta 20): <b>RUC o razón social + serie-número</b>; para notas ponga NC o ND. El robot entra <b>una sola vez</b> a SUNAT con la clave de la empresa elegida arriba y baja el XML y PDF oficiales de todas.</div>' +
     '<textarea id="iniVar" rows="6" style="width:100%;box-sizing:border-box;font:12.5px monospace" placeholder="20604785775 F001-10892&#10;UNILAC F001-10780&#10;NC 20100000015 FC01-12"></textarea>' +
     '<div style="margin-top:4px"><button class="p" onclick="iniVarias()">🔎 Buscar todas en SUNAT</button> <span id="iniVarMsg" style="font-size:12.5px"></span></div>';
@@ -702,6 +703,43 @@ function iniVarias(elegidos) {
 function iniDuda(i, j) {
   var d = INI.dudas[i], o = d.opciones[j], c = d.c; c.ruc = o.ruc; c.nombre = o.nombre;
   $('iniVar').value = ''; iniVarias([c]);
+}
+/* 🚫 EXCLUIR de Cobranzas y de los reportes (Excluidas.js): facturas anuladas, canceladas antes del sistema, duplicadas;
+ * vouchers duplicados o que no son pagos. Queda en la hoja «🚫 Facturas excluidas» y se puede volver a incluir. */
+var EXC_MOTIVOS = { f: ['Anulada (comunicación de baja)', 'Cancelada antes del sistema (año anterior)', 'Duplicada', 'No corresponde a la empresa', 'Otro'],
+  v: ['Duplicado', 'No es un pago a proveedor / de cliente', 'De otra persona o empresa', 'Pagado antes del sistema (año anterior)', 'Otro'] };
+function excluirDlg(x, tipo) {
+  modal('<h3 style="margin-top:0">🚫 Excluir ' + esc(x.doc) + '</h3><p style="color:#475569">' + esc(x.cn || '') + (x.f ? ' · ' + esc(ff(x.f)) : '') + (x.tot ? ' · ' + esc(x.mon || '') + ' ' + fm(x.tot) : '') + '</p>' +
+    '<p>Deja de contar en Cobranzas y en <b>todos los reportes</b> (Mesa, Estado de cuenta, Para enviar, Telegram, vencimientos)' + (tipo === 'f' ? '; sus notas de crédito o débito también.' : '.') + ' Se puede volver a incluir (📥 Saldos iniciales → 🚫 Excluidas).</p>' +
+    '<label>Motivo <select id="excMot">' + EXC_MOTIVOS[tipo].map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('') + '</select></label>' +
+    '<label style="display:block;margin-top:6px">Nota (opcional) <input id="excNota" style="width:100%;box-sizing:border-box" placeholder="ej. anulada con comunicación de baja del 05/01/2026"></label>' +
+    '<p><button class="p" id="excB" onclick="excluirGuardar()">🚫 Excluir</button> <button onclick="cerrarModal()">Cancelar</button> <span id="excMsg"></span></p>');
+  window._exc = x;
+}
+function excluirF(k) { var d = S.D[k]; if (!d) return; excluirDlg({ k: d.k, doc: d.doc, cn: d.cn, er: nomEmp(d.er), f: d.f, mon: d.mon, tot: d.tot }, 'f'); }
+function excluirV(id) {
+  var v = S.V[id]; if (!v) return excluirDlg({ k: 'P|' + id, doc: id.split('|').slice(0, 2).join(' '), cn: '', mon: '', tot: 0 }, 'v');
+  excluirDlg({ k: 'P|' + id, doc: (v.bco + ' ' + v.op).trim() || id, cn: S.lado === 'Por pagar' ? (v.bn || '') : (v.us || v.bn || ''), er: nomEmp(S.lado === 'Por pagar' ? v.pr : v.br), f: v.f, mon: v.mon, tot: v.m }, 'v');
+}
+function excluirGuardar() {
+  var x = window._exc; x.motivo = $('excMot').value; x.nota = $('excNota').value.trim(); x.f = x.f ? ff(x.f) : '';
+  $('excB').disabled = true; $('excMsg').textContent = '⏳ Guardando…';
+  R.withFailureHandler(function (e) { $('excB').disabled = false; $('excMsg').textContent = '❌ ' + (e.message || e); }).withSuccessHandler(function (r) {
+    cerrarModal(); estado(r.mensaje); esperarRecalculo();
+  }).MESA_excluir(TK, x);
+}
+function excLista() {
+  R.withFailureHandler(function (e) { $('excLista').textContent = '❌ ' + (e.message || e); }).withSuccessHandler(function (L) {
+    if (!$('excLista')) return;
+    if (!L.length) { $('excLista').innerHTML = '<p style="color:#64748B">No hay nada excluido. Para excluir una factura o un voucher: toque su 🔍 (ficha) → 🚫 Excluir.</p>'; return; }
+    $('excLista').innerHTML = '<div style="max-height:50vh;overflow:auto"><table class="tf" style="font-size:12px;table-layout:auto"><tr><th>Documento / voucher</th><th>Proveedor / cliente</th><th>Empresa</th><th>Fecha</th><th style="text-align:right">Monto</th><th>Motivo</th><th>Quién · cuándo</th><th></th></tr>' +
+      L.map(function (x) { return '<tr><td><b>' + esc(x.doc) + '</b></td><td>' + esc(x.cn) + '</td><td>' + esc(x.er) + '</td><td>' + esc(x.f) + '</td><td style="text-align:right">' + esc(x.mon) + ' ' + esc(x.tot) + '</td><td>' + esc(x.motivo) + (x.nota ? '<div style="color:#64748B">' + esc(x.nota) + '</div>' : '') + '</td><td>' + esc(x.quien) + '<div style="color:#64748B">' + esc(x.cuando) + '</div></td>' +
+        '<td><button onclick="excIncluir(this,\'' + esc(x.k).replace(/'/g, '') + '\')">↩️ Volver a incluir</button></td></tr>'; }).join('') + '</table></div>';
+  }).MESA_excluidas(TK);
+}
+function excIncluir(b, k) {
+  b.disabled = true;
+  R.withFailureHandler(function (e) { b.disabled = false; alert(e.message || e); }).withSuccessHandler(function (r) { estado(r.mensaje); esperarRecalculo(); excLista(); }).MESA_incluir(TK, k);
 }
 function iniPintar() {
   var n = INI.filas.filter(function (x) { return x.on; }).length;
@@ -2489,7 +2527,7 @@ function fichaF(k) {
   });
   if (!ms.length) h += '<tr><td colspan="3" style="color:var(--gr);padding:8px 6px">Sin pagos, notas ni retenciones registrados.</td></tr>';
   h += '<tr class="tot"><td>' + (d.sal < -0.05 ? '💰 Pagado de más' : 'Saldo ' + (S.lado === 'Por pagar' ? 'por pagar' : 'por cobrar')) + '</td><td>=</td><td style="text-align:right;color:' + (d.sal > 0.05 ? 'var(--ro)' : 'var(--ve)') + '">' + fm(d.sal) + '</td></tr></table>' +
-    '<p>' + (d.pdf ? '<button onclick="verFactura(\'' + esc(k) + '\')">📄 Ver la factura</button> ' : '') + '<button onclick="abrirManual(\'' + esc(k) + '\')">✍️ Registrar pago sin voucher</button> <button onclick="irMesaF(\'' + esc(k) + '\')">🧩 Cruzar en la Mesa</button> <button onclick="cerrarModal()">Cerrar</button></p>';
+    '<p>' + (d.pdf ? '<button onclick="verFactura(\'' + esc(k) + '\')">📄 Ver la factura</button> ' : '') + '<button onclick="abrirManual(\'' + esc(k) + '\')">✍️ Registrar pago sin voucher</button> <button onclick="irMesaF(\'' + esc(k) + '\')">🧩 Cruzar en la Mesa</button> <button onclick="excluirF(\'' + esc(k) + '\')" title="Anulada, cancelada antes del sistema, duplicada…: deja de salir en Cobranzas y en todos los reportes (se puede volver a incluir)">🚫 Excluir de los reportes</button> <button onclick="cerrarModal()">Cerrar</button></p>';
   modal(h);
 }
 /** 🔍 Ficha de un voucher (o de una retención, N/C o pago manual): a qué facturas se aplicó. */
@@ -2519,7 +2557,7 @@ function fichaV(id) {
   if (v && !v.dev && dvd) { sobra = r2(sobra - dvd); h += '<p>↩️ <b>El proveedor devolvió ' + fm(dvd) + '</b> de este depósito: ' + (S.devDe[id] || []).map(function (x) { var w = S.V[x.de]; return (w ? w.bco + ' ' + w.op + ' (' + ff(w.f) + ')' : x.fu) + ' ' + fm(x.m); }).join(', ') + '.</p>'; }
   if (v && v.dev && (S.devA[id] || []).length) h += '<p>↩️ Devolvió: ' + S.devA[id].map(function (x) { var w = x.a && S.data.vouchers.filter(function (z) { return z.fu === x.a || (z.dups || []).indexOf(x.a) >= 0; })[0]; return (w ? w.bco + ' ' + w.op : x.k && EV.D[x.k] ? EV.D[x.k].doc : x.a) + ' ' + fm(x.m); }).join(', ') + '</p>';
   if (v && !v.dev) h += '<p>' + (sobra > 0.05 ? '💰 <b>Sobran ' + fm(sobra) + '</b> (saldo a favor: se aplica a otra factura, se compensa o el proveedor lo devuelve).' : ks.length ? '✅ Aplicado completo.' : '') + '</p>';
-  h += '<p>' + (v ? '<button onclick="verVoucher(\'' + esc(id) + '\')">🖼 Ver voucher</button> <button onclick="irMesaV(\'' + esc(id) + '\')">🧩 Cruzar en la Mesa</button> ' : '') + '<button onclick="cerrarModal()">Cerrar</button></p>';
+  h += '<p>' + (v ? '<button onclick="verVoucher(\'' + esc(id) + '\')">🖼 Ver voucher</button> <button onclick="irMesaV(\'' + esc(id) + '\')">🧩 Cruzar en la Mesa</button> ' : '') + '<button onclick="excluirV(\'' + esc(id) + '\')" title="Duplicado, no es un pago real, de otra persona…: deja de contar en Cobranzas y en los reportes (se puede volver a incluir)">🚫 Excluir</button> <button onclick="cerrarModal()">Cerrar</button></p>';
   modal(h);
 }
 function irMesaV(id) {
