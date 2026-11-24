@@ -94,7 +94,7 @@ function LEC_leer_(base64, mimeType, esPDF, totalPaginasLote) {
             modelo = mods[j];
           } catch (eM) {
             errM = eM;
-            if (/HTTP (429|5\d\d)/.test(String(eM.message || eM))) LEC_marcarCaido_(p, mods[j]);
+            if (/HTTP (429|5\d\d)/.test(String(eM.message || eM))) LEC_marcarCaido_(p, mods[j], /HTTP 429/.test(String(eM.message || eM)) ? LEC_SEG_SIN_CUPO_ : 0);
             if (j < mods.length - 1) Logger.log(LEC_NOMBRES_[p] + ' · ' + String(mods[j]).split('/').pop() + ' falló: ' + String(eM.message || eM).slice(0, 120) + ' → se prueba ' + String(mods[j + 1]).split('/').pop());
           }
         }
@@ -288,9 +288,12 @@ var LEC_SEG_CAIDO_ = 120;
 function LEC_caido_(p, m) {
   try { return !!CacheService.getScriptCache().get('lec_caido_' + p + '_' + String(m).replace(/[^\w.\-]/g, '_')); } catch (e) { return false; }
 }
-function LEC_marcarCaido_(p, m) {
-  try { CacheService.getScriptCache().put('lec_caido_' + p + '_' + String(m).replace(/[^\w.\-]/g, '_'), '1', LEC_SEG_CAIDO_); } catch (e) {}
+// seg: cuánto recordarlo. «Sin cupo» (429) dura más que «saturado» (503): el cupo gratis no vuelve en 2 minutos y
+// reintentar solo gasta tiempo (y más cupo).
+function LEC_marcarCaido_(p, m, seg) {
+  try { CacheService.getScriptCache().put('lec_caido_' + p + '_' + String(m).replace(/[^\w.\-]/g, '_'), '1', seg || LEC_SEG_CAIDO_); } catch (e) {}
 }
+var LEC_SEG_SIN_CUPO_ = 900;   // 15 min
 
 /** Pregunta mínima en paralelo a los Gemini elegidos (una vez cada 2 min como máximo). → texto para el registro. */
 function LEC_sondeoGemini_() {
@@ -309,7 +312,7 @@ function LEC_sondeoGemini_() {
   resps.forEach(function (r, i) {
     const code = r.getResponseCode();
     if (code === 200) ok.push(lista[i]);
-    else { mal.push(lista[i] + ' (' + code + ')'); if (code === 429 || code >= 500) LEC_marcarCaido_('gemini', lista[i]); if (code === 404) marcarModeloNoDisponible_(lista[i]); }
+    else { mal.push(lista[i] + ' (' + code + ')'); if (code === 429 || code >= 500) LEC_marcarCaido_('gemini', lista[i], code === 429 ? LEC_SEG_SIN_CUPO_ : 0); if (code === 404) marcarModeloNoDisponible_(lista[i]); }
   });
   const txt = '🔎 Sondeo de Gemini en paralelo (' + Math.round((Date.now() - t0) / 100) / 10 + ' s): responden ' + (ok.join(', ') || 'ninguno') +
     (mal.length ? ' · saturados/sin cupo: ' + mal.join(', ') : '');
@@ -349,7 +352,7 @@ function LEC_leerParalelo_(pdfs) {
     const i = idx[j], code = r.getResponseCode();
     if (code !== 200) {
       out[i] = { error: 'HTTP ' + code };
-      if (code === 429 || code >= 500) LEC_marcarCaido_(p, modelo);
+      if (code === 429 || code >= 500) LEC_marcarCaido_(p, modelo, code === 429 ? LEC_SEG_SIN_CUPO_ : 0);
       return;
     }
     try { out[i] = { arr: LEC_openaiTexto_(r.getContentText()), mini: imgs[i].mini, quien: quien }; bien++; }

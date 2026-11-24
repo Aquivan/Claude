@@ -161,6 +161,34 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
         porPagina[p].push(v);
       });
 
+      // ⚡ Imágenes para las celdas de TODAS las páginas con voucher nuevo, A LA VEZ (antes una por una, ~7 s cada una
+      // esperando la miniatura de Drive). Las que ya trajo NVIDIA/Groq no se repiten. Si algo falla, cada una sigue como antes.
+      if (typeof LEC_imagenesParalelo_ === 'function') {
+        const faltan = [];
+        for (let rel = 1; rel <= paginasLeidas; rel++) {
+          const ig = loteInicio + (rel - 1);
+          if (miniPagina[ig]) continue;
+          if ((porPagina[rel] || []).some(function (v) { return !esDuplicadoCtx(ctx, v.nOperacion, v.banco, parsearMonto(v.monto)); })) faltan.push(ig);
+        }
+        if (faltan.length >= 2) {
+          const tImgs = Date.now();
+          try {
+            const pdfsImg = [];
+            for (let q = 0; q < faltan.length; q++) {
+              const dI = await PDFLib.PDFDocument.create();
+              const [pI] = await dI.copyPages(pdfDoc, [faltan[q]]);
+              dI.addPage(pI);
+              pdfsImg.push(Utilities.base64Encode(Utilities.newBlob([...new Int8Array(await dI.save())], MimeType.PDF, 'pag.pdf').getBytes()));
+            }
+            const imgs = LEC_imagenesParalelo_(pdfsImg, 800);
+            let n = 0;
+            imgs.forEach(function (im, q) { if (im && (im.mini || im.jpg)) { miniPagina[faltan[q]] = im.mini || im.jpg; n++; } });
+            Logger.log('⚡ Imágenes de ' + n + '/' + faltan.length + ' páginas preparadas a la vez (' + Math.round((Date.now() - tImgs) / 100) / 10 + ' s).');
+          } catch (eImg) { Logger.log('Imágenes a la vez: ' + eImg.message + ' → una por una.'); }
+          if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.imagen += Date.now() - tImgs;
+        }
+      }
+
       for (let rel = 1; rel <= paginasLeidas; rel++) {
         const indiceGlobal     = loteInicio + (rel - 1);
         const numeroPaginaReal = indiceGlobal + 1;
