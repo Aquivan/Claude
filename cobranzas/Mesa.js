@@ -70,7 +70,7 @@ var MESA_WEB_FN_ = {
   MESA_rucEstado: MESA_rucEstado, MESA_rucOtro: MESA_rucOtro, MESA_rucElegir: MESA_rucElegir, MESA_version: MESA_version,
   MESA_rucVentana: MESA_rucVentana, MESA_ruc: MESA_ruc, MESA_sireRapido: MESA_sireRapido, MESA_sireEstado: MESA_sireEstado,
   MESA_errorVista: MESA_errorVista, MESA_iniInfo: MESA_iniInfo, MESA_iniVista: MESA_iniVista, MESA_iniSire: MESA_iniSire, MESA_iniGuardar: MESA_iniGuardar,
-  MESA_scpPedir: MESA_scpPedir, MESA_scpEstado: MESA_scpEstado, MESA_scpRuc: MESA_scpRuc, MESA_scpVarias: MESA_scpVarias,
+  MESA_scpPedir: MESA_scpPedir, MESA_scpEstado: MESA_scpEstado, MESA_scpRuc: MESA_scpRuc, MESA_scpVarias: MESA_scpVarias, MESA_empresaVarios: MESA_empresaVarios,
   MESA_excluir: MESA_excluir, MESA_excluidas: MESA_excluidas, MESA_incluir: MESA_incluir
 };
 function MESA_doPost_(e) {
@@ -451,6 +451,7 @@ function MESA_datos_(tk, lado) {
       id: p.id, fu: p.fuente, dups: dups[p.fuente] || [], f: MESA_fecha_(p.fecha), op: p.operacion || '', bco: p.banco || '',
       mon: p.moneda || 'PEN', m: p.monto, pr: pr, br: br, bn: p.beneficiarioNombre || '', us: p.usuario || '',
       des: String(p.descripcion || '').slice(0, 120), env: String(p.enviadoPor || '').slice(0, 40), refs: refs,
+      nota: String(p.nota || '').slice(0, 80), arch: String(p.archivo || '').slice(0, 80),
       antes: refsDeCopia[p.fuente] ? '' : refs,   // lo que dice HOY la celda de la fila principal (para no pisar cambios de otros)
       rl: parse.refs.map(function (q) { return q.tipo + '_' + q.serie + '-' + q.numero; }),
       rm: parse.refs.map(function (q) { return q.monto != null ? q.monto : null; }),   // monto por línea («=1500»)
@@ -731,6 +732,24 @@ function MESA_completar_(tk, x, token) {
     MESA_programarRecalculo_();
   }
   return { mensaje: hechos ? '✏️ ' + hechos + ' dato(s) escritos en ' + x.fu + ' · Cobranzas se recalcula en ~1 minuto.' : '✏️ No había nada que cambiar (ya estaba así).', lote: log.length ? lote : '', avisos: avisos };
+}
+
+/**
+ * 🏢 Asignar la empresa del grupo a VARIOS vouchers de una vez (los que no la tienen). lista: [{id, fu, dups, er}].
+ * Por pagar escribe «ID Usuario» y «Empresa»; por cobrar, «ID Beneficiario». Cada celda lleva su nota y se puede deshacer.
+ */
+function MESA_empresaVarios(tk, lado, lista) {
+  return MESA_escribiendo_(function () {
+    var cfg = leerConfig_(ssPrincipal_()), pagar = lado !== 'Por cobrar', n = 0, avisos = [];
+    (lista || []).slice(0, 80).forEach(function (x) {
+      if (cfg.grupo.indexOf(String(x.er)) < 0) return;
+      var campos = {};
+      if (pagar) { campos['ID Usuario'] = x.er; campos['Empresa'] = cfg.nombreEmpresa[x.er] || ''; } else campos['ID Beneficiario'] = x.er;
+      try { var r = MESA_completar_(tk, { id: x.id, fu: x.fu, dups: x.dups || [], campos: campos }, null); if (!r.error) n++; (r.avisos || []).forEach(function (a) { if (avisos.indexOf(a) < 0) avisos.push(a); }); }
+      catch (e) { avisos.push(x.fu + ': ' + e.message); }
+    });
+    return { mensaje: '🏢 Empresa escrita en ' + n + ' voucher(s) de la hoja de Vouchers (cada celda con su nota) · Cobranzas se recalcula en ~1 minuto.', avisos: avisos.slice(0, 5) };
+  });
 }
 
 function MESA_manual(tk, x, token) { var a = arguments; return MESA_escribiendo_(function () { return MESA_reintentar_(function () { return MESA_manual_.apply(null, a); }); }); }
