@@ -1,0 +1,80 @@
+# 🩺 Ejecuciones de Apps Script (las de la pantalla «Ejecuciones» de script.google.com), sin capturas:
+# usa la MISMA credencial de clasp que los despliegues (secret CLASPRC_JSON) y la API de Apps Script (processes.list).
+# Muestra solo proyecto, función, tipo, estado, hora y duración: nunca datos de clientes ni claves (el repo es público).
+# Solo se ejecuta a mano (Actions → Run workflow) o desde el asistente.
+
+name: Ejecuciones de Apps Script
+
+on:
+  workflow_dispatch:
+    inputs:
+      horas:
+        description: "Cuántas horas hacia atrás"
+        required: true
+        default: "6"
+      filtro:
+        description: "Solo proyectos cuyo nombre contenga (vacío = todos)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  ejecuciones:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Listar ejecuciones
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          HORAS: ${{ inputs.horas }}
+          FILTRO: ${{ inputs.filtro }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, urllib.request, urllib.parse, datetime
+          raw = os.environ.get('CLASPRC_JSON') or ''
+          if not raw: print('::error::Falta el secret CLASPRC_JSON'); sys.exit(1)
+          c = json.loads(raw)
+          # clasp 3: {"tokens":{"default":{client_id, client_secret, refresh_token}}} · clasp 2: {"token":{refresh_token}, "oauth2ClientSettings":{clientId, clientSecret}}
+          t = (c.get('tokens') or {}).get('default') or {}
+          cid = t.get('client_id') or (c.get('oauth2ClientSettings') or {}).get('clientId')
+          sec = t.get('client_secret') or (c.get('oauth2ClientSettings') or {}).get('clientSecret')
+          rt = t.get('refresh_token') or (c.get('token') or {}).get('refresh_token')
+          if not (cid and sec and rt): print('::error::La credencial de clasp no tiene el formato esperado'); sys.exit(1)
+          body = urllib.parse.urlencode({'client_id': cid, 'client_secret': sec, 'refresh_token': rt, 'grant_type': 'refresh_token'}).encode()
+          tok = json.load(urllib.request.urlopen('https://oauth2.googleapis.com/token', body))
+          acc = tok['access_token']
+          print('::add-mask::' + acc)
+          print('Permisos de la credencial:', tok.get('scope', '(no informa)'))
+          desde = (datetime.datetime.utcnow() - datetime.timedelta(hours=float(os.environ.get('HORAS') or 6))).strftime('%Y-%m-%dT%H:%M:%SZ')
+          filtro = (os.environ.get('FILTRO') or '').lower()
+          filas, page = [], None
+          for _ in range(10):
+              q = {'pageSize': 200, 'userProcessFilter.startTime': desde}
+              if page: q['pageToken'] = page
+              req = urllib.request.Request('https://script.googleapis.com/v1/processes?' + urllib.parse.urlencode(q), headers={'Authorization': 'Bearer ' + acc})
+              try:
+                  r = json.load(urllib.request.urlopen(req))
+              except urllib.error.HTTPError as e:
+                  msg = e.read().decode()[:500]
+                  print('::error::La API de Apps Script respondió ' + str(e.code) + ': ' + msg)
+                  if e.code == 403:
+                      print('→ Si dice «insufficient scopes», a la credencial de clasp le falta el permiso script.processes (ver ejecuciones).')
+                      print('→ Si dice que la API no está habilitada: script.google.com/home/usersettings → «API de Google Apps Script» → Activar.')
+                  sys.exit(1)
+              filas += r.get('processes', [])
+              page = r.get('nextPageToken')
+              if not page: break
+          lima = datetime.timezone(datetime.timedelta(hours=-5))
+          print('\nHora (Lima)          | Proyecto                        | Función                         | Tipo            | Estado          | Duración')
+          print('-' * 140)
+          n = 0
+          for p in filas:
+              nom = p.get('projectName', '')
+              if filtro and filtro not in nom.lower(): continue
+              ini = datetime.datetime.fromisoformat(p.get('startTime', '').replace('Z', '+00:00')).astimezone(lima).strftime('%d/%m %H:%M:%S') if p.get('startTime') else ''
+              print('%-20s | %-31s | %-31s | %-15s | %-15s | %s' % (ini, nom[:31], p.get('functionName', '')[:31], p.get('processType', '')[:15], p.get('processStatus', '')[:15], p.get('duration', '')))
+              n += 1
+          print('\nTotal: %d ejecuciones en las últimas %s h' % (n, os.environ.get('HORAS')))
+          PY
