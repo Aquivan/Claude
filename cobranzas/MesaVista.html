@@ -3397,7 +3397,13 @@ function xfInit() {
       pintar();
     } });
   xfDef('Mon', { box: 'xfMon', tit: 'Moneda', items: function () { return xfSel('fMon'); }, val: function () { return [$('fMon').value]; },
-    aplicar: function (v) { $('fMon').value = v[0] || ''; pintar(); } });
+    aplicar: function (v) {
+      $('fMon').value = v[0] || '';
+      // 📒 en el Análisis las columnas siguen a la moneda elegida (PEN → solo soles, USD → solo dólares, ambas → las dos)
+      var am = { PEN: 'pen', USD: 'usd' }[v[0]] || 'ambas';
+      if ($('eAnaMon')) $('eAnaMon').value = am; if ($('ecAnaMon')) $('ecAnaMon').value = am;
+      pintar();
+    } });
   xfDef('Con', { box: 'xfCon', tit: '', boton: '☰ lista', multi: true, buscar: true, todos: true,
     items: function () { return Array.prototype.slice.call($('dlCon').options).map(function (o) { var r = (o.value.match(/(\d{11}|\d{8})\s*$/) || [])[1] || o.value; return { v: r, t: o.value }; }); },
     val: function () { var c = contraFiltro(); return c ? (c.rucs || (c.ruc ? [c.ruc] : [])) : []; },
@@ -3493,7 +3499,7 @@ function guiaVer(abrir) {
 }
 function masFiltros(c) { $('mas' + c).classList.toggle('on'); }
 function limpiarFiltros() {
-  $('fEmp').value = ''; S.empSel = null; $('fCon').value = ''; S.conSel = null; $('fDe').value = ''; $('fHa').value = ''; $('fMon').value = '';
+  $('fEmp').value = ''; S.empSel = null; $('fCon').value = ''; S.conSel = null; $('fDe').value = ''; $('fHa').value = ''; $('fMon').value = ''; if ($('eAnaMon')) $('eAnaMon').value = 'ambas';
   if ($('qF')) $('qF').value = ''; if ($('qV')) $('qV').value = ''; if ($('qB')) $('qB').value = '';
   pintar(); xfBotones();
 }
