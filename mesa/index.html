@@ -580,7 +580,7 @@ function iniAbrir() {
     '<label>Lado <select id="iniLado"><option' + (S.lado === 'Por pagar' ? ' selected' : '') + '>Por pagar</option><option' + (S.lado === 'Por cobrar' ? ' selected' : '') + '>Por cobrar</option></select></label>' +
     '<label title="Las facturas de antes de esta fecha entran con su saldo a esa fecha; lo pagado antes ya está en ese saldo">Corte <input type="date" id="iniCorte"></label>' +
     '<span id="iniInfo" style="color:#64748B;font-size:12px"></span></div>' +
-    '<div class="seg" id="iniTabs" style="margin-bottom:8px"><button data-v="pegar" class="on" onclick="iniTab(this.dataset.v)">📋 Pegar o subir Excel</button><button data-v="sire" onclick="iniTab(this.dataset.v)">🔎 Elegir del SIRE</button><button data-v="una" onclick="iniTab(this.dataset.v)">✍️ Una factura</button></div>' +
+    '<div class="seg" id="iniTabs" style="margin-bottom:8px"><button data-v="pegar" class="on" onclick="iniTab(this.dataset.v)">📋 Pegar o subir Excel</button><button data-v="sire" onclick="iniTab(this.dataset.v)">🔎 Elegir del SIRE</button><button data-v="una" onclick="iniTab(this.dataset.v)">✍️ Una factura</button><button data-v="varias" onclick="iniTab(this.dataset.v)" title="Varias facturas de una vez: un solo ingreso a SUNAT">🔎 Varias de SUNAT</button></div>' +
     '<div id="iniCuerpo"></div><div id="iniPrev" style="margin-top:8px"></div><div id="iniMsg" style="margin-top:6px"></div>' +
     '<p><button class="p" id="iniG" onclick="iniGuardar()" disabled>💾 Guardar las marcadas</button> <button onclick="cerrarModal()">Cerrar</button></p>');
   $('mCaja').style.width = 'min(1150px,97vw)';
@@ -600,10 +600,13 @@ function iniTab(t) {
     '<div style="margin-top:4px">o suba el archivo: <input type="file" id="iniArch" accept=".xlsx,.xls,.csv,.txt" onchange="iniArchivo(this)"></div>';
   if (t === 'sire') h = '<div style="color:#475569;font-size:12.5px;margin-bottom:4px">Facturas que <b>sí están en el SIRE</b> pero son de antes del corte (no entran solas). Marque solo las que seguían <b>pendientes</b> y, si ya se pagó una parte, escriba el saldo.</div>' +
     '<input id="iniQ" placeholder="🔎 proveedor/cliente, RUC o número (vacío = todas)" style="width:340px"> <button onclick="iniSire()">Buscar en el SIRE</button>';
+  if (t === 'varias') h = '<div style="color:#475569;font-size:12.5px;margin-bottom:4px">Una por línea (hasta 20): <b>RUC o razón social + serie-número</b>; para notas ponga NC o ND. El robot entra <b>una sola vez</b> a SUNAT con la clave de la empresa elegida arriba y baja el XML y PDF oficiales de todas.</div>' +
+    '<textarea id="iniVar" rows="6" style="width:100%;box-sizing:border-box;font:12.5px monospace" placeholder="20604785775 F001-10892&#10;UNILAC F001-10780&#10;NC 20100000015 FC01-12"></textarea>' +
+    '<div style="margin-top:4px"><button class="p" onclick="iniVarias()">🔎 Buscar todas en SUNAT</button> <span id="iniVarMsg" style="font-size:12.5px"></span></div>';
   if (t === 'una') h = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px">' +
     [['iRuc', 'RUC proveedor / cliente'], ['iNom', 'Nombre'], ['iTipo', 'Tipo'], ['iDoc', 'Serie-número (F001-10892)'], ['iFe', 'Fecha emisión', 'date'], ['iVe', 'Vence', 'date'], ['iMon', 'Moneda'], ['iTot', 'Total'], ['iSal', 'Saldo al corte (vacío = total)'], ['iObs', 'Observación']].map(function (x) {
       var inp = x[0] === 'iTipo' ? '<select id="iTipo">' + INI_TIPOS.map(function (t) { return '<option>' + t + '</option>'; }).join('') + '</select>'
-        : x[0] === 'iMon' ? '<select id="iMon"><option>PEN</option><option>USD</option></select>' : '<input id="' + x[0] + '" type="' + (x[2] || 'text') + '" style="width:100%;box-sizing:border-box">';
+        : x[0] === 'iMon' ? '<select id="iMon"><option>PEN</option><option>USD</option></select>' : '<input id="' + x[0] + '" type="' + (x[2] || 'text') + '" style="width:100%;box-sizing:border-box"' + (x[0] === 'iDoc' || x[0] === 'iRuc' ? ' oninput="INI.filas=[];iniPintar();$(\'iSunat\').innerHTML=\'\'"' : '') + '>';
       return '<label style="font-size:12px;color:#475569">' + x[1] + '<br>' + inp + '</label>';
     }).join('') + '</div><label style="font-size:12px"><input type="checkbox" id="iFuera"> No está en el SIRE (no es saldo del año anterior)</label> <button onclick="iniUna()">Ver cómo queda</button>' +
     ' <button class="p" onclick="iniSunat()" title="Escriba el RUC (o la razón social), el tipo y la serie-número: el robot entra a SUNAT SOL (Consulta de comprobantes) con la clave de la empresa y trae fecha, moneda, total y detalle">🔎 Buscar en SUNAT y llenar</button>' +
@@ -705,11 +708,48 @@ function iniSunat() {
     ver();
   }).MESA_scpPedir(TK, [{ empresa: b.emp, lado: b.lado, ruc: ruc, nombre: nom, tipo: tipo, serie: m[1], numero: m[2], fecha: $('iFe').value ? $('iFe').value.split('-').reverse().join('/') : '' }]);
 }
+/* 🔎 Varias de SUNAT: una consulta (un ingreso) para muchas líneas */
+function iniVarias(elegidos) {
+  var b = iniBase(), txt = $('iniVar').value;
+  if (!b.emp) return alert('Elija la empresa.');
+  if (!txt.trim() && !(elegidos || []).length) return alert('Escriba una factura por línea.');
+  $('iniVarMsg').innerHTML = '⏳ Preparando…';
+  R.withFailureHandler(function (e) { $('iniVarMsg').innerHTML = '<span style="color:#B91C1C">❌ ' + esc(e.message || e) + '</span>'; }).withSuccessHandler(function (r) {
+    var av = '';
+    if ((r.malas || []).length) av += '<div style="color:#B45309">⚠️ No entendí: ' + r.malas.map(esc).join(' · ') + '</div>';
+    INI.dudas = r.dudas || [];
+    if (INI.dudas.length) av += INI.dudas.map(function (d, i) {
+      return '<div>❔ «' + esc(d.linea) + '»: ' + (d.opciones.length ? '¿cuál es? ' + d.opciones.map(function (o, j) { return '<button onclick="iniDuda(' + i + ',' + j + ')">' + esc(o.ruc + ' · ' + o.nombre) + '</button>'; }).join(' ') : 'no conozco ese nombre: escriba el RUC en esa línea.') + '</div>';
+    }).join('');
+    if (!r.lote) { $('iniVarMsg').innerHTML = av || 'Nada para consultar.'; return; }
+    if (!(elegidos || []).length) { INI.filas = []; iniPintar(); }   // al elegir una dudosa se suman a las ya encontradas
+    var t0 = Date.now();
+    var ver = function () {
+      clearTimeout(SCPT);
+      SCPT = setTimeout(function () {
+        R.withFailureHandler(function () { ver(); }).withSuccessHandler(function (e) {
+          if (!e.listo) { $('iniVarMsg').innerHTML = esc(e.etapa || '⏳ …') + ' · ' + r.n + ' comprobante(s) · ' + mmss((Date.now() - t0) / 1000) + av; return Date.now() - t0 < 10 * 60000 ? ver() : ($('iniVarMsg').innerHTML = '⌛ El robot no respondió en 10 min.'); }
+          var ok = (e.resultados || []).filter(function (x) { return x.ok; }), no = (e.resultados || []).filter(function (x) { return !x.ok; });
+          INI.filas = INI.filas.concat(ok.map(function (x) { return { on: true, f: x.fila }; }));
+          $('iniVarMsg').innerHTML = '✅ <b>' + ok.length + ' de ' + (e.resultados || []).length + ' encontradas</b> en SUNAT (XML y PDF oficiales). Revise; si ya se pagó una parte, ponga el saldo en la tabla.' +
+            no.map(function (x) { var c = x.consulta || {}; return '<div style="color:#B45309">❔ ' + esc(c.serie + '-' + c.numero + ' (' + c.ruc + ')') + ': ' + esc(x.error || 'no encontrada') + '</div>'; }).join('') + av;
+          iniPintar();
+        }).MESA_scpEstado(TK, r.lote);
+      }, 6000);
+    };
+    ver();
+  }).MESA_scpVarias(TK, txt, b.emp, b.lado, elegidos || []);
+}
+/* eligió el RUC de una línea dudosa: se consulta esa sola */
+function iniDuda(i, j) {
+  var d = INI.dudas[i], o = d.opciones[j], c = d.c; c.ruc = o.ruc; c.nombre = o.nombre;
+  $('iniVar').value = ''; iniVarias([c]);
+}
 function iniPintar() {
   var n = INI.filas.filter(function (x) { return x.on; }).length;
   $('iniG').disabled = !n; $('iniG').textContent = '💾 Guardar ' + (n ? n + ' ' : '') + 'factura(s)';
   if (!INI.filas.length) { $('iniPrev').innerHTML = ''; return; }
-  var b = iniBase(), editable = INI.tab === 'sire';
+  var b = iniBase(), editable = INI.tab === 'sire' || INI.tab === 'varias';
   $('iniPrev').innerHTML = '<div style="max-height:46vh;overflow:auto;border:1px solid #E2E8F0;border-radius:6px"><table class="tf" style="font-size:12px;table-layout:auto"><tr><th><input type="checkbox" ' + (n === INI.filas.length ? 'checked' : '') + ' onchange="INI.filas.forEach(function(x){x.on=this.checked},this);iniPintar()"></th>' +
     '<th>Empresa</th><th>Lado</th><th>RUC</th><th>Proveedor / cliente</th><th>Tipo</th><th>Documento</th><th>Emisión</th><th>Vence</th><th>Mon.</th><th style="text-align:right">Total</th><th style="text-align:right">Saldo al corte</th><th>Origen</th></tr>' +
     INI.filas.slice(0, 800).map(function (x, i) {
