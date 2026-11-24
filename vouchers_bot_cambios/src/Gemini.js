@@ -80,7 +80,7 @@ function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
       if (code === 429 || code >= 500 || code === 404) {
         Logger.log('Modelo ' + modelos[m] + ': HTTP ' + code + ' (Google tardó ' + segPet + ' s en responder). Se prueba el siguiente.');
         if (code === 404) marcarModeloNoDisponible_(modelos[m]);
-        else if (typeof LEC_marcarCaido_ === 'function') LEC_marcarCaido_('gemini', modelos[m]);   // ⚡ se salta 2 min
+        else if (typeof LEC_marcarCaido_ === 'function') LEC_marcarCaido_('gemini', modelos[m], code === 429 ? LEC_SEG_SIN_CUPO_ : 0);   // ⚡ se salta 2 min (sin cupo: 15 min)
         continue;
       }
       throw new Error('GEMINI_HTTP_' + code + ': ' + resp.getContentText().substring(0, 200));
