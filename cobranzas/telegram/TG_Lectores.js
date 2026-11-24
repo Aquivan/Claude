@@ -201,7 +201,13 @@ function LECT_modelos_(ctx, p, aviso, editar) {
   TG_enviar_(ctx.chatId, html, teclado);
 }
 
-/** Modelos que leen imágenes que la clave ve HOY (máx. 12). */
+/** Para ordenar la lista de Gemini: los numerados de más nuevo a más viejo y los alias «-latest» al final. */
+function LECT_ordenGemini_(id) {
+  var m = String(id).match(/^gemini-(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : 0;
+}
+
+/** Modelos que leen imágenes que la clave ve HOY (máx. 12; Gemini hasta 20). */
 function LECT_listaModelos_(p) {
   var ids = [];
   {
@@ -218,7 +224,10 @@ function LECT_listaModelos_(p) {
       var rm = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': k }, muteHttpExceptions: true });
       ids = (JSON.parse(rm.getContentText()).models || []).filter(function (m) { return (m.supportedGenerationMethods || []).indexOf('generateContent') >= 0; })
         .map(function (m) { return String(m.name).replace(/^models\//, ''); })
-        .filter(function (id) { return /^gemini-\d/.test(id) && !/tts|image|embed|audio|live|thinking|exp|robotics|computer/i.test(id); });
+        // también los alias «-latest» (gemini-flash-latest, gemini-flash-lite-latest: Google los apunta al más nuevo);
+        // fuera los que en la versión gratis no tienen cupo (pro, omni, nano-banana) o no leen vouchers (transcribe, customtools).
+        .filter(function (id) { return /^gemini-(\d|flash)/.test(id) && !/tts|image|embed|audio|live|thinking|exp|robotics|computer|pro|omni|nano-banana|transcribe|customtools/i.test(id); });
+      return ids.sort(function (a, b) { return LECT_ordenGemini_(b) - LECT_ordenGemini_(a) || (a < b ? 1 : -1); }).slice(0, 20);
     }
   }
   return ids.sort().reverse().slice(0, 12);
