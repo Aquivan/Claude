@@ -909,7 +909,9 @@ function TGQ_tg_(ctx, texto, soloFilas) {
   TG_accion_(ctx.chatId, 'typing');
   var r;
   try { r = TGQ_buscar_(ctx.ss, texto, soloFilas); } catch (e) { return TG_enviar_(ctx.chatId, '❌ ' + TG_esc_(e.message)); }
-  TG_enviar_(ctx.chatId, TGQ_texto_(r, true));
+  var admin = ctx.usuario && ctx.usuario.rol === 'admin';
+  TG_enviar_(ctx.chatId, TGQ_texto_(r, true), admin && r.tandas.length ? [[{ text: '🗑 Deshacer una de estas tandas', style: 'danger',
+    callback_data: 'k:' + TG_guardarBoton_({ t: 'tgx', a: 'lista', nombres: r.tandas.map(function (t) { return t.nombre; }).slice(0, 20) }, 21600) }]] : null);   // TG_Tandas.js
   var cambios = TGQ_cambios_(ctx.ss, r.tandas);
   if (cambios.length) TG_mostrarCambios_(ctx, cambios);   // ✅ Escribir · ✖ No (TG_IA.js) · ↩️ Deshacer
   var ext = TGQ_externos_(ctx.ss, r.tandas, 'tg', ctx.chatId);

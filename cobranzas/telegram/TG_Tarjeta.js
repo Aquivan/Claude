@@ -83,6 +83,7 @@ function TG_menuTarjeta_(ctx, secc) {
       .map(function (k) { return TG_bot_(TG_MENU_SECC_[k].t + ' ›', 'm:' + k); });
     for (var i = 0; i < secs.length; i += 2) filas.push(secs.slice(i, i + 2));
     filas.push([TG_bot_('⏱ Última ejecución', 'mc:ultima'), TG_bot_('📋 Procesados hoy', 'mc:procesados')]);
+    if (admin) filas.push([TG_bot_('🗑 Deshacer una tanda (filas de un PDF o foto)', 'mc:tandas', 'danger')]);
     filas.push([TG_bot_('❓ Ayuda', 'mc:ayuda'), TG_bot_('✖ Cerrar', 'm:x', 'link')]);
     var L = [TG_textoMenu_(), ''].concat(Object.keys(TG_MENU_SECC_).filter(function (k) { return admin || !TG_MENU_SECC_[k].admin; })
       .map(function (k) { return '<b>' + TG_MENU_SECC_[k].t + '</b> · ' + TG_MENU_SECC_[k].d; }));
