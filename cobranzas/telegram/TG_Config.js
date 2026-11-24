@@ -47,6 +47,7 @@ var TG_AVISOS_ = [
   ['venc', '⏰ Facturas por vencer y vencidas'],
   ['oblig', '📅 Vencimientos SUNAT (IGV-Renta, PLAME, SIRE)'],
   ['err', '❌ Descargas automáticas con error'],
+  ['fallas', '🩺 Fallas del sistema (procesos cortados, errores, vouchers sin leer)'],
   ['resumen', '☀️ Resumen de la mañana'],
 ];
 

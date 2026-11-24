@@ -137,7 +137,7 @@ function CTV_programar_() {
 }
 
 /** Cada 3 min mientras haya algo: cuando aparecen las filas nuevas, repone lo escrito a mano (solo en celdas vacías). */
-function CTV_reponer() {
+function CTV_reponer__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'CTV_reponer') ScriptApp.deleteTrigger(t); });
   var p = PropertiesService.getScriptProperties(), lista = [];
   try { lista = JSON.parse(p.getProperty(CTV_PROP_) || '[]'); } catch (e) { lista = []; }

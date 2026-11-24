@@ -389,7 +389,7 @@ function menuRepararEnlaces() {
   if (r.pendientes) ScriptApp.newTrigger('repararEnlacesSegundoPlano').timeBased().after(60 * 1000).create();
 }
 
-function repararEnlacesSegundoPlano() {
+function repararEnlacesSegundoPlano__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'repararEnlacesSegundoPlano') ScriptApp.deleteTrigger(t); });
   var r = repararEnlacesTexto_(300000);
   if (r.pendientes) ScriptApp.newTrigger('repararEnlacesSegundoPlano').timeBased().after(60 * 1000).create();

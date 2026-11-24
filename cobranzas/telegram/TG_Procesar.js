@@ -462,7 +462,7 @@ function TGP_recalcularLuego_() {
   if (!hay) ScriptApp.newTrigger('TGP_recalcular').timeBased().after(60 * 1000).create();
 }
 
-function TGP_recalcular() {
+function TGP_recalcular__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGP_recalcular') ScriptApp.deleteTrigger(t); });
   try { actualizarTodo_(true); } catch (e) { console.warn('Recalcular tras Procesar documento: ' + e.message); }
 }

@@ -418,7 +418,7 @@ function programarPanelSegundoPlano_() {
 }
 
 /** Activador de un solo uso: rehace el Panel de Control con los datos recien importados. */
-function actualizarPanelSegundoPlano() {
+function actualizarPanelSegundoPlano__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'actualizarPanelSegundoPlano') ScriptApp.deleteTrigger(t);
   });

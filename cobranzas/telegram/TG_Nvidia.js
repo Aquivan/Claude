@@ -51,7 +51,7 @@ function TGNV_programar_(ms) {
 }
 
 /** Disparador: una tanda por ejecución. */
-function TGNV_paso() {
+function TGNV_paso__reg() {
   var p = PropertiesService.getScriptProperties(), est;
   try { est = JSON.parse(p.getProperty('TGNV_EST') || 'null'); } catch (e) { est = null; }
   if (!est) return;
@@ -214,7 +214,7 @@ function TGNV_terminar_(est) {
 }
 
 /** Vigía: solo corre si la lectura en el momento se cortó. Marca el que se colgó y sigue con el resto. */
-function TGNV_leerPaso() {
+function TGNV_leerPaso__reg() {
   var p = PropertiesService.getScriptProperties(), est;
   try { est = JSON.parse(p.getProperty('TGNV_VCH') || 'null'); } catch (e) { est = null; }
   if (!est) return;
