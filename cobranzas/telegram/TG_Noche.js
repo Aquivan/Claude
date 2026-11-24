@@ -83,7 +83,7 @@ function TGN_relojResumen_(cfg) {
 }
 
 /** Disparador diario: manda el ☀️ resumen (una sola vez al día; el vigía queda de respaldo). */
-function TG_resumenManana() {
+function TG_resumenManana__reg() {
   var ss = TG_ss_();
   var cfg = TG_cfg_(ss);
   if (!cfg.avisosActivos || !TG_token_()) return;

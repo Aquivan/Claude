@@ -6,7 +6,7 @@
  * menu 💼 Cobranzas → 🔄 Actualizar ahora.
  */
 
-function actualizacionAutomatica() {
+function actualizacionAutomatica__reg() {
   try {
     actualizarTodo_(false);
   } catch (e) {

@@ -239,7 +239,7 @@ function procesarColaLiquidaciones_(cola) {
 }
 
 /** Continuacion en segundo plano de "generar TODAS las liquidaciones". */
-function continuarColaLiquidaciones() {
+function continuarColaLiquidaciones__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'continuarColaLiquidaciones') ScriptApp.deleteTrigger(t);
   });

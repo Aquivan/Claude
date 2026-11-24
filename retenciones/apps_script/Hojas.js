@@ -329,7 +329,7 @@ function RET_importarAhora_() {
 }
 
 /** Disparador de continuación de PDF (cuando una tanda no alcanzó el tiempo). */
-function RET_continuarPdf() {
+function RET_continuarPdf__reg() {
   RET_borrarContinuacion_();
   RET_conCandado_(function () { RET_ordenarPdf_(null); });
 }

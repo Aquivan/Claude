@@ -16,7 +16,7 @@ var DET_TITULO_DIARIO_ = 'Detracciones · diario';
 var DET_MAX_REVISIONES_ = 12;  // 12 x 8 min = hasta ~1.5 horas esperando a GitHub
 
 /** Disparador diario (mismo nombre de siempre: los activadores ya instalados siguen funcionando). */
-function DET_actualizacionAutomatica() {
+function DET_actualizacionAutomatica__reg() {
   // La descarga automática es solo de lunes a viernes (sábado y domingo solo se importa lo que haya).
   var dia = Number(Utilities.formatDate(new Date(), 'America/Lima', 'u'));   // 1 = lunes … 7 = domingo
   if (dia > 5) { DET_importarAhora_(); return; }
@@ -42,7 +42,7 @@ function DET_actualizacionAutomatica() {
 }
 
 /** Revision cada 8 min hasta que GitHub termine; entonces importa. */
-function DET_importarTrasDescarga() {
+function DET_importarTrasDescarga__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'DET_importarTrasDescarga') ScriptApp.deleteTrigger(t);
   });
@@ -84,7 +84,7 @@ function DET_revisarFallas_() {
   } catch (e) { console.warn('Detracciones (revisar fallas): ' + e.message); }
 }
 
-function DET_reintentar() {
+function DET_reintentar__reg() {
   ScriptApp.getProjectTriggers().forEach(function (x) { if (x.getHandlerFunction() === 'DET_reintentar') ScriptApp.deleteTrigger(x); });
   var props = PropertiesService.getScriptProperties(), r = {};
   try { r = JSON.parse(props.getProperty('DET_REINT') || '{}'); } catch (e) {}
@@ -96,7 +96,7 @@ function DET_reintentar() {
 }
 
 /** 25 min después del reintento: rehace las pestañas (si sigue fallando, ya no se vuelve a pedir ese día). */
-function DET_trasReintento() {
+function DET_trasReintento__reg() {
   ScriptApp.getProjectTriggers().forEach(function (x) { if (x.getHandlerFunction() === 'DET_trasReintento') ScriptApp.deleteTrigger(x); });
   try { DET_importarAhora_(); } catch (e) { console.warn(e.message); }
   DET_revisarFallas_();

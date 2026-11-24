@@ -7,7 +7,7 @@
  * (Telegram reintenta si tardamos: los repetidos se descartan).
  */
 
-function doPost(e) {
+function doPost__reg(e) {
   try {
     var p = (e && e.parameter) || {};
     if (p.canal === 'vch') return VCH_doPost_(e);

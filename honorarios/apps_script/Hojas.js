@@ -303,7 +303,7 @@ function HON_importarAhora_() {
   });
 }
 
-function HON_continuarPdf() {
+function HON_continuarPdf__reg() {
   HON_borrarContinuacion_();
   HON_conCandado_(function () { HON_ordenarPdf_(); });
 }
