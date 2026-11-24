@@ -109,11 +109,16 @@ function LEC_leer_(base64, mimeType, esPDF, totalPaginasLote) {
 // acepta las instrucciones completas (muy largas): usa las resumidas que
 // manda Cobranzas.
 function LEC_openai_(p, c, base64, mimeType, dePdf) {
+  // ⏱ Si la ejecución ya lleva más de 4 min, sin razonar (responde en segundos): así no se pasa de los 6 min de Google.
+  if (c.razonar && typeof INICIO_EJECUCION_ !== 'undefined' && Date.now() - INICIO_EJECUCION_ > 240000) {
+    c = Object.assign({}, c, { razonar: false });
+    Logger.log('Queda poco tiempo: ' + p + ' lee sin razonar.');
+  }
   const url = p === 'nvidia' ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
   const sistema = (p === 'groq' && c.prompt) ? c.prompt : (dePdf ? PROMPT_PDF : PROMPT_IMAGEN);
   const carga = {
     // 🧠 c.razonar (se elige en «lectores»): piensa antes de responder; necesita más espacio para su razonamiento.
-    model: c.modelo, temperature: 0.1, max_tokens: p === 'groq' ? (c.razonar ? 4000 : 1500) : (c.razonar ? 16000 : 4000),
+    model: c.modelo, temperature: 0.1, max_tokens: p === 'groq' ? (c.razonar ? 4000 : 1500) : (c.razonar ? 8000 : 4000),
     messages: [
       { role: 'system', content: (c.razonar ? '' : '/no_think\n') + sistema },   // sin «razonar» responde en segundos
       { role: 'user', content: [

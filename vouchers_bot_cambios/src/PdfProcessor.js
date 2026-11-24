@@ -74,7 +74,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
       const loteBlob   = Utilities.newBlob([...new Int8Array(loteBytes)], MimeType.PDF, 'lote_' + (loteInicio + 1) + '.pdf');
       const loteBase64 = Utilities.base64Encode(loteBlob.getBytes());
 
-      let vouchersLote;
+      let vouchersLote, paginasLeidas = numPaginasLote, cortado = false;
       try {
         vouchersLote = numPaginasLote > 1
           ? llamarGemini(loteBase64, 'application/pdf', true, numPaginasLote)
@@ -87,6 +87,13 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
         Logger.log('Lote pag. ' + (loteInicio + 1) + '-' + loteFin + ': Gemini fallo (' + eGemini.message + '). Se lee pagina por pagina con los lectores de respaldo.');
         vouchersLote = [];
         for (let k = 0; k < numPaginasLote; k++) {
+          // ⏱ Cada página con respaldo puede tardar ~40 s: si no queda tiempo, se guarda lo leído y se sigue en la próxima
+          // ejecución desde la página siguiente (antes se pasaba de los 6 min de Google y el PDF se quedaba atascado).
+          if (Date.now() - inicioEjecucion > LIMITE - 45000) {
+            paginasLeidas = k; cortado = true;
+            Logger.log('Sin tiempo: se leyeron ' + k + ' de ' + numPaginasLote + ' páginas del lote; sigue en la próxima ejecución.');
+            break;
+          }
           const unoDoc = await PDFLib.PDFDocument.create();
           const [pagUno] = await unoDoc.copyPages(pdfDoc, [indicesLote[k]]);
           unoDoc.addPage(pagUno);
@@ -106,7 +113,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
         porPagina[p].push(v);
       });
 
-      for (let rel = 1; rel <= numPaginasLote; rel++) {
+      for (let rel = 1; rel <= paginasLeidas; rel++) {
         const indiceGlobal     = loteInicio + (rel - 1);
         const numeroPaginaReal = indiceGlobal + 1;
         const vouchersPage     = porPagina[rel] || [];
@@ -155,6 +162,8 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
           flushSeguro_();
         }
       }
+
+      if (cortado) { pdfIncompleto = true; break; }   // ⏱ lo que falta, en la próxima ejecución (1 min)
 
     } catch (eLote) {
       if (eLote.message === 'API_SATURADA') {
