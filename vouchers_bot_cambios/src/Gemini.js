@@ -62,16 +62,29 @@ function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
     for (let m = 0; m < modelos.length; m++) {
       const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
                   modelos[m] + ':generateContent?key=' + CFG.API_KEY;
-      const tPet = Date.now();
-      const resp = UrlFetchApp.fetch(url, {
-        method: 'POST',
-        contentType: 'application/json',
-        payload: JSON.stringify(payload),
-        muteHttpExceptions: true
-      });
-      const code = resp.getResponseCode();
-      const segPet = Math.round((Date.now() - tPet) / 100) / 10;
+      let tPet = Date.now();
+      const pedir = function () {
+        return UrlFetchApp.fetch(url, { method: 'POST', contentType: 'application/json', payload: JSON.stringify(payload), muteHttpExceptions: true });
+      };
+      let resp = pedir();
+      let code = resp.getResponseCode();
+      let segPet = Math.round((Date.now() - tPet) / 100) / 10;
       if (code !== 200) { TIEMPOS_.gemFallo += Date.now() - tPet; TIEMPOS_.gemFallos++; }
+      // 🔁 «Saturado» (5xx) que llegó RÁPIDO (< 10 s): muchas veces dura segundos. Se espera 8 s y se intenta UNA vez más
+      // el mismo modelo antes de pasar al siguiente (o a NVIDIA). No con «sin cupo» (429: no vuelve en segundos), ni si
+      // Google ya hizo esperar mucho, ni si a esta ejecución le queda poco tiempo.
+      if (code >= 500 && segPet < 10 && (Date.now() - INICIO_EJECUCION_) < 250000) {
+        Logger.log('Modelo ' + modelos[m] + ': HTTP ' + code + ' en ' + segPet + ' s. Se espera 8 s y se intenta una vez más.');
+        const tEsp = Date.now();
+        Utilities.sleep(8000);
+        tPet = Date.now();
+        resp = pedir();
+        code = resp.getResponseCode();
+        segPet = Math.round((Date.now() - tPet) / 100) / 10;
+        TIEMPOS_.gemFallo += tPet - tEsp;   // los 8 s de espera
+        if (code !== 200) { TIEMPOS_.gemFallo += Date.now() - tPet; TIEMPOS_.gemFallos++; }
+        else Logger.log('✅ ' + modelos[m] + ' respondió en el segundo intento.');
+      }
 
       if (code === 200) {
         if (m > 0) Logger.log('Leido con ' + modelos[m] + ' (el principal estaba ocupado).');
