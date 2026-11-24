@@ -40,6 +40,7 @@ function huellaExterna_(ss, cfg, liqs) {
   var reas = ss.getSheetByName(HOJA_REASIGNAR_);
   if (reas && reas.getLastRow() > 3) partes.push(hashTexto_(JSON.stringify(reas.getRange(4, 1, reas.getLastRow() - 3, 6).getDisplayValues())));
   try { partes.push('ini:' + INI_huella_(ss)); } catch (e) {}
+  try { partes.push('exc:' + EXC_huella_(ss)); } catch (e) {}
   var conf = ss.getSheetByName(HOJA.CONFIG);
   if (conf) partes.push(hashTexto_(JSON.stringify(conf.getDataRange().getDisplayValues())));
   return partes.join('#');
@@ -108,6 +109,11 @@ function actualizarTodoInterno_(forzar) {
       docs = fi.docs; pagosTodos = fi.pagos;
       if (ini.n) bitacora_(ss, 'Saldos iniciales', t0, ini.n + ' factura(s)' + (fi.quitados ? ' · ' + fi.quitados + ' movimiento(s) de antes del corte ya incluidos en el saldo' : ''));
     } catch (e) { bitacora_(ss, 'Saldos iniciales ERROR', t0, e.message); }
+    // 🚫 facturas excluidas a mano (Excluidas.js): anuladas, canceladas antes del sistema, duplicadas…
+    try {
+      var ex = EXC_filtrar_(ss, docs), exP = EXC_filtrarPagos_(ss, pagosTodos); docs = ex.docs; pagosTodos = exP.pagos;
+      if (ex.n || exP.n) bitacora_(ss, 'Excluidas', t0, ex.n + ' documento(s) y ' + exP.n + ' voucher(s)/movimiento(s) fuera de los reportes');
+    } catch (e) { bitacora_(ss, 'Excluidas ERROR', t0, e.message); }
 
     var res = ejecutarCruce_({
       docs: docs, pagos: pagosTodos, decisiones: decisiones,
