@@ -54,7 +54,7 @@ function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
   // se pasa AL MOMENTO al siguiente de la lista, en vez de esperar 20-90 s.
   // Solo si todos estan ocupados se espera un poco y se vuelve a probar.
   // opc.modelos: los Gemini elegidos EN ORDEN en /lectores (1.º, 2.º, 3.º…). Sin otro lector de respaldo, después siguen los de siempre.
-  let modelos = (opc.modelos && opc.modelos.length > 1) ? modelosGemini_(opc.modelos, !!opc.sinEsperas) : modelosGemini_(opc.modelo);
+  let modelos = (opc.modelos && opc.modelos.length > 1) ? modelosGemini_(opc.modelos, !!opc.sinEsperas, !!opc.sinEsperas) : modelosGemini_(opc.modelo, false, !!opc.sinEsperas);
   if (opc.maxModelos) modelos = modelos.slice(0, opc.maxModelos);
   const ESPERAS = opc.sinEsperas ? [] : [15000, 30000];
 
@@ -80,6 +80,7 @@ function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
       if (code === 429 || code >= 500 || code === 404) {
         Logger.log('Modelo ' + modelos[m] + ': HTTP ' + code + ' (Google tardó ' + segPet + ' s en responder). Se prueba el siguiente.');
         if (code === 404) marcarModeloNoDisponible_(modelos[m]);
+        else if (typeof LEC_marcarCaido_ === 'function') LEC_marcarCaido_('gemini', modelos[m]);   // ⚡ se salta 2 min
         continue;
       }
       throw new Error('GEMINI_HTTP_' + code + ': ' + resp.getContentText().substring(0, 200));
@@ -96,7 +97,7 @@ function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
 // del script MODELOS_GEMINI (ej. "gemini-3.8-flash,gemini-3.6-flash").
 // primero: el modelo elegido por Telegram («lectores modelo gemini ...»), si hay.
 // primero también puede ser una LISTA (varios elegidos en orden); soloEsos: no agregar los de siempre (hay otro lector de respaldo).
-function modelosGemini_(primero, soloEsos) {
+function modelosGemini_(primero, soloEsos, hayRespaldo) {
   const prop = PropertiesService.getScriptProperties().getProperty('MODELOS_GEMINI') || '';
   const elegidos = Array.isArray(primero) ? primero.map(String) : (primero ? [String(primero)] : []);
   const lista = elegidos.concat(soloEsos && elegidos.length ? [] : (prop ? prop.split(',') : [CFG.MODELO_GEMINI, 'gemini-3.8-flash', 'gemini-3.5-flash-lite']))
@@ -108,6 +109,13 @@ function modelosGemini_(primero, soloEsos) {
     vistos[x] = true;
     return !cache.get('gemini_404_' + x);
   });
+  // ⚡ Los que respondieron saturado/sin cupo hace < 2 min (Lectores.js) se saltan; si hay otro lector de respaldo y
+  // TODOS están así, no se pierde tiempo: se pasa directo al respaldo. Sin respaldo, se prueban igual.
+  if (typeof LEC_caido_ === 'function') {
+    const vivos = usar.filter(function (x) { return !LEC_caido_('gemini', x); });
+    if (vivos.length) { if (vivos.length < usar.length) Logger.log('Se saltan (saturados hace poco): ' + usar.filter(function (x) { return vivos.indexOf(x) < 0; }).join(', ')); return vivos; }
+    if (hayRespaldo) { Logger.log('Todos los Gemini elegidos estuvieron saturados hace poco: directo al respaldo.'); return []; }
+  }
   return usar.length ? usar : [CFG.MODELO_GEMINI];
 }
 

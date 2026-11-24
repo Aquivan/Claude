@@ -50,6 +50,11 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
     Logger.log('Iniciando PDF de ' + totalPags + ' paginas: ' + nombre);
   }
 
+  // ⚡ PDF largo (más de un lote): primero se pregunta en paralelo qué Gemini está respondiendo (Lectores.js).
+  if (totalPags - startIdx > Math.max(1, CFG.PAGINAS_POR_LOTE || 1) && typeof LEC_sondeoGemini_ === 'function') {
+    try { LEC_sondeoGemini_(); } catch (eS) { Logger.log('Sondeo: ' + eS.message); }
+  }
+
   let pdfIncompleto = false;
   let alguno = false;
   const resumenes = [];
@@ -91,7 +96,29 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
         if (numPaginasLote <= 1 || typeof LEC_hayRespaldo_ !== 'function' || !LEC_hayRespaldo_()) throw eGemini;
         Logger.log('Lote pag. ' + (loteInicio + 1) + '-' + loteFin + ': Gemini fallo (' + eGemini.message + '). Se lee pagina por pagina con los lectores de respaldo.');
         vouchersLote = [];
+        // ⚡ Las páginas del lote van A LA VEZ a NVIDIA (si queda tiempo para esperar la más lenta, ~100 s);
+        // las que fallen se leen después una por una como siempre.
+        let par = null;
+        if (typeof LEC_leerParalelo_ === 'function' && Date.now() - inicioEjecucion < LIMITE - 100000) {
+          const tSepP = Date.now(), pdfsPag = [];
+          for (let k = 0; k < numPaginasLote; k++) {
+            const d1 = await PDFLib.PDFDocument.create();
+            const [pg] = await d1.copyPages(pdfDoc, [indicesLote[k]]);
+            d1.addPage(pg);
+            pdfsPag.push(Utilities.base64Encode(Utilities.newBlob([...new Int8Array(await d1.save())], MimeType.PDF, 'pag.pdf').getBytes()));
+          }
+          if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.pdf += Date.now() - tSepP;
+          const tPar = Date.now();
+          try { par = LEC_leerParalelo_(pdfsPag); } catch (ePar) { Logger.log('Lectura en paralelo falló: ' + ePar.message + ' → una por una.'); par = null; }
+          if (typeof TIEMPOS_ !== 'undefined') { TIEMPOS_.ia += Date.now() - tPar; if (par) TIEMPOS_.lecturas += numPaginasLote; }
+        }
         for (let k = 0; k < numPaginasLote; k++) {
+          if (par && par[k] && par[k].arr) {
+            const nota = '🤖 Leído por ' + par[k].quien + ' (en paralelo)';
+            par[k].arr.forEach(function (v) { if (v && typeof v === 'object') { v.pagina = k + 1; v._lector = nota; vouchersLote.push(v); } });
+            if (par[k].mini) miniPagina[indicesLote[k]] = par[k].mini;
+            continue;
+          }
           // ⏱ Cada página con respaldo puede tardar ~40 s: si no queda tiempo, se guarda lo leído y se sigue en la próxima
           // ejecución desde la página siguiente (antes se pasaba de los 6 min de Google y el PDF se quedaba atascado).
           if (Date.now() - inicioEjecucion > LIMITE - 45000) {
