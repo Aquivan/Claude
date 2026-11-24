@@ -52,7 +52,9 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
 
   // ⚡ PDF largo (más de un lote): primero se pregunta en paralelo qué Gemini está respondiendo (Lectores.js).
   if (totalPags - startIdx > Math.max(1, CFG.PAGINAS_POR_LOTE || 1) && typeof LEC_sondeoGemini_ === 'function') {
+    const tSondeo = Date.now();
     try { LEC_sondeoGemini_(); } catch (eS) { Logger.log('Sondeo: ' + eS.message); }
+    if (typeof TIEMPOS_ !== 'undefined') { TIEMPOS_.ia += Date.now() - tSondeo; TIEMPOS_.sondeo = (TIEMPOS_.sondeo || 0) + Date.now() - tSondeo; }
   }
 
   let pdfIncompleto = false;
@@ -133,7 +135,17 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
           const unoB64 = Utilities.base64Encode(Utilities.newBlob([...new Int8Array(await unoDoc.save())], MimeType.PDF, 'pag.pdf').getBytes());
           if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.pdf += Date.now() - tUno;
           if (typeof LEC_ULTIMA_MINI_ !== 'undefined') LEC_ULTIMA_MINI_ = null;
-          (llamarGemini(unoB64, 'application/pdf', true) || []).forEach(function (v) { v.pagina = k + 1; vouchersLote.push(v); });
+          let leidosK;
+          try { leidosK = llamarGemini(unoB64, 'application/pdf', true) || []; }
+          catch (eK) {
+            // 💾 Si ya se leyeron páginas de este lote, se GUARDAN y se sigue desde esta en la próxima vuelta
+            // (antes, si una página fallaba, se perdían también las ya leídas y se volvían a leer).
+            if (k === 0) throw eK;
+            paginasLeidas = k; cortado = true;
+            Logger.log('Pág. ' + (indicesLote[k] + 1) + ': ninguna IA pudo (' + eK.message + '). Se guardan las ' + k + ' ya leídas; sigue en la próxima vuelta.');
+            break;
+          }
+          leidosK.forEach(function (v) { v.pagina = k + 1; vouchersLote.push(v); });
           if (typeof LEC_ULTIMA_MINI_ !== 'undefined' && LEC_ULTIMA_MINI_) miniPagina[indicesLote[k]] = LEC_ULTIMA_MINI_;
         }
       }

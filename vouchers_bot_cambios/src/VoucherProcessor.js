@@ -121,7 +121,7 @@ async function procesarVouchers() {
       REG_anotar_('Vouchers', tiempoExcedido ? 'fin (pausado por tiempo)' : 'fin', seg,
         'procesados ' + procesados + ' · errores ' + conError + ' · apartados ' + apartados +
         ' · IA ' + Math.round((t.ia || 0) / 1000) + ' s en ' + (t.lecturas || 0) + ' lectura(s)' + (t.lector ? ' · último lector ' + t.lector : '') +
-        ' · guardar ' + Math.round((t.escribir || 0) / 1000) + ' s\n' + REG_desglose_(t, seg) + '\n' + String(Logger.getLog() || '').slice(-2500));
+        ' · guardar ' + Math.round((t.escribir || 0) / 1000) + ' s\n' + REG_desglose_(t, seg) + '\n' + REG_logCorto_(String(Logger.getLog() || '')));
     }
 
     if (tiempoExcedido) {

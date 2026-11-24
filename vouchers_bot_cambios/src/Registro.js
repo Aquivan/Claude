@@ -36,7 +36,13 @@ function REG_desglose_(t, total) {
   return '⏱ DESGLOSE ' + total + ' s: IA ' + ia + ' s' + pct(ia) + (fallo ? ' [de eso, esperando a Gemini saturado: ' + fallo + ' s en ' + (t.gemFallos || 0) + ' intento(s)]' : '') +
     ' · imagen en celda ' + img + ' s' + pct(img) + ' en ' + (t.imagenes || 0) + (t.imagenReuso ? ' (' + t.imagenReuso + ' reusada(s) de NVIDIA/Groq)' : '') +
     ' · abrir/separar PDF ' + pdf + ' s' + pct(pdf) + ' · leer hoja (duplicados) ' + idx + ' s' + pct(idx) +
-    ' · escribir filas ' + esc + ' s' + pct(esc) + ' · pausas ' + pau + ' s' + pct(pau) + ' · otros (Drive, mover archivos…) ' + otros + ' s' + pct(otros);
+    (t.sondeo ? ' [sondeo de Gemini ' + s(t.sondeo) + ' s]' : '') + ' · escribir filas ' + esc + ' s' + pct(esc) + ' · pausas ' + pau + ' s' + pct(pau) + ' · otros (Drive, mover archivos…) ' + otros + ' s' + pct(otros);
+}
+
+/** El registro de la ejecución, corto: el COMIENZO y el FINAL (el medio es lo repetido). */
+function REG_logCorto_(log) {
+  if (log.length <= 2400) return log;
+  return log.slice(0, 900) + '\n[…]\n' + log.slice(-1500);
 }
 
 function REG_anotar_(sistema, evento, segundos, detalle) {
