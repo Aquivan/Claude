@@ -1254,9 +1254,9 @@ function TGQ_rucElegirFilas_(ss, prov, filas, ruc, det, reemplazarAlias) {
     return { id: String(++n), hoja: f.hoja, fila: f.fila, col: f.col, encabezado: 'ID Beneficiario', actual: '', nuevo: String(ruc), motivo: prov + ' · elegido por la persona (' + (det || '') + ')' };
   });
   ANX_guardarPropuestos_(ss, cambios);
-  var r = ANX_aplicarDet_(ss, cambios.map(function (x) { return x.id; }), false);
+  var r = ANX_aplicarDet_(ss, cambios.map(function (x) { return x.id; }), false, { sinRecalcular: true });
   var alias = TGQ_alias_(ss, prov, ruc, !!reemplazarAlias);
-  return { mensaje: r.mensaje + (alias ? ' · ' + TGQ_aliasTxt_(alias, prov, ruc) : '') };
+  return { mensaje: r.mensaje + (alias ? ' · ' + TGQ_aliasTxt_(alias, prov, ruc) : '') + TGQ_recalcAparte_(r) };
 }
 
 /**
@@ -1274,7 +1274,7 @@ function TGQ_rucElegirVarios_(ss, lista) {
   });
   if (!cambios.length) return { mensaje: 'No se escribió nada' + (malos.length ? ' · RUC no válido: ' + malos.join(', ') : '') };
   ANX_guardarPropuestos_(ss, cambios);
-  var r = ANX_aplicarDet_(ss, cambios.map(function (c) { return c.id; }), false);
+  var r = ANX_aplicarDet_(ss, cambios.map(function (c) { return c.id; }), false, { sinRecalcular: true });
   var cambiados = [];
   (lista || []).forEach(function (x) {
     try {
@@ -1283,7 +1283,15 @@ function TGQ_rucElegirVarios_(ss, lista) {
       if (a === 'nuevo') alias.push(x.prov); else if (a) cambiados.push(TGQ_aliasTxt_(a, x.prov, x.ruc));
     } catch (e) { /* sin alias */ }
   });
-  return { mensaje: r.mensaje + (alias.length ? ' · 💾 ' + alias.length + ' nombre(s) quedaron como alias' : '') + (cambiados.length ? ' · ' + cambiados.join(' ') : '') + (malos.length ? ' · RUC no válido: ' + malos.join(', ') : '') };
+  return { mensaje: r.mensaje + (alias.length ? ' · 💾 ' + alias.length + ' nombre(s) quedaron como alias' : '') + (cambiados.length ? ' · ' + cambiados.join(' ') : '') + (malos.length ? ' · RUC no válido: ' + malos.join(', ') : '') + TGQ_recalcAparte_(r) };
+}
+
+/** El RUC queda escrito al instante; Cobranzas se recalcula aparte (~1 min después, una sola vez aunque se elijan
+ *  varios seguidos: TGP_recalcularLuego_ no crea otro disparador si ya hay uno esperando). */
+function TGQ_recalcAparte_(r) {
+  if (!r || !r.lote) return '';
+  try { TGP_recalcularLuego_(); return ' · 🔄 Cobranzas se actualiza sola en ~1–2 min (la Mesa y los saldos lo muestran después)'; }
+  catch (e) { try { return ' · ' + actualizarTodo_(true); } catch (e2) { return ''; } }
 }
 
 /** «Originales 2656-2666, Fotos 382» → ["Originales!2656", …, "Fotos!382"] */
