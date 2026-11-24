@@ -191,7 +191,7 @@ function VER_borrarTrigger_() {
 }
 
 /** Continuación (cada minuto) hasta verificar todos los vouchers de la cola. */
-function VER_continuar() {
+function VER_continuar__reg() {
   VER_borrarTrigger_();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var cola = VER_leerCola_(ss);

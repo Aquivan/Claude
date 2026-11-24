@@ -201,11 +201,22 @@ function LEC_pdfAImagen_(base64Pdf) { return LEC_vistaPrevia_(base64Pdf, MimeTyp
 // Imagen o PDF -> JPG de 'lado' px como máximo (vista previa de Drive). Sirve también para ACHICAR fotos
 // grandes: Groq gratis rechaza las fotos de alta resolución («Request too large»: cuenta más tokens).
 function LEC_vistaPrevia_(base64, mime, lado) {
+  // 🔁 A veces Drive tarda en preparar la vista previa y responde 404 (pasó con las páginas 25-26 del 24/11: las terminó
+  // leyendo Groq). Se intenta 2 veces con un archivo nuevo antes de pasar al siguiente lector.
+  let ultimo = null;
+  for (let intento = 1; intento <= 2; intento++) {
+    try { return LEC_vistaPrevia1_(base64, mime, lado, intento); }
+    catch (e) { ultimo = e; Logger.log('Vista previa de Drive (intento ' + intento + '): ' + e.message); }
+  }
+  throw ultimo;
+}
+
+function LEC_vistaPrevia1_(base64, mime, lado, intento) {
   const token = ScriptApp.getOAuthToken();
   let tmp = null;
   try {
     tmp = DriveApp.createFile(Utilities.newBlob(Utilities.base64Decode(base64), mime, 'lector_respaldo_tmp'));
-    const id = tmp.getId(), esperas = [700, 900, 1200, 1600, 2200, 3000];
+    const id = tmp.getId(), esperas = intento > 1 ? [1500, 2000, 3000, 4000, 5000] : [700, 900, 1200, 1600, 2200, 3000];
     let url = '';
     for (let i = 0; i < esperas.length && !url; i++) {
       Utilities.sleep(esperas[i]);
@@ -359,7 +370,7 @@ function LEC_imagenesParalelo_(pdfs, lado) {
   });
   const urls = tmp.map(function () { return ''; });
   try {
-    const esperas = [800, 1000, 1500, 2000, 3000];
+    const esperas = [800, 1000, 1500, 2000, 3000, 4000, 5000];   // hasta ~17 s: Drive a veces tarda
     for (let r = 0; r < esperas.length; r++) {
       const falta = [];
       tmp.forEach(function (f, i) { if (f && !urls[i]) falta.push(i); });

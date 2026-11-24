@@ -928,7 +928,7 @@ function AUD_iniciar_(ss, valores, vueltas, contAnt) {
 }
 
 /** Continuación automática (cada minuto) mientras quede cola. */
-function AUD_continuar() {
+function AUD_continuar__reg() {
   AUD_borrarContinuacion_();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var est = AUD_leerEstado_(ss);

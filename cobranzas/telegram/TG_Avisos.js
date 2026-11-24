@@ -22,13 +22,14 @@ function TG_vigia() {
   if (!cfg.avisosActivos || !TG_token_()) return;
   var us = TG_usuarios_(ss).filter(function (u) { return u.activo; });
   if (!us.length) return;
+  try { TGF_prenderAdmins_(ss, us); } catch (e) { console.warn('Avisos de fallas: ' + e.message); }   // 🩺 TG_Fallas.js
   var para = function (codigo) { return us.filter(function (u) { return u.avisos.indexOf(codigo) >= 0; }); };
   var hora = Number(Utilities.formatDate(new Date(), 'America/Lima', 'H'));
   var noche = hora >= 23 || hora < 6;
   var c = TG_ctxDatos_(ss);
   var V = TG_vistos_(ss);
   var tareas = [
-    ['err', TG_avisoErrores_],
+    ['err', TG_avisoErrores_], ['fallas', TGF_aviso_],
     ['notif', TG_avisoNotificaciones_], ['notif', TG_avisoMensajes_], ['det', TG_avisoDetracciones_],
     ['ret', TG_avisoRetenciones_], ['hon', TG_avisoHonorarios_], ['vou', TG_avisoVouchers_], ['notif', TG_avisoSsco_],
   ];

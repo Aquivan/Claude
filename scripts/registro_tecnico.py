@@ -78,6 +78,17 @@ for carpeta, sistema, modo, funcs in PROYECTOS:
         if 'node_modules' in raiz: continue
         for f in fs:
             if f.endswith('.js') and f != 'REG_Registro.js': archivos.append(os.path.join(raiz, f))
+    # 🧹 procesos «de una vez» (.timeBased().after()): se envuelven también (solo anotan si fallan o tardan > 10 min)
+    # para que borren el disparador que los despertó. Se excluyen los async y los que además se repiten.
+    todo = '\n'.join(open(a, encoding='utf-8').read() for a in archivos)
+    una_vez = []
+    for h in sorted(set(re.findall(r"newTrigger\('(\w+)'\)\s*\.timeBased\(\)\s*\.after", todo))):
+        if re.search(r"newTrigger\('" + h + r"'\)\s*\.timeBased\(\)\s*\.(every|onWeekDay|atHour|at\(|onMonthDay|atDate)", todo):
+            continue   # también se repite: no se borra
+        if re.search(r'^\s*async\s+function ' + re.escape(h) + r'(__reg)?\s*\(', todo, re.M):
+            continue   # async: el envoltorio no espera su fin
+        una_vez.append(h)
+        if h not in funcs: funcs = dict(funcs, **{h: {'soloLento': 600}})
     envolturas = []
     for fn, opc in funcs.items():
         rx = re.compile(r'^(\s*)function ' + re.escape(fn) + r'\s*\(', re.M)
@@ -94,7 +105,7 @@ for carpeta, sistema, modo, funcs in PROYECTOS:
             errores.append('%s: %s aparece %d veces' % (carpeta, fn, len(donde)))
             continue
         envolturas.append('function %s() { return REG_envolver_(%r, %s__reg, arguments, %s); }' % (fn, fn, fn, js_opc(opc)))
-    cuerpo = PLANTILLA.replace('__SISTEMA__', sistema).replace('__MODO__', modo)
+    cuerpo = PLANTILLA.replace('__SISTEMA__', sistema).replace('__MODO__', modo).replace('__UNA_VEZ__', repr(una_vez).replace("'", '"'))
     cuerpo += '\n/* ------------------------------------------------ procesos automáticos envueltos */\n\n' + '\n'.join(envolturas) + '\n'
     open(os.path.join(d, 'REG_Registro.js'), 'w', encoding='utf-8').write(cuerpo)
     print('%-28s %-14s %-8s %d procesos' % (carpeta, sistema, modo, len(envolturas)))

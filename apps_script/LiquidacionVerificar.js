@@ -229,7 +229,7 @@ function LVER_validar(rucs, anio) {
 }
 
 /** Trabaja hasta ~4,5 min y, si queda algo, se programa de nuevo en 1 minuto. */
-function LVER_continuar() {
+function LVER_continuar__reg() {
   var props = PropertiesService.getScriptProperties(), t0 = Date.now();
   var cola = JSON.parse(props.getProperty('LVER_COLA') || '[]'), hechos = [];
   // el disparador corre como quien lo pidió: su credencial está en SUS propiedades (nunca en las del script)
