@@ -68,7 +68,8 @@ var MESA_WEB_FN_ = {
   MESA_historial: MESA_historial, MESA_deshacer: MESA_deshacer, MESA_recalcularAhora: MESA_recalcularAhora, MESA_estado: MESA_estado,
   MESA_archivo: MESA_archivo, MESA_ia: MESA_ia, MESA_rucRapido: MESA_rucRapido, MESA_rucAplicar: MESA_rucAplicar, MESA_rucExternos: MESA_rucExternos,
   MESA_rucEstado: MESA_rucEstado, MESA_rucOtro: MESA_rucOtro, MESA_rucElegir: MESA_rucElegir, MESA_version: MESA_version,
-  MESA_rucVentana: MESA_rucVentana, MESA_ruc: MESA_ruc, MESA_sireRapido: MESA_sireRapido
+  MESA_rucVentana: MESA_rucVentana, MESA_ruc: MESA_ruc, MESA_sireRapido: MESA_sireRapido, MESA_sireEstado: MESA_sireEstado,
+  MESA_errorVista: MESA_errorVista
 };
 function MESA_doPost_(e) {
   var salida = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
@@ -78,6 +79,13 @@ function MESA_doPost_(e) {
   if (!fn) return salida({ ok: false, error: 'función no permitida' });
   try { return salida({ ok: true, r: fn.apply(null, q.args || []) }); }
   catch (x) { return salida({ ok: false, error: String(x && x.message || x) }); }
+}
+
+/** Un error de la pantalla de la Mesa (window.onerror): queda en el 🩺 Registro técnico para poder revisarlo. */
+function MESA_errorVista(tk, texto) {
+  var quien = MESA_ok_(tk);
+  REG_anotar_('Cobranzas', 'Mesa · error de pantalla', '', String(texto || '').slice(0, 1500) + (quien ? ' · ' + String(quien).slice(0, 40) : ''));
+  return true;
 }
 
 function MESA_llaveNueva_(quien) {
