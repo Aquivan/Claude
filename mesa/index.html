@@ -605,7 +605,9 @@ function iniTab(t) {
       var inp = x[0] === 'iTipo' ? '<select id="iTipo">' + INI_TIPOS.map(function (t) { return '<option>' + t + '</option>'; }).join('') + '</select>'
         : x[0] === 'iMon' ? '<select id="iMon"><option>PEN</option><option>USD</option></select>' : '<input id="' + x[0] + '" type="' + (x[2] || 'text') + '" style="width:100%;box-sizing:border-box">';
       return '<label style="font-size:12px;color:#475569">' + x[1] + '<br>' + inp + '</label>';
-    }).join('') + '</div><label style="font-size:12px"><input type="checkbox" id="iFuera"> No está en el SIRE (no es saldo del año anterior)</label> <button onclick="iniUna()">Ver cómo queda</button>';
+    }).join('') + '</div><label style="font-size:12px"><input type="checkbox" id="iFuera"> No está en el SIRE (no es saldo del año anterior)</label> <button onclick="iniUna()">Ver cómo queda</button>' +
+    ' <button class="p" onclick="iniSunat()" title="Escriba el RUC (o la razón social), el tipo y la serie-número: el robot entra a SUNAT SOL (Consulta de comprobantes) con la clave de la empresa y trae fecha, moneda, total y detalle">🔎 Buscar en SUNAT y llenar</button>' +
+    '<div id="iSunat" style="margin-top:6px;font-size:12.5px"></div>';
   $('iniCuerpo').innerHTML = h;
 }
 function iniBase() { return { emp: $('iniEmp').value, lado: $('iniLado').value, corte: $('iniCorte').value }; }
@@ -660,8 +662,47 @@ function iniUna() {
   if (!(Number($('iTot').value.replace(/,/g, '')) > 0)) return alert('Escriba el total.');
   var fecha = function (v) { return v ? v.split('-').reverse().join('/') : ''; };
   INI.filas = [{ on: true, f: [b.emp, b.lado, $('iRuc').value.trim(), $('iNom').value.trim(), $('iTipo').value, d[0], d[1], fecha($('iFe').value), fecha($('iVe').value), $('iMon').value,
-    Number($('iTot').value.replace(/,/g, '')), $('iSal').value.trim() === '' ? '' : Number($('iSal').value.replace(/,/g, '')), fecha(b.corte), $('iFuera').checked ? 'Fuera de SIRE' : 'Manual', $('iObs').value.trim(), ''] }];
+    Number($('iTot').value.replace(/,/g, '')), $('iSal').value.trim() === '' ? '' : Number($('iSal').value.replace(/,/g, '')), fecha(b.corte), $('iFuera').checked ? 'Fuera de SIRE' : INI.sunat === $('iDoc').value ? 'SUNAT (consulta)' : 'Manual', $('iObs').value.trim(), ''] }];
   iniPintar();
+}
+/* 🔎 Buscar en SUNAT (SunatComprobante.js): con RUC (o razón social) + tipo + serie-número trae lo demás y llena el formulario */
+var SCPT = 0;
+function iniSunat() {
+  var b = iniBase(), ruc = $('iRuc').value.trim(), nom = $('iNom').value.trim(), m = String($('iDoc').value).toUpperCase().match(/([A-Z0-9]{4})\s*[-\/ ]\s*0*(\d+)/);
+  if (!b.emp) return alert('Elija la empresa.');
+  if (!m) return alert('Escriba la serie y el número, por ejemplo F001-10892.');
+  var tipo = $('iTipo').value.slice(0, 2);
+  if (['01', '07', '08'].indexOf(tipo) < 0) return alert('En SUNAT solo se pueden consultar facturas, notas de crédito y notas de débito.');
+  if (!/^\d{11}$/.test(ruc)) {
+    if (nom.length < 3) return alert('Escriba el RUC (11 dígitos) o la razón social.');
+    $('iSunat').innerHTML = '⏳ Buscando el RUC de «' + esc(nom) + '»…';
+    return R.withFailureHandler(function (e) { $('iSunat').innerHTML = '❌ ' + esc(e.message || e); }).withSuccessHandler(function (ops) {
+      if (!ops.length) return $('iSunat').innerHTML = '❔ No conozco el RUC de «' + esc(nom) + '»: escríbalo.';
+      if (ops.length === 1) { $('iRuc').value = ops[0].ruc; $('iNom').value = ops[0].nombre || nom; return iniSunat(); }
+      $('iSunat').innerHTML = '¿Cuál es? ' + ops.map(function (o) { return '<button onclick="$(\'iRuc\').value=\'' + o.ruc + '\';$(\'iNom\').value=this.dataset.n;iniSunat()" data-n="' + esc(o.nombre) + '">' + esc(o.ruc + ' · ' + o.nombre) + '</button>'; }).join(' ');
+    }).MESA_scpRuc(TK, nom);
+  }
+  $('iSunat').innerHTML = '⏳ Pidiendo a SUNAT… (1–3 min: el robot entra con la clave SOL de ' + esc(nomEmp(b.emp)) + ')';
+  R.withFailureHandler(function (e) { $('iSunat').innerHTML = '❌ ' + esc(e.message || e); }).withSuccessHandler(function (r) {
+    var t0 = Date.now();
+    var ver = function () {
+      clearTimeout(SCPT);
+      SCPT = setTimeout(function () {
+        R.withFailureHandler(function () { ver(); }).withSuccessHandler(function (e) {
+          if (!e.listo) { $('iSunat').innerHTML = esc(e.etapa || '⏳ …') + ' · ' + mmss((Date.now() - t0) / 1000); return Date.now() - t0 < 8 * 60000 ? ver() : ($('iSunat').innerHTML = '⌛ El robot no respondió en 8 min. Vuelva a intentar más tarde.'); }
+          var x = (e.resultados || [])[0];
+          if (!x) return $('iSunat').innerHTML = '❌ ' + esc(e.error || 'Sin resultado.');
+          if (!x.ok) return $('iSunat').innerHTML = '❔ ' + esc(x.error || 'SUNAT no lo mostró.');
+          var f = x.fila, iso = function (d) { return d ? d.split('/').reverse().join('-') : ''; };
+          $('iNom').value = f[3]; $('iFe').value = iso(f[7]); $('iVe').value = iso(f[8]); $('iMon').value = f[9]; $('iTot').value = f[10]; $('iObs').value = f[14] || '';
+          $('iSunat').innerHTML = '✅ <b>Encontrada en SUNAT</b>' + (x.estado ? ' (' + esc(x.estado) + ')' : '') + ': ' + esc(f[3]) + ' · ' + esc(f[7]) + ' · ' + esc(f[9]) + ' ' + fm(Number(f[10])) + (x.igv ? ' (IGV ' + fm(x.igv) + ')' : '') + (x.formaPago ? ' · ' + esc(x.formaPago) : '') +
+            '. Revise; si ya se pagó una parte, ponga el saldo. <details><summary>Ver lo que mostró SUNAT</summary><pre style="white-space:pre-wrap;max-height:200px;overflow:auto;font-size:11px">' + esc(x.texto || '') + '</pre></details>';
+          INI.sunat = $('iDoc').value; iniUna();
+        }).MESA_scpEstado(TK, r.lote);
+      }, 6000);
+    };
+    ver();
+  }).MESA_scpPedir(TK, [{ empresa: b.emp, lado: b.lado, ruc: ruc, nombre: nom, tipo: tipo, serie: m[1], numero: m[2], fecha: $('iFe').value ? $('iFe').value.split('-').reverse().join('/') : '' }]);
 }
 function iniPintar() {
   var n = INI.filas.filter(function (x) { return x.on; }).length;
