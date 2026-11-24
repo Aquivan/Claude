@@ -68,19 +68,34 @@ function LEC_leer_(base64, mimeType, esPDF, totalPaginasLote) {
       let arr, modelo;
       if (p === 'gemini') {
         // Con respaldo: solo 2 modelos de Gemini (si están saturados, los otros suelen estarlo también).
-        const g = llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, { sinEsperas: hayOtro, maxModelos: hayOtro ? 2 : 0, modelo: cfg.gemini && cfg.gemini.modelo });
+        // Si en /lectores se eligieron VARIOS Gemini en orden, se prueban todos esos (en ese orden); si no, 2 con respaldo.
+        const lista = (cfg.gemini && cfg.gemini.modelos) || [];
+        const g = llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote,
+          { sinEsperas: hayOtro, maxModelos: hayOtro ? Math.max(2, lista.length) : 0, modelo: cfg.gemini && cfg.gemini.modelo, modelos: lista });
         arr = g.vouchers; modelo = g.modelo;
       } else {
         if (esPDF && !imagen) imagen = LEC_pdfAImagen_(base64);
-        if (esPDF) arr = LEC_openai_(p, cfg[p], imagen, 'image/jpeg', true);
-        else if (p === 'groq' && base64.length > 450000) {   // foto grande (~330 KB o más): Groq gratis la rechaza; se achica a 1280 px
-          if (!LEC_ACHICADA_[base64.length]) {
-            LEC_ACHICADA_ = {};
-            LEC_ACHICADA_[base64.length] = LEC_vistaPrevia_(base64, mimeType, 1280);
+        // Varios modelos del mismo proveedor en el orden elegido en /lectores: si uno falla, el siguiente.
+        const mods = (cfg[p].modelos && cfg[p].modelos.length) ? cfg[p].modelos : [cfg[p].modelo];
+        let errM = null;
+        for (let j = 0; j < mods.length && !arr; j++) {
+          const c = Object.assign({}, cfg[p], { modelo: mods[j] });
+          try {
+            if (esPDF) arr = LEC_openai_(p, c, imagen, 'image/jpeg', true);
+            else if (p === 'groq' && base64.length > 450000) {   // foto grande (~330 KB o más): Groq gratis la rechaza; se achica a 1280 px
+              if (!LEC_ACHICADA_[base64.length]) {
+                LEC_ACHICADA_ = {};
+                LEC_ACHICADA_[base64.length] = LEC_vistaPrevia_(base64, mimeType, 1280);
+              }
+              arr = LEC_openai_(p, c, LEC_ACHICADA_[base64.length], 'image/jpeg', false);
+            } else arr = LEC_openai_(p, c, base64, mimeType, false);
+            modelo = mods[j];
+          } catch (eM) {
+            errM = eM;
+            if (j < mods.length - 1) Logger.log(LEC_NOMBRES_[p] + ' · ' + String(mods[j]).split('/').pop() + ' falló: ' + String(eM.message || eM).slice(0, 120) + ' → se prueba ' + String(mods[j + 1]).split('/').pop());
           }
-          arr = LEC_openai_(p, cfg[p], LEC_ACHICADA_[base64.length], 'image/jpeg', false);
-        } else arr = LEC_openai_(p, cfg[p], base64, mimeType, false);
-        modelo = cfg[p].modelo;
+        }
+        if (!arr) throw errM || new Error('sin respuesta');
       }
       const quien = LEC_NOMBRES_[p] + ' · ' + String(modelo || '').split('/').pop();
       if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.lector = quien;
