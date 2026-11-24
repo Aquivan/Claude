@@ -176,6 +176,8 @@ function LEC_hayRespaldo_() {
   return (cfg.orden || []).some(function (p) { return p !== 'gemini' && cfg[p] && cfg[p].clave && cfg[p].modelo; });
 }
 
+var LEC_ULTIMA_MINI_ = null;   // la última página convertida para NVIDIA/Groq, en tamaño celda (base64 JPG)
+
 // Una página de PDF -> imagen JPG (base64), para NVIDIA y Groq que no leen PDF.
 // Es lo mismo que hace la hoja para la miniatura de la celda (ImageInsert.js):
 // archivo temporal en Drive, su vista previa en buena resolución y se borra.
@@ -203,6 +205,14 @@ function LEC_vistaPrevia_(base64, mime, lado) {
     }
     if (!url) url = 'https://drive.google.com/thumbnail?id=' + id + '&sz=w' + lado;
     const img = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+    // ⚡ Para la celda: la misma página en 800 px (como la de siempre) sin volver a subirla a Drive ni esperar otra
+    // miniatura. PdfProcessor.js la usa si esa página tiene voucher (antes se repetía todo: ~3-8 s por voucher).
+    if (mime === MimeType.PDF && /=s\d+/.test(url)) {
+      try {
+        const mini = UrlFetchApp.fetch(url.replace(/=s\d+/, '=s800'), { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+        if (mini.getResponseCode() === 200 && mini.getBlob().getBytes().length > 2000) LEC_ULTIMA_MINI_ = Utilities.base64Encode(mini.getBlob().getBytes());
+      } catch (e) {}
+    }
     if (img.getResponseCode() !== 200 || img.getBlob().getBytes().length < 2000)
       throw new Error('no se pudo convertir en imagen (HTTP ' + img.getResponseCode() + ')');
     return Utilities.base64Encode(img.getBlob().getBytes());

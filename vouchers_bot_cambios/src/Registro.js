@@ -27,6 +27,18 @@ function REG_hoja_() {
   return sh;
 }
 
+/** ⏱ En qué se fue el tiempo de una ejecución, paso por paso (segundos). t = TIEMPOS_ (Gemini.js), total en s. */
+function REG_desglose_(t, total) {
+  const s = function (ms) { return Math.round((ms || 0) / 100) / 10; };
+  const ia = s(t.ia), fallo = s(t.gemFallo), img = s(t.imagen), pdf = s(t.pdf), idx = s(t.indices), esc = s(t.escribir), pau = s(t.pausas);
+  const otros = Math.max(0, Math.round((Number(total) - ia - img - pdf - idx - esc - pau) * 10) / 10);
+  const pct = function (x) { return total ? ' (' + Math.round(x / total * 100) + '%)' : ''; };
+  return '⏱ DESGLOSE ' + total + ' s: IA ' + ia + ' s' + pct(ia) + (fallo ? ' [de eso, esperando a Gemini saturado: ' + fallo + ' s en ' + (t.gemFallos || 0) + ' intento(s)]' : '') +
+    ' · imagen en celda ' + img + ' s' + pct(img) + ' en ' + (t.imagenes || 0) + (t.imagenReuso ? ' (' + t.imagenReuso + ' reusada(s) de NVIDIA/Groq)' : '') +
+    ' · abrir/separar PDF ' + pdf + ' s' + pct(pdf) + ' · leer hoja (duplicados) ' + idx + ' s' + pct(idx) +
+    ' · escribir filas ' + esc + ' s' + pct(esc) + ' · pausas ' + pau + ' s' + pct(pau) + ' · otros (Drive, mover archivos…) ' + otros + ' s' + pct(otros);
+}
+
 function REG_anotar_(sistema, evento, segundos, detalle) {
   try {
     const sh = REG_hoja_();
