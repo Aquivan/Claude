@@ -60,7 +60,7 @@ function pintar() {
       '<span class="flechas"><button title="Subir" onclick="mover(' + i + ',-1)"' + (i ? '' : ' disabled') + '>▲</button>' +
       '<button title="Bajar" onclick="mover(' + i + ',1)"' + (i < orden.length - 1 ? '' : ' disabled') + '>▼</button></span>' +
       '<span class="nom">' + esc(D.nombres[p]) + (falta ? '<br><span class="aviso">⚠️ falta su clave</span>' : '') + '</span>' +
-      '<span class="mod"><input id="m_' + p + '" value="' + esc(modelo[p]) + '" placeholder="automático" onchange="modelo[\'' + p + '\']=this.value.trim()">' +
+      '<span class="mod"><input id="m_' + p + '" value="' + esc(modelo[p]) + '" placeholder="automático · varios en orden: 1.º, 2.º, 3.º" onchange="modelo[\'' + p + '\']=this.value.trim()">' +
       '<button onclick="verModelos(\'' + p + '\')">🔧 Ver</button></span>' +
       '<span><label><input type="checkbox" ' + (off ? '' : 'checked') + ' onchange="prender(\'' + p + '\',this.checked)"> Prendido</label>' +
       (p === 'gemini' ? '' : '<br><label title="Piensa antes de responder: más preciso con números difíciles, pero tarda más (10 a 40 s)"><input type="checkbox" ' + (razonar[p] ? 'checked' : '') +
@@ -86,11 +86,16 @@ function verModelos(p) {
   google.script.run.withSuccessHandler(function (ids) {
     if (ids && ids.error) { l.textContent = '❌ ' + ids.error; return; }
     ids = (ids && ids.ids) || ids || [];
-    l.innerHTML = (ids.length ? 'Toque uno: ' : 'No encontré otros. ') + '<span onclick="elegir(\'' + p + '\',\'\')">🤖 automático</span>' +
+    l.innerHTML = (ids.length ? 'Toque en el orden que quiere (1.º, 2.º…; tocar de nuevo lo quita): ' : 'No encontré otros. ') + '<span onclick="elegir(\'' + p + '\',\'\')">🤖 automático</span>' +
       ids.map(function (id) { return '<span onclick="elegir(\'' + p + '\',\'' + esc(id) + '\')">' + esc(id) + '</span>'; }).join('');
   }).withFailureHandler(function (e) { l.textContent = '❌ ' + (e.message || e); }).LECT_modelosHoja(p);
 }
-function elegir(p, id) { modelo[p] = id; document.getElementById('m_' + p).value = id; document.getElementById('l_' + p).innerHTML = ''; }
+// Varios en orden: cada modelo que toca se agrega al final (1.º, 2.º, 3.º…); si ya estaba, se quita. «automático» vacía la lista.
+function elegir(p, id) {
+  var inp = document.getElementById('m_' + p), l = inp.value.split(/[\s,]+/).filter(Boolean), k = l.indexOf(id);
+  if (!id) l = []; else if (k >= 0) l.splice(k, 1); else l.push(id);
+  inp.value = l.join(', '); modelo[p] = inp.value;
+}
 function guardar() {
   orden.forEach(function (p) { var i = document.getElementById('m_' + p); if (i) modelo[p] = i.value.trim(); });
   document.getElementById('bG').disabled = true; msg('Guardando…');

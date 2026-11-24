@@ -50,7 +50,9 @@ function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
   // Si el modelo principal esta saturado (429/5xx) o no existe para la clave (404),
   // se pasa AL MOMENTO al siguiente de la lista, en vez de esperar 20-90 s.
   // Solo si todos estan ocupados se espera un poco y se vuelve a probar.
-  const modelos = opc.maxModelos ? modelosGemini_(opc.modelo).slice(0, opc.maxModelos) : modelosGemini_(opc.modelo);
+  // opc.modelos: los Gemini elegidos EN ORDEN en /lectores (1.º, 2.º, 3.º…). Sin otro lector de respaldo, después siguen los de siempre.
+  let modelos = (opc.modelos && opc.modelos.length > 1) ? modelosGemini_(opc.modelos, !!opc.sinEsperas) : modelosGemini_(opc.modelo);
+  if (opc.maxModelos) modelos = modelos.slice(0, opc.maxModelos);
   const ESPERAS = opc.sinEsperas ? [] : [15000, 30000];
 
   for (let vuelta = 0; vuelta <= ESPERAS.length; vuelta++) {
@@ -87,9 +89,11 @@ function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
 // Modelos a probar en orden. Se puede cambiar sin tocar codigo con la propiedad
 // del script MODELOS_GEMINI (ej. "gemini-3.8-flash,gemini-3.6-flash").
 // primero: el modelo elegido por Telegram («lectores modelo gemini ...»), si hay.
-function modelosGemini_(primero) {
+// primero también puede ser una LISTA (varios elegidos en orden); soloEsos: no agregar los de siempre (hay otro lector de respaldo).
+function modelosGemini_(primero, soloEsos) {
   const prop = PropertiesService.getScriptProperties().getProperty('MODELOS_GEMINI') || '';
-  const lista = (primero ? [String(primero)] : []).concat(prop ? prop.split(',') : [CFG.MODELO_GEMINI, 'gemini-3.8-flash', 'gemini-3.5-flash-lite'])
+  const elegidos = Array.isArray(primero) ? primero.map(String) : (primero ? [String(primero)] : []);
+  const lista = elegidos.concat(soloEsos && elegidos.length ? [] : (prop ? prop.split(',') : [CFG.MODELO_GEMINI, 'gemini-3.8-flash', 'gemini-3.5-flash-lite']))
     .map(function (x) { return String(x).trim(); }).filter(Boolean);
   const cache = CacheService.getScriptCache();
   const vistos = {};
