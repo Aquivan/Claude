@@ -96,10 +96,10 @@ function TGX_tandas_(ss, max) {
   return out.slice(0, max || 8);
 }
 
-function TGX_listaTG_(ctx) {
+function TGX_listaTG_(ctx, nombres) {
   if (!ctx.usuario || ctx.usuario.rol !== 'admin') return TG_enviar_(ctx.chatId, 'Solo un administrador puede deshacer tandas.');
   TG_accion_(ctx.chatId, 'typing');
-  var tandas = TGX_tandas_(ctx.ss, 8);
+  var tandas = nombres && nombres.length ? TGX_tandas_(ctx.ss, 200).filter(function (t) { return nombres.indexOf(t.archivo) >= 0; }).slice(0, 10) : TGX_tandas_(ctx.ss, 8);
   var b = function (t, d, st) { var o = { text: t, callback_data: typeof d === 'string' ? d : 'k:' + TG_guardarBoton_(d, 21600) }; if (st) o.style = st; return o; };
   var filas = tandas.map(function (x) {
     return [b('🗑 ' + x.archivo.slice(0, 28) + ' · ' + String(x.fin).slice(0, 16) + ' · ' + x.n + ' fila(s)', { t: 'tgx', a: 'ver', x: x })];
@@ -119,10 +119,25 @@ function TGX_vigente_(ss, x) {
   return TGX_tandas_(ss, 50).filter(function (y) { return y.hoja === x.hoja && y.archivo === x.archivo && y.desde === x.desde && y.n === x.n; })[0] || null;
 }
 
+/** Borra las filas de la tanda y, si no queda otra con ese nombre, manda el archivo a la papelera. → {papelera, quedan} */
+function TGX_deshacer_(ss, x, quien) {
+  var libro = SpreadsheetApp.openById(leerConfig_(ss).idVouchers), h = libro.getSheetByName(x.hoja);
+  h.deleteRows(x.desde, x.n);
+  var quedan = TGX_tandas_(ss, 200).filter(function (y) { return y.archivo === x.archivo; }).length, papelera = 0;
+  if (!quedan) {
+    [CTV_PROC_.Fotos, CTV_PROC_.Originales].forEach(function (id) {
+      try { var it = DriveApp.getFolderById(id).getFilesByName(x.archivo); while (it.hasNext()) { it.next().setTrashed(true); papelera++; } } catch (e) {}
+    });
+  }
+  try { actualizarTodo_(true); } catch (e) {}
+  console.log('🗑 Tanda deshecha por ' + quien + ': ' + x.hoja + ' filas ' + x.desde + '-' + x.hasta + ' · ' + x.archivo);
+  return { papelera: papelera, quedan: quedan };
+}
+
 function TGX_alBoton_(ctx, d) {
   if (d.a === 'ultima') return TGX_ultimaTG_(ctx);
   if (!ctx.usuario || ctx.usuario.rol !== 'admin') return TG_enviar_(ctx.chatId, 'Solo un administrador puede deshacer tandas.');
-  if (d.a === 'lista') return TGX_listaTG_(ctx);
+  if (d.a === 'lista') return TGX_listaTG_(ctx, d.nombres);
   var x = d.x || {};
   var b = function (t, dd, st) { var o = { text: t, callback_data: typeof dd === 'string' ? dd : 'k:' + TG_guardarBoton_(dd, 21600) }; if (st) o.style = st; return o; };
   if (d.a === 'ver') {
@@ -136,18 +151,33 @@ function TGX_alBoton_(ctx, d) {
   if (d.a === 'si') {
     if (TGX_procesando_()) return TG_tarjeta_(ctx, '⏳ La hoja de Vouchers está procesando en este momento: espere a que termine (1-5 min) y toque de nuevo.', [[b('🔁 Intentar de nuevo', { t: 'tgx', a: 'si', x: x }, 'danger'), b('← Volver', { t: 'tgx', a: 'lista' }, 'link')]]);
     if (!TGX_vigente_(ctx.ss, x)) return TG_tarjeta_(ctx, '⚠️ Esa tanda cambió (alguien borró o agregó filas). Vuelva a elegirla para ver lo actual.', [[b('🗑 Ver tandas', { t: 'tgx', a: 'lista' })]]);
-    var libro = SpreadsheetApp.openById(leerConfig_(ctx.ss).idVouchers), h = libro.getSheetByName(x.hoja);
-    h.deleteRows(x.desde, x.n);
-    var quedan = TGX_tandas_(ctx.ss, 200).filter(function (y) { return y.archivo === x.archivo; }).length, papelera = 0;
-    if (!quedan) {
-      [CTV_PROC_.Fotos, CTV_PROC_.Originales].forEach(function (id) {
-        try { var it = DriveApp.getFolderById(id).getFilesByName(x.archivo); while (it.hasNext()) { it.next().setTrashed(true); papelera++; } } catch (e) {}
-      });
-    }
-    try { actualizarTodo_(true); } catch (e) {}
-    console.log('🗑 Tanda deshecha por ' + (ctx.nombre || ctx.chatId) + ': ' + x.hoja + ' filas ' + x.desde + '-' + x.hasta + ' · ' + x.archivo);
+    var rr = TGX_deshacer_(ctx.ss, x, ctx.nombre || ctx.chatId), papelera = rr.papelera, quedan = rr.quedan;
     return TG_tarjeta_(ctx, '✅ <b>Tanda deshecha</b>\n• ' + x.n + ' fila(s) borradas de ' + TG_esc_(x.hoja) + ' (' + TG_esc_(x.archivo) + ')' +
       (papelera ? '\n• ' + papelera + ' archivo(s) a la papelera de Drive' : quedan ? '\n• El archivo se dejó: hay otra tanda con ese nombre' : ''),
       [[b('🗑 Otra tanda', { t: 'tgx', a: 'lista' }), b('⏱ Última ejecución', { t: 'tgx', a: 'ultima' })], [b('📋 Menú', 'm:', 'link')]]);
   }
+}
+
+
+/* ------------------------------------------------ 🗑 en la hoja: 💼 Cobranzas → 📋 Vouchers procesados → 🗑 Deshacer una tanda */
+
+function TGX_menuAbrir() {
+  var h = '<div style="font:13px Arial;padding:4px"><p style="margin:0 0 8px;color:#475569">Una <b>tanda</b> = las filas seguidas de un mismo archivo en la hoja de Vouchers (si un PDF se procesó dos veces, sale dos veces). ' +
+    'Al deshacer: se borran esas filas con sus imágenes y, si no queda otra tanda con ese nombre, el archivo va a la papelera de Drive (30 días). Después se recalcula Cobranzas.</p>' +
+    '<div id="l">Cargando…</div><p id="m" style="font-weight:bold"></p></div>' +
+    '<script>function e(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c];});}' +
+    'var T=[];function pintar(l){T=l;document.getElementById("l").innerHTML=l.length?"<table style=\\"width:100%;border-collapse:collapse\\"><tr style=\\"background:#F1F5F9\\"><th align=left>Archivo</th><th align=left>Pestaña · filas</th><th align=left>Procesada</th><th></th></tr>"+l.map(function(x,i){return "<tr style=\\"border-top:1px solid #E2E8F0\\"><td>"+e(x.archivo)+"</td><td>"+e(x.hoja)+" "+x.desde+"–"+x.hasta+" ("+x.n+")</td><td>"+e(x.fin)+"</td><td><button onclick=\\"des("+i+")\\" style=\\"color:#B91C1C\\">🗑 Deshacer</button></td></tr>";}).join("")+"</table>":"No hay tandas.";}' +
+    'function des(i){var x=T[i];if(!confirm("¿Deshacer "+x.archivo+"? Se borran "+x.n+" fila(s) de "+x.hoja+" ("+x.desde+"–"+x.hasta+") con sus imágenes."))return;document.getElementById("m").textContent="Deshaciendo…";' +
+    'google.script.run.withSuccessHandler(function(r){document.getElementById("m").textContent=r.texto;pintar(r.tandas);}).withFailureHandler(function(er){document.getElementById("m").textContent="❌ "+(er.message||er);}).TGX_hojaDeshacer(x);}' +
+    'google.script.run.withSuccessHandler(pintar).withFailureHandler(function(er){document.getElementById("l").textContent="❌ "+(er.message||er);}).TGX_hojaLista();</script>';
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(h).setWidth(720).setHeight(480), '🗑 Deshacer una tanda de vouchers');
+}
+function TGX_hojaLista() { return TGX_tandas_(ssPrincipal_(), 15); }
+function TGX_hojaDeshacer(x) {
+  var ss = ssPrincipal_();
+  if (TGX_procesando_()) throw new Error('La hoja de Vouchers está procesando en este momento: espere 1-5 minutos y vuelva a intentar.');
+  if (!TGX_vigente_(ss, x)) throw new Error('Esa tanda cambió (alguien borró o agregó filas). Cierre y vuelva a abrir esta ventana.');
+  var quien = ''; try { quien = Session.getActiveUser().getEmail(); } catch (e) {}
+  var r = TGX_deshacer_(ss, x, quien || 'hoja');
+  return { texto: '✅ Deshecha: ' + x.n + ' fila(s) de ' + x.hoja + ' (' + x.archivo + ')' + (r.papelera ? ' · archivo a la papelera' : r.quedan ? ' · el archivo se dejó (hay otra tanda con ese nombre)' : ''), tandas: TGX_tandas_(ss, 15) };
 }

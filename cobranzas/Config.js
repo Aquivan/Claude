@@ -66,6 +66,7 @@ function onOpen() {
     .addItem('🧾 Actualizar padrones SUNAT (agentes de retención, buenos contribuyentes, SSCO)', 'menuActualizarPadrones')
     .addSubMenu(ui.createMenu('📋 Vouchers procesados (ver y completar RUC)')
       .addItem('📋 Ver procesados (hoy, de Sonia, 26-10-26 Edit…)', 'menuVouchersProcesados')
+      .addItem('🗑 Deshacer una tanda (borrar las filas de un PDF o foto)', 'TGX_menuAbrir')
       .addItem('🏛 Buscar en padrón SUNAT e internet los que faltan', 'menuBuscarExternosProcesados')
       .addItem('✍️ Escribir los RUC marcados en Vouchers', 'menuEscribirRucProcesados')
       .addItem('🤖 Analizar con IA: factura, empresa y retención pendiente', 'menuAnalizarIAProcesados'))
