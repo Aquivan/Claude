@@ -151,7 +151,11 @@ class Sol:
     def get(self, url, ref=None):
         req = urllib.request.Request(url, headers={"Referer": ref} if ref else {})
         with self.op.open(req, timeout=60) as r:
-            return r.read().decode("utf-8", "replace")
+            b = r.read()
+        try:
+            return b.decode("utf-8")
+        except UnicodeDecodeError:   # la consulta clásica de SUNAT responde en ISO-8859-1
+            return b.decode("latin-1")
 
     def post(self, url, datos, ref=None):
         req = urllib.request.Request(url, data=urllib.parse.urlencode(datos).encode(),
@@ -191,7 +195,7 @@ def parsear(h, c):
     plano = " ".join(t.replace("|", " ").split())
     d = {"texto": t[:4000]}
     rucs = re.findall(r"\bRUC\s*:?\s*(\d{11})", plano)
-    m = re.search(r"Fecha de Emisi[oó]n\s*:?\s*(\d{2}/\d{2}/\d{4})", plano)
+    m = re.search(r"Fecha de Emisi.{0,3}n[^0-9]{0,20}(\d{2}/\d{2}/\d{4})", plano, re.I) or re.search(r"Emisi.{0,3}n[^0-9]{0,20}(\d{2}/\d{2}/\d{4})", plano, re.I)
     d["fecha"] = m.group(1) if m else ""
     m = re.search(r"Fecha de Vencimiento\s*:?\s*(\d{2}/\d{2}/\d{4})", plano) or re.search(r"Vencimiento[^0-9]{0,40}(\d{2}/\d{2}/\d{4})", plano)
     d["vence"] = m.group(1) if m else ""
