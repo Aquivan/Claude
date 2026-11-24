@@ -11,9 +11,10 @@ var MON_NOMBRE_ = '🩺 Ejecuciones (monitor)';
 
 function instalar() {
   desinstalar();
-  ScriptApp.newTrigger('MON_cada5').timeBased().everyMinutes(5).create();
+  ScriptApp.newTrigger('MON_cada5').timeBased().everyMinutes(1).create();
+  PropertiesService.getScriptProperties().setProperty('MON_CADA', '1');
   MON_cada5();
-  Logger.log('✅ Listo: la hoja «' + MON_NOMBRE_ + '» se actualiza cada 5 minutos.');
+  Logger.log('✅ Listo: la hoja «' + MON_NOMBRE_ + '» se actualiza cada minuto.');
 }
 
 function desinstalar() {
@@ -28,6 +29,12 @@ function MON_hoja_() {
 }
 
 function MON_cada5() {
+  // Si quedó instalado «cada 5 min» (versión anterior), se pasa solo a «cada minuto».
+  if (PropertiesService.getScriptProperties().getProperty('MON_CADA') !== '1') {
+    ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
+    ScriptApp.newTrigger('MON_cada5').timeBased().everyMinutes(1).create();
+    PropertiesService.getScriptProperties().setProperty('MON_CADA', '1');
+  }
   var desde = new Date(Date.now() - 6 * 3600 * 1000).toISOString(), filas = [], page = '';
   for (var i = 0; i < 10; i++) {
     var url = 'https://script.googleapis.com/v1/processes?pageSize=200&userProcessFilter.startTime=' + encodeURIComponent(desde) + (page ? '&pageToken=' + encodeURIComponent(page) : '');

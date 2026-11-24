@@ -1,5 +1,5 @@
 # 🩺 Monitor de ejecuciones (monitor/): proyecto Apps Script APARTE que copia la pantalla «Ejecuciones» de todos los
-# proyectos a la hoja «🩺 Ejecuciones (monitor)» cada 5 min, para leerla con el conector de Drive (sin capturas).
+# proyectos a la hoja «🩺 Ejecuciones (monitor)» cada minuto, para leerla con el conector de Drive (sin capturas).
 # La primera vez crea el proyecto y guarda monitor/.clasp.json; después solo sube el código.
 # El dueño lo autoriza UNA vez: abrir el proyecto → función «instalar» → ▶ Ejecutar → Permitir.
 
