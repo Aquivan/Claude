@@ -52,6 +52,32 @@ function VIG_guardarPrueba_(id, d) {
   return esp;
 }
 
+/** Sin 📌 vouchers de prueba: 3 fotos y 1 PDF ya procesados en la hoja de Vouchers (los más recientes).
+ *  No traen respuesta correcta: se califica contra lo que leyó la MAYORÍA de los modelos (esp = null). */
+function VIG_pruebasRecientes_() {
+  function recientes(id, filtro, n) {
+    var out = [], it = DriveApp.getFolderById(id).getFiles(), c = 0;
+    while (it.hasNext() && c < 300) {
+      var f = it.next(); c++;
+      if (filtro(f)) out.push({ id: f.getId(), mime: f.getMimeType(), t: f.getDateCreated().getTime() });
+    }
+    return out.sort(function (a, b) { return b.t - a.t; }).slice(0, n);
+  }
+  var fotos = [], pdfs = [];
+  try { fotos = recientes(CTV_PROC_.Fotos, function (f) { return /^image\//.test(f.getMimeType()) && f.getSize() < 4000000; }, 3); } catch (e) {}
+  try { pdfs = recientes(CTV_PROC_.Originales, function (f) { return f.getMimeType() === 'application/pdf' && f.getSize() < 400000; }, 1); } catch (e) {}
+  return fotos.concat(pdfs).map(function (x) { return { id: x.id, mime: x.mime, esp: null }; });
+}
+
+/** Modelos Gemini para «probar Gemini»: los gratis conocidos que ve la clave + los que lee imágenes de su lista. */
+function VIG_gemini_() {
+  var vistos = {}, out = [];
+  var add = function (m) { if (m && !vistos[m]) { vistos[m] = 1; out.push({ p: 'gemini', m: m }); } };
+  try { TGNV_geminiDisponibles_().si.forEach(function (x) { add(x[0]); }); } catch (e) {}
+  try { LECT_listaModelos_('gemini').forEach(add); } catch (e) {}
+  return out.slice(0, 14);
+}
+
 /* ------------------------------------------------ 🔭 buscar modelos */
 
 function VIG_candidatos_() {
@@ -113,8 +139,9 @@ function VIG_textoBusqueda_(b) {
 
 /** items: [{p, m}] · chat: a quién responder ('' = a todos los administradores). → texto para mostrar */
 function VIG_probar_(chat, items, motivo) {
-  var pruebas = VIG_pruebas_().slice(0, VIG_MAX_PRUEBAS_);
-  if (!pruebas.length) return '📌 Todavía no hay vouchers de prueba. Mande una foto al bot con «comparar» (o «comparar gemini») y, en el resultado, toque «📌 Guardar como prueba» en la lectura correcta. Con 3 a 5 vouchers distintos (BCP, BBVA, SUNAT, PDF…) la prueba es confiable.';
+  var pruebas = VIG_pruebas_().slice(0, VIG_MAX_PRUEBAS_), mayoria = false;
+  if (!pruebas.length) { pruebas = VIG_pruebasRecientes_(); mayoria = true; }
+  if (!pruebas.length) return '📌 No encontré vouchers para probar. Mande una foto al bot con «comparar» y toque «📌 Guardar como prueba» en la lectura correcta.';
   var props = PropertiesService.getScriptProperties();
   var viejo = null; try { viejo = JSON.parse(props.getProperty('VIG_EST') || 'null'); } catch (e) {}
   if (viejo && Date.now() - viejo.t0 < 90 * 60000) return '⏳ Ya hay una prueba en marcha (' + viejo.k + ' de ' + viejo.items.length * viejo.tests.length + '). Le aviso al terminar.';
@@ -122,10 +149,12 @@ function VIG_probar_(chat, items, motivo) {
   (items || []).forEach(function (x) { var k = x.p + '|' + x.m; if (!vistos[k] && VIG_NOMPROV_[x.p] && x.m) { vistos[k] = 1; its.push({ p: x.p, m: x.m }); } });
   if (!its.length) return 'No hay modelos para probar.';
   var est = { chat: chat || '', motivo: motivo || '', items: its, tests: pruebas.map(function (t) { return { id: t.id, mime: t.mime, esp: t.esp }; }),
-    k: 0, res: {}, enCurso: null, t0: Date.now() };
+    k: 0, res: {}, enCurso: null, t0: Date.now(), mayoria: mayoria };
+  VIG_borrarLecturas_();
   props.setProperty('VIG_EST', JSON.stringify(est));
   VIG_programar_(1000);
-  return '🧪 Probando <b>' + its.length + ' modelos</b> con <b>' + pruebas.length + ' vouchers de prueba</b> (' + its.length * pruebas.length + ' lecturas), en segundo plano. Puede tardar de 5 a 30 min; le aviso con el ranking al terminar.';
+  return '🧪 Probando <b>' + its.length + ' modelos</b> con <b>' + pruebas.length + ' vouchers de prueba</b> (' + its.length * pruebas.length + ' lecturas)' +
+    (mayoria ? ' <i>(no hay 📌 vouchers de prueba: uso los ' + pruebas.length + ' últimos procesados y gana lo que lee la mayoría)</i>' : '') + ', en segundo plano. Puede tardar de 5 a 30 min; le aviso con el ranking al terminar.';
 }
 
 function VIG_todos_() {
@@ -174,6 +203,7 @@ function VIG_paso__reg() {
   if (est.k < total) return VIG_programar_(15000);
   props.deleteProperty('VIG_EST');
   VIG_programar_(0);
+  if (est.mayoria) VIG_calificarMayoria_(est);
   VIG_mostrar_(est);
 }
 
@@ -213,10 +243,42 @@ function VIG_anotar_(est, k, d, err, seg) {
     return;
   }
   r.lect++; r.seg += seg;
+  if (!t.esp) {
+    PropertiesService.getScriptProperties().setProperty('VIG_L_' + k, VIG_CAMPOS_MAY_.map(function (c) { return TGNV_norm_(c, d[c]).replace(/\|/g, ''); }).join('|'));
+    return;
+  }
   Object.keys(t.esp).forEach(function (c) {
     r.campos++;
     if (TGNV_norm_(c, d[c]) === TGNV_norm_(c, t.esp[c])) r.ok++;
   });
+}
+
+var VIG_CAMPOS_MAY_ = ['fecha', 'nOperacion', 'monto', 'moneda', 'banco', 'idCliente', 'proveedor'];
+
+function VIG_borrarLecturas_() {
+  var props = PropertiesService.getScriptProperties();
+  Object.keys(props.getProperties()).forEach(function (k) { if (/^VIG_L_\d+$/.test(k)) props.deleteProperty(k); });
+}
+
+/** Sin respuesta correcta: lo «correcto» de cada voucher y dato = lo que leyó la mayoría (mín. 2 votos). Llena est.res[].campos/ok. */
+function VIG_calificarMayoria_(est) {
+  var props = PropertiesService.getScriptProperties().getProperties(), nT = est.tests.length, lect = {};
+  Object.keys(props).forEach(function (k) { var m = k.match(/^VIG_L_(\d+)$/); if (m) lect[m[1]] = props[k].split('|'); });
+  for (var t = 0; t < nT; t++) {
+    VIG_CAMPOS_MAY_.forEach(function (c, i) {
+      var votos = {}, mejor = '', n = 0;
+      Object.keys(lect).forEach(function (k) { if (k % nT === t && lect[k][i]) votos[lect[k][i]] = (votos[lect[k][i]] || 0) + 1; });
+      Object.keys(votos).forEach(function (v) { if (votos[v] > n) { mejor = v; n = votos[v]; } });
+      if (n < 2) return;
+      Object.keys(lect).forEach(function (k) {
+        if (k % nT !== t) return;
+        var it = est.items[Math.floor(k / nT)], r = est.res[it.p + '|' + it.m];
+        if (!r) return;
+        r.campos++; if (lect[k][i] === mejor) r.ok++;
+      });
+    });
+  }
+  VIG_borrarLecturas_();
 }
 
 function VIG_ranking_(est) {
@@ -232,7 +294,7 @@ function VIG_ranking_(est) {
 function VIG_mostrar_(est) {
   var rk = VIG_ranking_(est), med = ['🥇', '🥈', '🥉'], n = 0;
   var L = ['🔭 <b>Prueba de modelos para leer vouchers</b>' + (est.motivo ? ' (' + TG_esc_(est.motivo) + ')' : ''),
-    '<i>' + est.tests.length + ' vouchers de prueba · ' + Math.round((Date.now() - est.t0) / 60000) + ' min</i>', ''];
+    '<i>' + est.tests.length + (est.mayoria ? ' vouchers recientes (gana la mayoría)' : ' vouchers de prueba') + ' · ' + Math.round((Date.now() - est.t0) / 60000) + ' min</i>', ''];
   rk.filter(function (x) { return !x.noDisp; }).forEach(function (x) {
     L.push((med[n++] || n + '.') + ' <b>' + VIG_NOMPROV_[x.p] + '</b> <code>' + TG_esc_(x.m.split('/').pop()) + '</code> · ' +
       (x.pct >= 0 ? '<b>' + x.pct + '%</b> (' + x.ok + '/' + x.campos + ' datos)' : '—') + ' · ' + x.seg + ' s' +
@@ -240,7 +302,7 @@ function VIG_mostrar_(est) {
   });
   var nd = rk.filter(function (x) { return x.noDisp; });
   if (nd.length) L.push('', '<i>No disponibles para sus claves (o solo de pago): ' + TG_esc_(nd.map(function (x) { return x.m.split('/').pop(); }).join(', ')) + '</i>');
-  L.push('', '<i>% = datos iguales a la respuesta correcta de sus vouchers de prueba (banco, fecha, N° de operación, monto, beneficiario…). Toque ⭐ para usar uno; nada cambia solo.</i>');
+  L.push('', est.mayoria ? '<i>% = datos iguales a lo que leyó la mayoría de los modelos (fecha, N° de operación, monto, moneda, banco, RUC, beneficiario). Toque ⭐ para usar uno; nada cambia solo.</i>' : '<i>% = datos iguales a la respuesta correcta de sus vouchers de prueba (banco, fecha, N° de operación, monto, beneficiario…). Toque ⭐ para usar uno; nada cambia solo.</i>');
   var mejores = rk.filter(function (x) { return !x.noDisp && !x.enUso && x.pct >= 0; }).slice(0, 5);
   var teclado = mejores.map(function (x) {
     return [{ text: '⭐ Usar ' + x.m.split('/').pop().slice(0, 30) + ' (' + VIG_NOMPROV_[x.p] + ')', callback_data: 'k:' + TG_guardarBoton_({ t: 'vig', a: 'usar', p: x.p, m: x.m }, 21600) }];
@@ -248,6 +310,7 @@ function VIG_mostrar_(est) {
   PropertiesService.getScriptProperties().setProperty('VIG_ULTIMO', JSON.stringify({ fecha: Date.now(), motivo: est.motivo, pruebas: est.tests.length,
     rk: rk.slice(0, 25).map(function (x) { return { p: x.p, m: x.m, pct: x.pct, ok: x.ok, campos: x.campos, seg: x.seg, fallos: x.fallos, noDisp: x.noDisp, enUso: x.enUso }; }) }).slice(0, 8500));
   VIG_enviar_(est.chat, L.join('\n'), teclado.length ? teclado : null);
+  try { REG_anotar_('Cobranzas', 'prueba de modelos · fin', Math.round((Date.now() - est.t0) / 1000), L.join('\n').replace(/<[^>]+>/g, '')); } catch (e) {}
 }
 
 function VIG_enviar_(chat, html, teclado) {
@@ -290,6 +353,7 @@ function VIG_tg_(ctx, texto) {
   var arg = String(texto).trim().replace(/^\/?\S+\s*/, '').toLowerCase();
   try {
     if (/^busc/.test(arg)) return VIG_tgBuscar_(ctx), true;
+    if (/gemini/.test(arg)) return TG_enviar_(ctx.chatId, VIG_probar_(String(ctx.chatId), VIG_gemini_(), 'todos los Gemini')), true;
     if (/^prob/.test(arg)) return TG_enviar_(ctx.chatId, VIG_probar_(String(ctx.chatId), VIG_todos_(), 'a pedido')), true;
     if (/^prueba/.test(arg)) return VIG_tgPruebas_(ctx), true;
     VIG_panel_(ctx);
@@ -318,7 +382,7 @@ function VIG_panel_(ctx) {
   var L = ['🔭 <b>Vigía de modelos de IA</b> (para leer vouchers)', '',
     'Cada lunes reviso si Gemini, NVIDIA o Groq sacaron modelos nuevos que leen imágenes; si hay, los pruebo con sus vouchers de prueba y le aviso con el ranking. Una vez al mes re-pruebo todo. Nunca cambio de modelo sin su ⭐.', '',
     '🔭 Última revisión: ' + (bus ? f(bus) : 'todavía no'),
-    '📌 Vouchers de prueba: <b>' + nP + '</b>' + (nP < 3 ? ' <i>(conviene 3 a 5 distintos: guárdelos desde «comparar» → 📌)</i>' : '')];
+    '📌 Vouchers de prueba: <b>' + nP + '</b>' + (nP ? (nP < 3 ? ' <i>(conviene 3 a 5 distintos: guárdelos desde «comparar» → 📌)</i>' : '') : ' <i>(sin ellos uso los 4 últimos procesados y gana lo que lee la mayoría)</i>')];
   if (ult && ult.rk) {
     L.push('🧪 Última prueba: ' + f(ult.fecha) + (ult.motivo ? ' (' + TG_esc_(ult.motivo) + ')' : ''));
     ult.rk.filter(function (x) { return !x.noDisp; }).slice(0, 3).forEach(function (x, i) {
@@ -328,7 +392,8 @@ function VIG_panel_(ctx) {
   var b = function (t, d) { return { text: t, callback_data: 'k:' + TG_guardarBoton_(d, 21600) }; };
   TG_enviar_(ctx.chatId, L.join('\n'), [
     [b('🔭 Buscar modelos nuevos ahora', { t: 'vig', a: 'buscar' })],
-    [b('🧪 Probar todos ahora', { t: 'vig', a: 'probar' }), b('🧪 Solo los que uso', { t: 'vig', a: 'actuales' })],
+    [b('🧪 Probar todos (Gemini, NVIDIA y Groq)', { t: 'vig', a: 'probar' })],
+    [b('🧪 Solo Gemini (todos)', { t: 'vig', a: 'gemini' }), b('🧪 Solo los que uso', { t: 'vig', a: 'actuales' })],
     [b('📌 Vouchers de prueba (' + nP + ')', { t: 'vig', a: 'pruebas' })]]);
 }
 
@@ -359,6 +424,7 @@ function VIG_alBoton_(ctx, d) {
     switch (d.a) {
       case 'buscar': return VIG_tgBuscar_(ctx);
       case 'probar': return TG_enviar_(chat, VIG_probar_(chat, VIG_todos_(), 'a pedido'));
+      case 'gemini': return TG_enviar_(chat, VIG_probar_(chat, VIG_gemini_(), 'todos los Gemini'));
       case 'actuales': return TG_enviar_(chat, VIG_probar_(chat, VIG_actuales_(), 'los que se usan'));
       case 'probarNuevos': return TG_enviar_(chat, VIG_probar_(chat, (d.items || []).concat(VIG_actuales_()), 'modelos nuevos'));
       case 'pruebas': return VIG_tgPruebas_(ctx);
