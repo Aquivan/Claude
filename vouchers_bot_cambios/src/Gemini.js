@@ -10,6 +10,7 @@
 // identico al de siempre).
 // ⏱ Tiempos de ESTA ejecución (los devuelve «procesar al instante» para que Telegram y WhatsApp digan en qué se fue el tiempo).
 var TIEMPOS_ = { ia: 0, escribir: 0, lecturas: 0, lector: '' };
+var INICIO_EJECUCION_ = Date.now();   // ⏱ inicio de ESTA ejecución (Google la corta a los 6 min): Lectores.js no razona si queda poco
 
 function llamarGemini(base64, mimeType, esPDF, totalPaginasLote) {
   const t0 = Date.now();
