@@ -45,6 +45,7 @@ const AYV_SECCIONES_ = [
   { id: 'menu', e: '🤖', t: 'Menú 🤖 Vouchers', p: [
     '• **📤 Subir vouchers**: subir PDF o fotos desde la computadora, con el nombre que usted elija.',
     '• **▶ Procesar Nuevos Archivos**: procesa ya lo que está en la carpeta de entrada.',
+    '• **🧪 Probar modelos Gemini**: pone a leer los mismos vouchers recientes a todos los modelos Gemini de su clave y anota en el 🩺 Registro técnico cuál acierta más, cuánto tarda y cuáles no están disponibles. No cambia nada.',
     '• **📂 Abrir carpetas en Drive**: Fotos y Originales procesados (los ya registrados), las de entrada (por procesar) y Descartados.',
     '• **⚙️ Verificar Configuración**: revisa carpetas, claves y conexiones.',
     '• **⏰ Activar / ⏸ Desactivar procesamiento automático** (cada 10 minutos).',

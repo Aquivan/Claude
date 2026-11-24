@@ -22,6 +22,7 @@ function onOpen() {
       .addSeparator()
       .addItem('🗂 Todas las carpetas (una ventana con los 5 enlaces)', 'CV_todas'))
     .addSeparator()
+    .addItem('🧪 Probar modelos Gemini (resultado en 🩺 Registro técnico)', 'PG_probarAhora')
     .addItem('⚙️ Verificar Configuracion', 'verificarConfiguracion')
     .addItem('⏰ Activar procesamiento automatico', 'crearTriggerAutomatico')
     .addItem('⏸ Desactivar procesamiento automatico', 'eliminarTriggerAutomatico')

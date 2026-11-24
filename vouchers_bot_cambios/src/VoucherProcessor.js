@@ -15,6 +15,9 @@ async function procesarVouchers() {
     return;
   }
 
+  // 🧪 Prueba de modelos Gemini: si hay una versión nueva, la programa aparte (no demora este procesamiento).
+  try { PG_asegurar_(); } catch (e) { Logger.log('Prueba Gemini: ' + e.message); }
+
   const inicioEjecucion = Date.now();
   const LIMITE = CFG.LIMITE_TIEMPO_MS;
 
