@@ -100,7 +100,7 @@ function TGQ_buscar_(ss, texto, soloFilas) {
     var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0], col = indiceColumnas_(enc);
     var c = { archivo: col('Archivo Original'), fecha: col('Fecha de depos', 'Fecha de deposito'), monto: col('Monto'), moneda: col('Moneda'),
       prov: col('Proveedor (Beneficiario)'), ruc: col('ID Beneficiario'), refs: col('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc'), op: col('Numero de oper', 'Numero de operacion'),
-      empresa: col('Empresa'), idUsuario: col('ID Usuario'), idCli: col('idCliente') };
+      empresa: col('Empresa'), idUsuario: col('ID Usuario'), idCli: col('idCliente'), proc: col('Fecha Procesamiento', 'Fecha de procesamiento') };
     if (c.archivo < 0 || c.monto < 0) return;
     var desde = Math.max(2, h.getLastRow() - 5000), n = h.getLastRow() - desde + 1;
     var leer = function (j) { return j >= 0 ? h.getRange(desde, j + 1, n, 1).getValues() : null; };
@@ -112,7 +112,7 @@ function TGQ_buscar_(ss, texto, soloFilas) {
         fecha: v.fecha ? aFecha_(v.fecha[i][0]) : null, monto: aNumero_(v.monto[i][0]), moneda: v.moneda ? String(v.moneda[i][0] || 'PEN') : 'PEN',
         prov: v.prov ? String(v.prov[i][0] || '').trim() : '', ruc: v.ruc ? aRuc_(v.ruc[i][0]) : '', refs: v.refs ? String(v.refs[i][0] || '') : '',
         op: v.op ? String(v.op[i][0] || '') : '', empresa: v.empresa ? String(v.empresa[i][0] || '').trim() : '',
-        idUsuario: v.idUsuario ? aRuc_(v.idUsuario[i][0]) : '', idCli: v.idCli ? aRuc_(v.idCli[i][0]) : '' });
+        idUsuario: v.idUsuario ? aRuc_(v.idUsuario[i][0]) : '', idCli: v.idCli ? aRuc_(v.idCli[i][0]) : '', proc: v.proc ? TGQ_procDma_(v.proc[i][0]) : '' });
     }
   });
   // 🔎 Vouchers puntuales (botón del aviso «voucher(s) nuevo(s)»): pestaña | N° de operación | monto
@@ -139,9 +139,16 @@ function TGQ_buscar_(ss, texto, soloFilas) {
   }
   if (!q.fechas.length && !q.archivos.length && !q.ultimos) q.ultimos = 3;   // "procesados sonia": sus 3 últimas tandas
   // Un archivo escrito tal cual ("26-10-26 Sonia(Edit).pdf"): primero el nombre exacto; si no hay, el parecido.
-  var elegidas = filas.filter(function (f) { return TGQ_coincide_(q, f.archivo, true, true); }), ampliado = '';
+  // 📅 «hoy», «ayer», «24/11»: la fecha del nombre de la tanda («24-11-26 Sonia») O el día en que se procesó (columna
+  // «Fecha Procesamiento»): un PDF «04-11-26 Edit.pdf» procesado hoy también sale en «procesados hoy».
+  var porProc = function (f) { return !q.archivos.length && q.fechas.length && f.proc && q.fechas.indexOf(f.proc) >= 0 && TGQ_coincide_(q, f.archivo, false, true); };
+  var elegidas = filas.filter(function (f) { return TGQ_coincide_(q, f.archivo, true, true) || porProc(f); }), ampliado = '';
   if (!elegidas.length && q.archivos.length) elegidas = filas.filter(function (f) { return TGQ_coincide_(q, f.archivo, true); });
   if (!elegidas.length && q.porDefecto) {   // hoy no hay: lo último que se procesó
+    var ultProc = filas.reduce(function (m, f) { return f.proc && TGQ_orden_(f.proc) > TGQ_orden_(m) ? f.proc : m; }, '');
+    if (ultProc) { q.fechas = [ultProc]; elegidas = filas.filter(porProc); if (elegidas.length) ampliado = 'Hoy no se procesó nada; muestro lo último procesado (' + ultProc + ').'; }
+  }
+  if (!elegidas.length && q.porDefecto) {
     var fechas = filas.map(function (f) { return TGQ_partirTanda_(f.archivo).fecha; }).filter(Boolean);
     var ult = fechas.sort(function (a, b) { return TGQ_orden_(b) - TGQ_orden_(a); })[0];
     if (ult) { q.fechas = [ult]; elegidas = filas.filter(function (f) { return TGQ_coincide_(q, f.archivo, true); }); ampliado = 'Hoy no hay procesados; muestro lo último (' + ult + ').'; }
@@ -162,6 +169,13 @@ function TGQ_buscar_(ss, texto, soloFilas) {
   var lista = orden.map(function (k) { return tandas[k]; });
   TGQ_sugerir_(ss, cfg, lista);
   return { q: q, tandas: lista, ampliado: ampliado };
+}
+
+/** «Fecha Procesamiento» de la hoja de Vouchers (fecha o texto «24/11/2026 12:06:59») → «24-11-26». */
+function TGQ_procDma_(v) {
+  if (v instanceof Date && !isNaN(v.getTime())) return TGQ_dma_(v);
+  var m = String(v || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  return m ? ('0' + m[1]).slice(-2) + '-' + ('0' + m[2]).slice(-2) + '-' + m[3].slice(-2) : '';
 }
 
 function TGQ_orden_(dma) { var p = String(dma || '').split('-'); return p.length === 3 ? Number(p[2] + p[1] + p[0]) : 0; }
