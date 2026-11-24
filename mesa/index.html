@@ -566,7 +566,7 @@ window.addEventListener('message', function (e) {
 
 /* ------------------------------------------------ ⚡ Traer de SUNAT (registro de compras / ventas, solo reporte) */
 function sireRapido() {
-  var emp = $('fEmp').value, nom = emp ? ($('fEmp').selectedOptions[0] || {}).textContent : 'todas las empresas';
+  var emp = empFiltro(), nom = emp ? empNombres(emp) : 'todas las empresas';
   var hoy = new Date(), per = hoy.getFullYear() + ('0' + (hoy.getMonth() + 1)).slice(-2);
   modal('<h3>⚡ Traer de SUNAT el registro (solo reporte)</h3><p style="color:#475569">Pide a SUNAT el registro de compras y/o ventas del SIRE, sin PDF ni XML. Tarda unos 2–4 minutos: aquí verá cada paso (SUNAT → hoja SIRE → Cobranzas) y al final esta Mesa se recarga sola.</p>' +
     '<label>Empresa</label><div><b>' + esc(nom) + '</b> <span style="color:#64748B">(se cambia con el filtro «Empresa» de arriba)</span></div>' +
@@ -582,7 +582,7 @@ function sireRapidoPedir() {
       SR = { id: r.id, texto: r.texto, j: { e: 'sunat', seg: 0 } }; srPintar();
       if (r.id) srSeguir();
     })
-    .MESA_sireRapido(TK, $('fEmp').value, $('srPer').value, $('srTip').value);
+    .MESA_sireRapido(TK, [].concat(empFiltro() || []).join(','), $('srPer').value, $('srTip').value);
 }
 /* Sigue el pedido paso a paso (SUNAT → hoja SIRE → Cobranzas) y al final recarga la Mesa sola. Si cierra la ventana, el avance sigue abajo, en la barra de estado. */
 var SR = null, SRT = 0;
@@ -730,8 +730,12 @@ function contraFiltro() {
   var nombre = t.replace(/·.*$/, '').trim();
   return { ruc: r || '', nombre: nombre, txt: nn(t) };
 }
+/** Empresa(s) del filtro: '' = todo el grupo, 'RUC' = una, ['RUC', …] = varias (▾ con casillas). */
+function empFiltro() { return S.empSel && S.empSel.length > 1 ? S.empSel : $('fEmp').value; }
+function empEs(emp, er) { return !emp || (typeof emp === 'string' ? er === emp : emp.indexOf(er) >= 0); }
+function empNombres(emp) { return !emp ? 'todo el grupo' : typeof emp === 'string' ? nomEmp(emp) : emp.map(nomEmp).join(', '); }
 function docVisible(d, c, emp) {
-  if (emp && d.er !== emp) return false;
+  if (emp && !empEs(emp, d.er)) return false;
   if (c) { if (c.rucs ? c.rucs.indexOf(d.cr) < 0 : c.ruc ? d.cr !== c.ruc : nn(d.cn + ' ' + d.cr).indexOf(c.txt) < 0) return false; }
   var de = $('fDe').value, ha = $('fHa').value, mo = $('fMon').value;
   if (de && d.f < de) return false; if (ha && d.f > ha) return false; if (mo && d.mon !== mo) return false;
@@ -743,7 +747,7 @@ function vouVisible(v, c, emp) {
   var lk = S.links[v.id];
   if (emp) {
     var eV = S.lado === 'Por pagar' ? v.pr : v.br;
-    if (eV && eV !== emp && !lk.some(function (k) { return S.D[k].er === emp; })) return false;
+    if (eV && !empEs(emp, eV) && !lk.some(function (k) { return empEs(emp, S.D[k].er); })) return false;
   }
   if (c) {
     var cV = S.lado === 'Por pagar' ? v.br : v.pr;
@@ -759,7 +763,7 @@ var FV = [], VV = [];
 function pintar() {
   if (!S.data) return;
   if (S.modo === 'e') return pintarE();
-  var c = contraFiltro(), emp = $('fEmp').value, ef = segV('sFac'), ev = segV('sVou'), qf = $('qF').value.trim(), qv = $('qV').value.trim();
+  var c = contraFiltro(), emp = empFiltro(), ef = segV('sFac'), ev = segV('sVou'), qf = $('qF').value.trim(), qv = $('qV').value.trim();
   var act = S.act ? S.V[S.act] : null, ligados = {};
   if (act && S.modo === 'v') S.links[act.id].forEach(function (k) { ligados[k] = 1; });
   if (S.actR && S.rl[S.actR]) S.rl[S.actR].forEach(function (x) { ligados[x.k] = 1; });
@@ -805,7 +809,7 @@ function pintar() {
     else r = (a.f > b.f ? 1 : a.f < b.f ? -1 : 0) * (ov === 'f-' ? -1 : 1);
     return r || (parseInt(a.fu.split('!')[1], 10) - parseInt(b.fu.split('!')[1], 10));
   });
-  var conGrupo = !emp, cuenta = {};
+  var conGrupo = typeof emp !== 'string' || !emp, cuenta = {};
   Object.keys(S.links).forEach(function (id) { S.links[id].forEach(function (k) { cuenta[k] = (cuenta[k] || 0) + 1; }); });
   var hF = FV.slice(0, S.verF).map(function (d, i) {
     var s = S.sim.saldo[d.k], cls = s <= 0.05 ? 'ok' : (s < base(d) - 0.05 ? 'pa' : 'pe');
@@ -1848,7 +1852,7 @@ function guardarManual(k) {
 
 /* ------------------------------------------------ 🧹 quitar todos los cruces (para volver a cruzar desde cero) */
 function alcanceLimpiar() {
-  var c = contraFiltro(), emp = $('fEmp').value;
+  var c = contraFiltro(), emp = empFiltro();
   var vs = S.data.vouchers.filter(function (v) { return vouVisible(v, c, emp); });
   var nL = vs.filter(function (v) { return !v.dev && S.links[v.id].length; });
   var nD = vs.filter(function (v) { return v.dev && (S.devT[v.id] || []).length; });
@@ -1856,7 +1860,7 @@ function alcanceLimpiar() {
   return { c: c, emp: emp, nL: nL, nD: nD, us: us };
 }
 function limpiarCruces() {
-  var a = alcanceLimpiar(), quien = (a.c ? (a.c.nombre || a.c.ruc) : 'TODOS los proveedores') + (a.emp ? ' · ' + nomEmp(a.emp) : ' · todo el grupo');
+  var a = alcanceLimpiar(), quien = (a.c ? (a.c.nombre || a.c.ruc) : 'TODOS los proveedores') + ' · ' + empNombres(a.emp);
   if (!a.nL.length && !a.nD.length && !a.us.length) return estado('No hay cruces que quitar con estos filtros.', true);
   modal('<h3 style="margin-top:0">🧹 Quitar cruces para volver a cruzar</h3>' +
     '<p>Alcance: <b>' + esc(quien) + '</b>' + (a.c ? '' : ' <span style="color:var(--ro)">(⚠️ sin proveedor elegido: es todo; mejor elija uno arriba)</span>') + '. Las fechas y la moneda de arriba también cuentan.</p>' +
@@ -2105,7 +2109,7 @@ function pintarE() {
   var vis = segV('eVis'), nCamb = sucios().length + rSucios().length;
   construirEV(vis === 'antes' ? 'antes' : 'despues');
   $('eCamb').innerHTML = nCamb ? '<span class="chip c-a">✏️ ' + nCamb + ' cambio(s) sin guardar</span> <button class="p" onclick="guardar()">💾 Guardar</button>' : '<span class="chip">sin cambios pendientes</span>';
-  var c = contraFiltro(), emp = $('fEmp').value, est = segV('eEst'), agr = segV('eAgr'), niv = segV('eDet'), q = $('eQ').value.trim();
+  var c = contraFiltro(), emp = empFiltro(), est = segV('eEst'), agr = segV('eAgr'), niv = segV('eDet'), q = $('eQ').value.trim();
   ENIV = niv;
   EVIS = EV.docs.filter(function (d) {
     if (vis === 'comp' && !d.cambio) return false;
@@ -2707,7 +2711,7 @@ function anaExcel() {
   var hacer = function () {
     var A = ANA, cab = ['Documento'].concat(A.conEmp ? ['Empresa'] : [], ['F. doc.', 'F. venc.', 'Mes cancel.', 'Tipo', A.res ? 'Amortizaciones' : 'Doc. amortización', 'Fecha', 'Moneda', 'T.C.'],
       A.conPen ? ['Compromiso S/', 'Amortización S/', 'Saldo S/'] : [], A.conUsd ? ['Compromiso US$', 'Amortización US$', 'Saldo US$'] : [], A.glosa ? ['Glosa'] : []);
-    var rows = [['ANÁLISIS DE CUENTA · ' + (A.pagar ? 'CUENTAS POR PAGAR' : 'CUENTAS POR COBRAR') + ' · ' + ($('fEmp').value ? razonEmp($('fEmp').value) : 'Grupo')], ['Generado el ' + ff(new Date().toISOString().slice(0, 10))]].concat($('ec').className === 'on' && ecNotaTexto() ? [['Nota: ' + ecNotaTexto().replace(/\s*\n\s*/g, ' · ')]] : [], [[], cab]);
+    var rows = [['ANÁLISIS DE CUENTA · ' + (A.pagar ? 'CUENTAS POR PAGAR' : 'CUENTAS POR COBRAR') + ' · ' + (typeof empFiltro() === 'string' ? ($('fEmp').value ? razonEmp($('fEmp').value) : 'Grupo') : empNombres(empFiltro()))], ['Generado el ' + ff(new Date().toISOString().slice(0, 10))]].concat($('ec').className === 'on' && ecNotaTexto() ? [['Nota: ' + ecNotaTexto().replace(/\s*\n\s*/g, ' · ')]] : [], [[], cab]);
     var r2n = function (v) { return Math.round(v * 100) / 100; };
     var mont = function (f) { return (A.conPen ? f.pen.map(r2n) : []).concat(A.conUsd ? f.usd.map(r2n) : []); };
     A.filas.forEach(function (f) {
@@ -2734,11 +2738,11 @@ var EC = null;
 // tipos de movimiento: nombre y color (los mismos en el resumen, la leyenda y cada línea)
 var ECT = { fac: ['Factura', '#1D4ED8'], nd: ['Nota débito', '#1E40AF'], nc: ['Nota crédito', '#C2410C'], ret: ['Retención', '#7C3AED'], det: ['Detracción', '#0E7490'], pago: ['Pago', '#15803D'], man: ['Pago manual', '#166534'], dev: ['Devolución', '#BE185D'], otr: ['Otro', '#475569'] };
 function ecDesdeFiltro() {
-  var c = contraFiltro(), emp = $('fEmp').value, rucs = {};
+  var c = contraFiltro(), emp = empFiltro(), rucs = {};
   EVIS.forEach(function (d) { rucs[d.cr] = 1; });
   var r = c && c.ruc ? c.ruc : (Object.keys(rucs).length === 1 ? Object.keys(rucs)[0] : '');
   if (!r) { alert('Elija primero UN ' + (S.lado === 'Por pagar' ? 'proveedor' : 'cliente') + ' arriba (casilla «Proveedor») o use el botón «📨 Estado de cuenta para enviar» de su grupo.'); return; }
-  ecAbrir(r, emp);
+  ecAbrir(r, typeof emp === 'string' ? emp : '');
 }
 function ecAbrir(cr, er) {
   if (!EV) construirEV('antes');
@@ -3122,8 +3126,16 @@ function xfInit() {
       if (!S.tipos.v) { S.act = ''; S.selV = {}; } if (!S.tipos.r) S.actR = '';
       S.verV = 300; pintar(); detalle();
     } });
-  xfDef('Emp', { box: 'xfEmp', tit: 'Empresa', buscar: true, items: function () { return xfSel('fEmp'); }, val: function () { return [$('fEmp').value]; },
-    aplicar: function (v) { $('fEmp').value = v[0] || ''; pintar(); } });
+  xfDef('Emp', { box: 'xfEmp', tit: 'Empresa', multi: true, todosTxt: '🏢 Todo el grupo', buscar: true,
+    items: function () { return xfSel('fEmp').filter(function (x) { return x.v; }); },
+    val: function () { var e = empFiltro(); return !e ? [] : typeof e === 'string' ? [e] : e.slice(); },   // [] = todo el grupo (todas marcadas)
+    aplicar: function (v) {
+      var it = XF.Emp.items(); S.empSel = null;
+      if (!v.length || v.length >= it.length) $('fEmp').value = '';
+      else if (v.length === 1) $('fEmp').value = v[0];
+      else { S.empSel = v.slice(); $('fEmp').value = ''; }
+      pintar();
+    } });
   xfDef('Mon', { box: 'xfMon', tit: 'Moneda', items: function () { return xfSel('fMon'); }, val: function () { return [$('fMon').value]; },
     aplicar: function (v) { $('fMon').value = v[0] || ''; pintar(); } });
   xfDef('Con', { box: 'xfCon', tit: '', boton: '☰ lista', multi: true, buscar: true, todos: true,
@@ -3149,7 +3161,7 @@ function xfBotones() {
   Object.keys(XF).forEach(function (id) {
     var d = XF[id], box = $(d.box); if (!box) return;
     var it = d.items(), val = d.val(), sel = it.filter(function (x) { return val.indexOf(x.v) >= 0; });
-    var txt = d.boton || (d.multi ? (sel.length === it.length ? 'Todos' : sel.map(function (x) { return x.t; }).join(', ')) : (sel[0] ? sel[0].t : '—'));
+    var txt = d.boton || (d.multi && !val.length && d.todosTxt ? d.todosTxt : d.multi ? (sel.length === it.length ? 'Todos' : sel.map(function (x) { return x.t; }).join(', ')) : (sel[0] ? sel[0].t : '—'));
     var act = id === 'Tip' ? !(val.length === 1 && val[0] === 'v') : d.multi ? sel.length && sel.length < it.length : !!(val[0] && it[0] && val[0] !== it[0].v);
     box.innerHTML = '<button class="xfB' + (act ? ' act' : '') + '" onclick="xfAbrir(\'' + id + '\', this)" title="Filtrar como en Excel">' + (d.tit ? d.tit + ': ' : '') + '<span class="xv">' + esc(txt) + '</span> ▾</button>';
   });
@@ -3221,7 +3233,7 @@ function guiaVer(abrir) {
 }
 function masFiltros(c) { $('mas' + c).classList.toggle('on'); }
 function limpiarFiltros() {
-  $('fEmp').value = ''; $('fCon').value = ''; S.conSel = null; $('fDe').value = ''; $('fHa').value = ''; $('fMon').value = '';
+  $('fEmp').value = ''; S.empSel = null; $('fCon').value = ''; S.conSel = null; $('fDe').value = ''; $('fHa').value = ''; $('fMon').value = '';
   if ($('qF')) $('qF').value = ''; if ($('qV')) $('qV').value = ''; if ($('qB')) $('qB').value = '';
   pintar(); xfBotones();
 }
