@@ -590,8 +590,8 @@ function srSeguir() {
   clearTimeout(SRT);
   SRT = setTimeout(function () {
     if (!SR) return;
-    R.withFailureHandler(function () { srSeguir(); }).withSuccessHandler(function (j) {
-      SR.j = j; srPintar();
+    R.withFailureHandler(function (e) { SR.fallas = (SR.fallas || 0) + 1; if (SR.fallas < 6) return srSeguir(); estado('⚠️ No pude seguir el avance de SUNAT (' + (e && e.message || e) + '). Cobranzas lo recalcula igual; toque 🔄 Recargar en unos minutos.', true); }).withSuccessHandler(function (j) {
+      SR.fallas = 0; SR.j = j; srPintar();
       if (!j.fin) return srSeguir();
       if (j.e === 'listo') cargar(true);
     }).MESA_sireEstado(TK, SR.id);
@@ -3197,7 +3197,18 @@ function xfLista() {
 }
 function xfMarca(v, on) { if (!XF[XFA.id].multi) XFA.marcados = {}; if (on) XFA.marcados[v] = 1; else delete XFA.marcados[v]; if (XF[XFA.id].multi) xfLista(); }
 function xfTodos(on) { XFA.vis.forEach(function (v) { if (on) XFA.marcados[v] = 1; else delete XFA.marcados[v]; }); xfLista(); }
-function xfAceptar() { var d = XF[XFA.id], v = Object.keys(XFA.marcados); xfCerrar(); d.aplicar(v); xfBotones(); }
+function xfAceptar() {
+  var d = XF[XFA.id], v = Object.keys(XFA.marcados); xfCerrar();
+  try { d.aplicar(v); } catch (e) { errVista('filtro ' + XFA.id + ': ' + (e && e.message || e) + ' ' + String(e && e.stack || '').split('\n').slice(0, 3).join(' | ')); }
+  try { xfBotones(); } catch (e) { errVista('xfBotones: ' + (e && e.message || e)); }
+}
+/* ⚠️ errores de la pantalla: se avisan abajo y quedan en el 🩺 Registro técnico (máx. 5 por sesión) */
+var ERRV = 0;
+function errVista(t) {
+  try { estado('⚠️ Algo falló en la pantalla: ' + String(t).slice(0, 160) + ' · ya quedó anotado para revisarlo; toque 🔄 Recargar.', true); } catch (e) {}
+  if (ERRV++ < 5) try { R.withFailureHandler(function () {}).withSuccessHandler(function () {}).MESA_errorVista(TK, String(t).slice(0, 1500) + ' · ' + navigator.userAgent.slice(0, 120)); } catch (e) {}
+}
+window.addEventListener('error', function (e) { errVista((e.message || 'error') + ' @' + (e.lineno || '?') + ':' + (e.colno || '?') + ' ' + String(e.error && e.error.stack || '').split('\n').slice(0, 3).join(' | ')); });
 function xfCerrar() { $('xfPop').className = ''; }
 function xfOrden(sel, v) { $(sel).value = v; xfCerrar(); pintar(); }
 document.addEventListener('mousedown', function (e) { var p = $('xfPop'); if (p && p.className === 'on' && !p.contains(e.target) && !(e.target.closest && e.target.closest('.xfB'))) xfCerrar(); });
