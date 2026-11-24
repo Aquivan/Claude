@@ -70,7 +70,7 @@ var MESA_WEB_FN_ = {
   MESA_rucEstado: MESA_rucEstado, MESA_rucOtro: MESA_rucOtro, MESA_rucElegir: MESA_rucElegir, MESA_version: MESA_version,
   MESA_rucVentana: MESA_rucVentana, MESA_ruc: MESA_ruc, MESA_sireRapido: MESA_sireRapido, MESA_sireEstado: MESA_sireEstado,
   MESA_errorVista: MESA_errorVista, MESA_iniInfo: MESA_iniInfo, MESA_iniVista: MESA_iniVista, MESA_iniSire: MESA_iniSire, MESA_iniGuardar: MESA_iniGuardar,
-  MESA_scpPedir: MESA_scpPedir, MESA_scpEstado: MESA_scpEstado, MESA_scpRuc: MESA_scpRuc
+  MESA_scpPedir: MESA_scpPedir, MESA_scpEstado: MESA_scpEstado, MESA_scpRuc: MESA_scpRuc, MESA_scpVarias: MESA_scpVarias
 };
 function MESA_doPost_(e) {
   var salida = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };

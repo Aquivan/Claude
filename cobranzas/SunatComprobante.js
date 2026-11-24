@@ -103,6 +103,42 @@ function MESA_scpRuc(tk, nombre) {
   return (TGQ_rucOpciones_(ssPrincipal_(), nombre).opciones || []).slice(0, 6).map(function (o) { return { ruc: o.ruc, nombre: o.nombre || o.nom || '' }; });
 }
 
+/* ============================================================ varias de una vez (un solo ingreso a SUNAT) */
+
+/**
+ * Una línea por comprobante: «20604785775 F001-10892», «UNILAC F001-10892», «NC 20604785775 FC01-12», «F001-10892 de UNILAC».
+ * Devuelve {consultas, dudas:[{linea, opciones}], malas:[linea]}. Los nombres se buscan entre los RUC ya conocidos.
+ */
+function SCP_lineas_(ss, texto, empresa, lado) {
+  var cfg = TG_cfg_(ss), grupo = cfg.cob.grupo, out = { consultas: [], dudas: [], malas: [] }, cache = {};
+  String(texto || '').split(/\r?\n|;/).map(function (l) { return l.trim(); }).filter(Boolean).slice(0, 40).forEach(function (l) {
+    var doc = INI_doc_(l.replace(/\b\d{8,11}\b/g, ' '));
+    if (!doc || !doc.numero) return out.malas.push(l);
+    var ruc = (l.match(/\b\d{11}\b/g) || []).filter(function (r) { return grupo.indexOf(r) < 0; })[0] || '';
+    var tipo = /\b(nc|n\/c|cr[eé]dito)\b/i.test(l) || /^F?C\d/i.test(doc.serie) && /cr/i.test(l) ? '07' : /\b(nd|n\/d|d[eé]bito)\b/i.test(l) ? '08' : '01';
+    var c = { empresa: empresa, lado: lado, ruc: ruc, nombre: '', tipo: tipo, serie: doc.serie, numero: doc.numero };
+    if (!ruc) {
+      var nom = l.replace(new RegExp(doc.serie + '\\s*[-\\/ ]\\s*0*' + doc.numero, 'i'), ' ').replace(/\b(factura|fac|ft|nc|nd|n\/c|n\/d|nota|de|cr[eé]dito|d[eé]bito|del)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+      if (nom.length < 3) return out.malas.push(l);
+      var ops = cache[nom] || (cache[nom] = (TGQ_rucOpciones_(ss, nom).opciones || []).slice(0, 5));
+      if (ops.length === 1 || (ops.length && normHeader_(ops[0].nombre || '') === normHeader_(nom))) { c.ruc = ops[0].ruc; c.nombre = ops[0].nombre || nom; }
+      else return out.dudas.push({ linea: l, nombre: nom, c: c, opciones: ops.map(function (o) { return { ruc: o.ruc, nombre: o.nombre || '' }; }) });
+    }
+    out.consultas.push(c);
+  });
+  return out;
+}
+
+/** Mesa: varias líneas → una sola consulta (un ingreso). Las que no tienen RUC claro vuelven para elegir. */
+function MESA_scpVarias(tk, texto, empresa, lado, elegidos) {
+  MESA_ok_(tk);
+  var r = SCP_lineas_(ssPrincipal_(), texto, aRuc_(empresa), lado);
+  (elegidos || []).forEach(function (c) { r.consultas.push(c); });
+  if (!r.consultas.length) return { lote: '', dudas: r.dudas, malas: r.malas };
+  if (r.consultas.length > 20) throw new Error('Máximo 20 comprobantes por consulta (puso ' + r.consultas.length + ').');
+  return { lote: SCP_lanzar_(r.consultas, { origen: 'mesa' }), n: r.consultas.length, dudas: r.dudas, malas: r.malas };
+}
+
 /* ============================================================ Telegram (texto o audio) */
 
 var SCP_RX_ = /(\/comprobante\b|\b(consult|busc|verific|trae|jala|saca)\w*\b[^.]*\b(sunat|comprobante)|\b(factura|boleta|nota de cr[eé]dito|nota de d[eé]bito|comprobante)\b[^.]*\b(sunat|saldo inicial))/i;
@@ -111,6 +147,8 @@ var SCP_RX_ = /(\/comprobante\b|\b(consult|busc|verific|trae|jala|saca)\w*\b[^.]
 function SCP_tg_(ctx, texto) {
   var t = String(texto || '');
   if (!SCP_RX_.test(t)) return false;
+  var conDoc = t.split(/\r?\n|;/).filter(function (l) { var d = INI_doc_(l.replace(/\b\d{8,11}\b/g, ' ')); return d && d.numero; });
+  if (conDoc.length > 1) return SCP_variasTG_(ctx, t, conDoc), true;   // varias: un solo ingreso a SUNAT
   var doc = INI_doc_(t.replace(/\b\d{8,11}\b/g, ' '));
   if (!doc || !doc.numero) {
     if (/^\/comprobante/i.test(t)) { TG_enviar_(ctx.chatId, '🔎 Dígame (o escriba) el RUC o la razón social, la serie y el número. Ej.: <i>/comprobante 20604785775 F001-10892 GRANIX</i> o <i>consulta en SUNAT la factura F001-10892 de UNILAC para GRANIX</i>.'); return true; }
@@ -140,6 +178,27 @@ function SCP_tg_(ctx, texto) {
   return true;
 }
 
+/** Varias líneas por Telegram (misma empresa y lado): las con RUC claro se consultan juntas; las dudosas se avisan. */
+function SCP_variasTG_(ctx, t, lineas, empresa) {
+  var cfg = TG_cfg_(ctx.ss), grupo = cfg.cob.grupo, nt = normHeader_(t);
+  empresa = empresa || (t.match(/\b\d{11}\b/g) || []).filter(function (r) { return grupo.indexOf(r) >= 0; })[0] || '';
+  if (!empresa) grupo.forEach(function (r) { var n = normHeader_(cfg.cob.nombreEmpresa[r] || ''); if (n && n.length >= 3 && new RegExp('\\b' + n.split(' ')[0] + '\\b').test(nt)) empresa = empresa || r; });
+  var lado = /\b(cobrar|venta|vend|emiti|cliente)/i.test(t) ? 'Por cobrar' : 'Por pagar';
+  if (!empresa) {
+    var f = [], bs = grupo.map(function (r) { return TG_bot_(cfg.cob.nombreEmpresa[r] || r, { t: 'scp', a: 'scpV', texto: t, empresa: r }); });
+    for (var i = 0; i < bs.length; i += 3) f.push(bs.slice(i, i + 3));
+    return TG_tarjeta_(ctx, '🔎 ' + lineas.length + ' comprobantes. ¿De qué empresa del grupo?', f.concat([[TG_bot_('✖ Cancelar', 'm:x', 'link')]]), { nuevo: true });
+  }
+  var r = SCP_lineas_(ctx.ss, lineas.join('\n'), empresa, lado), extra = '';
+  if (r.dudas.length) extra += '\n❔ Sin RUC claro (dígame el RUC): ' + r.dudas.map(function (d) { return TG_esc_(d.linea); }).join(' · ');
+  if (r.malas.length) extra += '\n⚠️ No entendí: ' + r.malas.map(TG_esc_).join(' · ');
+  if (!r.consultas.length) return TG_enviar_(ctx.chatId, '🔎 No pude armar ninguna consulta.' + extra);
+  try {
+    SCP_lanzar_(r.consultas.slice(0, 20), { origen: 'tg', chat: ctx.chatId });
+    TG_enviar_(ctx.chatId, '🔎 Consultando en SUNAT <b>' + Math.min(20, r.consultas.length) + '</b> comprobante(s) de una vez para <b>' + TG_esc_(cfg.cob.nombreEmpresa[empresa] || empresa) + '</b> (un solo ingreso, 1–3 min).' + extra);
+  } catch (e) { TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message)); }
+}
+
 /** Falta la empresa del grupo → se elige con botones; si no, se lanza. */
 function SCP_pedirTG_(ctx, c) {
   var cfg = TG_cfg_(ctx.ss);
@@ -157,6 +216,12 @@ function SCP_pedirTG_(ctx, c) {
 /** Botones de la consulta (k:… guardados): elegir empresa/RUC, agregar o no. */
 function SCP_alBoton_(ctx, d) {
   if (d.a === 'scpE') return SCP_pedirTG_(ctx, d.c);
+  if (d.a === 'scpV') return SCP_variasTG_(ctx, d.texto, d.texto.split(/\r?\n|;/).filter(function (l) { var x = INI_doc_(l.replace(/\b\d{8,11}\b/g, ' ')); return x && x.numero; }), d.empresa);
+  if (d.a === 'scpT') {   // 📥 agregar todas las encontradas
+    var rt = INI_agregar_(ssPrincipal_(), d.filas, 'Telegram');
+    try { MESA_tocar_(); MESA_programarRecalculo_(); } catch (e) {}
+    return TG_tarjeta_(ctx, '📥 ' + rt.nuevos + ' agregada(s)' + (rt.cambiados ? ' y ' + rt.cambiados + ' actualizada(s)' : '') + ' en «' + INI_HOJA_ + '». Cobranzas se recalcula en ~1–2 min.', []);
+  }
   if (d.a === 'scpA') {
     var r = INI_agregar_(ssPrincipal_(), [d.fila], 'Telegram');
     try { MESA_tocar_(); MESA_programarRecalculo_(); } catch (e) {}
@@ -169,6 +234,16 @@ function SCP_alBoton_(ctx, d) {
 function SCP_avisarTG_(chat, lote, est) {
   var ctx = { chatId: chat, ss: TG_ss_() };
   if (!est.resultados.length) return TG_enviar_(chat, '⚠️ La consulta a SUNAT no terminó: ' + TG_esc_(est.error || 'sin resultado'));
+  var ok = est.resultados.filter(function (x) { return x.ok; });
+  if (est.resultados.length > 3) {   // varias: un solo resumen con «agregar todas» (no una tarjeta por cada una)
+    var L = est.resultados.map(function (x) {
+      var c = x.consulta || {};
+      return x.ok ? '✅ <b>' + TG_esc_(x.fila[5] + '-' + x.fila[6]) + '</b> · ' + TG_esc_(String(x.fila[3]).slice(0, 28)) + ' · ' + TG_esc_(x.fecha) + ' · ' + (x.moneda === 'USD' ? 'US$ ' : 'S/ ') + x.total.toFixed(2) + (x.pdf ? ' <a href="' + x.pdf + '">PDF</a>' : '')
+        : '❔ ' + TG_esc_(c.serie + '-' + c.numero) + ' (' + TG_esc_(c.ruc) + '): ' + TG_esc_(x.error || 'no encontrada');
+    });
+    return TG_tarjeta_(ctx, '🔎 <b>Consulta en SUNAT</b>: ' + ok.length + ' de ' + est.resultados.length + ' encontradas\n\n' + L.join('\n') + (ok.length ? '\n\n¿Las agrego a 📥 Saldos iniciales (saldo = total)? Para poner otro saldo use la 🧩 Mesa o la hoja.' : ''),
+      ok.length ? [[TG_bot_('📥 Agregar las ' + ok.length, { t: 'scp', a: 'scpT', filas: ok.map(function (x) { return x.fila; }) }, 'success'), TG_bot_('✖ No', { t: 'scp', a: 'scpN' }, 'link')]] : [], { nuevo: true });
+  }
   est.resultados.forEach(function (x) {
     var c = x.consulta || {};
     if (!x.ok) return TG_enviar_(chat, '❔ SUNAT no mostró la <b>' + TG_esc_(c.serie + '-' + c.numero) + '</b> (' + TG_esc_(c.ruc) + '): ' + TG_esc_(x.error || 'no encontrada') + '\n<i>Revise el RUC, la serie y el número, o si es de otra empresa del grupo.</i>');
