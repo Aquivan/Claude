@@ -18,10 +18,12 @@
 // «🧪 Probar modelos Gemini» o cambiar PG_VERSION_.
 // ============================================================
 
-var PG_VERSION_ = '2026-11-24a';
-var PG_FIJOS_ = ['gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite',
-  'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
-var PG_MAX_MODELOS_ = 14;
+var PG_VERSION_ = '2026-11-24b';
+var PG_FIJOS_ = ['gemini-4-hydrogen', 'gemini-4-neon', 'gemini-4-carbon', 'gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.7-flash',
+  'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash'];
+var PG_MAX_MODELOS_ = 20;
+// Los de solo pago o sin cupo gratis (429 siempre en la prueba del 24/11) no se prueban: gastan tiempo.
+var PG_SALTAR_ = /pro|omni|nano-banana|transcribe|customtools|-preview$/i;
 var PG_CAMPOS_ = ['fecha', 'nOperacion', 'monto', 'moneda', 'banco', 'idCliente', 'proveedor'];
 
 /** Lo llama procesarVouchers: si hay una versión nueva de la prueba, la programa (cuesta una lectura de propiedad). */
@@ -44,6 +46,7 @@ function PG_iniciar_(motivo) {
   let viejo = null;
   try { viejo = JSON.parse(props.getProperty('PG_EST') || 'null'); } catch (e) {}
   if (viejo && Date.now() - viejo.t0 < 60 * 60000) return 'Ya hay una prueba en marcha. El resultado sale en el 🩺 Registro técnico.';
+  PG_borrarRes_();
   const est = { motivo: motivo, t0: Date.now(), modelos: [], archivos: [], k: 0, res: {} };
   props.setProperty('PG_EST', JSON.stringify(est));
   PG_programar_(30000);
@@ -70,8 +73,24 @@ function PG_modelos_() {
     }
   } catch (e) {}
   const lista = PG_FIJOS_.slice();
-  ids.sort().reverse().forEach(function (id) { if (lista.indexOf(id) < 0) lista.push(id); });
+  ids.sort().reverse().forEach(function (id) { if (lista.indexOf(id) < 0 && !PG_SALTAR_.test(id)) lista.push(id); });
   return { probar: lista.slice(0, PG_MAX_MODELOS_), vistos: ids };
+}
+
+/** ¿A qué modelo apunta cada alias «-latest»? Google lo dice en los datos del modelo (versión, nombre y descripción). */
+function PG_alias_(ids) {
+  const alias = ids.filter(function (id) { return /latest/i.test(id); });
+  if (!alias.length) return '';
+  return alias.map(function (id) {
+    try {
+      const r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + id + '?key=' + CFG.API_KEY, { muteHttpExceptions: true });
+      if (r.getResponseCode() !== 200) return id + ' → (Google respondió ' + r.getResponseCode() + ')';
+      const m = JSON.parse(r.getContentText());
+      return id + ' → versión «' + (m.version || '?') + '» · nombre «' + (m.displayName || '?') + '»' +
+        (m.description ? ' · ' + String(m.description).replace(/\s+/g, ' ').slice(0, 220) : '') +
+        (m.inputTokenLimit ? ' · entrada ' + m.inputTokenLimit + ' tokens' : '');
+    } catch (e) { return id + ' → (error: ' + String(e.message || e).slice(0, 80) + ')'; }
+  }).join('\n');
 }
 
 /** 3 fotos y 1 PDF (chico) de los ya procesados, los más recientes. */
@@ -96,10 +115,12 @@ function PG_paso() {
   let est = null;
   try { est = JSON.parse(props.getProperty('PG_EST') || 'null'); } catch (e) {}
   if (!est) return PG_programar_(0);
+  est.res = PG_cargarRes_(est);
   PG_programar_(7 * 60000);   // vigía: si esta ejecución muere, sigue en 7 min
   if (!est.modelos.length) {
     const m = PG_modelos_();
     est.modelos = m.probar;
+    try { REG_anotar_('Vouchers', 'alias de Gemini', '', PG_alias_(m.vistos.length ? m.vistos : PG_FIJOS_) || 'La clave no ve alias «-latest».'); } catch (e) {}
     props.setProperty('PG_VISTOS', m.vistos.join(', ').slice(0, 3000));
     est.archivos = PG_archivos_();
     if (!est.archivos.length) {
@@ -121,12 +142,31 @@ function PG_paso() {
       r.err = x.err; r.l.push({ a: k % nA, e: x.err.slice(0, 12), s: seg });
       if (/^(404|403|400)/.test(x.err)) r.nd = true;
     } else r.l.push({ a: k % nA, d: x.d, s: seg });
-    props.setProperty('PG_EST', JSON.stringify(est));
+    PG_guardarEst_(est);
   }
+  PG_guardarEst_(est);
   if (est.k < total) return PG_programar_(20000);
   props.deleteProperty('PG_EST');
+  PG_borrarRes_();
   PG_programar_(0);
   PG_informe_(est);
+}
+
+// Los resultados de cada modelo van en su propia propiedad (PG_R_<n>): todos juntos pasarían el límite de 9 KB por propiedad.
+function PG_guardarEst_(est) {
+  const props = PropertiesService.getScriptProperties(), copia = {};
+  Object.keys(est).forEach(function (k) { if (k !== 'res') copia[k] = est[k]; });
+  est.modelos.forEach(function (m, i) { if (est.res[m]) props.setProperty('PG_R_' + i, JSON.stringify(est.res[m])); });
+  props.setProperty('PG_EST', JSON.stringify(copia));
+}
+function PG_cargarRes_(est) {
+  const todas = PropertiesService.getScriptProperties().getProperties(), res = est.res || {};
+  (est.modelos || []).forEach(function (m, i) { if (todas['PG_R_' + i]) { try { res[m] = JSON.parse(todas['PG_R_' + i]); } catch (e) {} } });
+  return res;
+}
+function PG_borrarRes_() {
+  const props = PropertiesService.getScriptProperties();
+  Object.keys(props.getProperties()).forEach(function (k) { if (/^PG_R_\d+$/.test(k)) props.deleteProperty(k); });
 }
 
 /** Una lectura directa (sin respaldos ni memoria de 404). → {d:'campo|campo…'} o {err:'503 …'} */
