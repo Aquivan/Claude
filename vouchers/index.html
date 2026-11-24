@@ -1779,7 +1779,7 @@ function rucResultado(r, cont) {
 function rucClaros(k) {
   var cl = RDAT['c' + k], sel = cl.filter(function (x, i) { return $('rc' + k + '_' + i).checked; });
   if (!sel.length) return rucMsg('rcm' + k, 'No marcó ninguno.');
-  rucMsg('rcm' + k, '⏳ Escribiendo ' + sel.length + ' de una vez y recalculando Cobranzas una sola vez (hasta 1–2 min)…');
+  rucMsg('rcm' + k, '⏳ Escribiendo ' + sel.length + ' de una vez (unos segundos; Cobranzas se actualiza sola después)…');
   ia('rucelegirvarios', { lista: sel.map(function (x) { return { prov: x.prov, filas: x.filas, ruc: x.ruc, det: x.nombre + ' — ' + x.como, reemplazarAlias: rucReempProv(x.prov) }; }) }, false)
     .then(function (y) { rucMsg('rcm' + k, y.error ? '❌ ' + y.error : (y.mensaje || 'Listo.'), !!y.error); })
     .catch(function (e) { rucMsg('rcm' + k, '❌ ' + e.message + ' — lo ya escrito queda; puede volver a intentar.', 1); });
