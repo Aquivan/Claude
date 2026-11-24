@@ -653,7 +653,8 @@ function iniSunat() {
           if (!x.ok) return $('iSunat').innerHTML = '❔ ' + esc(x.error || 'SUNAT no lo mostró.');
           var f = x.fila, iso = function (d) { return d ? d.split('/').reverse().join('-') : ''; };
           $('iNom').value = f[3]; $('iFe').value = iso(f[7]); $('iVe').value = iso(f[8]); $('iMon').value = f[9]; $('iTot').value = f[10]; $('iObs').value = f[14] || '';
-          $('iSunat').innerHTML = '✅ <b>Encontrada en SUNAT</b>' + (x.estado ? ' (' + esc(x.estado) + ')' : '') + ': ' + esc(f[3]) + ' · ' + esc(f[7]) + ' · ' + esc(f[9]) + ' ' + fm(Number(f[10])) + (x.igv ? ' (IGV ' + fm(x.igv) + ')' : '') + (x.formaPago ? ' · ' + esc(x.formaPago) : '') +
+          $('iSunat').innerHTML = '✅ <b>Encontrada en SUNAT</b>' + (x.estado ? ' (' + esc(x.estado) + ')' : '') + ': ' + esc(f[3]) + ' · ' + esc(f[7]) + ' · ' + esc(f[9]) + ' ' + fm(Number(f[10])) + (x.igv ? ' (IGV ' + fm(x.igv) + ')' : '') + (x.formaPago ? ' · ' + esc(x.formaPago) : '') + (x.vence ? ' · vence ' + esc(x.vence) : '') + ' <span style="color:#64748B">(' + esc(x.fuente || 'SUNAT') + ')</span>' +
+            (x.pdf ? ' · <a href="' + esc(x.pdf) + '" target="_blank">📄 PDF oficial</a>' : '') +
             '. Revise; si ya se pagó una parte, ponga el saldo. <details><summary>Ver lo que mostró SUNAT</summary><pre style="white-space:pre-wrap;max-height:200px;overflow:auto;font-size:11px">' + esc(x.texto || '') + '</pre></details>';
           INI.sunat = $('iDoc').value; iniUna();
         }).MESA_scpEstado(TK, r.lote);

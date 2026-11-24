@@ -20,6 +20,11 @@ import time
 import urllib.parse
 import urllib.request
 import http.cookiejar
+import base64
+import io
+import zipfile
+import urllib.error
+import xml.etree.ElementTree as ET
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 CID = "4f3b88b3-d9d6-402a-b85d-6a0bc857746a"
@@ -27,6 +32,8 @@ SEC = f"https://api-seguridad.sunat.gob.pe/v1/clientessol/{CID}/oauth2"
 ORIG = "https://e-menu.sunat.gob.pe/cl-ti-itmenu/AutenticaMenuInternet.htm"
 MENU = "https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm"
 CD = "https://ww1.sunat.gob.pe/ol-ti-itconscpegem/consultar.do"
+API = "https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe/comprobantes"   # la de «descargar XML/PDF» (sunat-facturas-lote.yml)
+COD_API = {"01": "01", "07": "F7", "08": "F8"}   # código que exige la API moderna (N/C = F7, N/D = F8)
 # tipo de comprobante + lado → tipoConsulta de la app clásica (10/11 FE, 13/14 N/C, 15/16 N/D; emitida/recibida)
 TIPO_CONSULTA = {("01", "emit"): "10", ("01", "recib"): "11", ("07", "emit"): "13", ("07", "recib"): "14",
                  ("08", "emit"): "15", ("08", "recib"): "16"}
@@ -83,8 +90,63 @@ class Sol:
                                                   "j_password": clave, "captcha": "", "originalUrl": ORIG, "state": state})
         if "Men" not in t:
             raise RuntimeError("no pude entrar a SUNAT SOL (revise la clave SOL de esa empresa)")
-        self.post(MENU, {"action": "prevApp"})
-        self.get(f"{MENU}?action=execute&code=11.9.5.1.1")
+        self.consulta_abierta = False
+        self.token = self._token_api()
+
+    def _token_api(self):
+        """Token de la API moderna (la misma que baja el XML y PDF oficiales): viene en la redirección del menú."""
+        class NoSeguir(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *a, **k):
+                return None
+        op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar), NoSeguir)
+        op.addheaders = [("User-Agent", UA)]
+        try:
+            self.post(MENU, {"action": "prevApp"})
+            url = f"{MENU}?action=execute&code=11.38.1.1.1"
+            for _ in range(5):
+                try:
+                    r = op.open(url, timeout=60)
+                    loc = r.headers.get("Location") or ""
+                except urllib.error.HTTPError as e:
+                    loc = e.headers.get("Location") or ""
+                m = re.search(r"token=([^&]+)", loc)
+                if m:
+                    return urllib.parse.unquote(m.group(1))
+                if not loc:
+                    return ""
+                url = urllib.parse.urljoin(url, loc)
+        except Exception:   # noqa: BLE001
+            return ""
+        return ""
+
+    def xml_api(self, id_api, accion="02"):
+        """02 = XML (zip), 01 = PDF (zip). Devuelve los bytes del archivo de adentro, o None. Reintenta: la API falla seguido."""
+        if not self.token:
+            return None
+        for _ in range(5):
+            try:
+                req = urllib.request.Request(f"{API}/{id_api}/{accion}?formato=x", headers={
+                    "Authorization": "Bearer " + self.token, "Accept": "application/json, text/plain, */*",
+                    "Origin": "https://e-factura.sunat.gob.pe", "Referer": "https://e-factura.sunat.gob.pe/", "User-Agent": UA})
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    d = json.loads(r.read().decode() or "{}")
+                if d.get("valArchivo"):
+                    z = zipfile.ZipFile(io.BytesIO(base64.b64decode(d["valArchivo"])))
+                    nombres = [n for n in z.namelist() if not n.endswith("/")]
+                    if accion == "02":
+                        nombres = [n for n in nombres if n.lower().endswith(".xml")] or nombres
+                    if nombres:
+                        return z.read(nombres[0])
+            except Exception:   # noqa: BLE001
+                pass
+            time.sleep(4)
+        return None
+
+    def abrir_consulta(self):
+        if not self.consulta_abierta:
+            self.post(MENU, {"action": "prevApp"})
+            self.get(f"{MENU}?action=execute&code=11.9.5.1.1")
+            self.consulta_abierta = True
 
     def get(self, url, ref=None):
         req = urllib.request.Request(url, headers={"Referer": ref} if ref else {})
@@ -98,6 +160,7 @@ class Sol:
             return r.read().decode("utf-8", "replace")
 
     def comprobante(self, tipo_consulta, ruc_emisor, serie, numero, desde, hasta):
+        self.abrir_consulta()
         q = self.post(CD, {"action": "realizarConsulta", "buscarPor": "porDoc", "tipoConsulta": tipo_consulta, "rucEmisor": ruc_emisor,
                            "serie": serie, "numero": numero, "numDocideRecep": "", "fecDesde": desde, "fecHasta": hasta}, ref=CD)
         self.get(f"{CD}?action=mostrarListado&tipoConsulta={tipo_consulta}", ref=CD)
@@ -167,6 +230,95 @@ def parsear(h, c):
     return d
 
 
+
+def _l(e):
+    return e.tag.split("}")[-1] if isinstance(e.tag, str) else ""
+
+
+def _hijos(e, nombre):
+    return [x for x in e.iter() if _l(x) == nombre]
+
+
+def _uno(e, *ruta):
+    """Primer elemento que sigue la ruta de nombres locales (sin importar los espacios de nombres)."""
+    actual = [e]
+    for n in ruta:
+        sig = []
+        for a in actual:
+            sig += [x for x in list(a) if _l(x) == n]
+        if not sig:
+            return None
+        actual = sig
+    return actual[0]
+
+
+def _txt(e, *ruta):
+    x = _uno(e, *ruta)
+    return (x.text or "").strip() if x is not None and x.text else ""
+
+
+def _fecha(iso):
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", iso or "")
+    return f"{m.group(3)}/{m.group(2)}/{m.group(1)}" if m else ""
+
+
+def parsear_xml(datos):
+    """Datos exactos del XML oficial (UBL 2.1 de SUNAT): factura, nota de crédito o de débito."""
+    raiz = ET.fromstring(datos)
+    tipo = _l(raiz)
+    sup = _uno(raiz, "AccountingSupplierParty", "Party")
+    cli = _uno(raiz, "AccountingCustomerParty", "Party")
+    def ruc(p):
+        return _txt(p, "PartyIdentification", "ID") if p is not None else ""
+    def nombre(p):
+        return (_txt(p, "PartyLegalEntity", "RegistrationName") or _txt(p, "PartyName", "Name")) if p is not None else ""
+    total_e = _uno(raiz, "LegalMonetaryTotal", "PayableAmount")
+    if total_e is None:   # (un Element sin hijos vale False: no usar «or»)
+        total_e = _uno(raiz, "RequestedMonetaryTotal", "PayableAmount")
+    total = float(total_e.text) if total_e is not None and total_e.text else 0.0
+    igv = 0.0
+    tt = _uno(raiz, "TaxTotal", "TaxAmount")
+    if tt is not None and tt.text:
+        igv = float(tt.text)
+    forma, vences = "", []
+    for pt in [x for x in list(raiz) if _l(x) == "PaymentTerms"]:
+        pid, medio = _txt(pt, "ID"), _txt(pt, "PaymentMeansID")
+        if pid.lower() == "formapago" and medio.lower() in ("contado", "credito"):
+            forma = "Crédito" if medio.lower() == "credito" else "Contado"
+        f = _txt(pt, "PaymentDueDate")
+        if f:
+            vences.append(f)
+    vence = max(vences) if vences else _txt(raiz, "DueDate")
+    det = []
+    for ln in [x for x in list(raiz) if _l(x) in ("InvoiceLine", "CreditNoteLine", "DebitNoteLine")][:5]:
+        desc = _txt(ln, "Item", "Description")
+        if desc:
+            det.append(" ".join(desc.split()))
+    ref = _txt(raiz, "BillingReference", "InvoiceDocumentReference", "ID") or _txt(raiz, "DiscrepancyResponse", "ReferenceID")
+    return {"emisor_ruc": ruc(sup), "emisor_nombre": nombre(sup), "receptor_ruc": ruc(cli), "receptor_nombre": nombre(cli),
+            "fecha": _fecha(_txt(raiz, "IssueDate")), "vence": _fecha(vence), "moneda": _txt(raiz, "DocumentCurrencyCode") or "PEN",
+            "total": total, "igv": igv, "forma_pago": forma, "detalle": " || ".join(det)[:300],
+            "estado": "", "modifica": ref, "fuente": "XML oficial (API SUNAT)", "texto": "", "clase": tipo}
+
+
+def buscar_xml(sol, c, emisor, recibida):
+    """1º camino: el XML oficial por la API moderna (como la descarga de facturas). PDF oficial de paso."""
+    cod = COD_API.get(c["tipo"])
+    if not cod or not sol.token:
+        return None
+    id_api = f"{emisor}-{cod}-{c['serie']}-{int(c['numero'])}-{'2' if recibida else '1'}"
+    x = sol.xml_api(id_api, "02")
+    if not x:
+        return None
+    try:
+        d = parsear_xml(x)
+    except Exception:   # noqa: BLE001
+        return None
+    pdf = sol.xml_api(id_api, "01")
+    if pdf and len(pdf) < 3_000_000:
+        d["pdf_b64"] = base64.b64encode(pdf).decode()
+    return d
+
 def rangos(fecha):
     """Rangos de fecha a probar: el año de la fecha dictada, o este año y los dos anteriores."""
     hoy = datetime.date.today()
@@ -180,8 +332,59 @@ def rangos(fecha):
     return out
 
 
+def prueba(empresa):
+    """Prueba real sin datos en el registro: toma un comprobante de compras de esa empresa del SIRE ya bajado (carpeta
+    sire/<RUC>/historico del repositorio), lo busca en SUNAT por los dos caminos y solo imprime ✓ / ✗ (ningún valor)."""
+    import csv
+    import glob
+    archivos = sorted(glob.glob(f"sire/{empresa}/historico/*/compras_aceptada.csv"))
+    fila = None
+    for a in reversed(archivos):
+        filas = [r for r in csv.DictReader(open(a, encoding="utf-8-sig")) if str(r.get("Tipo CP/Doc.", "")).strip().lstrip("0") == "1"]
+        if filas:
+            fila = filas[len(filas) // 2]
+            break
+    if not fila:
+        sys.exit("No hay compras del SIRE de esa empresa en el repositorio para probar.")
+    c = {"i": 0, "empresa": empresa, "lado": "Por pagar", "ruc": fila["Nro Doc Identidad"].strip(), "tipo": "01",
+         "serie": fila["Serie del CDP"].strip(), "numero": str(int(float(fila["Nro CP o Doc. Nro Inicial (Rango)"]))), "fecha": fila["Fecha de emisión"].strip()}
+    total_sire = num(fila.get("Total CP", ""))
+    claves = leer_claves()
+    if empresa not in claves:
+        sys.exit("Falta la clave SOL de esa empresa")
+    t0 = time.time()
+    sol = Sol(empresa, claves[empresa][0], claves[empresa][1], state_login())
+    print(f"1. Entrar a SUNAT SOL: ✓ ({time.time() - t0:.0f} s)")
+    print(f"2. Token de la API de descarga (XML/PDF): {'✓' if sol.token else '✗'}")
+    t1 = time.time()
+    d = buscar_xml(sol, c, c["ruc"], True)
+    if d:
+        campos = ["emisor_ruc", "emisor_nombre", "receptor_ruc", "fecha", "moneda", "total", "igv", "forma_pago", "detalle"]
+        print(f"3. XML oficial: ✓ ({time.time() - t1:.0f} s) · " + " ".join(f"{k} {'✓' if d.get(k) else '✗'}" for k in campos) +
+              f" · vence {'✓' if d.get('vence') else '—'} · PDF {'✓' if d.get('pdf_b64') else '✗'}")
+        print(f"   total igual al del SIRE: {'✓' if abs(d['total'] - total_sire) < 0.02 else '✗'} · emisor correcto: {'✓' if d['emisor_ruc'] == c['ruc'] else '✗'} · receptor = la empresa: {'✓' if d['receptor_ruc'] == empresa else '✗'}")
+    else:
+        print(f"3. XML oficial: ✗ ({time.time() - t1:.0f} s)")
+    t2 = time.time()
+    h = None
+    for desde, hasta in rangos(c["fecha"]):
+        h, _ = sol.comprobante("11", c["ruc"], c["serie"], c["numero"], desde, hasta)
+        if h:
+            break
+    if h:
+        d2 = parsear(h, {"emisor": c["ruc"]})
+        print(f"4. Consulta de comprobantes (respaldo): ✓ ({time.time() - t2:.0f} s) · fecha {'✓' if d2['fecha'] else '✗'} · total {'✓' if d2['total'] else '✗'}"
+              f" · igual al SIRE {'✓' if abs(d2['total'] - total_sire) < 0.02 else '✗'} · moneda {'✓' if d2['moneda'] else '✗'}")
+    else:
+        print(f"4. Consulta de comprobantes (respaldo): ✗ ({time.time() - t2:.0f} s)")
+    if not d and not h:
+        sys.exit(1)
+
+
 def main():
     lote = (os.environ.get("LOTE") or "").strip()
+    if lote == "prueba":
+        return prueba((os.environ.get("EMPRESA") or "").strip())
     if not lote:
         sys.exit("Falta el lote")
     r = bot({"accion": "scp_pendientes", "lote": lote})
@@ -213,7 +416,13 @@ def main():
                 resultados.append({"i": c["i"], "ok": False, "error": "ese tipo de comprobante no se puede consultar aquí (solo factura, N/C y N/D)"})
                 continue
             emisor = c["ruc"] if recibida else emp
-            bot({"accion": "scp_estado", "lote": lote, "estado": "🔎 buscando el comprobante en SUNAT…"})
+            bot({"accion": "scp_estado", "lote": lote, "estado": "🔎 bajando el XML oficial del comprobante…"})
+            d = buscar_xml(sol, c, emisor, recibida)
+            if d:
+                d.update({"i": c["i"], "ok": True})
+                resultados.append(d)
+                continue
+            bot({"accion": "scp_estado", "lote": lote, "estado": "🔎 buscando en Consulta de comprobantes…"})
             hallado = None
             for desde, hasta in rangos(c.get("fecha")):
                 try:
