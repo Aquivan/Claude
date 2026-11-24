@@ -21,6 +21,7 @@ function hojasRespaldadas_() {
   return [
     { nombre: HOJA.MANUAL, desde: 2, cols: 10, proteger: true, contarBorrados: true },
     { nombre: HOJA_REASIGNAR_, desde: 4, cols: 6, proteger: true, contarBorrados: true },
+    { nombre: INI_HOJA_, desde: 2, cols: 16, contarBorrados: true },
     { nombre: HOJA.CONFIG, desde: 1, cols: 16 },
     { nombre: HOJA.DECISIONES, desde: 2, cols: 4 },
   ];

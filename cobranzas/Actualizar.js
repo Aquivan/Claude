@@ -27,7 +27,7 @@ function actualizacionAutomatica__reg() {
 
 // Subir este numero cuando cambie la forma de calcular o escribir, para que la
 // siguiente actualizacion automatica rehaga todo aunque los datos no cambien.
-var VERSION_CALCULO_ = '15';
+var VERSION_CALCULO_ = '16';
 
 function huellaExterna_(ss, cfg, liqs) {
   var partes = ['v' + VERSION_CALCULO_, Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd')]; // cambia de dia: recalcular vencidos
@@ -39,6 +39,7 @@ function huellaExterna_(ss, cfg, liqs) {
   if (man && man.getLastRow() > 1) partes.push(hashTexto_(JSON.stringify(man.getRange(2, 1, man.getLastRow() - 1, 10).getDisplayValues())));
   var reas = ss.getSheetByName(HOJA_REASIGNAR_);
   if (reas && reas.getLastRow() > 3) partes.push(hashTexto_(JSON.stringify(reas.getRange(4, 1, reas.getLastRow() - 3, 6).getDisplayValues())));
+  try { partes.push('ini:' + INI_huella_(ss)); } catch (e) {}
   var conf = ss.getSheetByName(HOJA.CONFIG);
   if (conf) partes.push(hashTexto_(JSON.stringify(conf.getDataRange().getDisplayValues())));
   return partes.join('#');
@@ -98,8 +99,18 @@ function actualizarTodoInterno_(forzar) {
     aplicarReasignaciones_(ss, ret);
     var det = leerDetraccionesSunat_(cfg, manual);
 
+    // 📥 Saldos iniciales y facturas fuera de SIRE (SaldosIniciales.js): van DESPUÉS de las del SIRE (si la misma está en
+    // el SIRE, manda la del SIRE) y sin el filtro de fecha «desde»; lo de antes del corte de esas facturas ya está en su saldo.
+    var ini = { docs: [], pagos: [], cortes: {}, avisos: [], n: 0 }, pagosTodos = vch.pagos.concat(manual, ret.pagos, det.pagos);
+    try {
+      ini = INI_leer_(ss, cfg);
+      var fi = INI_filtrarAntesDelCorte_(ini, docs.concat(ini.docs), pagosTodos.concat(ini.pagos));
+      docs = fi.docs; pagosTodos = fi.pagos;
+      if (ini.n) bitacora_(ss, 'Saldos iniciales', t0, ini.n + ' factura(s)' + (fi.quitados ? ' · ' + fi.quitados + ' movimiento(s) de antes del corte ya incluidos en el saldo' : ''));
+    } catch (e) { bitacora_(ss, 'Saldos iniciales ERROR', t0, e.message); }
+
     var res = ejecutarCruce_({
-      docs: docs, pagos: vch.pagos.concat(manual, ret.pagos, det.pagos), decisiones: decisiones,
+      docs: docs, pagos: pagosTodos, decisiones: decisiones,
       grupo: cfg.grupo, alias: cfg.aliasNombre, categorias: cfg.categorias,
       opciones: { modo: cfg.modo, tolerancia: cfg.tolerancia, diasVentana: cfg.ventana },
     });
@@ -109,6 +120,7 @@ function actualizarTodoInterno_(forzar) {
     });
 
     ret.avisos.forEach(function (a) { res.errores.push(a); });
+    ini.avisos.forEach(function (a) { res.errores.push(a); });
     (vco.avisos || []).forEach(function (a) { res.errores.unshift(a); });
     det.avisos.forEach(function (a) { res.errores.push(a); });
     avisosRespaldo.forEach(function (a) { res.errores.unshift(a); });
