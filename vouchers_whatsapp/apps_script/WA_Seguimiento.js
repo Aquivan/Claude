@@ -206,6 +206,8 @@ function WA_procesarYa_() {
     console.log('Procesar al instante: HTTP ' + r.getResponseCode() + ' ' + r.getContentText().slice(0, 300));
     var j = null;
     try { j = JSON.parse(r.getContentText()); } catch (e2) {}
+    REG_anotar_('WhatsApp', 'procesar al instante', Math.round((Date.now() - t0) / 1000),   // 🩺 WA_Registro.js
+      'HTTP ' + r.getResponseCode() + (j ? ' · ' + JSON.stringify(j).slice(0, 400) : ' · ' + r.getContentText().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 300)));
     if (!j || r.getResponseCode() !== 200) {
       // ⚡ La hoja de Vouchers no respondió bien: se reintenta en la revisión del minuto siguiente (no se espera su vuelta de 10 min).
       console.error('Procesar al instante: la hoja de Vouchers no respondió JSON (HTTP ' + r.getResponseCode() + '): ' + r.getContentText().replace(/<[^>]+>/g, ' ').slice(0, 300));
@@ -217,6 +219,7 @@ function WA_procesarYa_() {
     } else if (j.tiempos && j.tiempos.total) p.setProperty('WA_ULT_TIEMPOS', JSON.stringify({ en: Date.now(), t: j.tiempos }));
   } catch (e) {
     console.error('Procesar al instante falló: ' + e.message);
+    REG_anotar_('WhatsApp', 'procesar al instante (falló)', '', String(e.message).slice(0, 300));
     WA_ULT_FALLO_ = /timed? ?out|tiempo/i.test(e.message) ? 'la hoja de Vouchers tardó demasiado en responder (sigue procesando; le mando el resultado al terminar)' : String(e.message).slice(0, 150);
     p.setProperty('WA_PROCESAR_PEND', '1');   // ⚡ se reintenta en la revisión del minuto siguiente
     p.setProperty('WA_PROCESAR_ERROR', Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM HH:mm') + ' ' + String(e.message).slice(0, 120));
