@@ -115,7 +115,7 @@ function LEC_leer_(base64, mimeType, esPDF, totalPaginasLote) {
       ultimoError = e;
       const msg = String(e && e.message || e);
       fallas.push(LEC_NOMBRES_[p] + ': ' + msg.slice(0, 90));
-      if (p === 'gemini' && /API_SATURADA|HTTP_(429|5\d\d)/.test(msg)) { try { cacheL.put('lec_gemini_caido', '1', 120); } catch (e2) {} }
+      if (p === 'gemini' && /API_SATURADA|HTTP_(429|5\d\d)/.test(msg)) { try { cacheL.put('lec_gemini_caido', '1', LEC_SEG_CAIDO_); } catch (e2) {} }
       Logger.log('Lector ' + LEC_NOMBRES_[p] + ' falló: ' + msg.slice(0, 200) + (hayOtro ? ' → se prueba el siguiente.' : ''));
     }
   }
@@ -283,7 +283,7 @@ function LEC_puente_() {
 // · LEC_leerParalelo_: si Gemini falló el lote, las páginas van A LA VEZ a NVIDIA (antes una tras otra).
 // ============================================================
 
-var LEC_SEG_CAIDO_ = 120;
+var LEC_SEG_CAIDO_ = 60;   // «saturado»: 1 min sin probarlo (antes 2) — Gemini se vuelve a intentar antes
 
 function LEC_caido_(p, m) {
   try { return !!CacheService.getScriptCache().get('lec_caido_' + p + '_' + String(m).replace(/[^\w.\-]/g, '_')); } catch (e) { return false; }
