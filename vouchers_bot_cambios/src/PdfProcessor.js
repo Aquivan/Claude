@@ -51,7 +51,10 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
   }
 
   // ⚡ PDF largo (más de un lote): primero se pregunta en paralelo qué Gemini está respondiendo (Lectores.js).
-  if (totalPags - startIdx > Math.max(1, CFG.PAGINAS_POR_LOTE || 1) && typeof LEC_sondeoGemini_ === 'function') {
+  // 📦 Páginas por lote: 10 (antes 5): la mitad de consultas a Gemini y de esperas por «saturado». Se puede cambiar sin
+  // tocar código con la propiedad del script PAGINAS_POR_LOTE.
+  const TAM_LOTE = Math.max(1, Number(PropertiesService.getScriptProperties().getProperty('PAGINAS_POR_LOTE')) || 10);
+  if (totalPags - startIdx > TAM_LOTE && typeof LEC_sondeoGemini_ === 'function') {
     const tSondeo = Date.now();
     try { LEC_sondeoGemini_(); } catch (eS) { Logger.log('Sondeo: ' + eS.message); }
     if (typeof TIEMPOS_ !== 'undefined') { TIEMPOS_.ia += Date.now() - tSondeo; TIEMPOS_.sondeo = (TIEMPOS_.sondeo || 0) + Date.now() - tSondeo; }
@@ -60,7 +63,6 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
   let pdfIncompleto = false;
   let alguno = false;
   const resumenes = [];
-  const TAM_LOTE = Math.max(1, CFG.PAGINAS_POR_LOTE || 1);
 
   for (let loteInicio = startIdx; loteInicio < totalPags; loteInicio += TAM_LOTE) {
     if (Date.now() - inicioEjecucion > LIMITE) {
@@ -189,64 +191,71 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
         }
       }
 
-      for (let rel = 1; rel <= paginasLeidas; rel++) {
-        const indiceGlobal     = loteInicio + (rel - 1);
-        const numeroPaginaReal = indiceGlobal + 1;
-        const vouchersPage     = porPagina[rel] || [];
-        let filasInsertadas    = 0;
-        let miniBlobPagina     = null; // se arma solo si esta pagina de verdad tiene un voucher
+      // 💾 Las filas del lote se escriben JUNTAS al final (escribirPendientes_, SheetWriter.js) y recién después las
+      // imágenes (cada imagen necesita su fila ya escrita).
+      const tareasImg = [];
+      ctx.diferir = true;
+      try {
+        for (let rel = 1; rel <= paginasLeidas; rel++) {
+          const indiceGlobal     = loteInicio + (rel - 1);
+          const numeroPaginaReal = indiceGlobal + 1;
+          const vouchersPage     = porPagina[rel] || [];
+          let filasInsertadas    = 0;
 
-        for (let j = 0; j < vouchersPage.length; j++) {
-          const v      = vouchersPage[j];
-          const montoV = parsearMonto(v.monto);
+          for (let j = 0; j < vouchersPage.length; j++) {
+            const v      = vouchersPage[j];
+            const montoV = parsearMonto(v.monto);
 
-          if (esDuplicadoCtx(ctx, v.nOperacion, v.banco, montoV)) {
-            Logger.log('  Pag.' + numeroPaginaReal + ' duplicado: ' + v.nOperacion + ' / ' + v.banco + ' / ' + montoV);
-            escribirFilaVoucher(ctx, {
-              fecha: v.fecha, nOperacion: '[DUPLICADO]', banco: v.banco, moneda: v.moneda,
-              monto: montoV, proveedor: v.proveedor, idCliente: v.idCliente,
-              cliente: v.cliente, descripcion: v.descripcion
-            }, nombre, numeroPaginaReal, 'Duplicado exacto', remitente);
-            flushSeguro_();
-            resumenes.push({ banco: v.banco, moneda: v.moneda, monto: montoV, nOperacion: v.nOperacion, duplicado: true });
-            filasInsertadas++;
-            continue;
-          }
+            if (esDuplicadoCtx(ctx, v.nOperacion, v.banco, montoV)) {
+              Logger.log('  Pag.' + numeroPaginaReal + ' duplicado: ' + v.nOperacion + ' / ' + v.banco + ' / ' + montoV);
+              escribirFilaVoucher(ctx, {
+                fecha: v.fecha, nOperacion: '[DUPLICADO]', banco: v.banco, moneda: v.moneda,
+                monto: montoV, proveedor: v.proveedor, idCliente: v.idCliente,
+                cliente: v.cliente, descripcion: v.descripcion
+              }, nombre, numeroPaginaReal, 'Duplicado exacto', remitente);
+              resumenes.push({ banco: v.banco, moneda: v.moneda, monto: montoV, nOperacion: v.nOperacion, duplicado: true });
+              filasInsertadas++;
+              continue;
+            }
 
-          const fila = escribirFilaVoucher(ctx, v, nombre, numeroPaginaReal, null, remitente);
-          registrarEnIndice(ctx, v.nOperacion, v.banco, montoV);
-
-          // ⚡ Si NVIDIA/Groq leyó esta página, su imagen ya está hecha: va directo a la celda (sin Drive ni esperas).
-          if (miniPagina[indiceGlobal] && IMG_medir_(function () { return _insertarBase64EnCelda(ctx.hoja, fila, 10, miniPagina[indiceGlobal], 'image/jpeg', 'Voucher ' + numeroPaginaReal); })) {
-            if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.imagenReuso++;
-            flushSeguro_();
+            const fila = escribirFilaVoucher(ctx, v, nombre, numeroPaginaReal, null, remitente);
+            registrarEnIndice(ctx, v.nOperacion, v.banco, montoV);
+            tareasImg.push({ fila: fila, indiceGlobal: indiceGlobal, numeroPaginaReal: numeroPaginaReal });
             alguno = true;
             filasInsertadas++;
             resumenes.push({ banco: v.banco, moneda: v.moneda, monto: montoV, nOperacion: v.nOperacion, duplicado: false });
-            continue;
           }
-          if (!miniBlobPagina) {
-            const miniDoc  = await PDFLib.PDFDocument.create();
-            const [pagCop] = await miniDoc.copyPages(pdfDoc, [indiceGlobal]);
-            miniDoc.addPage(pagCop);
-            const miniBytes = await miniDoc.save();
-            miniBlobPagina = Utilities.newBlob([...new Int8Array(miniBytes)], MimeType.PDF, 'pag_' + numeroPaginaReal + '.pdf');
-          }
-          insertarImagenDesdeBlob(ctx.hoja, fila, 10, miniBlobPagina, 'Voucher ' + numeroPaginaReal);
-          flushSeguro_();   // UN solo flush por voucher
-          alguno = true;
-          filasInsertadas++;
-          resumenes.push({ banco: v.banco, moneda: v.moneda, monto: montoV, nOperacion: v.nOperacion, duplicado: false });
-        }
 
-        if (filasInsertadas === 0) {
-          escribirFilaVoucher(ctx, {
-            fecha:'', nOperacion:'[OMITIDO]', banco:'', moneda:'', monto:0,
-            proveedor:'Pagina sin voucher nuevo o legible', idCliente:'', cliente:'', descripcion:''
-          }, nombre, numeroPaginaReal, 'Vacio / Ignorado', remitente);
-          flushSeguro_();
+          if (filasInsertadas === 0) {
+            escribirFilaVoucher(ctx, {
+              fecha:'', nOperacion:'[OMITIDO]', banco:'', moneda:'', monto:0,
+              proveedor:'Pagina sin voucher nuevo o legible', idCliente:'', cliente:'', descripcion:''
+            }, nombre, numeroPaginaReal, 'Vacio / Ignorado', remitente);
+          }
         }
+      } finally {
+        ctx.diferir = false;
+        escribirPendientes_(ctx);
       }
+
+      // 🖼 Imágenes: la ya hecha (NVIDIA/Groq o preparadas a la vez) directo; si no hay, como siempre por Drive.
+      const miniBlobs = {};
+      for (let q = 0; q < tareasImg.length; q++) {
+        const tk = tareasImg[q];
+        if (miniPagina[tk.indiceGlobal] && IMG_medir_(function () { return _insertarBase64EnCelda(ctx.hoja, tk.fila, 10, miniPagina[tk.indiceGlobal], 'image/jpeg', 'Voucher ' + tk.numeroPaginaReal); })) {
+          if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.imagenReuso++;
+          continue;
+        }
+        if (!miniBlobs[tk.indiceGlobal]) {
+          const miniDoc  = await PDFLib.PDFDocument.create();
+          const [pagCop] = await miniDoc.copyPages(pdfDoc, [tk.indiceGlobal]);
+          miniDoc.addPage(pagCop);
+          const miniBytes = await miniDoc.save();
+          miniBlobs[tk.indiceGlobal] = Utilities.newBlob([...new Int8Array(miniBytes)], MimeType.PDF, 'pag_' + tk.numeroPaginaReal + '.pdf');
+        }
+        insertarImagenDesdeBlob(ctx.hoja, tk.fila, 10, miniBlobs[tk.indiceGlobal], 'Voucher ' + tk.numeroPaginaReal);
+      }
+      if (tareasImg.length) flushSeguro_();   // UNA confirmación para todas las imágenes del lote
 
       if (cortado) { pdfIncompleto = true; break; }   // ⏱ lo que falta, en la próxima ejecución (1 min)
 

@@ -100,6 +100,18 @@ function escribirFilaVoucher(ctx, voucher, nombreArchivo, numeroPagina, estadoCo
     origen
   ];
 
+  // ⚡ Modo lote (ctx.diferir, PdfProcessor.js): la fila se guarda en memoria y se escriben TODAS las del lote juntas
+  // con escribirPendientes_ (1 escritura + 1 formato + 1 confirmación por lote, en vez de 3-4 por voucher).
+  if (ctx.diferir) {
+    ctx.pend = ctx.pend || [];
+    ctx.pend.push({ fila: fila, valores: filaValores, nota: voucher._lector || '',
+      args: [voucher, nombreArchivo, numeroPagina, estadoColumnaJ, remitente] });
+    ctx.ultimaFila = fila;
+    const nomD = (nombreArchivo || '').trim();
+    if (nomD && numeroPagina && (!ctx.indicePag[nomD] || numeroPagina > ctx.indicePag[nomD])) ctx.indicePag[nomD] = numeroPagina;
+    return fila;
+  }
+
   // ⚡ Primero la fila COMPLETA de una sola vez (1 escritura en vez de 14: varios segundos menos por voucher).
   // Si falla (una columna tipada por una "Tabla" de Sheets), recién ahí se escribe celda por celda como siempre.
   const tEscribir = Date.now();
@@ -150,6 +162,47 @@ function escribirFilaVoucher(ctx, voucher, nombreArchivo, numeroPagina, estadoCo
   }
 
   return fila;
+}
+
+/** Escribe juntas las filas guardadas en modo lote (ctx.pend). Si la escritura junta falla (columna tipada por una
+ *  «Tabla» de Sheets), se escriben una por una como siempre. */
+function escribirPendientes_(ctx) {
+  const pend = ctx.pend || [];
+  ctx.pend = [];
+  if (!pend.length) return;
+  const t0 = Date.now(), hoja = ctx.hoja, primera = pend[0].fila;
+  const seguidas = pend.every(function (p, i) { return p.fila === primera + i; });
+  let ok = false;
+  if (seguidas) {
+    try {
+      hoja.getRange(primera, 1, pend.length, pend[0].valores.length).setValues(pend.map(function (p) { return p.valores; }));
+      SpreadsheetApp.flush();
+      ok = true;
+    } catch (e) { Logger.log('  Filas del lote juntas no se pudo (' + e.message + '): una por una.'); }
+  }
+  if (!ok) {   // como antes: fila por fila (y celda por celda si hace falta)
+    const ult = ctx.ultimaFila;
+    pend.forEach(function (p) {
+      ctx.ultimaFila = p.fila - 1;
+      const a = p.args;
+      escribirFilaVoucher(ctx, a[0], a[1], a[2], a[3], a[4]);
+    });
+    ctx.ultimaFila = Math.max(ult, ctx.ultimaFila);
+    if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.escribir += Date.now() - t0;
+    return;
+  }
+  if (!ESTADO_FORMATO_.bloqueado) {
+    try {
+      hoja.getRange(primera, 1, pend.length, 1).setNumberFormat('dd/MM/yyyy');
+      hoja.getRange(primera, 5, pend.length, 1).setNumberFormat('#,##0.00');
+      SpreadsheetApp.flush();
+    } catch (eF) {
+      ESTADO_FORMATO_.bloqueado = true;
+      Logger.log('Formato numerico deshabilitado para esta ejecucion: ' + eF.message);
+    }
+  }
+  pend.forEach(function (p) { if (p.nota) { try { hoja.getRange(p.fila, 2).setNote(p.nota); } catch (eN) {} } });
+  if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.escribir += Date.now() - t0;
 }
 
 function obtenerHoja(nombrePestana) {
