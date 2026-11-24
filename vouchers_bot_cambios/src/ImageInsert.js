@@ -130,3 +130,15 @@ function insertarImagenBase64_(hoja, fila, columna, base64, mimeType, nombre) {
     hoja.getRange(fila, columna).setValue('[imagen no disponible]');
   }
 }
+
+
+// ⏱ Imágenes que quedaron sin poner por falta de tiempo: «Reparar imágenes faltantes» (Repair.js) las pone en 2 min,
+// en su propia ejecución. Disparador aparte (IMG_repararPronto) para no tocar el de cada 30 min si está activado.
+function IMG_repararPronto_() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'IMG_repararPronto') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('IMG_repararPronto').timeBased().after(2 * 60 * 1000).create();
+}
+async function IMG_repararPronto() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'IMG_repararPronto') ScriptApp.deleteTrigger(t); });
+  await repararImagenesFaltantes();
+}

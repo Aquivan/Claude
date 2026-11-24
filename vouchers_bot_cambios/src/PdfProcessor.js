@@ -65,7 +65,10 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
   const resumenes = [];
 
   for (let loteInicio = startIdx; loteInicio < totalPags; loteInicio += TAM_LOTE) {
-    if (Date.now() - inicioEjecucion > LIMITE) {
+    // ⏱ Un lote de 10 páginas tarda ~1,5-2 min (leer + filas + imágenes): solo se empieza si queda ese tiempo antes del
+    // corte de Google (6 min). El 24/11 a las 12:10 un lote empezó tarde y Google cortó al poner las imágenes.
+    const reservaLote = Math.min(120000, TAM_LOTE * 11000);
+    if (Date.now() - inicioEjecucion > LIMITE - reservaLote) {
       Logger.log('Limite de tiempo antes del lote en pag. ' + (loteInicio + 1) + '/' + totalPags + '. Progreso guardado.');
       pdfIncompleto = true;
       break;
@@ -172,7 +175,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
           if (miniPagina[ig]) continue;
           if ((porPagina[rel] || []).some(function (v) { return !esDuplicadoCtx(ctx, v.nOperacion, v.banco, parsearMonto(v.monto)); })) faltan.push(ig);
         }
-        if (faltan.length >= 2) {
+        if (faltan.length >= 2 && Date.now() - inicioEjecucion < LIMITE - 20000) {
           const tImgs = Date.now();
           try {
             const pdfsImg = [];
@@ -240,8 +243,11 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
 
       // 🖼 Imágenes: la ya hecha (NVIDIA/Groq o preparadas a la vez) directo; si no hay, como siempre por Drive.
       const miniBlobs = {};
+      let imgPendientes = false;
       for (let q = 0; q < tareasImg.length; q++) {
         const tk = tareasImg[q];
+        // ⏱ Cerca del corte de Google: las imágenes que faltan quedan para «Reparar imágenes» en 2 min (los datos ya están).
+        if (Date.now() - inicioEjecucion > LIMITE + 10000) { imgPendientes = true; break; }
         if (miniPagina[tk.indiceGlobal] && IMG_medir_(function () { return _insertarBase64EnCelda(ctx.hoja, tk.fila, 10, miniPagina[tk.indiceGlobal], 'image/jpeg', 'Voucher ' + tk.numeroPaginaReal); })) {
           if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.imagenReuso++;
           continue;
@@ -256,6 +262,10 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
         insertarImagenDesdeBlob(ctx.hoja, tk.fila, 10, miniBlobs[tk.indiceGlobal], 'Voucher ' + tk.numeroPaginaReal);
       }
       if (tareasImg.length) flushSeguro_();   // UNA confirmación para todas las imágenes del lote
+      if (imgPendientes) {
+        Logger.log('Sin tiempo para todas las imágenes: las que faltan se ponen en 2 min (Reparar imágenes).');
+        try { IMG_repararPronto_(); } catch (eR) { Logger.log('No se pudo programar la reparación: ' + eR.message); }
+      }
 
       if (cortado) { pdfIncompleto = true; break; }   // ⏱ lo que falta, en la próxima ejecución (1 min)
 
