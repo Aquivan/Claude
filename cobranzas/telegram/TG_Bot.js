@@ -132,6 +132,7 @@ function TG_manejar_(u) {
   if (IAT_tg_(ctx, texto)) return;   // 🤖 «ia»: la IA de cada tarea (TG_IATareas.js)
   if (VIG_tg_(ctx, texto) || VIG_tgCorregir_(ctx, texto)) return;   // 🔭 «modelos»: vigía de modelos de IA · «prueba 1 nOperacion=…» (TG_Vigia.js)
   if (LECT_tg_(ctx, texto)) return;   // 🧾 «lectores»: qué IA lee los vouchers y en qué orden (TG_Lectores.js)
+  if (TGX_tg_(ctx, texto)) return;   // ⏱ «última ejecución» · «deshacer tanda» (TG_Tandas.js)
   if (TGRL_tg_(ctx, texto)) return;   // 🔁 "volver a leer Originales 2666" (TG_Releer.js)
   if (CTV_tg_(ctx, texto)) return;   // 🔁 "cambia el último a foto" (TG_CambiarTipo.js)
   if (TGQ_RX_.test(texto)) return TGQ_tg_(ctx, texto);   // 📋 "procesados hoy sonia" (TG_Procesados.js)
@@ -269,6 +270,8 @@ function TG_comando_(ctx, texto) {
     case 'descargar': return TG_asistenteDescarga_(ctx, null);
     case 'ia': return IAT_tg_(ctx, 'ia') || TG_enviar_(chatId, 'Solo para administradores.');   // 🤖 IA de cada tarea (TG_IATareas.js)
     case 'modelos': case 'modelo': return VIG_tg_(ctx, 'modelos ' + (arg || '')) || TG_enviar_(chatId, 'Solo para administradores.');   // 🔭 vigía de modelos (TG_Vigia.js)
+    case 'ultima': case 'ultimaejecucion': return TGX_ultimaTG_(ctx);   // ⏱ última vuelta de la hoja de Vouchers (TG_Tandas.js)
+    case 'tandas': return TGX_listaTG_(ctx);   // 🗑 deshacer una tanda de vouchers
     case 'lectores': case 'lector': return LECT_tg_(ctx, 'lectores ' + (arg || '')) || TG_enviar_(chatId, 'Solo para administradores.');   // 🧾 lectores de vouchers (TG_Lectores.js)
     case 'nvidia': return TGNV_comando_(ctx);   // 🟩 probar modelos gratis de NVIDIA y elegir uno (TG_Nvidia.js)
     case 'sire': return TGS_comandoTG_(ctx, arg);   // ⚡ SIRE solo reporte (rápido): /sire granix 202601-202609
@@ -525,7 +528,8 @@ function TG_alBoton_(ss, q) {
       return TG_preguntar_(ctx, '', adjs);
     case 'sug': return TG_preguntar_(ctx, datos.texto, []);
     case 'rlee': return TGRL_botonTG_(ctx, datos, op);   // 🔁 volver a leer una página (TG_Releer.js)
-    case 'tgqruc': return TGQ_tg_(ctx, 'procesados', datos.filas || []);   // 🔎 RUC de los vouchers del aviso (TG_Procesados.js)
+    case 'tgqruc': return TGQ_tg_(ctx, 'procesados', datos.filas || []);
+    case 'tgx': return TGX_alBoton_(ctx, datos);   // ⏱ última ejecución y 🗑 deshacer una tanda (TG_Tandas.js)   // 🔎 RUC de los vouchers del aviso (TG_Procesados.js)
     case 'cambios': return TG_aplicarCambios_(ctx, datos, op);
     case 'rucelige': return TGQ_eligeTG_(ctx, datos, op);
     case 'tgrcomp': return TGR_compBotonTG_(ctx, datos, op);   // ✏️ completar vouchers: todo / solo RUC / otra factura (TG_Retener.js)

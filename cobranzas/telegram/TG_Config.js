@@ -389,6 +389,7 @@ function TG_comandosAlDia_() {
 // Comandos que Telegram muestra en el botón "Menú".
 var TG_COMANDOS_ = [
   ['menu', '📋 Menú principal'],
+  ['ultima', '⏱ Última ejecución de Vouchers (y 🗑 deshacer una tanda)'],
   ['resumen', '📊 Resumen de hoy (todo el grupo)'],
   ['cobrar', '💰 Cuentas por cobrar'],
   ['pagar', '💸 Cuentas por pagar'],
