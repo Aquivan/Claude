@@ -202,8 +202,9 @@ function MESA_ruc(tk, fn, args) {
 function MESA_sireRapido(tk, empresa, periodo, tipo) {
   var quien = MESA_ok_(tk);
   var ss = TG_ss_(), cfg = TG_cfg_(ss);
-  empresa = String(empresa || '').replace(/\D/g, '');
-  if (empresa && cfg.cob.grupo.indexOf(empresa) < 0) throw new Error('Ese RUC no es del grupo.');
+  var rucs = String(empresa || '').split(/[^\d]+/).filter(function (r) { return /^\d{11}$/.test(r); });   // una o varias (Empresa ▾ con casillas)
+  rucs.forEach(function (r) { if (cfg.cob.grupo.indexOf(r) < 0) throw new Error(r + ' no es del grupo.'); });
+  empresa = rucs.join(',');
   periodo = String(periodo || '').replace(/\D/g, '') || TG_mes_(0);
   if (!/^20\d\d(0[1-9]|1[0-2])$/.test(periodo)) throw new Error('Periodo inválido (AAAAMM).');
   if (periodo > TG_mes_(0)) throw new Error(periodo + ' todavía no empieza.');
@@ -213,7 +214,7 @@ function MESA_sireRapido(tk, empresa, periodo, tipo) {
   var desde = Date.now();
   TG_gh_(cfg, '/actions/workflows/' + p.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: inputs });
   console.log('Mesa · SIRE rápido pedido por ' + quien + ': ' + JSON.stringify(inputs));
-  var j = MESA_sireVigilar_({ e: 'sunat', desde: desde, wf: p.wf, titulo: TGS_titulo_(inputs), rucs: empresa ? [empresa] : cfg.cob.grupo.slice(), anio: periodo.slice(0, 4) });
+  var j = MESA_sireVigilar_({ e: 'sunat', desde: desde, wf: p.wf, titulo: TGS_titulo_(inputs), rucs: rucs.length ? rucs : cfg.cob.grupo.slice(), anio: periodo.slice(0, 4) });
   return { texto: TG_textoDescarga_(acc, cfg.cob), id: j.id };
 }
 
