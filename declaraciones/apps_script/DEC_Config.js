@@ -194,7 +194,7 @@ function DEC_mensualActivo_() {
 }
 
 /** Disparador mensual: pide los últimos meses (hasta el mes anterior). */
-function DEC_mensual() {
+function DEC_mensual__reg() {
   var cfg = DEC_cfg_();
   var r = DEC_pedir_(cfg, { empresa: 'todas', desde: DEC_mesAtras_(cfg.meses), hasta: DEC_mesAtras_(1) });
   DEC_marcar_(DEC_ahora_() + ' · descarga mensual pedida (' + r.desde + '–' + r.hasta + ')');

@@ -792,7 +792,7 @@ function MESA_programarRecalculo_() {
 }
 function MESA_etapa_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('MESA_ETAPA') || 'null'); } catch (e) { return null; } }
 
-function MESA_recalcular() {
+function MESA_recalcular__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'MESA_recalcular') ScriptApp.deleteTrigger(t); });
   MESA_esperarEscritura_();
   var props = PropertiesService.getScriptProperties(), pedido = props.getProperty('MESA_PEDIDO');

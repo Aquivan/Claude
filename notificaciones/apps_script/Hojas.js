@@ -269,7 +269,7 @@ function NOT_importarAhora_() {
   NOT_conCandado_(function () { NOT_actualizarDatos_(); NOT_ordenarPdf_(); });
 }
 
-function NOT_continuarPdf() {
+function NOT_continuarPdf__reg() {
   NOT_borrarContinuacion_();
   NOT_conCandado_(function () { NOT_ordenarPdf_(); });
 }

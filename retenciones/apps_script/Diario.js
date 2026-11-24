@@ -15,7 +15,7 @@ var RET_TITULO_DIARIO_ = 'Retenciones · diario';
 var RET_MAX_REVISIONES_ = 12;  // 12 x 8 min = hasta ~1.5 horas esperando a GitHub
 
 /** Disparador diario (mismo nombre de siempre: los activadores ya instalados siguen funcionando). */
-function RET_actualizacionAutomatica() {
+function RET_actualizacionAutomatica__reg() {
   var estado = 'nada';
   try {
     var cfg = RET_leerConfig_();
@@ -37,7 +37,7 @@ function RET_actualizacionAutomatica() {
 }
 
 /** Revision cada 8 min hasta que GitHub termine; entonces importa. */
-function RET_importarTrasDescarga() {
+function RET_importarTrasDescarga__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'RET_importarTrasDescarga') ScriptApp.deleteTrigger(t);
   });

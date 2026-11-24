@@ -153,7 +153,7 @@ function VIG_programar_(ms) {
 }
 
 /** Disparador: lee pares (modelo, voucher) hasta ~4 min y se reprograma. */
-function VIG_paso() {
+function VIG_paso__reg() {
   var props = PropertiesService.getScriptProperties(), est, t0 = Date.now();
   try { est = JSON.parse(props.getProperty('VIG_EST') || 'null'); } catch (e) { est = null; }
   if (!est) return VIG_programar_(0);
@@ -265,7 +265,7 @@ function VIG_asegurar_() {
   props.setProperty('VIG_TRIGGER', '1');
 }
 
-function VIG_semanal() {
+function VIG_semanal__reg() {
   var b = VIG_buscar_(), props = PropertiesService.getScriptProperties(), ult = null;
   try { ult = JSON.parse(props.getProperty('VIG_ULTIMO') || 'null'); } catch (e) {}
   var hayPruebas = VIG_pruebas_().length > 0;

@@ -956,7 +956,7 @@ function TGP_encolarAnalisis_(clave, job) {
 }
 
 /** Activador: continúa las revisiones pendientes (los archivos ya leídos están guardados: solo se leen los que faltan). */
-function TGP_seguirAnalisis() {
+function TGP_seguirAnalisis__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TGP_seguirAnalisis') ScriptApp.deleteTrigger(t); });
   var props = PropertiesService.getScriptProperties(), todas = props.getProperties(), ss = TG_ss_();
   Object.keys(todas).filter(function (k) { return k.indexOf('TGP_ANJ_') === 0; }).forEach(function (k) {

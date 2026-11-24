@@ -15,7 +15,7 @@ var NOT_TITULO_DIARIO_ = 'Notificaciones · diario';
 var NOT_MAX_REVISIONES_ = 12;  // 12 x 8 min = hasta ~1.5 horas esperando a GitHub
 
 /** Disparador diario (mismo nombre de siempre: los activadores ya instalados siguen funcionando). */
-function NOT_actualizacionAutomatica() {
+function NOT_actualizacionAutomatica__reg() {
   var estado = 'nada';
   try {
     var cfg = NOT_leerConfig_();
@@ -37,7 +37,7 @@ function NOT_actualizacionAutomatica() {
 }
 
 /** Revision cada 8 min hasta que GitHub termine; entonces importa. */
-function NOT_importarTrasDescarga() {
+function NOT_importarTrasDescarga__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'NOT_importarTrasDescarga') ScriptApp.deleteTrigger(t);
   });

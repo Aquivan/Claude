@@ -317,7 +317,7 @@ function TG_programarSeguimiento_(min) {
 }
 
 /** Disparador: revisa las descargas pedidas desde Telegram y avisa las que terminaron. */
-function TG_seguirDescargas() {
+function TG_seguirDescargas__reg() {
   var props = PropertiesService.getScriptProperties();
   var lista = JSON.parse(props.getProperty('TG_SEGUIR') || '[]');
   if (!lista.length) return;

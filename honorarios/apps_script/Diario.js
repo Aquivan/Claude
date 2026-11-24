@@ -15,7 +15,7 @@ var HON_TITULO_DIARIO_ = 'Honorarios · diario';
 var HON_MAX_REVISIONES_ = 12;  // 12 x 8 min = hasta ~1.5 horas esperando a GitHub
 
 /** Disparador diario (mismo nombre de siempre: los activadores ya instalados siguen funcionando). */
-function HON_actualizacionAutomatica() {
+function HON_actualizacionAutomatica__reg() {
   var estado = 'nada';
   try {
     var cfg = HON_leerConfig_();
@@ -37,7 +37,7 @@ function HON_actualizacionAutomatica() {
 }
 
 /** Revision cada 8 min hasta que GitHub termine; entonces importa. */
-function HON_importarTrasDescarga() {
+function HON_importarTrasDescarga__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'HON_importarTrasDescarga') ScriptApp.deleteTrigger(t);
   });

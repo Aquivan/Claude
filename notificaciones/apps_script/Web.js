@@ -171,7 +171,7 @@ function NOT_webFin_(d) {
 }
 
 /** Después de que el robot mandó lo bajado: rehace Panel, Notificaciones y Mensajes. */
-function NOT_trasDescarga() {
+function NOT_trasDescarga__reg() {
   ScriptApp.getProjectTriggers().forEach(function (x) { if (x.getHandlerFunction() === 'NOT_trasDescarga') ScriptApp.deleteTrigger(x); });
   try { NOT_importarAhora_(); } catch (x) { console.warn('Notificaciones (actualizar tras descarga): ' + x.message); }
 }

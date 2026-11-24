@@ -418,7 +418,7 @@ function DET_importarAhora_() {
   DET_conCandado_(function () { DET_actualizarDatos_(); DET_ordenarConstancias_(); });
 }
 
-function DET_continuarConstancias() {
+function DET_continuarConstancias__reg() {
   DET_borrarContinuacion_();
   DET_conCandado_(DET_ordenarConstancias_);
 }

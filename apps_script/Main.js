@@ -948,9 +948,9 @@ function obtenerOCrearHoja_(ss, nombre) {
  * disparadores ahora llaman a estas funciones públicas, y el menú
  * "🔧 Reparar ejecuciones automáticas" cambia los que ya estaban creados.
  * ---------------------------------------------------------------------- */
-function ejecucionDiariaAutomatica() { dispararEjecucionProgramadaDiaria_(); }
-function importacionAutomatica() { importarSiHayCorridaNueva_(); }
-function seguimientoAutomatico() { seguimientoAutomatico_(); }
+function ejecucionDiariaAutomatica__reg() { dispararEjecucionProgramadaDiaria_(); }
+function importacionAutomatica__reg() { importarSiHayCorridaNueva_(); }
+function seguimientoAutomatico__reg() { seguimientoAutomatico_(); }
 
 function menuRepararDisparadores() {
   var props = PropertiesService.getScriptProperties();

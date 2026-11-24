@@ -140,7 +140,7 @@ function GR_programarRevision_() {
 function GR_menuResultados() { GR_guardia_(); var n = GR_revisarResultados(); SpreadsheetApp.getActive().toast(n ? n + ' guía(s) en curso.' : 'No hay guías en curso.', '🚚 Guías', 5); }
 
 /** Trae del bot el estado de las guías en curso. Devuelve cuántas siguen en curso (sin ninguna, se apaga solo). */
-function GR_revisarResultados() {
+function GR_revisarResultados__reg() {
   var ss = SpreadsheetApp.getActive();
   var sh = ss.getSheetByName(GR_HOJA_), ult = sh.getLastRow();
   if (ult < GR_FILA1_) return 0;

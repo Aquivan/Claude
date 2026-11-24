@@ -95,7 +95,7 @@ function programarColaWebhook_() {
 }
 
 /** Activador: importa lo que GitHub aviso, una empresa a la vez. */
-function procesarColaWebhook() {
+function procesarColaWebhook__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'procesarColaWebhook') ScriptApp.deleteTrigger(t);
   });
@@ -181,7 +181,7 @@ function quitarSirePendiente_(ruc, periodo) {
 }
 
 /** Activador: vuelve a pedir lo pendiente (una sola corrida rápida por mes, todas esas empresas juntas). */
-function reintentarSirePendientes() {
+function reintentarSirePendientes__reg() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'reintentarSirePendientes') ScriptApp.deleteTrigger(t); });
   var p = leerSirePendientes_(), porPeriodo = {}, rendidos = [];
   Object.keys(p).forEach(function (k) {

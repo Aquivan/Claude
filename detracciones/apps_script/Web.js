@@ -186,7 +186,7 @@ function DET_webFin_(d) {
 }
 
 /** Después de que el robot mandó lo bajado: rehace Panel, Detracciones, Por proveedor y Por mes, y reintenta las que fallaron. */
-function DET_trasDescarga() {
+function DET_trasDescarga__reg() {
   ScriptApp.getProjectTriggers().forEach(function (x) { if (x.getHandlerFunction() === 'DET_trasDescarga') ScriptApp.deleteTrigger(x); });
   try { DET_importarAhora_(); } catch (e) { console.warn('Detracciones (actualizar tras descarga): ' + e.message); }
   DET_revisarFallas_();
