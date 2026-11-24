@@ -123,7 +123,7 @@ function leerVouchers_(cfg) {
       idCliente: col('idCliente'), descripcion: col('Descripcion'), archivo: col('Archivo Original'),
       idUsuario: col('ID Usuario'), empresa: col('Empresa'), idBenef: col('ID Beneficiario'),
       refs: col('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc'), porRetener: col('Por Retener'),
-      enviadoPor: col('Enviado por'), usuario: col('Cliente (usuario)', 'Cliente'),
+      enviadoPor: col('Enviado por'), usuario: col('Cliente (usuario)', 'Cliente'), nota: col('Nota'),
     };
     // Pestaña sin los encabezados de siempre (pegada sin títulos o con las columnas en otro
     // orden): se lee A–J reconociendo cada columna por su contenido (o con el mapa que ya
@@ -167,6 +167,8 @@ function leerVouchers_(cfg) {
         descripcion: c.descripcion >= 0 ? String(r[c.descripcion] || '') : '',
         enviadoPor: c.enviadoPor >= 0 ? String(r[c.enviadoPor] || '').trim() : '',
         usuario: c.usuario >= 0 ? String(r[c.usuario] || '').trim() : '',
+        nota: c.nota >= 0 ? String(r[c.nota] || '').trim() : '',
+        archivo: c.archivo >= 0 ? String(r[c.archivo] || '').trim() : '',
       };
       agregar(pago);
     });
