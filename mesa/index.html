@@ -254,7 +254,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
     <span id="eCamb"></span>
     <span class="seg" id="eAgr" title="Cómo agrupar"><button data-v="pe" class="on" onclick="segE(this)">Proveedor → Empresa</button><button data-v="ep" onclick="segE(this)">Empresa → Proveedor</button></span>
     <span class="seg" id="eEst"><button data-v="saldo" class="on" onclick="segE(this)">Con saldo</button><button data-v="todas" onclick="segE(this)">Todas</button><button data-v="canc" onclick="segE(this)">Canceladas</button><button data-v="venc" onclick="segE(this)">Vencidas</button></span>
-    <span class="seg" id="eDet" title="Cuánto detalle"><button data-v="res" onclick="segE(this)" title="Una línea por proveedor (y empresa) con los totales de cada concepto">📋 Resumen</button><button data-v="fac" class="on" onclick="segE(this)" title="Una línea por factura: total, N/C, retención, detracción, pagado y saldo">🧾 Por factura</button><button data-v="det" onclick="segE(this)" title="Cada factura con sus movimientos y el saldo que va quedando, y los vouchers del proveedor">🔎 Detallado</button><button data-v="ana" onclick="segE(this)" title="Análisis de cuenta tipo Contasis: cada documento con su compromiso, sus amortizaciones y el saldo, en soles y/o dólares, con totales por proveedor y exportación a Excel">📒 Análisis</button></span>
+    <span class="seg" id="eDet" title="Cuánto detalle"><button data-v="res" onclick="segE(this)" title="Una línea por proveedor (y empresa) con los totales de cada concepto">📋 Resumen</button><button data-v="fac" class="on" onclick="segE(this)" title="Una línea por factura: total, N/C, retención, detracción, pagado y saldo">🧾 Por factura</button><button data-v="det" onclick="segE(this)" title="Cada factura con sus movimientos y el saldo que va quedando, y los vouchers del proveedor">🔎 Detallado</button><button data-v="tip" onclick="segE(this)" title="Todo agrupado por tipo: facturas, notas de crédito y débito, retenciones, detracciones, pagos (vouchers), pagos manuales, devoluciones y otros, con el total de cada grupo">📑 Por tipo</button><button data-v="ana" onclick="segE(this)" title="Análisis de cuenta tipo Contasis: cada documento con su compromiso, sus amortizaciones y el saldo, en soles y/o dólares, con totales por proveedor y exportación a Excel">📒 Análisis</button></span>
     <span id="anaOpc" style="display:none;gap:4px;align-items:center">
       <select id="eAnaMon" onchange="pintarE()" title="En qué moneda se ven los montos (se convierte con el tipo de cambio del documento)"><option value="ambas">Soles y dólares</option><option value="pen">Solo soles (S/)</option><option value="usd">Solo dólares (US$)</option></select>
       <span class="seg" id="eAnaRes"><button data-v="det" class="on" onclick="segOn('eAnaRes',this.dataset.v);pintarE()" title="Cada documento con sus pagos, retenciones, detracciones y N/C">Detalle</button><button data-v="res" onclick="segOn('eAnaRes',this.dataset.v);pintarE()" title="Una línea por documento: compromiso, amortización y saldo">Resumir</button></span>
@@ -337,7 +337,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
 <div id="modal"><div class="caja" id="mCaja"></div></div>
 <div id="ec"><div id="ecBar"><b>📨 Estado de cuenta para enviar</b>
   <label>Desde</label><input type="date" id="ecDe" onchange="ecPintar()"><label>Hasta</label><input type="date" id="ecHa" onchange="ecPintar()">
-  <span class="seg" id="ecNiv"><button data-v="res" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">📋 Resumido</button><button data-v="det" class="on" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">🔎 Detallado</button><button data-v="ana" onclick="segOn('ecNiv',this.dataset.v);ecPintar()" title="Análisis de documentos (como Contasis): cada documento con su compromiso, amortizaciones y saldo, en soles y/o dólares">📒 Análisis</button></span>
+  <span class="seg" id="ecNiv"><button data-v="res" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">📋 Resumido</button><button data-v="det" class="on" onclick="segOn('ecNiv',this.dataset.v);ecPintar()">🔎 Detallado</button><button data-v="tip" onclick="segOn('ecNiv',this.dataset.v);ecPintar()" title="Todo agrupado por tipo (facturas, N/C, N/D, retenciones, detracciones, pagos…) con el total de cada grupo">📑 Por tipo</button><button data-v="ana" onclick="segOn('ecNiv',this.dataset.v);ecPintar()" title="Análisis de documentos (como Contasis): cada documento con su compromiso, amortizaciones y saldo, en soles y/o dólares">📒 Análisis</button></span>
   <span id="ecAnaOpc" style="display:none;gap:4px;align-items:center"><select id="ecAnaMon" onchange="ecPintar()"><option value="ambas">Soles y dólares</option><option value="pen">Solo soles (S/)</option><option value="usd">Solo dólares (US$)</option></select>
   <span class="seg" id="ecAnaRes"><button data-v="det" class="on" onclick="segOn('ecAnaRes',this.dataset.v);ecPintar()">Detalle</button><button data-v="res" onclick="segOn('ecAnaRes',this.dataset.v);ecPintar()">Resumir</button></span>
   <label title="Mostrar u ocultar la columna Glosa"><input type="checkbox" id="ecAnaGlosa" checked onchange="ecPintar()"> Glosa</label>
@@ -2039,8 +2039,8 @@ function pintarE() {
     .map(function (x) { return '<div class="kpi"><div class="t">' + x[0] + '</div><div class="v">' + x[1] + '</div></div>'; }).join('');
   S.E.claves = lista.map(function (g) { return g.k; });
   $('anaOpc').style.display = niv === 'ana' ? 'inline-flex' : 'none';
-  var h = niv === 'res' ? [resumenE(lista, totG, agr)] : niv === 'ana' ? [analisisE(lista, agr)] : lista.slice(0, 300).map(function (g, gi) { return grupoE(g, gi, agr, niv); });
-  if (niv !== 'res' && niv !== 'ana' && lista.length > 300) h.push('<div class="mas">Se muestran los primeros 300 grupos de ' + lista.length + ': use los filtros o el 📋 Resumen.</div>');
+  var h = niv === 'res' ? [resumenE(lista, totG, agr)] : niv === 'ana' ? [analisisE(lista, agr)] : niv === 'tip' ? [porTipoE(lista, agr)] : lista.slice(0, 300).map(function (g, gi) { return grupoE(g, gi, agr, niv); });
+  if (niv !== 'res' && niv !== 'ana' && niv !== 'tip' && lista.length > 300) h.push('<div class="mas">Se muestran los primeros 300 grupos de ' + lista.length + ': use los filtros o el 📋 Resumen.</div>');
   if (!lista.length) h = ['<div class="mas" style="color:var(--gr)">' + (vis === 'comp' ? 'No hay cambios sin guardar: haga cruces en 💳 Vouchers o 🧾 Retenciones y vuelva aquí para ver cómo quedará.' : 'No hay facturas con estos filtros.') + '</div>'];
   if (vis === 'comp' && lista.length) h.unshift('<div class="ley"><span>⚖️ Solo las facturas que cambian con lo que hizo en la Mesa: <s>saldo antes</s> → saldo después. Las líneas 🆕 son las nuevas.</span></div>');
   $('repCont').innerHTML = h.join('');
@@ -2148,6 +2148,19 @@ function detalladoE(sg) {
 }
 function copiarE() {
   var L = [], n = 0;
+  if (ENIV === 'tip') {
+    L.push(['Proveedor/Cliente', 'RUC', 'Empresa', 'Moneda', 'Grupo', 'Fecha', 'Documento', 'Concepto', 'Monto'].join('\t'));
+    EPT.forEach(function (b) {
+      porTipoDatos(b.L).grupos.forEach(function (G) {
+        var tit = tipoTitulo(G.g, S.lado === 'Por pagar').replace(/^\S+\s/, '');
+        G.l.forEach(function (l) { n++; L.push([b.nomC, b.cr, b.nomE, b.mon, tit, ff(l.f), l.doc, l.con, l.cargo || l.abono].join('\t')); });
+        L.push([b.nomC, b.cr, b.nomE, b.mon, 'TOTAL ' + tit, '', '', '', G.tot].join('\t'));
+      });
+    });
+    var tt = document.createElement('textarea'); tt.value = L.join('\n'); document.body.appendChild(tt); tt.select();
+    try { document.execCommand('copy'); estado('📋 Copiados ' + n + ' movimientos agrupados por tipo: péguelos en Excel o Sheets.'); } catch (e) { estado('No se pudo copiar.', true); }
+    tt.remove(); return;
+  }
   if (ENIV === 'det') {
     L.push(['Proveedor/Cliente', 'Empresa', 'Documento', 'Fecha', 'Tipo', 'Concepto', 'Operación', 'Banco', 'Importe', 'Saldo', 'Origen'].join('\t'));
     EVIS.forEach(function (d) {
@@ -2408,6 +2421,7 @@ function ayudaCompleta() {
     '<li>En el estado de cuenta: <b>💾 Guardado</b> (lo que está hoy), <b>✏️ Con mis cambios</b> (cómo quedará si guarda: saldo antes tachado → después, líneas 🆕) y <b>⚖️ Comparar</b> (solo lo que cambia). Desde ahí mismo puede 💾 Guardar.</li>' +
     '<li><b>🧮 Calculadora</b> (botón arriba o F2): flotante y movible; IGV, retención 3%, detracción, memoria e historial. <b>Alt+clic</b> en cualquier monto de la pantalla lo pasa a la calculadora.</li>' +
     '<li><b>🧹 Quitar cruces</b>: deja en blanco los cruces del proveedor / empresa filtrados (y, si lo marca, las reasignaciones de retención y las devoluciones) para volver a cruzar desde cero. Nada se escribe hasta 💾 Guardar; ↶ lo vuelve todo de una vez.</li>' +
+    '<li><b>📑 Por tipo</b> (en 📊 Estado de cuenta y en 📨 Para enviar): todo agrupado por tipo —🧾 facturas, ➕ notas de débito, 📄 notas de crédito, 🧾 retenciones, 🏦 detracciones, 💳 pagos (vouchers, incluso los que están a cuenta sin factura), 💵 pagos manuales y efectivo, ✂️ otros descuentos y ↩️ devoluciones—, cada grupo con su lista (fecha, documento, concepto, monto) y su <b>total</b>, y un resumen de grupos con el saldo. En el Estado de cuenta va por proveedor (o cliente) → empresa → moneda, con los totales de todo lo que se ve arriba; respeta los filtros. 📋 Copiar (Excel), 🖨 Imprimir; en 📨 Para enviar también ⬇ PDF, 🖼 Imagen y 📋 Copiar texto.</li>' +
     '<li><b>📒 Análisis</b> (en 📊 Estado de cuenta, junto a Detallado): el análisis de cuenta de los sistemas contables (como Contasis): por proveedor o cliente, cada documento con su <b>compromiso</b>, cada <b>amortización</b> (pago, retención, detracción, N/C, efectivo) con su documento y fecha, el <b>saldo</b> que va quedando y el <b>mes en que se canceló</b>; total por proveedor y total general en S/ y US$. <b>Detalle</b> (cada factura en su bloque, con la línea 🧾 <b>Saldo de la factura</b> al final: compromiso − amortización = saldo, y su estado) o <b>Resumir</b> (una línea por documento); moneda <b>soles y dólares / solo soles / solo dólares</b> (convierte con el tipo de cambio del documento del SIRE o, si no lo tiene, el del día más cercano). <b>⬇ Excel</b>, 📋 Copiar y 🖨 Imprimir. Respeta los filtros de arriba. También está en <b>📨 Para enviar</b> (botón «📒 Análisis»): el análisis de un proveedor con encabezado formal y conformidad, para mandar en PDF (sale horizontal), imagen, texto o Excel.</li>' +
     '<li><b>📨 Estado de cuenta para enviar</b> (en 📊 Estado de cuenta: botón «📨 Para enviar» arriba o en cada proveedor): el formato de los sistemas contables, listo para mandar al proveedor o cliente. Encabezado (empresa, proveedor, periodo, moneda), <b>resumen del periodo</b> (saldo inicial + facturas − N/C − retenciones − detracciones − pagos + devoluciones = saldo final), <b>antigüedad de saldos</b> (por vencer, 1–30, 31–60, 61–90, +90), <b>facturas pendientes</b> y, en «Detallado», los <b>movimientos</b> con saldo acumulado (cada pago en una línea con las facturas que canceló). Elija desde/hasta (vacío = desde el inicio), resumido o detallado y si lleva conformidad (firma). <b>🖨 Imprimir / PDF</b>, <b>🖼 Imagen</b> (para WhatsApp) o <b>📋 Copiar</b> (Excel o correo).</li>' +
     '<li><b>📄 Comprobantes</b>: en la 🔍 ficha de una factura, cada retención tiene «📄 ver comprobante de retención» y cada detracción «📄 ver constancia de detracción»; se abren en el visor con sus datos (fecha, monto retenido, facturas). También en 🧾 Retenciones al tocar un comprobante o su línea. Salen de las hojas de Retenciones y Detracciones (el PDF tiene que estar copiado a Drive).</li>' +
@@ -2655,9 +2669,10 @@ function ecNotaHtml(pos) {
 function ecNotaTexto() { return ($('ecNota') && $('ecNota').value || '').trim(); }
 function dias(a, b) { return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000); }
 /** Arma los movimientos de ese proveedor/cliente y empresa en una moneda: cargos (facturas, N/D, devoluciones) y abonos (pagos, N/C, retenciones, detracciones…). */
-function ecDatos(cr, er, mon) {
+function ecDatos(cr, er, mon, opc) {
+  opc = opc || {};
   var pagar = S.lado === 'Por pagar';
-  var docs = EV.docs.filter(function (d) { return d.cr === cr && (!er || d.er === er) && d.mon === mon; });
+  var docs = (opc.docs || EV.docs).filter(function (d) { return d.cr === cr && (!er || d.er === er) && d.mon === mon; });
   var L = [], vou = {}, cre = {};
   docs.forEach(function (d) {
     var nd = /^08_/.test(d.doc), nc = /^07_/.test(d.doc) || d.tot < 0;
@@ -2674,7 +2689,7 @@ function ecDatos(cr, er, mon) {
   S.data.vouchers.forEach(function (v) {
     var c = pagar ? v.br : v.pr, e = pagar ? v.pr : v.br;
     if (c !== cr || (er && e && e !== er) || v.mon !== mon || v.dev) return;
-    var modo = $('ecSinEmp').value;
+    var modo = opc.modo || $('ecSinEmp').value;
     if (!e ? modo === 'con' : modo === 'sin') return;   // con / sin empresa según el selector
     if (!vou[v.id]) vou[v.id] = { f: v.f, doc: (v.bco + ' ' + v.op).trim(), apl: [], m: 0, v: v };
   });
@@ -2690,6 +2705,66 @@ function ecDatos(cr, er, mon) {
   L.sort(function (a, b) { return a.f < b.f ? -1 : a.f > b.f ? 1 : (orden[a.g] || 9) - (orden[b.g] || 9); });
   return { docs: docs, L: L };
 }
+/* ------------------------------------------------ 📑 Por tipo: todo agrupado por tipo con el total de cada grupo */
+var TIPOS_E = [['fac', '🧾', 'Facturas'], ['nd', '➕', 'Notas de débito'], ['nc', '📄', 'Notas de crédito'], ['ret', '🧾', 'Retenciones del IGV (3%)'],
+  ['det', '🏦', 'Detracciones (SPOT)'], ['pago', '💳', 'Pagos (vouchers)'], ['man', '💵', 'Pagos manuales y efectivo'], ['otr', '✂️', 'Otros descuentos y compensaciones'], ['dev', '↩️', 'Devoluciones']];
+function tipoTitulo(g, pagar) { var t = TIPOS_E.filter(function (x) { return x[0] === g; })[0] || ['otr', '•', 'Otros']; return t[1] + ' ' + (g === 'pago' && !pagar ? 'Cobros (vouchers)' : t[2]); }
+/** Agrupa las líneas (ecDatos().L) por tipo. → {grupos:[{g, l:[…], tot}], car, abo} */
+function porTipoDatos(L) {
+  var G = {}, car = 0, abo = 0;
+  L.forEach(function (l) { var g = ECT[l.g] ? l.g : 'otr'; (G[g] = G[g] || []).push(l); car += l.cargo; abo += l.abono; });
+  return { grupos: TIPOS_E.map(function (t) { return t[0]; }).filter(function (g) { return G[g]; }).map(function (g) {
+    return { g: g, l: G[g], tot: r2(G[g].reduce(function (t, l) { return t + l.cargo + l.abono; }, 0)) };
+  }), car: r2(car), abo: r2(abo) };
+}
+/** HTML de los grupos (sim = S/ o US$). Mismo formato en el Estado de cuenta y en 📨 Para enviar (PDF, imagen, impresión). */
+function porTipoHtml(L, sim, conResumen) {
+  var x = porTipoDatos(L), pagar = S.lado === 'Por pagar', h = '';
+  if (!x.grupos.length) return '<p class="sub">Sin movimientos en este periodo.</p>';
+  if (conResumen) {
+    h += '<table class="pt-res" style="width:100%;border-collapse:collapse;margin:6px 0 10px"><tr><th style="text-align:left">Grupo</th><th style="text-align:right">Cant.</th><th style="text-align:right">Total ' + sim + '</th></tr>' +
+      x.grupos.map(function (G) { var c = ECT[G.g][1]; return '<tr><td style="color:' + c + ';font-weight:bold">' + tipoTitulo(G.g, pagar) + '</td><td style="text-align:right">' + G.l.length + '</td><td style="text-align:right;color:' + c + ';font-weight:bold">' + fm(G.tot) + '</td></tr>'; }).join('') +
+      '<tr style="border-top:2px solid #334155;font-weight:bold"><td>Saldo (cargos ' + fm(x.car) + ' − abonos ' + fm(x.abo) + ')</td><td></td><td style="text-align:right;color:' + (x.car - x.abo > 0.05 ? '#B91C1C' : '#065F46') + '">' + sim + ' ' + fm(r2(x.car - x.abo)) + '</td></tr></table>';
+  }
+  x.grupos.forEach(function (G) {
+    var c = ECT[G.g][1];
+    h += '<h2 style="color:' + c + ';border-bottom:2px solid ' + c + ';margin:12px 0 4px;font-size:14px">' + tipoTitulo(G.g, pagar) + ' <span style="font-weight:normal;font-size:12px">· ' + G.l.length + ' · total ' + sim + ' ' + fm(G.tot) + '</span></h2>' +
+      '<table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left;width:76px">Fecha</th><th style="text-align:left;width:130px">Documento</th><th style="text-align:left">Concepto</th><th style="text-align:right;width:96px">Monto</th></tr>' +
+      G.l.slice().sort(function (a, b) { return a.f < b.f ? -1 : a.f > b.f ? 1 : 0; }).map(function (l) {
+        return '<tr><td>' + ff(l.f) + '</td><td style="color:' + c + ';font-weight:bold">' + esc(l.doc) + '</td><td>' + esc(l.con) + (l.ref && G.g !== 'pago' && G.g !== 'fac' ? ' <span class="sub" style="color:#64748B">' + esc(l.ref) + '</span>' : '') + '</td><td style="text-align:right">' + fm(l.cargo || l.abono) + '</td></tr>';
+      }).join('') +
+      '<tr style="border-top:2px solid ' + c + ';font-weight:bold"><td colspan="3">Total ' + tipoTitulo(G.g, pagar).replace(/^\S+\s/, '') + ' (' + G.l.length + ')</td><td style="text-align:right;color:' + c + '">' + fm(G.tot) + '</td></tr></table>';
+  });
+  return h;
+}
+/** 📑 Por tipo en el Estado de cuenta: por proveedor (o cliente) → empresa → moneda, cada uno con sus grupos y totales. */
+var EPT = [];
+function porTipoE(lista, agr) {
+  EPT = [];
+  var TG = {}, h = '';
+  lista.slice(0, 150).forEach(function (g) {
+    g.subs.forEach(function (sg) {
+      var mons = {}; sg.docs.forEach(function (d) { mons[d.mon] = 1; });
+      Object.keys(mons).sort().forEach(function (mon) {
+        var L = ecDatos(sg.cr, sg.er, mon, { docs: sg.docs, modo: modoEmp() }).L, sim = mon === 'USD' ? 'US$' : 'S/';
+        var nomC = agr === 'pe' ? g.nombre : sg.nombre, nomE = agr === 'pe' ? sg.nombre : g.nombre;
+        porTipoDatos(L).grupos.forEach(function (G) { var t = TG[mon + '|' + G.g] || (TG[mon + '|' + G.g] = { mon: mon, g: G.g, n: 0, tot: 0 }); t.n += G.l.length; t.tot = r2(t.tot + G.tot); });
+        EPT.push({ nomC: nomC, cr: sg.cr, nomE: nomE, mon: mon, L: L });
+        h += '<div style="border:1px solid #CBD5E1;border-radius:8px;padding:8px 10px;margin:8px 0;background:#fff">' +
+          '<div style="font-weight:bold;font-size:14px">' + esc(nomC) + ' <span style="color:var(--gr);font-weight:normal;font-size:12px">' + esc(sg.cr || '') + ' · 🏢 ' + esc(nomE) + ' · ' + (mon === 'USD' ? 'dólares' : 'soles') + '</span></div>' +
+          porTipoHtml(L, sim, true) + '</div>';
+      });
+    });
+  });
+  var tot = Object.keys(TG).map(function (k) { return TG[k]; });
+  var cab = tot.length ? '<div style="border:2px solid #334155;border-radius:8px;padding:8px 10px;margin:6px 0;background:#F8FAFC"><b>📑 Totales de todo lo que se ve, por tipo</b>' +
+    ['PEN', 'USD'].filter(function (m) { return tot.some(function (t) { return t.mon === m; }); }).map(function (m) {
+      return '<div style="margin-top:6px"><b>' + (m === 'USD' ? 'Dólares (US$)' : 'Soles (S/)') + '</b>: ' + TIPOS_E.map(function (x) { return TG[m + '|' + x[0]]; }).filter(Boolean)
+        .map(function (t) { return '<span style="display:inline-block;margin:2px 10px 2px 0;color:' + ECT[t.g][1] + '"><b>' + tipoTitulo(t.g, S.lado === 'Por pagar') + '</b> (' + t.n + '): ' + fm(t.tot) + '</span>'; }).join('') + '</div>';
+    }).join('') + '</div>' : '';
+  return cab + h + (lista.length > 150 ? '<div class="mas">Se muestran los primeros 150 grupos: use los filtros.</div>' : '');
+}
+
 function ecPintar() {
   if (!EC) return;
   var cr = EC.cr, er = EC.er, mon = $('ecMon').value || 'PEN', de = $('ecDe').value, ha = $('ecHa').value || new Date().toISOString().slice(0, 10);
@@ -2749,6 +2824,8 @@ function ecPintar() {
       pend.sort(function (a, b) { return a.d.f < b.d.f ? -1 : 1; }).map(function (p) { return '<tr><td style="color:#1D4ED8;font-weight:bold">' + esc(p.d.doc) + (er ? '' : ' <span class="sub">' + esc(nomEmp(p.d.er)) + '</span>') + '</td><td>' + ff(p.d.f) + '</td><td>' + (p.d.ve ? ff(p.d.ve) : '—') + '</td><td class="n" style="' + (p.dd > 60 ? 'color:#B91C1C;font-weight:bold' : p.dd > 0 ? 'color:#C2410C;font-weight:bold' : 'color:#047857') + '">' + (p.dd > 0 ? p.dd : 'por vencer') + '</td><td class="n">' + fm(p.d.tot) + '</td><td class="n"><b>' + fm(p.s) + '</b></td></tr>'; }).join('') +
       '<tr class="tot"><td colspan="5">Total pendiente</td><td class="n">' + fm(pend.reduce(function (t, p) { return t + p.s; }, 0)) + '</td></tr></table>';
   }
+  // 📑 por tipo: cada grupo con su lista y su total (en lugar de los movimientos por fecha)
+  if (niv === 'tip') h += '<h2>Detalle por tipo</h2>' + porTipoHtml(per, sim, true);
   // movimientos
   if (det) {
     var s = ini;
@@ -2771,7 +2848,7 @@ function ecPintar() {
   if ($('ecConf').checked) h += '<div class="firma"><div>' + esc(nomE) + '<br>Firma y sello</div><div>Conformidad de ' + esc(nomC) + '<br>Nombre, firma, sello y fecha</div></div>';
   h += '<div class="sub" style="margin-top:16px;text-align:center">Generado el ' + ff(hoy) + ' · Cuentas por Cobrar y Pagar · Grupo</div>';
   $('ecHoja').innerHTML = h;
-  EC.copiar = { nomE: nomE, er: er, nomC: nomC, cr: cr, de: de, ha: ha, mon: mon, ini: ini, fin: fin, per: per, pend: pend, ab: ab };
+  EC.copiar = { nomE: nomE, er: er, nomC: nomC, cr: cr, de: de, ha: ha, mon: mon, ini: ini, fin: fin, per: per, pend: pend, ab: ab, tip: niv === 'tip' };
 }
 /** 📒 Análisis de documentos de un proveedor (o cliente) para enviar: mismo encabezado formal + la tabla del análisis. */
 function ecAnalisis(cr, er, de, ha) {
@@ -2892,6 +2969,17 @@ function ecCopiar() {
   var T = function (a) { return a.join('\t'); }, n = function (x) { return x.toFixed(2); }, L = [];
   L.push('ESTADO DE CUENTA'); L.push(T([S.lado === 'Por pagar' ? 'Proveedor' : 'Cliente', c.nomC, 'RUC ' + c.cr])); L.push(T(['Empresa', c.nomE, c.er ? 'RUC ' + c.er : '']));
   L.push(T(['Periodo', c.de ? ff(c.de) : 'Desde el inicio', ff(c.ha), c.mon])); if (ecNotaTexto()) L.push(T(['Nota', ecNotaTexto().replace(/\s*\n\s*/g, ' · ')])); L.push('');
+  if (c.tip) {
+    porTipoDatos(c.per).grupos.forEach(function (G) {
+      var tit = tipoTitulo(G.g, S.lado === 'Por pagar').replace(/^\S+\s/, '');
+      L.push(tit.toUpperCase()); L.push(T(['Fecha', 'Documento', 'Concepto', 'Monto']));
+      G.l.forEach(function (l) { L.push(T([ff(l.f), l.doc, l.con, n(l.cargo || l.abono)])); });
+      L.push(T(['', '', 'Total ' + tit + ' (' + G.l.length + ')', n(G.tot)])); L.push('');
+    });
+    L.push(T(['', '', 'SALDO FINAL', n(c.fin)]));
+    var tx2 = L.join('\n');
+    return (navigator.clipboard ? navigator.clipboard.writeText(tx2) : Promise.reject()).then(function () { $('ecMsg').textContent = '📋 Copiado: péguelo en Excel, Sheets o un correo.'; }, function () { prompt('Copie el texto:', tx2); });
+  }
   L.push(T(['Fecha', 'Documento', 'Concepto', 'Cargos', 'Abonos', 'Saldo'])); L.push(T(['', '', 'Saldo inicial', '', '', n(c.ini)]));
   var s = c.ini; c.per.forEach(function (l) { s = r2(s + l.cargo - l.abono); L.push(T([ff(l.f), l.doc, l.con, l.cargo ? n(l.cargo) : '', l.abono ? n(l.abono) : '', n(s)])); });
   L.push(T(['', '', 'SALDO FINAL', '', '', n(c.fin)])); L.push('');
