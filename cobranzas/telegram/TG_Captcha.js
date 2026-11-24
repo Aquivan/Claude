@@ -38,6 +38,10 @@ function TGC_doPost_(e) {
       }
       return TGW_json_(TGR_pdfGh_(ss, run, q));
     }
+    if (/^scp_/.test(String(q.accion || ''))) {   // 🔎 comprobante consultado en SUNAT (SunatComprobante.js)
+      if (!run || !TGC_runValido_(cfg, run, /(^|\/)sunat-comprobante\.ya?ml$/)) return TGW_json_({ ok: false, error: 'Forbidden' });
+      return TGW_json_(SCP_gh_(q));
+    }
     if (/^rpn_/.test(String(q.accion || ''))) {
       if (!run || !TGC_runValido_(cfg, run, /(^|\/)ruc-por-nombre\.ya?ml$/)) return TGW_json_({ ok: false, error: 'Forbidden' });
       return TGW_json_(RPN_gh_(q));

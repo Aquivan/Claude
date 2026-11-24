@@ -119,6 +119,7 @@ function TG_manejar_(u) {
 
   if (ses.procPend && texto.charAt(0) !== '/' && TGP_nombreDirectoTG_(ctx, ses, texto, m)) return;   // 🧾 "21-10-26 Edit"
   if (/^\/?(deshacer|desh[aá]z(lo)?|deshaga)\b/i.test(texto)) return TGU_preguntarTG_(ctx);   // ↩️ la última acción, todo
+  if (/^\/comprobante\b/i.test(texto) && SCP_tg_(ctx, texto)) return;   // 🔎 /comprobante RUC F001-10892 GRANIX (SunatComprobante.js)
   if (texto.charAt(0) === '/') return TG_comando_(ctx, texto);
   var atajo = TG_ATAJOS_[texto];
   if (atajo) return TG_comando_(ctx, atajo);
@@ -133,6 +134,7 @@ function TG_manejar_(u) {
   if (VIG_tg_(ctx, texto) || VIG_tgCorregir_(ctx, texto)) return;   // 🔭 «modelos»: vigía de modelos de IA · «prueba 1 nOperacion=…» (TG_Vigia.js)
   if (LECT_tg_(ctx, texto)) return;   // 🧾 «lectores»: qué IA lee los vouchers y en qué orden (TG_Lectores.js)
   if (TGX_tg_(ctx, texto)) return;
+  if (SCP_tg_(ctx, texto)) return;   // 🔎 «consulta en SUNAT la factura F001-10892 de …» (SunatComprobante.js)
   if (ECS_tg_(ctx, texto)) return;   // 📨 «estado de cuenta granix» (TG_EstadoCuenta.js)   // ⏱ «última ejecución» · «deshacer tanda» (TG_Tandas.js)
   if (TGRL_tg_(ctx, texto)) return;   // 🔁 "volver a leer Originales 2666" (TG_Releer.js)
   if (CTV_tg_(ctx, texto)) return;   // 🔁 "cambia el último a foto" (TG_CambiarTipo.js)
@@ -360,6 +362,7 @@ function TG_alArchivo_(ctx, m, texto) {
     if (ses0.esperando) return TG_alEsperado_(ctx, ses0, dicho);
     if (TG_ATAJOS_[dicho]) return TG_comando_(ctx, TG_ATAJOS_[dicho]);
     if (TGG_datoTG_(ctx, dicho)) return;   // 🚚 lo dicho es para la guía abierta
+    if (SCP_tg_(ctx, dicho)) return;   // 🔎 consulta de un comprobante en SUNAT dictada
     return TG_preguntar_(ctx, dicho, []);
   }
 
@@ -533,6 +536,7 @@ function TG_alBoton_(ss, q) {
     case 'rlee': return TGRL_botonTG_(ctx, datos, op);   // 🔁 volver a leer una página (TG_Releer.js)
     case 'tgqruc': return TGQ_tg_(ctx, 'procesados', datos.filas || []);
     case 'tgx': return TGX_alBoton_(ctx, datos);
+    case 'scp': return SCP_alBoton_(ctx, datos);   // 🔎 comprobante consultado en SUNAT (SunatComprobante.js)
     case 'ecs': return ECS_alBoton_(ctx, datos);   // 📨 estado de cuenta con filtros (TG_EstadoCuenta.js)   // ⏱ última ejecución y 🗑 deshacer una tanda (TG_Tandas.js)   // 🔎 RUC de los vouchers del aviso (TG_Procesados.js)
     case 'cambios': return TG_aplicarCambios_(ctx, datos, op);
     case 'rucelige': return TGQ_eligeTG_(ctx, datos, op);

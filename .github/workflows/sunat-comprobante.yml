@@ -1,0 +1,63 @@
+# 🔎 Consultar un comprobante en SUNAT SOL (proyecto Cobranzas, cobranzas/SunatComprobante.js).
+# Lo lanza el bot de Cobranzas con un "lote": el RUC, la serie y el número NO van en las entradas ni en el registro
+# (el repositorio es público); el robot se los pide al bot y le devuelve los datos del comprobante. Solo LEE en SUNAT.
+
+name: Consultar comprobante en SUNAT
+
+on:
+  workflow_dispatch:
+    inputs:
+      lote:
+        description: "Lote que dejó el bot de Cobranzas (no lo escriba a mano)"
+        required: true
+      empresa:
+        description: "RUC de la empresa del grupo (su GitHub Environment trae su clave SOL). Lo pone el bot."
+        required: true
+
+run-name: "Consulta de comprobante · lote ${{ inputs.lote }}"
+
+permissions:
+  contents: read
+
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.empresa }}   # las claves SOL de ESA empresa (como sire-descargar.yml)
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/sunat_comprobante.py
+            .github/workflows/sunat-factura.yml
+            cobranzas/.clasp.json
+          sparse-checkout-cone-mode: false
+
+      - name: Dirección del bot
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          [ -n "$CLASPRC_JSON" ] || { echo "::error::Falta el secret CLASPRC_JSON"; exit 1; }
+          npm install -g @google/clasp@3.3.0 >/dev/null 2>&1
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"; chmod 600 "$HOME/.clasprc.json"
+          cd cobranzas
+          ID=$(clasp --json list-deployments 2>/dev/null | python3 -c "
+          import json,sys
+          t=sys.stdin.read()
+          try: d=json.loads(t[t.index('['):])
+          except Exception: d=[]
+          b=[x for x in d if (x.get('description') or '').startswith('Asistente Telegram')]
+          print(b[0]['deploymentId'] if b else '')")
+          rm -f "$HOME/.clasprc.json"
+          [ -n "$ID" ] || { echo "::error::No encontré la aplicación web del bot"; exit 1; }
+          echo "::add-mask::$ID"
+          echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
+
+      - name: Consultar en SUNAT y devolver al bot
+        env:
+          LOTE: ${{ inputs.lote }}
+          SUNAT_CLAVES: ${{ secrets.SUNAT_CLAVES }}
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
+          SUNAT_CLAVE: ${{ secrets.SUNAT_CLAVE }}
+        run: python3 scripts/sunat_comprobante.py
