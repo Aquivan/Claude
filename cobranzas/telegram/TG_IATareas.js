@@ -237,7 +237,9 @@ function IAT_teclado_(t) {
   var b = function (tx, d) { return { text: tx, callback_data: 'k:' + TG_guardarBoton_(d, 21600) }; };
   if (!t) {
     var filas = [[b('🧾 Vouchers → /lectores', { t: 'iat', a: 'lectores' })]];
-    Object.keys(IAT_TAREAS_).forEach(function (x) { filas.push([b('⚙️ ' + IAT_TAREAS_[x].nom.split(' (')[0], { t: 'iat', a: 'tarea', tarea: x })]); });
+    var ts = Object.keys(IAT_TAREAS_).map(function (x) { return b('⚙️ ' + IAT_TAREAS_[x].nom.split(' (')[0], { t: 'iat', a: 'tarea', tarea: x }); });
+    for (var k = 0; k < ts.length; k += 2) filas.push(ts.slice(k, k + 2));
+    filas.push([TG_bot_('← IA y lectores', 'm:ia', 'link'), TG_bot_('📋 Menú', 'm:', 'link')]);
     return filas;
   }
   var c = IAT_cfg_(t), out = [];
@@ -248,14 +250,14 @@ function IAT_teclado_(t) {
     fila.push(b('🔧 Modelo', { t: 'iat', a: 'modelos', tarea: t, p: p }));
     out.push(fila);
   });
-  out.push([b('⬅️ Todas las tareas', { t: 'iat', a: 'volver' })]);
+  var vt = b('← Todas las tareas', { t: 'iat', a: 'volver' }); vt.style = 'link';
+  out.push([vt, TG_bot_('📋 Menú', 'm:', 'link')]);
   return out;
 }
 
 function IAT_panel_(ctx, aviso, editar, t) {
   var html = (aviso ? aviso + '\n\n' : '') + IAT_textoPanel_(t);
-  if (editar && ctx.msgId && TG_editar_(ctx.chatId, ctx.msgId, html, IAT_teclado_(t))) return;
-  TG_enviar_(ctx.chatId, html, IAT_teclado_(t));
+  TG_tarjeta_(ctx, html, IAT_teclado_(t));   // 🪪 botones dentro del mensaje; al tocar uno cambia este mismo mensaje
 }
 
 function IAT_alBoton_(ctx, d) {
@@ -270,10 +272,12 @@ function IAT_alBoton_(ctx, d) {
     if (d.a === 'modelos') {
       TG_accion_(ctx.chatId, 'typing');
       var ids = IAT_listaModelos_(t, p);
-      var b = function (tx, x) { return [{ text: tx, callback_data: 'k:' + TG_guardarBoton_(x, 21600) }]; };
-      var tecl = [b('🤖 Automático' + (!c.modelo[p] ? ' ✓' : ''), { t: 'iat', a: 'modelo', tarea: t, p: p, m: '' })]
-        .concat(ids.slice(0, 12).map(function (id) { return b((c.modelo[p] === id ? '✓ ' : '') + id.slice(0, 55), { t: 'iat', a: 'modelo', tarea: t, p: p, m: id }); }));
-      return TG_enviar_(ctx.chatId, '🔧 <b>' + IAT_TAREAS_[t].nom + ' · ' + IAT_NOMPROV_[p] + '</b> (ahora: <code>' + TG_esc_(c.modelo[p] || 'automático') + '</code>). Toque uno:', tecl);
+      var bb = function (tx, x, st) { var o = { text: tx, callback_data: 'k:' + TG_guardarBoton_(x, 21600) }; if (st) o.style = st; return o; };
+      var mods = ids.slice(0, 12).map(function (id) { return bb((c.modelo[p] === id ? '✓ ' : '') + id.slice(0, 40), { t: 'iat', a: 'modelo', tarea: t, p: p, m: id }, c.modelo[p] === id ? 'primary' : ''); });
+      var tecl = [[bb('🤖 Automático' + (!c.modelo[p] ? ' ✓' : ''), { t: 'iat', a: 'modelo', tarea: t, p: p, m: '' }, !c.modelo[p] ? 'primary' : '')]];
+      for (var k = 0; k < mods.length; k += 2) tecl.push(mods.slice(k, k + 2));
+      tecl.push([bb('← ' + IAT_TAREAS_[t].nom.split(' (')[0], { t: 'iat', a: 'tarea', tarea: t }, 'link')]);
+      return TG_tarjeta_(ctx, '🔧 <b>' + IAT_TAREAS_[t].nom + ' · ' + IAT_NOMPROV_[p] + '</b>\nAhora: <code>' + TG_esc_(c.modelo[p] || 'automático') + '</code>. Toque uno:', tecl);
     }
     if (d.a === 'subir') { var i = c.orden.indexOf(p); if (i > 0) { c.orden.splice(i, 1); c.orden.splice(i - 1, 0, p); } c.apagados = c.apagados.filter(function (x) { return x !== p; }); }
     else if (d.a === 'onoff') {
@@ -285,7 +289,7 @@ function IAT_alBoton_(ctx, d) {
     } else if (d.a === 'modelo') {
       c.modelo[p] = d.m || '';
       IAT_guardar_(t, c);
-      return IAT_panel_(ctx, '✅ ' + IAT_NOMPROV_[p] + ' usará <code>' + TG_esc_(d.m || 'automático') + '</code>.', false, t);
+      return IAT_panel_(ctx, '✅ ' + IAT_NOMPROV_[p] + ' usará <code>' + TG_esc_(d.m || 'automático') + '</code>.', true, t);
     } else return;
     c.orden = c.orden.filter(function (x) { return c.apagados.indexOf(x) < 0; }).concat(c.orden.filter(function (x) { return c.apagados.indexOf(x) >= 0; }));
     IAT_guardar_(t, c);
