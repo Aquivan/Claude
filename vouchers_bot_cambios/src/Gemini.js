@@ -56,8 +56,11 @@ function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
   // opc.modelos: los Gemini elegidos EN ORDEN en /lectores (1.º, 2.º, 3.º…). Sin otro lector de respaldo, después siguen los de siempre.
   let modelos = (opc.modelos && opc.modelos.length > 1) ? modelosGemini_(opc.modelos, !!opc.sinEsperas, !!opc.sinEsperas) : modelosGemini_(opc.modelo, false, !!opc.sinEsperas);
   if (opc.maxModelos) modelos = modelos.slice(0, opc.maxModelos);
-  const ESPERAS = opc.sinEsperas ? [] : [15000, 30000];
+  // ⏳ Paciencia con Gemini: aunque haya respaldo (NVIDIA/Groq), si todos los Gemini dijeron «saturado» se espera 15 s y se
+  // prueban una vez más antes de pasar al respaldo (si a la ejecución le queda tiempo). Sin respaldo: 15 s y 30 s.
+  const ESPERAS = opc.sinEsperas ? ((Date.now() - INICIO_EJECUCION_) < 200000 ? [15000] : []) : [15000, 30000];
 
+  if (!modelos.length) throw new Error('API_SATURADA');   // todos saturados hace poco y hay respaldo: directo al respaldo
   for (let vuelta = 0; vuelta <= ESPERAS.length; vuelta++) {
     for (let m = 0; m < modelos.length; m++) {
       const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
