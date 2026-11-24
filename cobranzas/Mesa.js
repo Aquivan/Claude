@@ -202,9 +202,116 @@ function MESA_sireRapido(tk, empresa, periodo, tipo) {
   tipo = tipo === 'compra' || tipo === 'venta' ? tipo : 'ambos';
   var acc = { t: 'descarga', proyecto: 'sire_rapido', empresa: empresa || 'todas', desde: periodo, hasta: periodo, tipo: tipo };
   var p = TG_PROYECTOS_.sire_rapido, inputs = p.inputs(acc);
+  var desde = Date.now();
   TG_gh_(cfg, '/actions/workflows/' + p.wf + '/dispatches', 'post', { ref: cfg.rama, inputs: inputs });
   console.log('Mesa · SIRE rápido pedido por ' + quien + ': ' + JSON.stringify(inputs));
-  return { texto: TG_textoDescarga_(acc, cfg.cob) };
+  var j = MESA_sireVigilar_({ e: 'sunat', desde: desde, wf: p.wf, titulo: TGS_titulo_(inputs), rucs: empresa ? [empresa] : cfg.cob.grupo.slice(), anio: periodo.slice(0, 4) });
+  return { texto: TG_textoDescarga_(acc, cfg.cob), id: j.id };
+}
+
+/* ------------------------------------------------ ⚡ seguimiento del «Traer de SUNAT»: SUNAT → hoja SIRE → Cobranzas
+ * Cada pedido queda como un «trabajo» (propiedad MESA_SRJ_<id>) que avanza por etapas:
+ *   sunat  esperando que GitHub baje el registro de SUNAT
+ *   sire   esperando que la hoja SIRE lo importe a la Liquidación IGV (se nota porque la Liquidación cambia)
+ *   cob    Cobranzas recalculando (MESA_programarRecalculo_, el mismo de ⚡ Recalcular / 💾 Guardar)
+ *   listo / sin (SUNAT no entregó nada) / error
+ * Lo hace avanzar la ventana de la Mesa (MESA_sireEstado, cada ~8 s) y, si la Mesa se cerró, un disparador
+ * (MESA_sireSeguir, cada minuto). Así Cobranzas ya no espera su vuelta de cada 10 min.
+ */
+function MESA_sireVigilar_(j) {
+  j.id = j.id || Utilities.getUuid().slice(0, 8);
+  j.t = Date.now();
+  MESA_sireGuardar_(j);
+  MESA_sireProgramar_();
+  return j;
+}
+function MESA_sireGuardar_(j) { PropertiesService.getScriptProperties().setProperty('MESA_SRJ_' + j.id, JSON.stringify(j)); }
+function MESA_sireProgramar_() {
+  var ya = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'MESA_sireSeguir'; });
+  if (!ya) ScriptApp.newTrigger('MESA_sireSeguir').timeBased().after(60 * 1000).create();
+}
+function MESA_sireFinal_(e) { return e === 'listo' || e === 'sin' || e === 'error'; }
+
+/** Un paso del trabajo (no espera nada: mira y, si toca, pasa a la siguiente etapa). */
+function MESA_sireAvance_(j) {
+  if (MESA_sireFinal_(j.e)) return j;
+  var ahora = Date.now(), cfg = TG_cfg_(TG_ss_());
+  if (j.e === 'sunat') {
+    var r = j.run ? TG_gh_(cfg, '/actions/runs/' + j.run)
+      : TG_ghRuns_(cfg, 10, j.wf).filter(function (x) { return x.event === 'workflow_dispatch' && new Date(x.created_at).getTime() >= j.desde - 90000 && x.display_title === j.titulo; })
+        .sort(function (a, b) { return new Date(a.created_at) - new Date(b.created_at); })[0] || null;
+    if (r) { j.run = r.id; j.url = r.html_url; }
+    if (r && r.status === 'completed') {
+      if (r.conclusion !== 'success') { j.e = 'error'; j.txt = 'La descarga de SUNAT terminó con problemas.'; }
+      else {
+        var n = MESA_sireNotas_(cfg, r.id);
+        if (n.ok.length || !n.mal.length) { j.e = 'sire'; j.t = ahora; j.txt = n.ok.join(' · '); }
+        else { j.e = 'sin'; j.txt = n.mal.join(' · '); }
+      }
+    } else if (ahora - j.desde > 20 * 60000) { j.e = 'error'; j.txt = 'GitHub no terminó en 20 minutos.'; }
+  }
+  if (j.e === 'sire') {
+    // la Liquidación IGV de esa(s) empresa(s) cambió después del pedido y lleva ~25 s quieta (la importación terminó)
+    var ult = 0;
+    try {
+      buscarLiquidaciones_(leerConfig_(ssPrincipal_())).forEach(function (l) {
+        if (j.rucs.indexOf(l.ruc) >= 0 && String(l.anio) === String(j.anio)) ult = Math.max(ult, l.actualizado);
+      });
+    } catch (e) { console.warn('SIRE seguimiento (liquidación): ' + e.message); }
+    var importado = ult > j.desde && ahora - ult >= 25000;
+    if (importado || ahora - j.t > 5 * 60000) { j.e = 'cob'; j.t = ahora; j.sinCambio = !importado; MESA_programarRecalculo_(); }
+  }
+  if (j.e === 'cob') {
+    var p = PropertiesService.getScriptProperties();
+    if (!p.getProperty('MESA_PEDIDO') && !p.getProperty('MESA_ETAPA')) { j.e = 'listo'; j.t = ahora; }
+    else if (ahora - j.t > 15 * 60000) { j.e = 'listo'; j.t = ahora; j.tarde = true; }
+  }
+  MESA_sireGuardar_(j);
+  return j;
+}
+
+/** Lo que dijo el robot (anotaciones de GitHub): cuántos comprobantes trajo, o por qué no trajo. */
+function MESA_sireNotas_(cfg, runId) {
+  var ok = [], mal = [], vistas = {};
+  try {
+    (TG_gh_(cfg, '/actions/runs/' + runId + '/jobs?per_page=100').jobs || []).forEach(function (jb) {
+      (TG_gh_(cfg, '/check-runs/' + jb.id + '/annotations') || []).forEach(function (n) {
+        if (vistas[n.title + '|' + n.message]) return;
+        vistas[n.title + '|' + n.message] = 1;
+        var m = String(n.title || '').match(/^SIRE (reporte|sin reporte|sin guardar|solo reporte)\s*(\d{11})?/);
+        if (!m) return;
+        var txt = (m[2] ? TG_nombreEmpresa_(cfg, m[2]) + ': ' : '') + String(n.message || '').replace(/\(oficial\)/g, '(presentado)').replace(/\s*;\s*$/, '').trim();
+        (m[1] === 'reporte' ? ok : mal).push(txt);
+      });
+    });
+  } catch (e) { console.warn('SIRE seguimiento (anotaciones): ' + e.message); }
+  return { ok: ok, mal: mal };
+}
+
+/** La ventana de la Mesa pregunta cómo va (y de paso lo hace avanzar). */
+function MESA_sireEstado(tk, id) {
+  MESA_ok_(tk);
+  var raw = PropertiesService.getScriptProperties().getProperty('MESA_SRJ_' + String(id || '').replace(/[^\w-]/g, ''));
+  if (!raw) return { e: 'error', txt: 'No encontré ese pedido.', fin: true };
+  var j = MESA_sireAvance_(JSON.parse(raw)), et = MESA_etapa_();
+  return { e: j.e, txt: j.txt || '', url: j.url || '', sinCambio: !!j.sinCambio, tarde: !!j.tarde, seg: Math.round((Date.now() - j.desde) / 1000),
+    calc: j.e === 'cob' && et ? et.e : '', fin: MESA_sireFinal_(j.e) };
+}
+
+/** Disparador (respaldo si la Mesa se cerró): avanza los trabajos abiertos y borra los terminados hace más de 1 h. */
+function MESA_sireSeguir__reg() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'MESA_sireSeguir') ScriptApp.deleteTrigger(t); });
+  var props = PropertiesService.getScriptProperties(), todo = props.getProperties(), abiertos = 0;
+  Object.keys(todo).forEach(function (k) {
+    if (k.indexOf('MESA_SRJ_') !== 0) return;
+    try {
+      var j = JSON.parse(todo[k]);
+      if (MESA_sireFinal_(j.e)) { if (Date.now() - j.t > 3600000) props.deleteProperty(k); return; }
+      j = MESA_sireAvance_(j);
+      if (!MESA_sireFinal_(j.e)) abiertos++;
+    } catch (e) { console.warn('SIRE seguimiento: ' + e.message); }
+  });
+  if (abiertos) MESA_sireProgramar_();
 }
 
 /* ------------------------------------------------ ⚡ memoria (caché) de los datos de la Mesa */

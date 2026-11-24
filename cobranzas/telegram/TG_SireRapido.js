@@ -122,9 +122,15 @@ function TGS_avisarFin_(cfg, s, r) {
     else problemas.push('⚠️ ' + (quien ? '<b>' + TG_esc_(quien) + '</b>: ' : '') + TG_esc_(msg));
   });
   var ok = r.conclusion === 'success';
+  if (ok && lineas.length) {   // 🔄 que Cobranzas se recalcule apenas la hoja SIRE lo importe (no en su vuelta de 10 min)
+    try {
+      var tt = String((s.extra && s.extra.titulo) || '').split(' · '), rucT = tt[1] || 'todas', perT = String(tt[2] || '').replace(/\D/g, '');
+      MESA_sireVigilar_({ e: 'sire', desde: s.desde, rucs: /^\d{11}$/.test(rucT) ? [rucT] : cfg.cob.grupo.slice(), anio: perT.slice(0, 4) || TG_mes_(0).slice(0, 4) });
+    } catch (e) { console.warn('SIRE → Cobranzas: ' + e.message); }
+  }
   var html = (ok ? '✅ <b>Reporte SIRE listo</b>' : '⚠️ <b>Reporte SIRE con problemas</b>') + ' (' + TG_duracion_(r) + '): ' + TG_esc_(s.texto) +
     (lineas.length ? '\n' + lineas.join('\n') : '') + (problemas.length ? '\n' + problemas.join('\n') : '') +
-    (lineas.length ? '\n<i>La hoja SIRE lo pasa a Drive sola (y actualiza la Liquidación IGV).</i>' : '') +
+    (lineas.length ? '\n<i>La hoja SIRE lo pasa a Drive sola (y actualiza la Liquidación IGV); Cobranzas se recalcula apenas termine.</i>' : '') +
     '\n<a href="' + r.html_url + '">ver en GitHub</a>';
   if (String(s.chat).indexOf('wa') === 0) return TGR_guardarWA_(s.chat, html);
   TG_enviar_(s.chat, html, ok ? null : [[{ text: '🔁 Reintentar lo que falló', callback_data: 'rr:' + r.id }]]);

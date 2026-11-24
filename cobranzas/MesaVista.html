@@ -526,7 +526,7 @@ window.addEventListener('message', function (e) {
 function sireRapido() {
   var emp = $('fEmp').value, nom = emp ? ($('fEmp').selectedOptions[0] || {}).textContent : 'todas las empresas';
   var hoy = new Date(), per = hoy.getFullYear() + ('0' + (hoy.getMonth() + 1)).slice(-2);
-  modal('<h3>⚡ Traer de SUNAT el registro (solo reporte)</h3><p style="color:#475569">Pide a SUNAT el registro de compras y/o ventas del SIRE, sin PDF ni XML. Tarda unos minutos; al terminar la Liquidación IGV y Cobranzas se actualizan solas' + (AU.on ? ' y esta Mesa también (🔁 Actualizar sola está activa).' : '. Active <b>🔁 Actualizar sola</b> para que aparezca aquí sin recargar.') + '</p>' +
+  modal('<h3>⚡ Traer de SUNAT el registro (solo reporte)</h3><p style="color:#475569">Pide a SUNAT el registro de compras y/o ventas del SIRE, sin PDF ni XML. Tarda unos 2–4 minutos: aquí verá cada paso (SUNAT → hoja SIRE → Cobranzas) y al final esta Mesa se recarga sola.</p>' +
     '<label>Empresa</label><div><b>' + esc(nom) + '</b> <span style="color:#64748B">(se cambia con el filtro «Empresa» de arriba)</span></div>' +
     '<label>Periodo (AAAAMM)</label><input id="srPer" value="' + per + '" style="width:120px">' +
     '<label>Registro</label><select id="srTip"><option value="ambos">Compras y ventas</option><option value="compra">Solo compras</option><option value="venta">Solo ventas</option></select>' +
@@ -535,8 +535,47 @@ function sireRapido() {
 function sireRapidoPedir() {
   $('srMsg').textContent = '⏳ Pidiendo…';
   R.withFailureHandler(function (e) { $('srMsg').innerHTML = '<span style="color:#B91C1C">❌ ' + esc(e && e.message || e) + '</span>'; })
-    .withSuccessHandler(function (r) { $('srMsg').innerHTML = '✅ Pedido: ' + esc(r.texto) + '.<br>En unos minutos queda en la Liquidación IGV y en Cobranzas.'; estado('⚡ Registro SIRE pedido a SUNAT: ' + r.texto); })
+    .withSuccessHandler(function (r) {
+      estado('⚡ Registro SIRE pedido a SUNAT: ' + r.texto);
+      SR = { id: r.id, texto: r.texto, j: { e: 'sunat', seg: 0 } }; srPintar();
+      if (r.id) srSeguir();
+    })
     .MESA_sireRapido(TK, $('fEmp').value, $('srPer').value, $('srTip').value);
+}
+/* Sigue el pedido paso a paso (SUNAT → hoja SIRE → Cobranzas) y al final recarga la Mesa sola. Si cierra la ventana, el avance sigue abajo, en la barra de estado. */
+var SR = null, SRT = 0;
+function srSeguir() {
+  clearTimeout(SRT);
+  SRT = setTimeout(function () {
+    if (!SR) return;
+    R.withFailureHandler(function () { srSeguir(); }).withSuccessHandler(function (j) {
+      SR.j = j; srPintar();
+      if (!j.fin) return srSeguir();
+      if (j.e === 'listo') cargar(true);
+    }).MESA_sireEstado(TK, SR.id);
+  }, 8000);
+}
+function srPintar() {
+  if (!SR) return;
+  var j = SR.j, orden = ['sunat', 'sire', 'cob', 'listo'], i = orden.indexOf(j.e);
+  var paso = function (k, t, hecho) {
+    var n = orden.indexOf(k), ic = j.e === 'error' && n === Math.max(i, 0) ? '❌' : i > n || (k === 'listo' && j.e === 'listo') ? '✅' : i === n ? '⏳' : '◻️';
+    return '<div style="padding:2px 0' + (i === n && j.e !== 'listo' ? ';font-weight:bold' : i < n ? ';color:#94A3B8' : '') + '">' + ic + ' ' + t + (i > n && hecho ? ' <span style="color:#64748B;font-weight:normal">· ' + hecho + '</span>' : '') + '</div>';
+  };
+  var calc = j.calc === 'calc' ? 'calculando' : j.calc === 'espera' ? 'esperando que termine la actualización automática' : 'en cola';
+  var h = '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px;margin-top:6px">' +
+    '<div style="margin-bottom:4px"><b>' + esc(SR.texto) + '</b> · ' + mmss(j.seg || 0) + '</div>' +
+    paso('sunat', '1. SUNAT entrega el registro', esc(j.txt || '')) +
+    paso('sire', '2. La hoja SIRE lo pasa a la Liquidación IGV', j.sinCambio ? 'no vi cambios en la Liquidación (quizá ya estaba al día)' : '') +
+    paso('cob', '3. Cobranzas se recalcula' + (j.e === 'cob' ? ' (' + calc + ')' : ''), '') +
+    paso('listo', '4. Esta Mesa se recarga sola', '') + '</div>';
+  if (j.e === 'sin') h += '<p style="color:#B45309">⚠️ SUNAT no entregó el registro: ' + esc(j.txt || '') + '. Se vuelve a pedir solo más tarde; no hay nada nuevo que recalcular.</p>';
+  if (j.e === 'error') h += '<p style="color:#B91C1C">❌ ' + esc(j.txt || 'No terminó.') + (j.url ? ' <a href="' + esc(j.url) + '" target="_blank">ver en GitHub</a>' : '') + '</p>';
+  if (j.e === 'listo') h += '<p style="color:#166534">✅ Listo' + (j.tarde ? ' (el recálculo tardó; si no ve los cambios toque 🔄 Recargar)' : '') + ': la Mesa ya muestra lo que trajo SUNAT. Puede cerrar esta ventana.</p>';
+  else if (!j.fin) h += '<p style="color:#64748B;font-size:12px">Puede cerrar esta ventana y seguir trabajando: el avance sigue abajo, en la barra de estado, y la Mesa se recarga sola al terminar.</p>';
+  if ($('srMsg')) $('srMsg').innerHTML = h;
+  var corto = { sunat: '⏳ pidiendo a SUNAT', sire: '⏳ la hoja SIRE lo está importando', cob: '⏳ Cobranzas recalculando', listo: '✅ listo, recargando la Mesa', sin: '⚠️ SUNAT no entregó el registro', error: '❌ no terminó' }[j.e];
+  estado(SR.texto + ': ' + corto + ' · ' + mmss(j.seg || 0), j.e === 'error');
 }
 
 /* ------------------------------------------------ 🔁 Actualizar sola */

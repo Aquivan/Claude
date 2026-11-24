@@ -43,7 +43,7 @@ function REG_anotar_(sistema, evento, segundos, detalle) {
 // el código que pregunta «¿ya hay uno programado?» creería que sí y el proceso no volvería a programarse (pasó en
 // Vouchers: un PDF largo esperaba la vuelta de 10 min en vez de seguir al minuto). Si Google ya lo borró, no pasa nada.
 // Ninguno de estos procesos tiene además un disparador que se repite (lo revisa scripts/registro_tecnico.py).
-var REG_UNA_VEZ_ = ["AUD_continuar", "CTV_reponer", "MESA_recalcular", "TGNV_leerPaso", "TGNV_paso", "TGP_recalcular", "TGP_seguirAnalisis", "TG_seguirDescargas", "VER_continuar", "VIG_paso"];
+var REG_UNA_VEZ_ = ["AUD_continuar", "CTV_reponer", "MESA_recalcular", "MESA_sireSeguir", "TGNV_leerPaso", "TGNV_paso", "TGP_recalcular", "TGP_seguirAnalisis", "TG_seguirDescargas", "VER_continuar", "VIG_paso"];
 
 function REG_disparadorUsado_(e) {
   try {
@@ -99,6 +99,7 @@ function MESA_recalcular() { return REG_envolver_('MESA_recalcular', MESA_recalc
 function doPost() { return REG_envolver_('doPost', doPost__reg, arguments, { soloLento: 25 }); }
 function AUD_continuar() { return REG_envolver_('AUD_continuar', AUD_continuar__reg, arguments, { soloLento: 600 }); }
 function CTV_reponer() { return REG_envolver_('CTV_reponer', CTV_reponer__reg, arguments, { soloLento: 600 }); }
+function MESA_sireSeguir() { return REG_envolver_('MESA_sireSeguir', MESA_sireSeguir__reg, arguments, { soloLento: 600 }); }
 function TGNV_leerPaso() { return REG_envolver_('TGNV_leerPaso', TGNV_leerPaso__reg, arguments, { soloLento: 600 }); }
 function TGNV_paso() { return REG_envolver_('TGNV_paso', TGNV_paso__reg, arguments, { soloLento: 600 }); }
 function TGP_recalcular() { return REG_envolver_('TGP_recalcular', TGP_recalcular__reg, arguments, { soloLento: 600 }); }
