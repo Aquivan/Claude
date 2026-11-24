@@ -61,14 +61,26 @@ function SCP_gh_(q) {
 function SCP_completar_(cq, r) {
   var x = { ok: !!r.ok, error: String(r.error || ''), consulta: cq, emisorRuc: r.emisor_ruc || '', emisorNombre: r.emisor_nombre || '', receptorRuc: r.receptor_ruc || '',
     receptorNombre: r.receptor_nombre || '', fecha: r.fecha || '', vence: r.vence || '', moneda: /USD|DOL/i.test(r.moneda || '') ? 'USD' : 'PEN', total: Number(r.total) || 0,
-    igv: Number(r.igv) || 0, formaPago: r.forma_pago || '', detalle: String(r.detalle || '').slice(0, 300), estado: r.estado || '', texto: String(r.texto || '').slice(0, 4000) };
+    igv: Number(r.igv) || 0, formaPago: r.forma_pago || '', detalle: String(r.detalle || '').slice(0, 300), estado: r.estado || '', texto: String(r.texto || '').slice(0, 4000),
+    fuente: r.fuente || 'Consulta de comprobantes', modifica: r.modifica || '', pdf: '' };
+  if (x.ok && r.pdf_b64) try { x.pdf = SCP_guardarPdf_(r.pdf_b64, (x.emisorRuc || cq.ruc) + '-' + cq.tipo + '-' + cq.serie + '-' + cq.numero + '.pdf'); } catch (e) { console.warn('SCP pdf: ' + e.message); }
   if (x.ok) {
     var otro = cq.lado === 'Por cobrar' ? { ruc: x.receptorRuc || cq.ruc, nom: x.receptorNombre || cq.nombre } : { ruc: x.emisorRuc || cq.ruc, nom: x.emisorNombre || cq.nombre };
     var tipoTxt = INI_TIPOS_.filter(function (t) { return t.indexOf(cq.tipo) === 0; })[0] || cq.tipo;
     var corte = Utilities.formatDate(INI_corteDefecto_(leerConfig_(ssPrincipal_())), 'America/Lima', 'dd/MM/yyyy');
-    x.fila = [cq.empresa, cq.lado, otro.ruc, otro.nom, tipoTxt, cq.serie, cq.numero, x.fecha, x.vence, x.moneda, x.total, '', corte, 'SUNAT (consulta)', x.detalle.slice(0, 120), ''];
+    x.fila = [cq.empresa, cq.lado, otro.ruc, otro.nom, tipoTxt, cq.serie, cq.numero, x.fecha, x.vence, x.moneda, x.total, '', corte, 'SUNAT (' + (/XML/.test(x.fuente) ? 'XML' : 'consulta') + ')', (x.detalle.slice(0, 120) + (x.pdf ? ' · PDF: ' + x.pdf : '')).replace(/^ · /, ''), ''];
   }
   return x;
+}
+
+/** PDF oficial del comprobante en la carpeta «📥 Comprobantes de SUNAT» (junto a la hoja de Cobranzas). */
+function SCP_guardarPdf_(b64, nombre) {
+  var ss = ssPrincipal_(), padre = DriveApp.getFileById(ss.getId()).getParents();
+  padre = padre.hasNext() ? padre.next() : DriveApp.getRootFolder();
+  var it = padre.getFoldersByName('📥 Comprobantes de SUNAT'), car = it.hasNext() ? it.next() : padre.createFolder('📥 Comprobantes de SUNAT');
+  var ya = car.getFilesByName(nombre);
+  if (ya.hasNext()) return ya.next().getUrl();
+  return car.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'application/pdf', nombre)).getUrl();
 }
 
 /** Cómo va (la Mesa pregunta cada pocos segundos). */
@@ -164,7 +176,7 @@ function SCP_avisarTG_(chat, lote, est) {
       (c.lado === 'Por pagar' ? 'De: ' : 'A: ') + '<b>' + TG_esc_(f[3]) + '</b> · ' + TG_esc_(f[2]) + '\n' +
       'Emisión: ' + TG_esc_(x.fecha || '—') + (x.vence ? ' · vence ' + TG_esc_(x.vence) : '') + (x.formaPago ? ' · ' + TG_esc_(x.formaPago) : '') + '\n' +
       'Total: <b>' + (x.moneda === 'USD' ? 'US$ ' : 'S/ ') + x.total.toFixed(2) + '</b>' + (x.igv ? ' (IGV ' + x.igv.toFixed(2) + ')' : '') +
-      (x.detalle ? '\n<i>' + TG_esc_(x.detalle.slice(0, 160)) + '</i>' : '') + '\n\n¿La agrego a 📥 Saldos iniciales (con saldo = total)?';
+      (x.detalle ? '\n<i>' + TG_esc_(x.detalle.slice(0, 160)) + '</i>' : '') + (x.pdf ? '\n<a href="' + x.pdf + '">📄 PDF oficial</a>' : '') + '\n<i>Fuente: ' + TG_esc_(x.fuente) + '</i>' + '\n\n¿La agrego a 📥 Saldos iniciales (con saldo = total)?';
     TG_tarjeta_(ctx, txt, [[TG_bot_('📥 Agregar', { t: 'scp', a: 'scpA', fila: f }, 'success'), TG_bot_('✖ No', { t: 'scp', a: 'scpN' }, 'link')]], { nuevo: true });
   });
 }

@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       lote:
-        description: "Lote que dejó el bot de Cobranzas (no lo escriba a mano)"
+        description: "Lote que dejó el bot de Cobranzas, o «prueba» (busca un comprobante de compras ya bajado del SIRE y solo muestra ✓/✗)"
         required: true
       empresa:
         description: "RUC de la empresa del grupo (su GitHub Environment trae su clave SOL). Lo pone el bot."
@@ -31,9 +31,11 @@ jobs:
             scripts/sunat_comprobante.py
             .github/workflows/sunat-factura.yml
             cobranzas/.clasp.json
+            sire/${{ inputs.empresa }}/historico
           sparse-checkout-cone-mode: false
 
       - name: Dirección del bot
+        if: inputs.lote != 'prueba'
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
         run: |
@@ -56,6 +58,7 @@ jobs:
       - name: Consultar en SUNAT y devolver al bot
         env:
           LOTE: ${{ inputs.lote }}
+          EMPRESA: ${{ inputs.empresa }}
           SUNAT_CLAVES: ${{ secrets.SUNAT_CLAVES }}
           SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
           SUNAT_USUARIO: ${{ secrets.SUNAT_USUARIO }}
