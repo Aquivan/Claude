@@ -272,6 +272,12 @@ function ECS_tarjetaTG_(ctx, st) {
     [b('👁 ' + nom(ECS_VIS_, st.vis) + ' ›', con('vis', sig(ECS_VIS_, st.vis)))].concat(c.mons.length > 1 ? [b('💱 ' + (st.mon === 'USD' ? 'US$' : 'S/') + ' ›', con('mon', st.mon === 'USD' ? 'PEN' : 'USD'))] : []),
     [b('📄 PDF', { a: 'pdf' }, 'primary'), b('🖼 Imagen', { a: 'img' }), b('📋 Texto', { a: 'txt' }), b('📊 Excel', { a: 'csv' })],
     [{ text: '📋 Menú', callback_data: 'm:', style: 'link' }]];
+  // 🪟 La Mesa dentro de Telegram, abierta directo en este estado de cuenta (Mini App en el chat privado; en grupos, enlace)
+  try {
+    var u = MESA_enlace_('Telegram · ' + (ctx.nombre || ctx.chatId)) + '&ec=' + encodeURIComponent(st.cr) + '&lado=' + encodeURIComponent(st.lado) +
+      (st.er ? '&er=' + encodeURIComponent(st.er) : '') + '&vis=' + st.vis + '&tg=1';
+    filas.splice(3, 0, [/^\d+$/.test(String(ctx.chatId)) ? { text: '🪟 Ver en Mini App (PDF, imagen, imprimir)', web_app: { url: u } } : { text: '🪟 Abrir en la Mesa', url: u }]);
+  } catch (e) { console.warn('Mini App del estado de cuenta: ' + e.message); }
   if (emps.length < 2) filas[0].shift();
   TG_tarjeta_(ctx, L.join('\n'), filas);
 }

@@ -67,7 +67,9 @@ def main():
     html = html.replace(PLANTILLA, "var TK = new URLSearchParams(location.search).get('k') || '', MODO = 'web', URLM = location.href;")
     html = html.replace('<base target="_top">', "", 1)
     google = "https://script.google.com/macros/s/%s/exec" % sys.argv[1]
-    html = html.replace("<head>", "<head>\n<title>🧩 Mesa de conciliación</title>\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n" + PUENTE % (json.dumps(url), json.dumps(google)), 1)
+    # 📱 Mini App de Telegram: su script (para ✖ Cerrar y para ocupar toda la pantalla). Fuera de Telegram no hace nada.
+    tg = "<script src=\"https://telegram.org/js/telegram-web-app.js\"></script>\n"
+    html = html.replace("<head>", "<head>\n<title>🧩 Mesa de conciliación</title>\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n" + tg + PUENTE % (json.dumps(url), json.dumps(google)), 1)
     os.makedirs(sys.argv[2], exist_ok=True)
     with open(os.path.join(sys.argv[2], "index.html"), "w", encoding="utf-8") as fh:
         fh.write(html)
