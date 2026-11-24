@@ -794,6 +794,8 @@ async function TGP_separar_(ss, job) {
 // Pide a la hoja de Vouchers que procese YA (la misma dirección del "⚡ Procesar al instante" de WhatsApp).
 // Devuelve lo que contesta la hoja (con ⏱ tiempos: total, ia, escribir, lector) o null.
 function TGP_procesarYa_() {
+  // ⚡ Primero por el puente de la hoja de Vouchers (su dirección y clave están en sus metadatos: no hay que copiar nada).
+  try { var rp = RUCV_puente_('procesarYa', {}); if (rp && (rp.ok || rp.tiempos)) return rp; } catch (e) { console.warn('Procesar al instante (puente): ' + e.message); }
   var url = PropertiesService.getScriptProperties().getProperty('TGP_PROCESAR_URL');
   if (!url) return null;
   try {

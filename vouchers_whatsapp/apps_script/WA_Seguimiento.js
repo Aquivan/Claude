@@ -195,8 +195,29 @@ function WA_avisarResultados_(hoja, datos) {
 // su revisión de cada 10 min. Nunca dos a la vez: la hoja de Vouchers no usa bloqueos.
 var WA_ULT_FALLO_ = '';   // por qué falló el último «procesar al instante» (para avisarle a la persona)
 
+/**
+ * ⚡ Dirección para «procesar al instante» SIN copiar nada: la hoja de Vouchers guarda en sus metadatos su propia
+ * dirección (PV_HOJA, la anota el Portal al publicarse) y una clave (PV_PUENTE). Se leen de ahí (10 min en memoria).
+ * Si no están, se usa la dirección pegada a mano en «⚡ Procesar al instante» (como antes).
+ */
+function WA_urlProcesar_() {
+  var c = CacheService.getScriptCache(), u = c.get('wa_url_procesar');
+  if (u) return u;
+  try {
+    var ss = SpreadsheetApp.openById(WA_VOUCHERS_.hoja);
+    var meta = function (k) { var m = ss.createDeveloperMetadataFinder().withKey(k).find(); return m.length ? String(m[0].getValue() || '') : ''; };
+    var hoja = meta('PV_HOJA'), k = meta('PV_PUENTE');
+    if (/^https:\/\/script\.google\.com\//.test(hoja) && k.length >= 40) {
+      u = hoja + '?portal=1&op=procesarYa&k=' + encodeURIComponent(k);
+      c.put('wa_url_procesar', u, 600);
+      return u;
+    }
+  } catch (e) { console.warn('Dirección automática de la hoja de Vouchers: ' + e.message); }
+  return WA_prop_('WA_PROCESAR_URL') || '';
+}
+
 function WA_procesarYa_() {
-  var url = WA_prop_('WA_PROCESAR_URL');
+  var url = WA_urlProcesar_();
   if (!url) return false;
   var p = WA_props_(), desde = Number(p.getProperty('WA_PROCESANDO') || 0);
   if (Date.now() - desde < 6 * 60 * 1000) return false;
@@ -212,6 +233,7 @@ function WA_procesarYa_() {
       // ⚡ La hoja de Vouchers no respondió bien: se reintenta en la revisión del minuto siguiente (no se espera su vuelta de 10 min).
       console.error('Procesar al instante: la hoja de Vouchers no respondió JSON (HTTP ' + r.getResponseCode() + '): ' + r.getContentText().replace(/<[^>]+>/g, ' ').slice(0, 300));
       p.setProperty('WA_PROCESAR_PEND', '1');
+      try { CacheService.getScriptCache().remove('wa_url_procesar'); } catch (e3) {}
       var cuerpo = r.getContentText().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       WA_ULT_FALLO_ = 'la hoja de Vouchers respondió HTTP ' + r.getResponseCode() + (/inicia|sign in|acceso|access|permiso|authoriz/i.test(cuerpo) ? ' (pide permiso o inicio de sesión)' : '') +
         (cuerpo ? ' · ' + cuerpo.slice(0, 120) : '');

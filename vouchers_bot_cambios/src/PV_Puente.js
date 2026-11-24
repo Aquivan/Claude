@@ -4,6 +4,7 @@
 // El portal (celular / PC, usuario y PIN) lee y escribe la hoja él mismo. Solo
 // para lo que necesita la IA y los procesos de ESTA hoja llama aquí:
 //   ?portal=1&k=CLAVE&op=procesar                -> procesar Entrada en ~1 minuto
+//   ?portal=1&k=CLAVE&op=procesarYa              -> procesar Entrada AHORA y devolver el resultado (WhatsApp / Telegram)
 //   ?portal=1&k=CLAVE&op=releer&hoja=..&fila=..  -> volver a leer con IA (no escribe)
 //   ?portal=1&k=CLAVE&op=releerEstado&id=..      -> resultado de esa lectura
 //   ?portal=1&k=CLAVE&op=releerAplicar&id=..&i=n -> reemplazar la fila con la opción n
@@ -29,6 +30,11 @@ function PVP_get_(p) {
     switch (p.op) {
       case 'ping': return { ok: true };
       case 'procesar': programarReintentoAutomatico_(); return { ok: true, mensaje: 'Se procesa en ~1 minuto.' };
+      case 'procesarYa': {   // ⚡ procesar AHORA y responder con el resultado y los ⏱ tiempos (WhatsApp y Telegram, sin copiar direcciones)
+        const rp = ejecutarProcesamiento_();
+        rp.ok = !rp.error;
+        return rp;
+      }
       case 'releer': {
         const fila = parseInt(p.fila, 10);
         if (!(fila >= 2)) throw new Error('Fila no válida.');

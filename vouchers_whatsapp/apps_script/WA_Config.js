@@ -180,8 +180,17 @@ function WA_menuEstado() {
   lineas.push('Autorizados: ' + (WA_permitidos_().join(', ') || 'FALTA'));
   lineas.push('Aplicación web: ' + (WA_urlApp_() || 'sin publicar'));
   lineas.push('Revisión cada minuto: ' + (ScriptApp.getProjectTriggers().some(function (x) { return x.getHandlerFunction() === 'WA_cadaMinuto'; }) ? 'activa' : 'INACTIVA'));
-  var pu = WA_prop_('WA_PROCESAR_URL');
-  if (!pu) lineas.push('Procesar al instante: ❌ sin configurar (menú ⚡ Procesar al instante): se espera la vuelta de 10 min');
+  var pu = WA_urlProcesar_(), auto = /[?&]portal=1/.test(pu);
+  if (auto) {   // dirección automática (metadatos de la hoja de Vouchers): se prueba con «ping», que no procesa nada
+    try {
+      var ra = UrlFetchApp.fetch(pu.replace('op=procesarYa', 'op=ping'), { muteHttpExceptions: true, followRedirects: true }), ja = null;
+      try { ja = JSON.parse(ra.getContentText()); } catch (e) {}
+      lineas.push('Procesar al instante: ' + (ja && ja.ok ? '✅ automático (sin copiar direcciones): la hoja de Vouchers responde' : '❌ automático: ' + (ja ? ja.error : 'HTTP ' + ra.getResponseCode())));
+    } catch (e) { lineas.push('Procesar al instante: ❌ ' + String(e.message).slice(0, 140)); }
+    pu = '';
+  }
+  if (auto) { /* ya probado */ }
+  else if (!pu) lineas.push('Procesar al instante: ❌ sin configurar (menú ⚡ Procesar al instante): se espera la vuelta de 10 min');
   else {   // prueba liviana: el diagnóstico de la hoja de Vouchers (no procesa nada)
     try {
       var rp = UrlFetchApp.fetch(pu.replace(/([?&]accion=)[^&]*/, '$1diagnostico'), { muteHttpExceptions: true, followRedirects: true }), jp = null;
