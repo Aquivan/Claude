@@ -90,7 +90,7 @@ function TG_menuTarjeta_(ctx, secc) {
   }
   var f = {
     cob: [[TG_bot_('💰 Por cobrar', 'mc:cobrar'), TG_bot_('💸 Por pagar', 'mc:pagar')], [TG_bot_('⏰ Vencidas', 'mc:vencidas'), TG_bot_('💱 Tipo de cambio', 'mc:tc')],
-      [TG_bot_('🔄 Recalcular cobranzas', 'mc:actualizar', 'primary')]],
+      [TG_bot_('📨 Estado de cuenta (proveedor o cliente)', 'mc:cuenta', 'primary')], [TG_bot_('🔄 Recalcular cobranzas', 'mc:actualizar')]],
     sunat: [[TG_bot_('📬 Buzón SUNAT', 'mc:notificaciones'), TG_bot_('🏦 Detracciones', 'mc:detracciones')], [TG_bot_('🧾 Retenciones', 'mc:retenciones'), TG_bot_('🧑‍💼 Honorarios', 'mc:honorarios')],
       [TG_bot_('⚙️ Estado descargas', 'mc:estado'), TG_bot_('⬇ Descargar de SUNAT', 'mc:descargar', 'primary')]],
     ia: [[TG_bot_('🧾 Lectores de vouchers', 'm:lect')], [TG_bot_('🤖 IA de cada tarea', 'm:iat')], [TG_bot_('🔭 Probar modelos (vigía)', 'm:vig')]],
