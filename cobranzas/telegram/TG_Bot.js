@@ -242,8 +242,8 @@ function TG_comando_(ctx, texto) {
   switch (cmd) {
     case 'start':
       TG_enviar_(chatId, '👋 <b>Hola' + (ctx.nombre ? ', ' + TG_esc_(ctx.nombre.split(' ')[0]) : '') + '.</b> ' + TG_textoBienvenida_(), TG_tecladoFijo_());
-      return TG_enviar_(chatId, TG_textoMenu_(), TG_tecladoMenu_(chatId));
-    case 'menu': return TG_enviar_(chatId, TG_textoMenu_(), TG_tecladoMenu_(chatId));
+      return TG_menuTarjeta_(ctx, '');
+    case 'menu': return TG_menuTarjeta_(ctx, arg);   // 🪪 menú por secciones en un solo mensaje (TG_Tarjeta.js)
     case 'tablero': return TGT_enviar_(ctx);   // 📊 tablero fijo que se actualiza solo (TG_Tablero.js)
     case 'portal': {   // 🧾 el Portal de Vouchers dentro de Telegram (Mini App)
       var bp = TG_botonPortal_(chatId);
@@ -472,6 +472,13 @@ function TG_alBoton_(ss, q) {
     efimeroMsg: q.message && q.message.ephemeral_message_id };   // 👻 botón tocado dentro de un mensaje efímero
   if (d === 'x') { TG_responderBoton_(q.id, 'Listo'); TG_llamar_('editMessageReplyMarkup', { chat_id: chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } }); return; }
   if (d.indexOf('c:') === 0) { TG_responderBoton_(q.id); return TG_comando_(ctx, '/' + d.slice(2)); }
+  if (d.indexOf('mc:') === 0) {   // 🪪 opción del 📋 Menú en tarjeta: la respuesta va aparte y el menú queda (TG_Tarjeta.js)
+    TG_responderBoton_(q.id);
+    var cm = { }; Object.keys(ctx).forEach(function (k) { cm[k] = ctx[k]; }); cm.esBoton = false; cm.msgId = null; cm.botonId = null;
+    return TG_comando_(cm, '/' + d.slice(3));
+  }
+  if (d.indexOf('m:') === 0) { TG_responderBoton_(q.id); return TG_menuBoton_(ctx, d.slice(2)); }   // 🪪 navegación del menú
+
   if (d.indexOf('av:') === 0) { TG_responderBoton_(q.id); return TG_enviarAvisos_(ctx, d.slice(3)); }
   if (d.indexOf('dw:') === 0) { TG_responderBoton_(q.id); return TG_asistenteDescarga_(ctx, d.slice(3)); }
   if (d.indexOf('f:') === 0) { TG_responderBoton_(q.id, '📎 Enviando…'); return TG_mandarArchivo_(ctx, d.slice(2), ''); }

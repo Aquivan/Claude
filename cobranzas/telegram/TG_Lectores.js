@@ -166,15 +166,14 @@ function LECT_teclado_(cfg) {
     if (i > 0) fila.push(b('⬆️ ' + nom, { t: 'lect', a: 'subir', p: p }));
     fila.push(b((off ? '▶ Prender ' : '⏸ Apagar ') + nom, { t: 'lect', a: 'onoff', p: p }));
     fila.push(b('🔧 Modelo', { t: 'lect', a: 'modelos', p: p }));
-    if (p !== 'gemini') fila.push(b(cfg.razonar[p] ? '🧠 Razona ✓' : '🧠 Razonar', { t: 'lect', a: 'razonar', p: p }));
+    if (p !== 'gemini') { var rz = b(cfg.razonar[p] ? '🧠 Razona ✓' : '🧠 Razonar', { t: 'lect', a: 'razonar', p: p }); if (cfg.razonar[p]) rz.style = 'success'; fila.push(rz); }
     return fila;
-  });
+  }).concat([[TG_bot_('← IA y lectores', 'm:ia', 'link'), TG_bot_('📋 Menú', 'm:', 'link')]]);
 }
 
 function LECT_panel_(ctx, aviso, editar) {
   var cfg = LECT_cfg_(), html = (aviso ? aviso + '\n\n' : '') + LECT_textoPanel_(cfg);
-  if (editar && ctx.msgId && TG_editar_(ctx.chatId, ctx.msgId, html, LECT_teclado_(cfg))) return;
-  TG_enviar_(ctx.chatId, html, LECT_teclado_(cfg));
+  TG_tarjeta_(ctx, html, LECT_teclado_(cfg));   // 🪪 botones dentro del mensaje; al tocar uno cambia este mismo mensaje
 }
 
 /** Modelos que leen imágenes que tiene HOY cada proveedor, como botones. Se eligen VARIOS en orden: 1.º, 2.º, 3.º…
@@ -187,18 +186,22 @@ function LECT_modelos_(ctx, p, aviso, editar) {
   lista.forEach(function (m) { if (ids.indexOf(m) < 0) ids.unshift(m); });   // los elegidos siempre se ven (aunque no estén en la lista de hoy)
   var num = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣'];
   var b = function (t, d) { return { text: t, callback_data: 'k:' + TG_guardarBoton_(d, 21600) }; };
-  var teclado = [[b('🤖 Automático' + (auto ? ' ✓' : ''), { t: 'lect', a: 'modelo', p: p, m: '' }), b('✅ Listo', { t: 'lect', a: 'listo', p: p })]]
-    .concat(ids.map(function (id) {
-      var i = auto ? -1 : lista.indexOf(id);
-      return [b((i >= 0 ? num[i] + ' ' : '') + id.slice(0, 55), { t: 'lect', a: 'mtoggle', p: p, m: id })];
-    }));
+  var mb = ids.map(function (id) {
+    var i = auto ? -1 : lista.indexOf(id), x = b((i >= 0 ? num[i] + ' ' : '') + id.replace(/^nvidia\//, '').slice(0, 40), { t: 'lect', a: 'mtoggle', p: p, m: id });
+    if (i >= 0) x.style = 'primary';   // 🔵 los elegidos, con su número de orden
+    return x;
+  });
+  var teclado = [[b('🤖 Automático' + (auto ? ' ✓' : ''), { t: 'lect', a: 'modelo', p: p, m: '' })]];
+  for (var k = 0; k < mb.length; k += 2) teclado.push(mb.slice(k, k + 2));
+  var listo = b('✅ Listo', { t: 'lect', a: 'listo', p: p }); listo.style = 'success';
+  var atras = b('← Lectores', { t: 'lect', a: 'listo', p: p }); atras.style = 'link';
+  teclado.push([atras, listo]);
   var html = (aviso ? aviso + '\n\n' : '') + '🔧 <b>Modelos de ' + LECT_NOMBRES_[p] + '</b> para leer vouchers\n' +
     'Orden ahora: ' + (auto ? '🤖 automático (' + LECT_textoLista_(cfg, p) + ')' : LECT_textoLista_(cfg, p)) + '\n\n' +
     (ids.length ? 'Toque los modelos <b>en el orden</b> que quiere: el 1.º lee; si falla (saturado, sin cupo), pasa al 2.º, luego al 3.º… (máx. ' + LECT_MAX_LISTA_ + '). Tocar uno con número lo quita. Al terminar, ✅ Listo.' : 'No encontré otros modelos que lean imágenes.') +
     (p === 'gemini' ? '\n<i>Si todos los Gemini elegidos fallan, pasa al siguiente lector (NVIDIA/Groq) según /lectores.</i>' : '') +
     '\n<i>Antes de elegir puede probarlos: /modelos.</i>';
-  if (editar && ctx.msgId && TG_editar_(ctx.chatId, ctx.msgId, html, teclado)) return;
-  TG_enviar_(ctx.chatId, html, teclado);
+  TG_tarjeta_(ctx, html, teclado);
 }
 
 /** Para ordenar la lista de Gemini: los numerados de más nuevo a más viejo y los alias «-latest» al final. */
@@ -238,7 +241,7 @@ function LECT_alBoton_(ctx, d) {
   var cfg = LECT_cfg_(), p = d.p;
   if (!LECT_NOMBRES_[p]) return;
   if (d.a === 'modelos') return LECT_modelos_(ctx, p);
-  if (d.a === 'listo') return LECT_panel_(ctx, '✅ ' + LECT_NOMBRES_[p] + ': ' + LECT_textoLista_(cfg, p) + '.');
+  if (d.a === 'listo') return LECT_panel_(ctx, '✅ ' + LECT_NOMBRES_[p] + ': ' + LECT_textoLista_(cfg, p) + '.', true);
   if (d.a === 'mtoggle') {
     var auto = !(cfg.extra[p] || []).length && cfg.modelo[p] === LECT_MODELO_DEF_[p];
     var l = auto ? [] : LECT_lista_(cfg, p), k = l.indexOf(d.m);

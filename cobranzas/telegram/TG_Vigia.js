@@ -390,11 +390,12 @@ function VIG_panel_(ctx) {
     });
   }
   var b = function (t, d) { return { text: t, callback_data: 'k:' + TG_guardarBoton_(d, 21600) }; };
-  TG_enviar_(ctx.chatId, L.join('\n'), [
+  TG_tarjeta_(ctx, L.join('\n'), [   // 🪪 botones dentro del mensaje
     [b('🔭 Buscar modelos nuevos ahora', { t: 'vig', a: 'buscar' })],
     [b('🧪 Probar todos (Gemini, NVIDIA y Groq)', { t: 'vig', a: 'probar' })],
     [b('🧪 Solo Gemini (todos)', { t: 'vig', a: 'gemini' }), b('🧪 Solo los que uso', { t: 'vig', a: 'actuales' })],
-    [b('📌 Vouchers de prueba (' + nP + ')', { t: 'vig', a: 'pruebas' })]]);
+    [b('📌 Vouchers de prueba (' + nP + ')', { t: 'vig', a: 'pruebas' })],
+    [TG_bot_('← IA y lectores', 'm:ia', 'link'), TG_bot_('📋 Menú', 'm:', 'link')]]);
 }
 
 function VIG_tgBuscar_(ctx) {
