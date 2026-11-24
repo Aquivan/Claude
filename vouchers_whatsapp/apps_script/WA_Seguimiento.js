@@ -16,6 +16,7 @@ var WA_MAX_SEGUIR_MS_ = 24 * 60 * 60 * 1000; // un "⏳ Revisar" se sigue mirand
 function WA_cadaMinuto() {
   var props = WA_props_().getProperties(), ahora = Date.now();
   try { WA_greCadaMinuto_(props); } catch (e) { console.error('Guías: ' + e.message); }   // 🚚 WA_Gre.js
+  try { WA_autoprueba_(props); } catch (e) { console.error('Autoprueba: ' + e.message); }   // 🩺 prueba sola «procesar al instante»
   var tandas = Object.keys(props).filter(function (k) { return k.indexOf('WA_TANDA_') === 0 && ahora - Number(props[k]) >= WA_ESPERA_TANDA_MS_; });
   var hayCola = props.WA_HAY_COLA === '1';
   if (props.WA_HAY_IA === '1') {
@@ -261,4 +262,30 @@ function WA_textoTiempos_(datos, filas) {
     return '\n\n_⏱ ' + (isFinite(llego) ? Math.round((Date.now() - llego) / 1000) + ' s desde que llegó · ' : '') + 'en la hoja ' + t.total + ' s: leer con IA ' + t.ia +
       ' s · guardar ' + t.escribir + ' s · resto ' + resto + ' s_';
   } catch (e) { return ''; }
+}
+
+/**
+ * 🩺 Autoprueba: tras cada publicación (y luego una vez por hora) prueba la conexión «procesar al instante» con la hoja de
+ * Vouchers SIN procesar nada (op «ping») y anota el resultado en el Registro técnico. Así el asistente lo verifica solo.
+ */
+var WA_AUTOPRUEBA_VER_ = '2026-11-24b';
+function WA_autoprueba_(props) {
+  var ult = Number(props.WA_AUTOPRUEBA_T || 0);
+  if (props.WA_AUTOPRUEBA_VER === WA_AUTOPRUEBA_VER_ && Date.now() - ult < 3600 * 1000) return;
+  var p = WA_props_();
+  p.setProperty('WA_AUTOPRUEBA_VER', WA_AUTOPRUEBA_VER_);
+  p.setProperty('WA_AUTOPRUEBA_T', String(Date.now()));
+  try { CacheService.getScriptCache().remove('wa_url_procesar'); } catch (e) {}
+  var url = WA_urlProcesar_(), auto = /[?&]portal=1/.test(url), t0 = Date.now(), res;
+  if (!url) res = '❌ sin dirección (ni automática ni pegada a mano)';
+  else {
+    var prueba = auto ? url.replace('op=procesarYa', 'op=ping') : url.replace(/([?&]accion=)[^&]*/, '$1diagnostico');
+    try {
+      var r = UrlFetchApp.fetch(prueba, { muteHttpExceptions: true, followRedirects: true }), j = null;
+      try { j = JSON.parse(r.getContentText()); } catch (e) {}
+      res = (j && (j.ok || j.version || j.hoja) ? '✅ ' : '❌ ') + (auto ? 'automática' : 'pegada a mano') + ' · HTTP ' + r.getResponseCode() + ' · ' +
+        (j ? JSON.stringify(j).slice(0, 200) : r.getContentText().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 200));
+    } catch (e) { res = '❌ ' + String(e.message).slice(0, 200); }
+  }
+  REG_anotar_('WhatsApp', 'autoprueba procesar al instante', Math.round((Date.now() - t0) / 1000), res);
 }
