@@ -3,6 +3,7 @@
 <head>
 <title>🧩 Mesa de conciliación</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
 /* 🧩 google.script.run → POST a Cobranzas (?canal=mesa), solo funciones MESA_* (cada una revisa la llave) */
 (function () {
@@ -2645,7 +2646,10 @@ function ecAbrir(cr, er) {
   ecNotaCargar();
   $('ec').className = 'on'; ecPintar();
 }
-function ecCerrar() { $('ec').className = ''; }
+function ecCerrar() {
+  if (INI_TG) { try { if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initData) return Telegram.WebApp.close(); } catch (e) {} }
+  $('ec').className = '';
+}
 /* 📝 Nota del documento para enviar: se recuerda por proveedor (o cliente) y empresa, en este navegador. */
 var NOTA_T = 0;
 function ecNotaClave() { return 'ecNota|' + S.lado + '|' + (EC ? EC.cr + '|' + (EC.er || '') : ''); }
@@ -2988,7 +2992,37 @@ function ecCopiar() {
   (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { $('ecMsg').textContent = '📋 Copiado: péguelo en Excel, Sheets o un correo.'; }, function () { prompt('Copie el texto:', txt); });
 }
 window.addEventListener('beforeunload', function (e) { if (sucios().length || rSucios().length) { e.preventDefault(); e.returnValue = ''; } });
-cargar(false);
+/* 📨 Abrir directo en el estado de cuenta de un proveedor o cliente (botón «🪟 Ver en Mini App» de Telegram, TG_EstadoCuenta.js):
+   ?ec=RUC&lado=Por cobrar&er=RUC empresa&vis=tip|det|res|ana&tg=1 — en GitHub Pages se leen de la dirección; en Google, con
+   google.script.url.getLocation. Con tg=1, ✖ Cerrar del estado de cuenta cierra la Mini App. */
+var INI_TG = false;
+function mesaArranque() {
+  var seguir = function (p) {
+    p = p || {};
+    if (p.lado === 'Por cobrar') { segOn('sLado', 'Por cobrar'); S.lado = 'Por cobrar'; $('lContra').textContent = 'Cliente'; }
+    INI_TG = p.tg === '1';
+    try { if (window.Telegram && Telegram.WebApp) { Telegram.WebApp.ready(); Telegram.WebApp.expand(); } } catch (e) {}
+    cargar(false);
+    if (!p.ec) return;
+    var n = 0, t = setInterval(function () {
+      if (++n > 360) return clearInterval(t);
+      if (!S.data || $('carga').style.display !== 'none') return;
+      clearInterval(t);
+      $('fCon').value = p.ec;
+      var bm = document.querySelector('#sModo button[data-v="e"]'); if (bm) cambiarModo(bm);
+      if (/^(res|fac|det|tip|ana)$/.test(p.vis || '')) segOn('eDet', p.vis);
+      pintarE();
+      ecAbrir(p.ec, /^\d{11}$/.test(p.er || '') ? p.er : '');
+      if (/^(res|det|tip|ana)$/.test(p.vis || '')) { segOn('ecNiv', p.vis); ecPintar(); }
+    }, 500);
+  };
+  try {
+    if (window.MESA_WEB) { var o = {}; new URLSearchParams(location.search).forEach(function (v, k) { o[k] = v; }); return seguir(o); }
+    if (MODO === 'web' && google.script.url && google.script.url.getLocation) return google.script.url.getLocation(function (l) { seguir(l && l.parameter); });
+  } catch (e) {}
+  seguir({});
+}
+mesaArranque();
 </script>
 </body>
 </html>
