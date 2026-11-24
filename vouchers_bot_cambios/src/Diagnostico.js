@@ -661,7 +661,9 @@ function ejecutarProcesamiento_() {
     duracionSegundos: Math.round((Date.now() - inicio) / 1000),
     // ⏱ en qué se fue el tiempo (segundos): leer con IA, escribir en la hoja, el resto (abrir archivos, imagen, duplicados…)
     tiempos: { total: Math.round((Date.now() - inicio) / 100) / 10, ia: Math.round(TIEMPOS_.ia / 100) / 10,
-      escribir: Math.round(TIEMPOS_.escribir / 100) / 10, lecturas: TIEMPOS_.lecturas, lector: TIEMPOS_.lector }
+      escribir: Math.round(TIEMPOS_.escribir / 100) / 10, lecturas: TIEMPOS_.lecturas, lector: TIEMPOS_.lector,
+      imagen: Math.round(TIEMPOS_.imagen / 100) / 10, pdf: Math.round(TIEMPOS_.pdf / 100) / 10, indices: Math.round(TIEMPOS_.indices / 100) / 10,
+      geminiSaturado: Math.round(TIEMPOS_.gemFallo / 100) / 10 }
   };
 }
 

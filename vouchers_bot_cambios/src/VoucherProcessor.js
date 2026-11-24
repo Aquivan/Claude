@@ -43,7 +43,9 @@ async function procesarVouchers() {
       // --- OPTIMIZACION CLAVE ---
       // Leemos la hoja UNA sola vez y armamos indices en memoria (uno por
       // pestaña: los duplicados se detectan solo dentro del mismo tipo).
+      const tIdx = Date.now();
       const ctx = crearContexto(hoja);
+      if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.indices += Date.now() - tIdx;   // ⏱ leer la hoja (duplicados)
       Logger.log('[' + carpetas.tipo + '] Indices cargados. Filas existentes: ' + ctx.ultimaFila +
                  ' | Claves duplicado: ' + ctx.indiceDup.size);
 
@@ -119,7 +121,7 @@ async function procesarVouchers() {
       REG_anotar_('Vouchers', tiempoExcedido ? 'fin (pausado por tiempo)' : 'fin', seg,
         'procesados ' + procesados + ' · errores ' + conError + ' · apartados ' + apartados +
         ' · IA ' + Math.round((t.ia || 0) / 1000) + ' s en ' + (t.lecturas || 0) + ' lectura(s)' + (t.lector ? ' · último lector ' + t.lector : '') +
-        ' · guardar ' + Math.round((t.escribir || 0) / 1000) + ' s\n' + String(Logger.getLog() || '').slice(-2500));
+        ' · guardar ' + Math.round((t.escribir || 0) / 1000) + ' s\n' + REG_desglose_(t, seg) + '\n' + String(Logger.getLog() || '').slice(-2500));
     }
 
     if (tiempoExcedido) {

@@ -28,11 +28,14 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
   carpetas  = carpetas || carpetasParaTipo_('original');
   cargarPdfLib();
 
+  const tAbrir     = Date.now();
   const nombre     = archivo.getName();
   const blob       = archivo.getBlob();
   const rawPdfData = new Uint8Array(blob.getBytes());
   const pdfDoc     = await PDFLib.PDFDocument.load(rawPdfData);
   const totalPags  = pdfDoc.getPageCount();
+  if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.pdf += Date.now() - tAbrir;   // ⏱ abrir el PDF
+  const miniPagina = {};   // ⚡ página → imagen 800 px ya hecha para NVIDIA/Groq (se reusa para la celda)
 
   const startIdx = obtenerUltimaPaginaProcesadaCtx(ctx, nombre);
 
@@ -67,12 +70,14 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
     try {
       // Un solo PDF con todas las paginas del lote juntas, para UNA sola
       // llamada a Gemini (en vez de una por pagina).
+      const tSep     = Date.now();
       const loteDoc  = await PDFLib.PDFDocument.create();
       const copiadas = await loteDoc.copyPages(pdfDoc, indicesLote);
       copiadas.forEach(function (p) { loteDoc.addPage(p); });
       const loteBytes  = await loteDoc.save();
       const loteBlob   = Utilities.newBlob([...new Int8Array(loteBytes)], MimeType.PDF, 'lote_' + (loteInicio + 1) + '.pdf');
       const loteBase64 = Utilities.base64Encode(loteBlob.getBytes());
+      if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.pdf += Date.now() - tSep;   // ⏱ separar las páginas del lote
 
       let vouchersLote, paginasLeidas = numPaginasLote, cortado = false;
       try {
@@ -94,11 +99,15 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
             Logger.log('Sin tiempo: se leyeron ' + k + ' de ' + numPaginasLote + ' páginas del lote; sigue en la próxima ejecución.');
             break;
           }
+          const tUno = Date.now();
           const unoDoc = await PDFLib.PDFDocument.create();
           const [pagUno] = await unoDoc.copyPages(pdfDoc, [indicesLote[k]]);
           unoDoc.addPage(pagUno);
           const unoB64 = Utilities.base64Encode(Utilities.newBlob([...new Int8Array(await unoDoc.save())], MimeType.PDF, 'pag.pdf').getBytes());
+          if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.pdf += Date.now() - tUno;
+          if (typeof LEC_ULTIMA_MINI_ !== 'undefined') LEC_ULTIMA_MINI_ = null;
           (llamarGemini(unoB64, 'application/pdf', true) || []).forEach(function (v) { v.pagina = k + 1; vouchersLote.push(v); });
+          if (typeof LEC_ULTIMA_MINI_ !== 'undefined' && LEC_ULTIMA_MINI_) miniPagina[indicesLote[k]] = LEC_ULTIMA_MINI_;
         }
       }
 
@@ -140,6 +149,15 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
           const fila = escribirFilaVoucher(ctx, v, nombre, numeroPaginaReal, null, remitente);
           registrarEnIndice(ctx, v.nOperacion, v.banco, montoV);
 
+          // ⚡ Si NVIDIA/Groq leyó esta página, su imagen ya está hecha: va directo a la celda (sin Drive ni esperas).
+          if (miniPagina[indiceGlobal] && IMG_medir_(function () { return _insertarBase64EnCelda(ctx.hoja, fila, 10, miniPagina[indiceGlobal], 'image/jpeg', 'Voucher ' + numeroPaginaReal); })) {
+            if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.imagenReuso++;
+            flushSeguro_();
+            alguno = true;
+            filasInsertadas++;
+            resumenes.push({ banco: v.banco, moneda: v.moneda, monto: montoV, nOperacion: v.nOperacion, duplicado: false });
+            continue;
+          }
           if (!miniBlobPagina) {
             const miniDoc  = await PDFLib.PDFDocument.create();
             const [pagCop] = await miniDoc.copyPages(pdfDoc, [indiceGlobal]);
@@ -185,6 +203,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
     }
 
     Utilities.sleep(CFG.PAUSA_MS);
+    if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.pausas += CFG.PAUSA_MS;
   }
 
   if (!pdfIncompleto) {

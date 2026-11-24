@@ -9,7 +9,10 @@
 // una sola imagen o una sola pagina de PDF, se deja undefined/1 (comportamiento
 // identico al de siempre).
 // ⏱ Tiempos de ESTA ejecución (los devuelve «procesar al instante» para que Telegram y WhatsApp digan en qué se fue el tiempo).
-var TIEMPOS_ = { ia: 0, escribir: 0, lecturas: 0, lector: '' };
+// ia = toda la lectura con IA (incluye los intentos que fallaron) · gemFallo = lo que se perdió esperando a Gemini cuando
+// respondió saturado/sin cupo · imagen = poner la imagen en la celda · pdf = abrir el PDF y separar sus páginas ·
+// indices = leer la hoja para detectar duplicados · pausas = esperas fijas entre lotes · escribir = escribir la fila.
+var TIEMPOS_ = { ia: 0, escribir: 0, lecturas: 0, lector: '', gemFallo: 0, gemFallos: 0, imagen: 0, imagenes: 0, imagenReuso: 0, pdf: 0, indices: 0, pausas: 0 };
 var INICIO_EJECUCION_ = Date.now();   // ⏱ inicio de ESTA ejecución (Google la corta a los 6 min): Lectores.js no razona si queda poco
 
 function llamarGemini(base64, mimeType, esPDF, totalPaginasLote) {
@@ -59,6 +62,7 @@ function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
     for (let m = 0; m < modelos.length; m++) {
       const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
                   modelos[m] + ':generateContent?key=' + CFG.API_KEY;
+      const tPet = Date.now();
       const resp = UrlFetchApp.fetch(url, {
         method: 'POST',
         contentType: 'application/json',
@@ -66,13 +70,15 @@ function llamarGeminiSolo_(base64, mimeType, esPDF, totalPaginasLote, opc) {
         muteHttpExceptions: true
       });
       const code = resp.getResponseCode();
+      const segPet = Math.round((Date.now() - tPet) / 100) / 10;
+      if (code !== 200) { TIEMPOS_.gemFallo += Date.now() - tPet; TIEMPOS_.gemFallos++; }
 
       if (code === 200) {
         if (m > 0) Logger.log('Leido con ' + modelos[m] + ' (el principal estaba ocupado).');
         return { vouchers: parsearRespuestaGemini_(resp), modelo: modelos[m] };
       }
       if (code === 429 || code >= 500 || code === 404) {
-        Logger.log('Modelo ' + modelos[m] + ': HTTP ' + code + '. Se prueba el siguiente.');
+        Logger.log('Modelo ' + modelos[m] + ': HTTP ' + code + ' (Google tardó ' + segPet + ' s en responder). Se prueba el siguiente.');
         if (code === 404) marcarModeloNoDisponible_(modelos[m]);
         continue;
       }
