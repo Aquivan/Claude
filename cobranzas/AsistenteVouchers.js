@@ -55,6 +55,8 @@ function VCH_doPost_(e) {
       case 'iat_ver': return TGW_json_(IAT_ver());   // 🤖 IA de cada tarea desde la hoja de Vouchers (TG_IATareas.js)
       case 'iat_guardar': return TGW_json_(IAT_guardarHoja(q.cfg, 'Vouchers · ' + String(q.quien || '').slice(0, 60)));
       case 'iat_modelos': return TGW_json_({ ids: IAT_modelosHoja(String(q.t || ''), String(q.p || '')) });
+      case 'lect_agregar': return TGW_json_(LECT_agregarHoja(q.d || {}));   // ➕ IA nueva desde la hoja de Vouchers (TG_LectoresExtra.js)
+      case 'lect_quitar': return TGW_json_(LECT_quitarHoja(String(q.id || '')));
       case 'lect_modelos': return TGW_json_({ ids: LECT_modelosHoja(String(q.p || '')) });
       case 'rucandidatos': return TGW_json_(TGQ_rucCandidatos_(ss));   // 📋 vouchers sin RUC para elegir (RucVentana.js)
       case 'rucultimas': return TGW_json_(TGQ_rucUltimas_());   // 📂 búsquedas anteriores (6 h)

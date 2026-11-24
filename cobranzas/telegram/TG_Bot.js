@@ -321,6 +321,7 @@ function TG_alEsperado_(ctx, ses, texto) {
   ses.esperando = null;
   TG_guardarSesion_(ctx.chatId, ses);
   if (e.tipo === 'recordar') return TG_preguntar_(ctx, 'Crea un recordatorio: ' + texto, []);
+  if (e.tipo === 'lect_agregar') return LECT_altaTG_(ctx, texto);   // ➕ IA nueva para leer vouchers (TG_LectoresExtra.js)
   if (e.tipo === 'pregunta_adj') return TG_preguntar_(ctx, texto, e.adj || []);
   if (e.tipo === 'entrega') return TGE_alTextoTG_(ctx, e, texto);
   if (e.tipo === 'procnombre') return TGP_alNombreTG_(ctx, e, texto);

@@ -22,12 +22,16 @@
 // ============================================================
 
 var LEC_NOMBRES_ = { gemini: 'Gemini', nvidia: 'NVIDIA', groq: 'Groq' };
+/** ➕ Las IA agregadas en /lectores (x1, x2…) traen su nombre en la configuración. */
+function LEC_nombresExtra_(cfg) {
+  Object.keys(cfg || {}).forEach(function (k) { if (/^x\d+$/.test(k) && cfg[k] && cfg[k].nombre) LEC_NOMBRES_[k] = cfg[k].nombre; });
+}
 var LEC_ACHICADA_ = {};   // la última foto achicada para Groq (en esta ejecución)
 
 function LEC_cfg_() {
   const cache = CacheService.getScriptCache();
   const t = cache.get('lec_cfg');
-  if (t) { try { return JSON.parse(t); } catch (e) {} }
+  if (t) { try { const c0 = JSON.parse(t); LEC_nombresExtra_(c0); return c0; } catch (e) {} }
   let cfg = { orden: ['gemini'] }, dura = 120;
   try {
     if (typeof VIA_llamar_ === 'function') {
@@ -37,6 +41,7 @@ function LEC_cfg_() {
     }
   } catch (e) { Logger.log('Lectores: ' + e.message + '. Se usa solo Gemini.'); }
   try { cache.put('lec_cfg', JSON.stringify(cfg), dura); } catch (e) {}
+  LEC_nombresExtra_(cfg);
   return cfg;
 }
 
@@ -154,7 +159,9 @@ function LEC_openaiCarga_(p, c, base64, mimeType, dePdf) {
     c = Object.assign({}, c, { razonar: false });
     Logger.log('Queda poco tiempo: ' + p + ' lee sin razonar.');
   }
-  const url = p === 'nvidia' ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
+  // ➕ IA agregada en /lectores (compatible con OpenAI): su propia dirección
+  const url = c.url ? String(c.url).replace(/\/+$/, '') + '/chat/completions'
+    : p === 'nvidia' ? 'https://integrate.api.nvidia.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
   const sistema = (p === 'groq' && c.prompt) ? c.prompt : (dePdf ? PROMPT_PDF : PROMPT_IMAGEN);
   const carga = {
     // 🧠 c.razonar (se elige en «lectores»): piensa antes de responder; necesita más espacio para su razonamiento.
