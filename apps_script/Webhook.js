@@ -73,7 +73,7 @@ function doPost(e) {
 // ---------------------------------------------------------------------------
 
 var COLA_WEBHOOK_ = 'COLA_WEBHOOK';
-var LIMITE_COLA_WEBHOOK_MS_ = 4 * 60 * 1000;
+var LIMITE_COLA_WEBHOOK_MS_ = 3 * 60 * 1000;   // 3 min: un ítem que empieza al final puede tardar ~2 min más (límite de Google: 6)
 
 function encolarImportacionWebhook_(ruc, periodo) {
   var candado = LockService.getDocumentLock();
@@ -155,6 +155,22 @@ function programarSirePendientes_() {
   ScriptApp.newTrigger('reintentarSirePendientes').timeBased().after(min * 60 * 1000).create();
 }
 
+// 🔁 Memoria de reintentos (24 h): cuando una corrida trae compras pero las ventas siguen «pendientes», el robot avisa
+// primero «llegó» (que borraba el pendiente) y luego «pendiente» (que lo creaba de nuevo con 0 intentos): así nunca
+// llegaba a 3 y se pedía de nuevo cada ~40 min, día y noche. Ahora los intentos se recuerdan 24 h.
+var SIRE_PEND_HIST_PROP_ = 'SIRE_PENDIENTES_HIST';
+var SIRE_PEND_HIST_MS_ = 24 * 3600 * 1000;
+function leerSirePendHist_() {
+  var h = JSON.parse(PropertiesService.getScriptProperties().getProperty(SIRE_PEND_HIST_PROP_) || '{}'), ahora = Date.now();
+  Object.keys(h).forEach(function (k) { if (ahora - (h[k].t || 0) > SIRE_PEND_HIST_MS_) delete h[k]; });
+  return h;
+}
+function recordarSirePend_(k, intentos, desde) {
+  var h = leerSirePendHist_();
+  h[k] = { intentos: intentos, desde: desde, t: Date.now() };
+  PropertiesService.getScriptProperties().setProperty(SIRE_PEND_HIST_PROP_, JSON.stringify(h));
+}
+
 function leerSirePendientes_() { return JSON.parse(PropertiesService.getScriptProperties().getProperty(SIRE_PEND_PROP_) || '{}'); }
 function guardarSirePendientes_(p) { PropertiesService.getScriptProperties().setProperty(SIRE_PEND_PROP_, JSON.stringify(p)); }
 
@@ -163,7 +179,15 @@ function anotarSirePendiente_(ruc, periodo, tipo) {
   candado.waitLock(20000);
   try {
     var p = leerSirePendientes_(), k = ruc + '|' + periodo;
-    if (!p[k]) { p[k] = { ruc: ruc, periodo: periodo, tipo: tipo, desde: Date.now(), intentos: 0 }; registrarEnBitacora_('⏳ SIRE ' + ruc + ' ' + periodo + ': SUNAT aún no lo entrega (lento). Se vuelve a pedir solo (a los 20, 40 y 60 min).'); }
+    if (!p[k]) {
+      var hist = leerSirePendHist_()[k];
+      if (hist && hist.intentos >= SIRE_PEND_ESPERAS_MIN_.length) {   // ya se insistió las 3 veces en las últimas 24 h: no se vuelve a pedir
+        registrarEnBitacora_('⏳ SIRE ' + ruc + ' ' + periodo + ': sigue pendiente en SUNAT; ya se reintentó 3 veces hoy. Lo toma la descarga diaria.');
+        return;
+      }
+      p[k] = { ruc: ruc, periodo: periodo, tipo: tipo, desde: hist ? hist.desde : Date.now(), intentos: hist ? hist.intentos : 0 };
+      if (!hist) registrarEnBitacora_('⏳ SIRE ' + ruc + ' ' + periodo + ': SUNAT aún no lo entrega (lento). Se vuelve a pedir solo (a los 20, 40 y 60 min).');
+    }
     p[k].avisado = Date.now();
     guardarSirePendientes_(p);
   } finally { candado.releaseLock(); }
@@ -176,6 +200,7 @@ function quitarSirePendiente_(ruc, periodo) {
   if (!p[k]) return;
   registrarEnBitacora_('✅ SIRE ' + ruc + ' ' + periodo + ': llegó (estaba pendiente en SUNAT desde ' +
     Utilities.formatDate(new Date(p[k].desde), 'America/Lima', 'dd/MM HH:mm') + ').');
+  recordarSirePend_(k, p[k].intentos || 0, p[k].desde);   // si enseguida avisa «pendiente» (el otro tipo), se sigue contando
   delete p[k];
   guardarSirePendientes_(p);
 }
@@ -186,8 +211,9 @@ function reintentarSirePendientes__reg() {
   var p = leerSirePendientes_(), porPeriodo = {}, rendidos = [];
   Object.keys(p).forEach(function (k) {
     var x = p[k];
-    if (x.intentos >= SIRE_PEND_ESPERAS_MIN_.length) { rendidos.push(x); delete p[k]; return; }
+    if (x.intentos >= SIRE_PEND_ESPERAS_MIN_.length) { rendidos.push(x); recordarSirePend_(k, x.intentos, x.desde); delete p[k]; return; }
     x.intentos++;
+    recordarSirePend_(k, x.intentos, x.desde);
     (porPeriodo[x.periodo] = porPeriodo[x.periodo] || []).push(x.ruc);
   });
   guardarSirePendientes_(p);
