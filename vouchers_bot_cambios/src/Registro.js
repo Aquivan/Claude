@@ -31,7 +31,7 @@ function REG_anotar_(sistema, evento, segundos, detalle) {
   try {
     const sh = REG_hoja_();
     sh.insertRowAfter(1);
-    sh.getRange(2, 1, 1, 5).setValues([[new Date(), sistema, evento, segundos === '' ? '' : Number(segundos) || 0, String(detalle || '').slice(0, 3000)]]);
+    sh.getRange(2, 1, 1, 5).setValues([["'" + Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HH:mm:ss'), sistema, evento, segundos === '' ? '' : Number(segundos) || 0, String(detalle || '').slice(0, 3000)]]);
     if (sh.getLastRow() > 401) sh.deleteRows(402, sh.getLastRow() - 401);
   } catch (e) { Logger.log('Registro técnico: ' + e.message); }
 }
