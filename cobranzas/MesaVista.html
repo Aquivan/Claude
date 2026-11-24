@@ -208,7 +208,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <div class="fila">
     <span class="t">🧩 Mesa de conciliación</span>
     <span class="seg" id="sLado"><button data-v="Por pagar" class="on" onclick="cambiarLado(this)">Por pagar</button><button data-v="Por cobrar" onclick="cambiarLado(this)">Por cobrar</button></span>
-    <span class="seg" id="sModo" title="Qué se cruza con las facturas"><button data-v="v" class="on" onclick="cambiarModo(this)">💳 Vouchers</button><button data-v="r" onclick="cambiarModo(this)">🧾 Retenciones</button><button data-v="e" onclick="cambiarModo(this)" title="Reporte de cuentas por pagar / cobrar: por proveedor o cliente y empresa, con cómo se canceló cada factura">📊 Estado de cuenta</button></span>
+    <span class="seg" id="sModo" title="Qué se cruza con las facturas"><button data-v="v" class="on" onclick="cambiarModo(this)">💳 Vouchers</button><button data-v="e" onclick="cambiarModo(this)" title="Reporte de cuentas por pagar / cobrar: por proveedor o cliente y empresa, con cómo se canceló cada factura">📊 Estado de cuenta</button></span>
     <span style="flex:1"></span>
     <span class="acc">
       <button id="bRecalc" onclick="recalcularAhora()" title="Recalcular Cobranzas en este momento (saldos, Consulta, Panel) sin esperar">⚡ Recalcular</button>
@@ -794,10 +794,13 @@ function pintar() {
 /** Retenciones (CRE), detracciones, pagos manuales y N/C de las facturas visibles, según los botones de filtro. */
 function otrosMovs(c, emp, qv) {
   var T = S.tipos, out = [];
+  var er = segV('sRet');   // 🧾 filtro de retenciones (Tipos ▾ con Retenciones → «Retenciones ▾»): todas / reasignadas / en factura con ret. de más
   if (T.r) Object.keys(S.R).forEach(function (u) {
     var U = S.R[u], d = S.D[U.kOrig]; if (!d) return;
     var ls = S.rl[u] || [];
     if (U.u !== S.actR && !ls.some(function (x) { return S.D[x.k] && docVisible(S.D[x.k], c, emp); })) return;
+    if (U.u !== S.actR && er === 'reas' && !ls.some(function (x) { return x.fila || x.nuevo; })) return;
+    if (U.u !== S.actR && er === 'exc' && !ls.some(function (x) { return x.m > 0.005 && S.D[x.k] && exceso(S.D[x.k]) > 0.05; })) return;
     if (!texto(qv, nn([U.cre, U.op, U.f, ff(U.f), d.doc, d.cn, 'retencion'].join(' ')))) return;
     out.push({ t: 'r', f: U.f, m: ls.reduce(function (s, x) { return s + x.m; }, 0), U: U });
   });
@@ -2413,7 +2416,8 @@ function ayudaCompleta() {
     '<li>Si otra persona cambió el mismo voucher mientras usted trabajaba, ese voucher no se guarda y se le avisa. <b>↩️ Deshacer último guardado</b> vuelve atrás lo suyo.</li>' +
     '<li><b>Ordenar</b>: facturas por fecha, número (serie y correlativo), saldo o nombre; vouchers por fecha, monto, N° de operación o fila de la hoja (en ambos sentidos).</li>' +
     '<li><b>💲 Monto por línea</b>: toque una línea y escriba cuánto de ese voucher va a esa factura (vacío = automático). Se guarda como «01_F001-12=1500.00» en «Tipo y Nº Doc.».</li>' +
-    '<li><b>🧾 Retenciones</b> (arriba): lista cada comprobante de retención con su factura. Si la factura retenida se anuló con nota de crédito, toque el comprobante y luego la otra factura del mismo proveedor: se pasa el monto que indique. «Ret. de más» en Facturas muestra las que tienen retención mayor al 3%. Se guarda en «🔁 Reasignar retenciones», igual que a mano.</li>' +
+    '<li><b>Filtros tipo Excel</b>: Empresa, Moneda, Facturas, Mostrar, Tipos y Retenciones se eligen con ▾ (buscar, Seleccionar todo, casillas, ACEPTAR); Facturas ▾ y Mostrar ▾ traen arriba ORDENAR. En Proveedor, <b>☰ lista</b> permite marcar varios proveedores a la vez. El botón azul indica un filtro distinto al normal; ✖ Limpiar filtros quita todo. ⚙ Más filtros: copias de Fotos, beneficiario e Identificar RUC. ℹ️ Cómo se usa abre o cierra los pasos y colores. En el celular: pestañas Facturas / Vouchers.</li>' +
+    '<li><b>🧾 Retenciones</b> (marque Retenciones en <b>Tipos ▾</b>; aparece «Retenciones ▾»: todas, reasignadas o en factura con ret. de más): cada comprobante de retención con su factura. Si la factura retenida se anuló con nota de crédito, toque el comprobante y luego la otra factura del mismo proveedor: se pasa el monto que indique. «Ret. de más» en Facturas muestra las que tienen retención mayor al 3%. Se guarda en «🔁 Reasignar retenciones», igual que a mano.</li>' +
     '<li><b>✍️ Pago sin voucher</b> (botón en cada factura): efectivo, compensación, retención o detracción manual… Solo fecha, modalidad y monto (lo demás es opcional); se escribe en «✍️ Registro manual».</li>' +
     '<li><b>Únicos / Con copias de Fotos</b>: un voucher que está en Originales y en Fotos se cuenta una sola vez y manda el de <b>Originales</b> (como en todo el sistema). «Con copias de Fotos» muestra debajo, en gris, la copia (con 🖼 para verla); se cruza desde la fila principal.</li>' +
     '<li><b>🎛 Mostrar en la lista</b> (en 💳 Vouchers, botones que se combinan): 💳 Vouchers · 🧾 Retenciones · 🏦 Detracciones · ✍️ Manuales · 📄 N/C. Encienda los que quiera ver juntos; cada uno tiene su color y su línea a la factura. Una retención se pasa a otra factura tocándola y luego tocando la factura; detracciones, manuales y N/C abren la 🔍 ficha de su factura.</li>' +
@@ -3006,7 +3010,7 @@ function xfInit() {
     aplicar: function (v) { var b = xfSeg('sFac').filter(function (x) { return x.v === v[0]; })[0]; if (b) b.b.click(); }, orden: 'oF' });
   xfDef('Vou', { box: 'xfVou', tit: 'Mostrar', items: function () { return xfSeg('sVou'); }, val: function () { return [segV('sVou')]; },
     aplicar: function (v) { var b = xfSeg('sVou').filter(function (x) { return x.v === v[0]; })[0]; if (b) b.b.click(); }, orden: 'oV' });
-  xfDef('Ret', { box: 'xfRet', tit: 'Mostrar', items: function () { return xfSeg('sRet'); }, val: function () { return [segV('sRet')]; },
+  xfDef('Ret', { box: 'xfRet', tit: 'Retenciones', items: function () { return xfSeg('sRet'); }, val: function () { return [segV('sRet')]; },
     aplicar: function (v) { var b = xfSeg('sRet').filter(function (x) { return x.v === v[0]; })[0]; if (b) b.b.click(); } });
   xfDef('Tip', { box: 'xfTip', tit: 'Tipos', multi: true, items: function () { return xfSeg('sTipos'); }, val: function () { return Object.keys(S.tipos || {}).filter(function (k) { return S.tipos[k]; }); },
     aplicar: function (v) {
@@ -3041,7 +3045,8 @@ function xfBotones() {
     box.innerHTML = '<button class="xfB' + (act ? ' act' : '') + '" onclick="xfAbrir(\'' + id + '\', this)" title="Filtrar como en Excel">' + (d.tit ? d.tit + ': ' : '') + '<span class="xv">' + esc(txt) + '</span> ▾</button>';
   });
   var vis = function (segId, boxId) { var s0 = $(segId), b0 = $(boxId); if (s0 && b0) b0.style.display = s0.style.display === 'none' ? 'none' : ''; };
-  vis('sRet', 'xfRet'); vis('sVou', 'xfVou'); vis('sTipos', 'xfTip');
+  vis('sVou', 'xfVou'); vis('sTipos', 'xfTip');
+  if ($('xfRet')) $('xfRet').style.display = S.modo === 'e' || !(S.modo === 'r' || (S.tipos && S.tipos.r)) ? 'none' : '';   // solo con Retenciones en Tipos ▾
   var n = 0; if (segV('sCop') && segV('sCop') !== 'u') n++; if ($('qB') && $('qB').value.trim()) n++;
   if ($('nMasV')) $('nMasV').textContent = n ? n : '';
   if ($('bMasV')) $('bMasV').style.display = $('sVou').style.display === 'none' && S.modo === 'r' ? 'none' : '';
