@@ -103,12 +103,14 @@ function TGP_leerVarios_(c, adjs) {
       var f = DriveApp.getFileById(adj.id), blob = f.getBlob(), mime = f.getMimeType();
       if (!/^image\/|pdf/i.test(mime)) { out[i] = { error: 'solo fotos o PDF' }; return; }
       var bytes = blob.getBytes();
-      var clave = hashTexto_('tgp4|' + bytes.length + '|' + Utilities.base64Encode(bytes.slice(0, 3000)));
+      var nPag = /pdf/i.test(mime) ? TGP_paginasPdf_(blob) : 1;
+      var clave = hashTexto_('tgp5|' + bytes.length + '|' + Utilities.base64Encode(bytes.slice(0, 3000)));
       var r = AUV_cacheGet_(cache, 'tgp', clave);
       if (r) { out[i] = TGP_docsDe_(r, mime); return; }
-      pend.push({ i: i, clave: clave, mime: mime, opts: { sistema: TGP_SISTEMA_, maxTokens: 8000,
+      pend.push({ i: i, clave: clave, mime: mime, nPag: nPag, opts: { sistema: TGP_SISTEMA_, maxTokens: 8000,
         adjunto: { mime: /pdf/i.test(mime) ? 'application/pdf' : mime, base64: Utilities.base64Encode(bytes) },
-        texto: 'ARCHIVO: ' + adj.nombre + '\nExtrae todos los documentos que contiene, con su página. ' +
+        texto: 'ARCHIVO: ' + adj.nombre + (nPag > 1 ? ' (PDF de ' + nPag + ' páginas: revisa TODAS, una por una; puede haber varios vouchers, y reversos de vouchers que no son documentos)' : '') +
+          '\nExtrae todos los documentos que contiene, con su página. ' +
           'El N° de operación cópialo dígito por dígito, con los ceros del inicio y del final (p. ej. «OP-0686860» → 0686860).' } });
     } catch (e) { out[i] = { error: e.message }; }
   });
@@ -126,7 +128,16 @@ function TGP_leerVarios_(c, adjs) {
       if (!rr || !rr.ok) {   // saturado o error: ese archivo solo, con reintentos y cambio de modelo
         try { rr = { ok: true, r: IA_llamarSeguro_(c.ia, x.opts) }; } catch (e) { out[x.i] = { error: e.message }; return; }   // 🤖 con respaldo
       }
-      AUV_cachePut_(cache, 'tgp', x.clave, rr.r);
+      // 📄 PDF de varias páginas leído como si tuviera 1 (la IA de respaldo, NVIDIA/Groq, solo recibe la 1.ª página):
+      // se reintenta SOLO con la IA principal (Gemini lee el PDF completo); si igual, se avisa y no se guarda.
+      var soloP1 = function (r) { var d = (r && r.documentos) || []; return x.nPag > 1 && !d.some(function (q) { return Number(q.pagina) > 1; }); };
+      if (soloP1(rr.r)) {
+        try { var o2 = {}; for (var kk in x.opts) o2[kk] = x.opts[kk]; o2._sinRespaldo = true; var r2 = IA_llamarSeguro_(c.ia, o2); if (r2 && !soloP1(r2)) rr = { ok: true, r: r2 }; } catch (e2) {}
+      }
+      if (soloP1(rr.r)) {
+        rr.r.observaciones = '⚠️ Solo se pudo revisar la página 1 de ' + x.nPag + ' (la IA principal no respondió). Vuelva a intentarlo en unos minutos' +
+          ' o, si es un escaneo de varios vouchers, use 📚 Varios vouchers. ' + String(rr.r.observaciones || '');
+      } else AUV_cachePut_(cache, 'tgp', x.clave, rr.r);
       out[x.i] = TGP_docsDe_(rr.r, x.mime);
     });
     AUV_cacheGuardar_(cache);
