@@ -6,8 +6,8 @@
 //   1. Una consulta corta a Gemini clasifica cada página: frente (voucher) · reverso · otro, y copia SOLO lo escrito a
 //      mano con lapicero (sin firmas, sellos ni rúbricas).
 //   2. Si hay reversos: en «Entrada» queda un PDF LIMPIO solo con los frentes (mismo nombre) y se lee como siempre;
-//      cada reverso va a la carpeta «✍️ Reversos» (junto a Procesados) como PDF de 1 página
-//      («<archivo> · pág 3 (reverso de pág 2).pdf») + una copia del PDF original completo.
+//      todos los reversos van JUNTOS a la carpeta «✍️ Reversos» (junto a Procesados) en «<archivo> · reversos.pdf»,
+//      cada página con una franja arriba: «REVERSO del voucher pag. 2 - BBVA S/ 25,701.12» + copia del original completo.
 //   3. Lo escrito a mano va a la columna «✍️ Anotación» (columna O, al final de A–N) de la fila del voucher: «Reverso: Granix» / «Frente: …», con
 //      enlace al reverso; si la IA duda, «(revisar)». La columna «Nota» no se toca.
 // Automático; se apaga en 🤖 Vouchers → ✍️ Reversos y anotaciones (propiedad VCH_REVERSOS = '0').
@@ -56,6 +56,7 @@ function REV_prompt_(n, empresas) {
     'NO copies texto impreso ni impresion termica, NI firmas, rubricas, iniciales sueltas, vistos, sellos o numeros de caja. Si no hay nada escrito a mano: "". ' +
     'Si una parte no se entiende, pon "?" en esa parte; no inventes.\n' +
     (empresas.length ? 'Si lo escrito a mano es claramente el nombre de una de estas empresas, escribelo EXACTAMENTE asi: ' + empresas.join(', ') + '. Si es otra cosa, copialo tal cual.\n' : '') +
+    '"banco" y "monto": SOLO para paginas "frente", el banco y el importe del voucher tal como se ve (ej. "BBVA", "S/ 25,701.12"); en las demas "".\n' +
     '"dudoso": true si no estas seguro del tipo de pagina o de lo escrito a mano; si no, false.\n' +
     'Responde SOLO el arreglo JSON, un objeto por pagina, por ejemplo: [{"pagina":1,"tipo":"frente","manuscrito":"","dudoso":false},{"pagina":2,"tipo":"reverso","manuscrito":"GRANIX","dudoso":false}]';
 }
@@ -66,7 +67,7 @@ function REV_clasificar_(base64, n, empresas) {
     contents: [{ parts: [{ text: REV_prompt_(n, empresas) }, { inline_data: { mime_type: 'application/pdf', data: base64 } }] }],
     generationConfig: { temperature: 0.1, maxOutputTokens: 8192, responseMimeType: 'application/json' }
   };
-  const modelos = modelosGemini_(null, false, false);
+  const modelos = modelosGemini_(['gemini-3.5-flash-lite'], false, false);   // ⚡ liviano primero: solo clasificar (antes 3 min)
   let ultimo = '';
   for (let m = 0; m < modelos.length; m++) {
     const resp = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + modelos[m] + ':generateContent?key=' + CFG.API_KEY,
@@ -79,6 +80,9 @@ function REV_clasificar_(base64, n, empresas) {
   }
   throw new Error('No se pudo clasificar las páginas (' + ultimo + ')');
 }
+
+/** Texto que la fuente básica del PDF puede dibujar (sin emojis; tildes fuera para no fallar). */
+function REV_ascii_(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, ''); }
 
 function REV_carpeta_(carpetas) {
   const proc = DriveApp.getFolderById(carpetas.procesados);
@@ -105,7 +109,8 @@ async function REV_separar_(archivo, pdfDoc, nombre, carpetas) {
     const arr = REV_clasificar_(b64, idx.length, empresas);
     arr.forEach(function (o) {
       const p = parseInt(o && o.pagina, 10);
-      if (p >= 1 && p <= idx.length) info[ini + p - 1] = { tipo: String(o.tipo || '').toLowerCase(), m: String(o.manuscrito || '').trim(), dud: o.dudoso === true };
+      if (p >= 1 && p <= idx.length) info[ini + p - 1] = { tipo: String(o.tipo || '').toLowerCase(), m: String(o.manuscrito || '').trim(), dud: o.dudoso === true,
+        banco: String(o.banco || '').trim(), monto: String(o.monto || '').trim() };
     });
   }
   for (let i = 0; i < total; i++) if (!info[i]) info[i] = { tipo: 'frente', m: '', dud: false };   // sin dato: como siempre
@@ -114,31 +119,51 @@ async function REV_separar_(archivo, pdfDoc, nombre, carpetas) {
   const nRev = info.filter(function (x) { return x.tipo === 'reverso'; }).length;
   if (!hayRev && !hayMano) { REV_anotGuardar_(nombre, {}); return null; }
 
-  // 2) página limpia de cada frente (1-based) y qué reverso le toca
+  // 2) página limpia de cada frente (1-based) y qué reverso le toca. Todos los reversos van JUNTOS en un solo PDF
+  //    («<archivo> · reversos.pdf»), cada página con una etiqueta arriba: de qué voucher es (pág. del PDF en Procesados).
   const limpias = [], anot = {}, base = nombre.replace(/\.pdf$/i, '');
-  const sinFrente = [];
-  let carpeta = null;
+  const sinFrente = [], revs = [];   // revs: {i, etiqueta, k}
   const fmt = function (o, lado) { return o.m ? lado + ': ' + o.m + (o.dud ? ' (revisar)' : '') : ''; };
   for (let i = 0; i < total; i++) {
     const o = info[i];
     if (o.tipo === 'reverso') {
       const prev = i - 1;
       const tieneFrente = prev >= 0 && info[prev].tipo !== 'reverso';
-      carpeta = carpeta || REV_carpeta_(carpetas);
-      const d = await PDFLib.PDFDocument.create();
-      const [pg] = await d.copyPages(pdfDoc, [i]);
-      d.addPage(pg);
-      const nomRev = base + ' · pág ' + (i + 1) + (tieneFrente ? ' (reverso de pág ' + (prev + 1) + ')' : ' (reverso sin frente)') + '.pdf';
-      const f = carpeta.createFile(Utilities.newBlob([...new Int8Array(await d.save())], MimeType.PDF, nomRev));
-      if (!tieneFrente) { sinFrente.push(i + 1); continue; }
+      if (!tieneFrente) { sinFrente.push(i + 1); revs.push({ i: i, etiqueta: 'REVERSO SIN VOUCHER ANTES (pag. ' + (i + 1) + ' del escaneo original)' }); continue; }
       const k = String(limpias.length);   // página limpia del frente anterior (ya agregado)
+      const f0 = info[prev];
+      revs.push({ i: i, k: k, etiqueta: 'REVERSO del voucher pag. ' + k + (f0.banco || f0.monto ? ' - ' + [f0.banco, f0.monto].filter(Boolean).join(' ') : '') });
       const txt = fmt(o, 'Reverso') || 'Reverso (sin anotación)';
-      anot[k] = anot[k] ? { t: anot[k].t + ' · ' + txt, id: f.getId() } : { t: txt, id: f.getId() };
+      anot[k] = anot[k] ? { t: anot[k].t + ' · ' + txt, id: '' } : { t: txt, id: '' };
       continue;
     }
     limpias.push(i);
     const tf = fmt(o, 'Frente');
     if (tf) anot[String(limpias.length)] = { t: tf, id: '' };
+  }
+  let carpeta = null;
+  if (revs.length) {
+    carpeta = REV_carpeta_(carpetas);
+    const d = await PDFLib.PDFDocument.create();
+    const fuente = await d.embedFont(PDFLib.StandardFonts.HelveticaBold);
+    const pags = await d.copyPages(pdfDoc, revs.map(function (r) { return r.i; }));
+    pags.forEach(function (pg, q) {
+      d.addPage(pg);
+      try {
+        const mb = pg.getMediaBox(), w = mb.width, h = mb.height;
+        const txt = REV_ascii_(revs[q].etiqueta);
+        let fs = Math.max(8, Math.min(22, w / 32));
+        while (fs > 6 && fuente.widthOfTextAtSize(txt, fs) > w - 20) fs -= 1;
+        const alto = fs * 1.8;
+        // franja AGREGADA arriba (la página crece; no tapa nada del reverso)
+        pg.setMediaBox(mb.x, mb.y, w, h + alto);
+        pg.setCropBox(mb.x, mb.y, w, h + alto);
+        pg.drawRectangle({ x: mb.x, y: mb.y + h, width: w, height: alto, color: PDFLib.rgb(1, 0.95, 0.6) });
+        pg.drawText(txt, { x: mb.x + 10, y: mb.y + h + fs * 0.55, size: fs, font: fuente, color: PDFLib.rgb(0.1, 0.1, 0.1) });
+      } catch (eE) { Logger.log('✍️ Etiqueta del reverso: ' + eE.message); }
+    });
+    const f = carpeta.createFile(Utilities.newBlob([...new Int8Array(await d.save())], MimeType.PDF, base + ' · reversos.pdf'));
+    Object.keys(anot).forEach(function (k) { if (/Reverso/.test(anot[k].t)) anot[k].id = f.getId(); });
   }
 
   let res = { anot: anot };
