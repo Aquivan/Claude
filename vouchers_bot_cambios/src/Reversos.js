@@ -6,8 +6,8 @@
 //   1. Una consulta corta a Gemini clasifica cada página: frente (voucher) · reverso · otro, y copia SOLO lo escrito a
 //      mano con lapicero (sin firmas, sellos ni rúbricas).
 //   2. Si hay reversos: en «Entrada» queda un PDF LIMPIO solo con los frentes (mismo nombre) y se lee como siempre;
-//      todos los reversos van JUNTOS a la carpeta «✍️ Reversos» (junto a Procesados) en «<archivo> · reversos.pdf»,
-//      cada página con una franja arriba: «REVERSO del voucher pag. 2 - BBVA S/ 25,701.12» + copia del original completo.
+//      cada reverso va a «✍️ Reversos/páginas (para los enlaces)» (1 página, con franja «REVERSO del voucher pag. 2 - BBVA S/ …»)
+//      y una copia COMPRIMIDA del original completo a «✍️ Reversos» (las páginas como JPG).
 //   3. Lo escrito a mano va a la columna «✍️ Anotación» (columna O, al final de A–N) de la fila del voucher: «Reverso: Granix» / «Frente: …», con
 //      enlace al reverso; si la IA duda, «(revisar)». La columna «Nota» no se toca.
 // Automático; se apaga en 🤖 Vouchers → ✍️ Reversos y anotaciones (propiedad VCH_REVERSOS = '0').
@@ -82,6 +82,35 @@ function REV_clasificar_(base64, n, empresas) {
   throw new Error('No se pudo clasificar las páginas (' + ultimo + ')');
 }
 
+/**
+ * 🗜 El escaneo completo como JPG por página (vista previa de Drive, 1400 px): pesa mucho menos y se lee igual.
+ * Cada página conserva su tamaño; la que no se pudo convertir va como estaba.
+ */
+async function REV_comprimir_(pdfDoc) {
+  const n = pdfDoc.getPageCount(), pdfs = [];
+  for (let i = 0; i < n; i++) {
+    const d1 = await PDFLib.PDFDocument.create();
+    const [p1] = await d1.copyPages(pdfDoc, [i]);
+    d1.addPage(p1);
+    pdfs.push(Utilities.base64Encode(Utilities.newBlob([...new Int8Array(await d1.save())], MimeType.PDF, 'p.pdf').getBytes()));
+  }
+  const imgs = LEC_imagenesParalelo_(pdfs, 1400);
+  const out = await PDFLib.PDFDocument.create();
+  for (let i = 0; i < n; i++) {
+    const im = imgs[i];
+    if (im && im.jpg) {
+      const jpg = await out.embedJpg(Utilities.base64Decode(im.jpg));
+      const orig = pdfDoc.getPage(i).getSize();
+      const w = orig.width, h = orig.width * jpg.height / jpg.width;
+      out.addPage([w, h]).drawImage(jpg, { x: 0, y: 0, width: w, height: h });
+    } else {
+      const [pg] = await out.copyPages(pdfDoc, [i]);
+      out.addPage(pg);
+    }
+  }
+  return out;
+}
+
 /** Texto que la fuente básica del PDF puede dibujar (sin emojis; tildes fuera para no fallar). */
 function REV_ascii_(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, ''); }
 
@@ -142,12 +171,15 @@ async function REV_separar_(archivo, pdfDoc, nombre, carpetas) {
     const tf = fmt(o, 'Frente');
     if (tf) anot[String(limpias.length)] = { t: tf, id: '' };
   }
-  let carpeta = null;
+  let carpeta = null, chico = null;
   if (revs.length) {
     carpeta = REV_carpeta_(carpetas);
+    // 🗜 copia COMPRIMIDA de todo el escaneo (páginas como JPG): con ella se arman la copia del original y los reversos
+    try { chico = await REV_comprimir_(pdfDoc); } catch (eC) { Logger.log('✍️ Comprimir: ' + eC.message + ' → sin comprimir'); chico = null; }
+    const fuenteDoc = chico || pdfDoc;
     const d = await PDFLib.PDFDocument.create();
     const fuente = await d.embedFont(PDFLib.StandardFonts.HelveticaBold);
-    const pags = await d.copyPages(pdfDoc, revs.map(function (r) { return r.i; }));
+    const pags = await d.copyPages(fuenteDoc, revs.map(function (r) { return r.i; }));
     pags.forEach(function (pg, q) {
       d.addPage(pg);
       try {
@@ -163,7 +195,7 @@ async function REV_separar_(archivo, pdfDoc, nombre, carpetas) {
         pg.drawText(txt, { x: mb.x + 10, y: mb.y + h + fs * 0.55, size: fs, font: fuente, color: PDFLib.rgb(0.1, 0.1, 0.1) });
       } catch (eE) { Logger.log('✍️ Etiqueta del reverso: ' + eE.message); }
     });
-    carpeta.createFile(Utilities.newBlob([...new Int8Array(await d.save())], MimeType.PDF, base + ' · reversos.pdf'));
+    // (ya no se guarda un «· reversos.pdf» con todos juntos: repetía lo de «páginas» — pedido del usuario 25/11/2026)
     // 🔗 El visor de Drive siempre abre un PDF en la página 1: para que el enlace de «✍️ Anotación» muestre EXACTO su
     // reverso, cada uno se guarda también solo (1 página, con su franja) en la subcarpeta «páginas» (no estorba a la vista).
     let sub = null;
@@ -185,7 +217,8 @@ async function REV_separar_(archivo, pdfDoc, nombre, carpetas) {
   if (hayRev) {
     carpeta = carpeta || REV_carpeta_(carpetas);
     // copia del original completo (por seguridad) y PDF limpio en Entrada con el mismo nombre
-    archivo.makeCopy(base + ' (original con reversos).pdf', carpeta);
+    if (chico) carpeta.createFile(Utilities.newBlob([...new Int8Array(await chico.save())], MimeType.PDF, base + ' (original con reversos).pdf'));
+    else archivo.makeCopy(base + ' (original con reversos).pdf', carpeta);
     const limpio = await PDFLib.PDFDocument.create();
     (await limpio.copyPages(pdfDoc, limpias)).forEach(function (p) { limpio.addPage(p); });
     const bytes = await limpio.save();
