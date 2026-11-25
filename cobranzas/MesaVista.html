@@ -2652,7 +2652,9 @@ function fichaF(k) {
         var n = nDocsDe(m.id), cv = colV(m.id), otros = (EV.movP[m.id] || []).filter(function (y) { return y.mod === 'Pago' && y.k !== k; });
         extra = ' · voucher ' + fm(m.mp) + (n > 1 ? ' · <span style="color:' + cv.b + '">también pagó ' + otros.map(function (y) { return '<a href="#" onclick="fichaF(\'' + esc(y.k) + '\');return false">' + esc(EV.D[y.k] ? EV.D[y.k].doc : y.k) + '</a> ' + fm(y.m); }).join(', ') + '</span>' : '');
         extra += ' · <a href="#" onclick="fichaV(\'' + esc(m.id) + '\');return false">ver voucher</a>';
+        if (S.V[m.id] && (S.links[m.id] || []).indexOf(k) >= 0) extra += ' · <a href="#" onclick="fichaEditar(\'' + esc(m.id) + '\',\'' + esc(k) + '\',\'f\');return false" title="Cambiar cuánto paga este voucher a esta factura, o quitar el cruce">✏️ cambiar monto / quitar</a>';
       }
+      if (x.c.g === 'ret' && /CRE\s+\S+/.test(m.op || '')) extra += ' · <a href="#" onclick="retIr(\'' + esc(String(m.op).replace(/^CRE\s+/, '')) + '\');return false" title="Ver esta retención en la Mesa para pasarla a otra factura o cambiar su monto">🔁 pasar a otra factura</a>';
       // 🧾 comprobante de retención / 🏦 constancia de detracción: se ven en el visor
       if (x.c.g === 'ret' && /CRE\s+\S+/.test(m.op || '')) extra += ' · <a href="#" onclick="verRetencion(\'' + esc(String(m.op).replace(/^CRE\s+/, '')) + '\',\'' + esc(k) + '\');return false">📄 ver comprobante de retención</a>';
       var urlDet = x.c.g === 'det' ? ((String(m.fu || '') + ' ' + String(m.o || '')).match(/https?:\/\/\S+/) || [])[0] : '';
@@ -2666,6 +2668,31 @@ function fichaF(k) {
   modal(h);
 }
 /** 🔍 Ficha de un voucher (o de una retención, N/C o pago manual): a qué facturas se aplicó. */
+/* ✏️ Editar un cruce desde las fichas (🔍): cuánto paga este voucher a esta factura, automático, o quitarlo. Sin guardar hasta 💾. */
+function fichaEditar(id, k, volver) {
+  var v = S.V[id], d = S.D[k]; if (!v || !d) return;
+  var x = S.sim.amt[id + '|' + k] || 0, fijo = S.montos[id + '|' + k];
+  modal('<h3 style="margin-top:0">✏️ ' + esc((v.bco + ' ' + v.op).trim()) + ' → ' + esc(d.doc) + '</h3>' +
+    '<p>Hoy aplica <b>' + fm(x) + '</b> de ' + v.mon + ' ' + fm(v.m) + (fijo != null ? ' (monto fijo)' : ' (automático: lo que alcance)') + ' · saldo de la factura: ' + fm(S.sim.saldo[k] || 0) + ' · al voucher le sobran ' + fm(S.sim.sobra[id] || 0) + '</p>' +
+    '<label>Monto que este voucher paga a esta factura <input id="mLin" inputmode="decimal" style="width:130px" value="' + (fijo != null ? fijo : x).toFixed(2) + '"></label>' +
+    '<p><button class="p" onclick="fichaMonto(\'' + esc(id) + '\',\'' + esc(k) + '\',0,\'' + volver + '\')">💲 Fijar este monto</button> ' +
+    '<button onclick="fichaMonto(\'' + esc(id) + '\',\'' + esc(k) + '\',1,\'' + volver + '\')" title="Que tome lo que alcance (como al escribir solo la factura)">🔄 Automático</button> ' +
+    '<button onclick="fichaQuitar(\'' + esc(id) + '\',\'' + esc(k) + '\',\'' + volver + '\')">✂️ Quitar este cruce</button> <button onclick="cerrarModal()">Cancelar</button></p>' +
+    '<p class="d2">Nada se escribe hasta 💾 Guardar (puede revisar con 👀 Ver antes de guardar y deshacer con ↶). Un monto fijo queda en la hoja de Vouchers así: ' + esc(d.doc) + '=' + (fijo != null ? fijo : x).toFixed(2) + '.</p>');
+  setTimeout(function () { if ($('mLin')) $('mLin').select(); }, 50);
+}
+function fichaVolver(id, k, volver) { if (volver === 'f') fichaF(k); else fichaV(id); }
+function fichaMonto(id, k, auto, volver) { montoLinea(id, k, !!auto); fichaVolver(id, k, volver); }
+function fichaQuitar(id, k, volver) { quitar(id, k); fichaVolver(id, k, volver); }
+/* 🔁 Retención: se muestra en la Mesa (Tipos con 🧾 Retenciones y buscando su número) para pasarla a otra factura. */
+function retIr(cre) {
+  cerrarModal();
+  if (S.modo === 'e') cambiarModo(document.querySelector('#sModo button[data-v="v"]'));
+  var t = Object.keys(S.tipos || {}).filter(function (x) { return S.tipos[x]; }); if (t.indexOf('r') < 0) t.push('r');
+  try { XF.Tip.aplicar(t); } catch (e) {}
+  if ($('qV')) $('qV').value = cre; S.verV = 300; pintar(); detalle();
+  estado('🧾 Retención ' + cre + ': tóquela (se marca) y luego la otra factura, o arrástrela; toque su línea morada para cambiar el monto o quitarla. 💾 Guardar la escribe en «🔁 Reasignar retenciones».');
+}
 function fichaV(id) {
   construirEV(S.modo === 'e' ? (segV('eVis') === 'antes' ? 'antes' : 'despues') : (sucios().length || rSucios().length ? 'despues' : 'antes'));
   var ms = (EV.movP[id] || []).slice(), v = S.V[id];
@@ -2682,10 +2709,10 @@ function fichaV(id) {
   if (ks.length) {
     h += '<div class="barra">' + ks.map(function (k, i) { var t = docs[k].reduce(function (s, m) { return s + m.m; }, 0); return '<span style="background:hsl(' + (hue(id) + i * 47) % 360 + ',60%,55%);width:' + Math.max(1, t / Math.max(monto, 0.01) * 100) + '%" title="' + esc((EV.D[k] ? EV.D[k].doc : k) + ' ' + fm(t)) + '"></span>'; }).join('') +
       (sobra > 0.05 ? '<span style="background:#BBF7D0;width:' + sobra / monto * 100 + '%" title="sobra ' + fm(sobra) + '"></span>' : '') + '</div>';
-    h += '<table class="tf"><tr><th>Factura</th><th>' + (S.lado === 'Por pagar' ? 'Proveedor' : 'Cliente') + '</th><th>Empresa</th><th style="text-align:right">Aplicado</th><th style="text-align:right">Saldo de la factura</th><th>Cómo</th></tr>' +
+    h += '<table class="tf"><tr><th>Factura</th><th>' + (S.lado === 'Por pagar' ? 'Proveedor' : 'Cliente') + '</th><th>Empresa</th><th style="text-align:right">Aplicado</th><th style="text-align:right">Saldo de la factura</th><th>Cómo</th><th></th></tr>' +
       ks.map(function (k) {
         var d = EV.D[k], t = docs[k].reduce(function (s, m) { return s + m.m; }, 0);
-        return '<tr class="doc" onclick="fichaF(\'' + esc(k) + '\')"><td><b>' + esc(d ? d.doc : k) + '</b></td><td>' + esc(d ? d.cn : '') + '</td><td>' + esc(d ? nomEmp(d.er) : '') + '</td><td class="num">' + fm(t) + '</td><td class="num">' + (d ? fm(d.sal) : '') + '</td><td style="color:var(--gr);font-size:11px">' + esc(docs[k].map(function (m) { return m.o + (m.nota ? ' (' + m.nota + ')' : ''); }).join(' · ')) + '</td></tr>';
+        return '<tr class="doc" onclick="fichaF(\'' + esc(k) + '\')"><td><b>' + esc(d ? d.doc : k) + '</b></td><td>' + esc(d ? d.cn : '') + '</td><td>' + esc(d ? nomEmp(d.er) : '') + '</td><td class="num">' + fm(t) + '</td><td class="num">' + (d ? fm(d.sal) : '') + '</td><td style="color:var(--gr);font-size:11px">' + esc(docs[k].map(function (m) { return m.o + (m.nota ? ' (' + m.nota + ')' : ''); }).join(' · ')) + '</td>' + (v && (S.links[id] || []).indexOf(k) >= 0 ? '<td><button onclick="event.stopPropagation();fichaEditar(\'' + esc(id) + '\',\'' + esc(k) + '\',\'v\')" title="Cambiar cuánto paga a esta factura o quitar el cruce">✏️</button></td>' : '<td></td>') + '</tr>';
       }).join('') + '</table>';
   }
   var dvd = (S.devuelto || {})[id] || 0;
