@@ -519,8 +519,18 @@ function TG_alBoton_(ss, q) {
     case 'adj': case 'adjs':
       var adjs = datos.adjs || TG_adjDelGrupo_(ss, datos.grupo, datos.adj);
       TG_llamar_('editMessageReplyMarkup', { chat_id: chatId, message_id: ctx.msgId, reply_markup: { inline_keyboard: [] } });
-      if (op === 'vou' && TGP_hayVariasPaginas_(adjs)) {   // PDF de varias páginas: registrar solo la del voucher
-        TG_enviar_(ctx.chatId, '📄 El PDF tiene varias páginas: lo reviso con IA para registrar <b>solo el voucher</b> y completar la factura.');
+      if (op === 'vou' && TGP_hayVariasPaginas_(adjs)) {   // PDF de varias páginas: ¿lote de vouchers o voucher + factura?
+        var kv = TG_guardarBoton_({ t: 'adj', adjs: adjs });
+        return TG_enviar_(ctx.chatId, '📄 <b>El PDF tiene varias páginas. ¿Qué es?</b>', { inline_keyboard: [
+          [{ text: '📚 Varios vouchers (con sus reversos ✍️)', callback_data: 'k:' + kv + ':voul' }],
+          [{ text: '📄 Un voucher con su factura', callback_data: 'k:' + kv + ':vou1' }]] });
+      }
+      if (op === 'voul') {   // 📚 lote escaneado: va ENTERO a Entrada; la hoja de Vouchers separa frentes y reversos (Reversos.js)
+        TG_enviar_(ctx.chatId, '📚 Lo mando entero a la hoja de Vouchers: registra cada voucher y, si después de un voucher viene su <b>reverso</b> con algo escrito a mano, lo pasa a la columna <b>✍️ Anotación</b> (los reversos quedan en la carpeta «✍️ Reversos»).');
+        return TGE_preguntarTG_(ctx, adjs);
+      }
+      if (op === 'vou1') {
+        TG_enviar_(ctx.chatId, '📄 Lo reviso con IA para registrar <b>solo el voucher</b> y completar la factura.');
         return TGP_iniciarTG_(ctx, adjs);
       }
       if (op === 'vou') return TGE_preguntarTG_(ctx, adjs);   // 🏷 primero: ¿de quién son?
