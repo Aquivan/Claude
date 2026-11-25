@@ -96,11 +96,15 @@ function TGU_borrarPorNombre_(nombre, hubFilas) {
       if (hubFilas) { var it = proc.getFilesByName(nombre); while (it.hasNext()) { var f0 = it.next(); if (!f0.isTrashed()) { f0.setTrashed(true); n++; } } }
       var fr = proc.getFoldersByName('✍️ Reversos');
       while (fr.hasNext()) {
-        var fs = fr.next().getFiles();
-        while (fs.hasNext()) {
-          var f = fs.next(), nm = f.getName();
-          if (nm.indexOf(base + ' · ') === 0 || nm === base + ' (original con reversos).pdf') { f.setTrashed(true); n++; }
-        }
+        var dirR = fr.next(), dirs = [dirR], sub = dirR.getFolders();   // también la subcarpeta «páginas (para los enlaces)»
+        while (sub.hasNext()) dirs.push(sub.next());
+        dirs.forEach(function (dir) {
+          var fs = dir.getFiles();
+          while (fs.hasNext()) {
+            var f = fs.next(), nm = f.getName();
+            if (nm.indexOf(base + ' · ') === 0 || nm === base + ' (original con reversos).pdf') { f.setTrashed(true); n++; }
+          }
+        });
       }
     } catch (e) {}
   });
