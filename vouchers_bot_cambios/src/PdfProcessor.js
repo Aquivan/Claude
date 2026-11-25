@@ -32,8 +32,8 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
   let nombre       = archivo.getName();
   const blob       = archivo.getBlob();
   const rawPdfData = new Uint8Array(blob.getBytes());
-  const pdfDoc     = await PDFLib.PDFDocument.load(rawPdfData);
-  const totalPags  = pdfDoc.getPageCount();
+  let pdfDoc       = await PDFLib.PDFDocument.load(rawPdfData);
+  let totalPags    = pdfDoc.getPageCount();
   if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.pdf += Date.now() - tAbrir;   // ⏱ abrir el PDF
   const miniPagina = {};   // ⚡ página → imagen 800 px ya hecha para NVIDIA/Groq (se reusa para la celda)
 
@@ -52,6 +52,24 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
     nombre = VCH_renombrar_(ctx, archivo, carpetas);
     startIdx = 0;
   }
+
+  // ✍️ Reversos y anotaciones a mano (Reversos.js): solo al empezar un PDF. Si trae reversos, se sigue con el PDF limpio.
+  let anot = REV_anotLeer_(nombre);
+  if (startIdx === 0 && anot === null && REV_activo_()) {
+    const tRev = Date.now();
+    try {
+      const r = await REV_separar_(archivo, pdfDoc, nombre, carpetas);
+      if (r) {
+        anot = r.anot || {};
+        if (r.archivo) { archivo = r.archivo; pdfDoc = r.pdfDoc; totalPags = pdfDoc.getPageCount(); }
+      }
+    } catch (eRev) {
+      Logger.log('✍️ Reversos: ' + eRev.message + ' → se lee el PDF como siempre.');
+      if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'reversos y anotaciones · ERROR', '', nombre + ' · ' + eRev.message);
+    }
+    if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.ia += Date.now() - tRev;
+  }
+  anot = anot || {};
 
   if (startIdx > 0) {
     Logger.log('REANUDANDO: ' + nombre + ' desde pag. ' + (startIdx + 1) + '/' + totalPags);
@@ -232,6 +250,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
 
             const fila = escribirFilaVoucher(ctx, v, nombre, numeroPaginaReal, null, remitente);
             registrarEnIndice(ctx, v.nOperacion, v.banco, montoV);
+            if (anot[numeroPaginaReal]) (ctx.anotPend = ctx.anotPend || []).push({ fila: fila, t: anot[numeroPaginaReal].t, id: anot[numeroPaginaReal].id });
             tareasImg.push({ fila: fila, indiceGlobal: indiceGlobal, numeroPaginaReal: numeroPaginaReal });
             alguno = true;
             filasInsertadas++;
@@ -248,6 +267,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
       } finally {
         ctx.diferir = false;
         escribirPendientes_(ctx);
+        REV_escribir_(ctx);   // ✍️ después de las filas (necesita la fila ya escrita)
       }
 
       // 🖼 Imágenes: la ya hecha (NVIDIA/Groq o preparadas a la vez) directo; si no hay, como siempre por Drive.
@@ -302,6 +322,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
   }
 
   if (!pdfIncompleto) {
+    REV_anotBorrar_(nombre);
     moverArchivo(archivo, carpetas.entrada, (alguno || startIdx > 0) ? carpetas.procesados : CFG.CARPETA_DESCARTADOS_ID);
   }
 
