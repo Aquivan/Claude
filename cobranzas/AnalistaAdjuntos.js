@@ -29,7 +29,7 @@ var ANX_CAMPOS_ = {
   id_beneficiario: ['ID Beneficiario', 'RUC Beneficiario'], ruc_beneficiario: ['ID Beneficiario', 'RUC Beneficiario'],
   empresa: ['Empresa'], id_usuario: ['ID Usuario', 'RUC Empresa'], ruc_empresa: ['ID Usuario'],
   por_retener: ['Por Retener'], retenido: ['Retenido'], revisado: ['Revisado Voucher'], nota: ['Nota', 'Observacion'],
-  beneficiario: ['Proveedor (Beneficiario)'], descripcion: ['Descripcion'],
+  beneficiario: ['Proveedor (Beneficiario)', 'Beneficiario'], descripcion: ['Descripcion'],
 };
 
 var ANX_SISTEMA_ADJ_ = [

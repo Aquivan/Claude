@@ -24,10 +24,10 @@ const AYV_SECCIONES_ = [
     'Al terminar, el archivo pasa a la carpeta de **Procesados** (o a **Duplicados/Descartados** si ya estaba o no era un voucher).'
   ] },
   { id: 'columnas', e: '📋', t: 'Qué significa cada columna', p: [
-    '• **Fecha de depósito**, **Número de operación**, **Banco**, **Moneda**, **Monto**: los datos del voucher.',
-    '• **Proveedor (Beneficiario)**: a quién se le pagó. **idCliente** / **Cliente (usuario)**: quién pagó.',
+    '• **Fecha depósito**, **N° operación**, **Banco**, **Moneda**, **Monto**: los datos del voucher.',
+    '• **Beneficiario**: a quién se le pagó. **Doc. depositante** / **Depositante**: quién pagó (RUC o DNI y nombre, como se leen en el voucher).',
     '• **Descripción**: el tipo de operación (depósito, transferencia, pago SUNAT…).',
-    '• **Voucher (imagen)**: la miniatura. **Archivo Original** y **Página**: de qué archivo y qué página salió.',
+    '• **Imagen**: la miniatura. **Archivo** y **Pág.**: de qué archivo y qué página salió. **Procesado**: fecha y hora en que se leyó. **Canal**: cómo llegó (Telegram, WhatsApp, carpeta). Si llega un archivo con un nombre que ya existe, se renombra solo «(2)», «(3)».',
     '• **Revisado Voucher**: márquelo cuando usted ya lo revisó.',
     '• **Por Retener** / **Retenido**: si a ese pago le corresponde retención y si ya se emitió.',
     '• **Empresa**, **ID Beneficiario**, **ID Usuario**: datos para cruzar con las facturas (los sugiere el 🧠 Asistente IA).'

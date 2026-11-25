@@ -384,10 +384,10 @@ function diagnosticoCompleto_() {
         pestana: hoja.getName(),
         filasConDatos: Math.max(ultimaFila - 1, 0),
         columnas: hoja.getLastColumn(),
-        tieneColumnaTelegram: cabeceras.indexOf('Enviado por Telegram') !== -1
+        tieneColumnaTelegram: cabeceras.indexOf('Enviado por Telegram') !== -1 || cabeceras.indexOf('Canal') !== -1
       };
       if (!r.hoja[nombrePestana].tieneColumnaTelegram) {
-        r.problemas.push('Falta la cabecera "Enviado por Telegram" en la pestana "' + nombrePestana + '".');
+        r.problemas.push('Falta la cabecera "Canal" (antes «Enviado por Telegram») en la pestana "' + nombrePestana + '".');
       }
     } catch (err) {
       r.hoja[nombrePestana] = { ok: false, error: err.message };

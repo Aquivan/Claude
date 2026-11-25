@@ -205,8 +205,8 @@ function VV_indice() {
     const nCol = sh.getLastColumn(), n = sh.getLastRow() - 1;
     const tit = sh.getRange(1, 1, 1, nCol).getDisplayValues()[0].map(norma);
     const col = function (re, def) { const i = tit.findIndex(function (t) { return re.test(t); }); return i >= 0 ? i : def; };
-    const iF = col(/^fecha de dep/, 0), iOp = col(/^numero de op|^n.? de op/, 1), iB = col(/^banco/, 2), iMon = col(/^moneda/, 3), iM = col(/^monto/, 4), iP = col(/^proveedor/, 5);
-    const iCli = col(/^cliente/, 7), iDes = col(/^descripcion/, 8), iArch = col(/^archivo original/, 10), iPag = col(/^pagina/, 12);
+    const iF = col(/^fecha de dep|^fecha dep/, 0), iOp = col(/^numero de op|^n.? de op|^n.? op/, 1), iB = col(/^banco/, 2), iMon = col(/^moneda/, 3), iM = col(/^monto/, 4), iP = col(/^proveedor|^beneficiario/, 5);
+    const iCli = col(/^cliente|^depositante/, 7), iDes = col(/^descripcion/, 8), iArch = col(/^archivo/, 10), iPag = col(/^pagina|^pag\b/, 12);
     const iRev = col(/^revisado/, -1), iPR = col(/^por retener/, -1), iRet = col(/^retenido/, -1), iEmp = col(/^empresa/, -1), iIdB = col(/^id benef/, -1);
     const rg = sh.getRange(2, 1, n, nCol), ver = rg.getDisplayValues(), crudo = rg.getValues();
     for (let r = 0; r < n; r++) {
