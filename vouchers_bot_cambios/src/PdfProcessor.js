@@ -29,7 +29,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
   cargarPdfLib();
 
   const tAbrir     = Date.now();
-  const nombre     = archivo.getName();
+  let nombre       = archivo.getName();
   const blob       = archivo.getBlob();
   const rawPdfData = new Uint8Array(blob.getBytes());
   const pdfDoc     = await PDFLib.PDFDocument.load(rawPdfData);
@@ -37,11 +37,20 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
   if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.pdf += Date.now() - tAbrir;   // ⏱ abrir el PDF
   const miniPagina = {};   // ⚡ página → imagen 800 px ya hecha para NVIDIA/Groq (se reusa para la celda)
 
-  const startIdx = obtenerUltimaPaginaProcesadaCtx(ctx, nombre);
+  let startIdx = obtenerUltimaPaginaProcesadaCtx(ctx, nombre);
 
   if (startIdx >= totalPags) {
-    moverArchivo(archivo, carpetas.entrada, carpetas.procesados);
-    return { seDetuvo: false, resumenes: [] };
+    // 🏷 Ya hay un PDF con este nombre leído completo. Si es el MISMO archivo (idéntico) se omite como siempre; si es
+    // OTRO documento con el mismo nombre, antes se pasaba a Procesados sin leerlo: ahora se renombra « (2)» y se lee.
+    let mismo = true;
+    try { mismo = VCH_mismoContenido_(archivo, carpetas); } catch (eM) { Logger.log('No pude comparar con el PDF anterior: ' + eM.message); }
+    if (mismo) {
+      Logger.log('PDF idéntico a uno ya procesado: se omite · ' + nombre);
+      moverArchivo(archivo, carpetas.entrada, carpetas.procesados);
+      return { seDetuvo: false, resumenes: [] };
+    }
+    nombre = VCH_renombrar_(ctx, archivo, carpetas);
+    startIdx = 0;
   }
 
   if (startIdx > 0) {
