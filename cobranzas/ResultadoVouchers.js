@@ -11,15 +11,14 @@
 
 /**
  * Marca manual de retención del voucher (OPCIONAL): columna «Retención» (🟡 Por retener · ✅ Retenido · 🚫 No corresponde)
- * o, si no hay, el chip «🧾 Retención manual» de «Control» (= retenido). Devuelve 'por' | 'ret' | 'no' | ''.
+ * Solo esa columna (no mira «Control» ni ninguna otra). Devuelve 'por' | 'ret' | 'no' | ''.
  * Solo cambia el texto de «Resultado»; ningún cálculo de Cobranzas depende de esto.
  */
-function RES_marca_(ret, control) {
+function RES_marca_(ret) {
   var t = normHeader_(ret);
   if (/no corresponde|sin retencion/.test(t)) return 'no';
   if (/retenido/.test(t)) return 'ret';
   if (/por retener/.test(t)) return 'por';
-  if (/retencion manual/.test(normHeader_(control))) return 'ret';
   return '';
 }
 
@@ -70,6 +69,48 @@ function RES_textos_(res, vch, cfg, excluidos) {
   });
   (vch.duplicados || []).forEach(function (d) { if (d.fuente && !mapa[d.fuente]) mapa[d.fuente] = '🔁 Copia de ' + d.otra; });
   return mapa;
+}
+
+/**
+ * 🧾 UNA SOLA VEZ (pedido del usuario el 25/11/2026): llena la columna «Retención» SOLO con los casos claros de hoy,
+ * como valores fijos (sin fórmulas), y solo en celdas vacías:
+ *   «Resultado» con «🧾 Retención aplicada» (CRE de SUNAT) → ✅ Retenido · «No corresponde retención» → 🚫 No corresponde.
+ *   Sin comprobante, falta retener, o cualquier otro caso → se deja vacío.
+ * Además borra la marca equivocada de Originales!2906 (pago a SUNAT, op. 5728), solo si sigue siendo esa.
+ * Después NUNCA más se escribe en «Retención»: la llena solo el usuario.
+ */
+function RES_retencionInicial_(cfg, mapa) {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('RES_RETENCION_INICIAL') === '1' || !cfg.idVouchers) return;
+  var vs = SpreadsheetApp.openById(cfg.idVouchers), resumen = [], hay = false;
+  cfg.pestanasVouchers.forEach(function (nombre) {
+    var sh = vs.getSheetByName(nombre);
+    if (!sh || sh.getLastRow() < 2) return;
+    var enc = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(normHeader_);
+    var c = enc.indexOf('retencion');
+    if (c < 0) return;
+    hay = true;
+    var n = sh.getLastRow() - 1, rg = sh.getRange(2, c + 1, n, 1), cur = rg.getValues(), ret = 0, no = 0, borr = 0;
+    var cOp = indiceColumnas_(sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0])('Numero de operacion');
+    var nuevo = cur.map(function (x, i) {
+      var v = String(x[0] || '').trim(), fila = i + 2;
+      if (v) {
+        if (/^originales$/i.test(nombre) && fila === 2906 && /retenido/i.test(v) && cOp >= 0 &&
+            String(sh.getRange(fila, cOp + 1).getDisplayValue()).trim() === '5728') { borr++; return ['']; }
+        return [x[0]];
+      }
+      var t = mapa[nombre + '!' + fila] || '';
+      if (/Falta retención|marcado/.test(t)) return [''];
+      if (/Retención aplicada/.test(t)) { ret++; return ['✅ Retenido']; }
+      if (/No corresponde retención/.test(t)) { no++; return ['🚫 No corresponde']; }
+      return [''];
+    });
+    if (ret + no + borr) rg.setValues(nuevo);
+    resumen.push(nombre + ': ✅ ' + ret + ' · 🚫 ' + no + (borr ? ' · borrada fila 2906' : ''));
+  });
+  if (!hay) return;   // aún no existe la columna: se intenta en la próxima actualización
+  props.setProperty('RES_RETENCION_INICIAL', '1');
+  REG_anotar_('Cobranzas', 'retención inicial (una vez)', '', resumen.join(' · '));
 }
 
 /** Escribe la columna «Resultado» de cada pestaña de vouchers (solo si cambió algo). Devuelve cuántas celdas cambió. */

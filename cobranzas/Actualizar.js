@@ -27,7 +27,7 @@ function actualizacionAutomatica__reg() {
 
 // Subir este numero cuando cambie la forma de calcular o escribir, para que la
 // siguiente actualizacion automatica rehaga todo aunque los datos no cambien.
-var VERSION_CALCULO_ = '17';
+var VERSION_CALCULO_ = '18';
 
 function huellaExterna_(ss, cfg, liqs) {
   var partes = ['v' + VERSION_CALCULO_, Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd')]; // cambia de dia: recalcular vencidos
@@ -147,7 +147,9 @@ function actualizarTodoInterno_(forzar) {
     // 📋 «Resultado» de cada voucher en la hoja de Vouchers (ResultadoVouchers.js)
     try {
       var excl = {}; try { excl = EXC_mapa_(ss)._p || {}; } catch (e) {}
-      var nRes = RES_escribir_(cfg, RES_textos_(res, vch, cfg, excl));
+      var mapaRes = RES_textos_(res, vch, cfg, excl);
+      try { RES_retencionInicial_(cfg, mapaRes); } catch (e) { REG_anotar_('Cobranzas', 'retención inicial · ERROR', '', e.message); }
+      var nRes = RES_escribir_(cfg, mapaRes);
       if (nRes) bitacora_(ss, 'Resultado (Vouchers)', t0, nRes + ' celda(s) actualizadas');
     } catch (e) { bitacora_(ss, 'Resultado (Vouchers) ERROR', t0, e.message); }
 
