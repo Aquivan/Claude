@@ -132,6 +132,18 @@ function TGX_deshacer_(ss, x, quien) {
   var carpeta = /foto/i.test(x.hoja) ? CTV_PROC_.Fotos : /original/i.test(x.hoja) ? CTV_PROC_.Originales : '';
   if (!quedan && carpeta) {
     try { var it = DriveApp.getFolderById(carpeta).getFilesByName(x.archivo); while (it.hasNext()) { it.next().setTrashed(true); papelera++; } } catch (e) {}
+    // ✍️ sus reversos (carpeta «✍️ Reversos» dentro de procesados): «<nombre> · reversos.pdf», «<nombre> · pág N (…).pdf»
+    // y «<nombre> (original con reversos).pdf»
+    try {
+      var base = String(x.archivo).replace(/\.pdf$/i, ''), fr = DriveApp.getFolderById(carpeta).getFoldersByName('✍️ Reversos');
+      while (fr.hasNext()) {
+        var fs = fr.next().getFiles();
+        while (fs.hasNext()) {
+          var f = fs.next(), n = f.getName();
+          if (n.indexOf(base + ' · ') === 0 || n === base + ' (original con reversos).pdf') { f.setTrashed(true); papelera++; }
+        }
+      }
+    } catch (e) {}
   }
   try { actualizarTodo_(true); } catch (e) {}
   console.log('🗑 Tanda deshecha por ' + quien + ': ' + x.hoja + ' filas ' + x.desde + '-' + x.hasta + ' · ' + x.archivo);
@@ -148,7 +160,7 @@ function TGX_alBoton_(ctx, d) {
     var otras = TGX_tandas_(ctx.ss, 200).filter(function (y) { return y.archivo === x.archivo && y.hoja === x.hoja && y.desde !== x.desde; }).length;
     return TG_tarjeta_(ctx, '🗑 <b>¿Deshacer esta tanda?</b>\n\n📄 <b>' + TG_esc_(x.archivo) + '</b>\n• Pestaña ' + TG_esc_(x.hoja) + ', filas ' + x.desde + ' a ' + x.hasta + ' (' + x.n + ' fila(s)), con sus imágenes\n' +
       '• Procesada: ' + TG_esc_(x.ini) + (x.fin !== x.ini ? ' → ' + TG_esc_(x.fin) : '') + '\n' +
-      (otras ? '• El archivo NO se borra: hay ' + otras + ' tanda(s) más con ese nombre en ' + TG_esc_(x.hoja) + '.' : '• El archivo de la carpeta de procesados de ' + TG_esc_(x.hoja) + ' va a la papelera de Drive (se recupera 30 días).') +
+      (otras ? '• El archivo NO se borra: hay ' + otras + ' tanda(s) más con ese nombre en ' + TG_esc_(x.hoja) + '.' : '• El archivo de la carpeta de procesados de ' + TG_esc_(x.hoja) + ' (y sus reversos ✍️, si tiene) va a la papelera de Drive (se recupera 30 días).') +
       '\n\n<i>Después se recalcula Cobranzas. Esto no se puede deshacer desde aquí.</i>',
       [[b('🗑 Sí, deshacer', { t: 'tgx', a: 'si', x: x }, 'danger'), b('← No', { t: 'tgx', a: 'lista' }, 'link')]]);
   }
