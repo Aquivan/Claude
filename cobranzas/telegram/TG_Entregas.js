@@ -235,7 +235,7 @@ function TGE_wa_(q) {
 
 /* ============================================================ Telegram (📥 Registrar como voucher) */
 
-function TGE_preguntarTG_(ctx, adjs) {
+function TGE_preguntarTG_(ctx, adjs, kAdj, extra) {
   TG_accion_(ctx.chatId, 'typing');
   var sug = null;
   try {
@@ -244,15 +244,17 @@ function TGE_preguntarTG_(ctx, adjs) {
   } catch (e) {}
   var nombres = TGE_recientes_(6).filter(function (n) { return !sug || n.toLowerCase() !== sug.nombre.toLowerCase(); }).slice(0, sug ? 5 : 6);
   var pestana = adjs.some(function (a) { return a.foto || /^image\//.test(a.mime); }) ? 'foto' : 'original';
-  var datos = { t: 'entrega', adjs: adjs, nombres: (sug ? [sug.nombre] : []).concat(nombres), ordenante: sug ? sug.ordenante : '', sug: !!sug, fecha: TGE_hoy_(), pestana: pestana };
+  var datos = { t: 'entrega', adjs: adjs, nombres: (sug ? [sug.nombre] : []).concat(nombres), ordenante: sug ? sug.ordenante : '', sug: !!sug, fecha: TGE_hoy_(), pestana: pestana,
+    kAdj: kAdj || '', extra: extra || '' };
   var k = TG_guardarBoton_(datos);
   var ses = TG_sesion_(ctx.chatId); ses.esperando = { tipo: 'entrega', k: k }; TG_guardarSesion_(ctx.chatId, ses);
-  var msg = TG_enviar_(ctx.chatId, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
+  // 🪪 tarjeta: si vino de un botón, se transforma ESE mensaje (con ← Atrás); si no, mensaje nuevo
+  var msg = TG_tarjeta_(ctx, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
   PropertiesService.getScriptProperties().setProperty(TGE_PROP_PEND_ + k, JSON.stringify({ chatId: ctx.chatId, t: Date.now(), msg: msg }));
 }
 
 function TGE_textoPregunta_(d) {
-  return '🏷 <b>¿De quién son ' + (d.adjs.length > 1 ? 'estos ' + d.adjs.length + ' vouchers' : 'este voucher') + '?</b>\n' +
+  return (d.extra ? d.extra + '\n\n' : '') + '🏷 <b>¿De quién son ' + (d.adjs.length > 1 ? 'estos ' + d.adjs.length + ' vouchers' : 'este voucher') + '?</b>\n' +
     'Quedarán como <code>' + TG_esc_(TGE_corta_(d.fecha)) + ' Nombre</code>' + (d.adjs.length > 1 ? ', <code>… Nombre 2</code>…' : '') + '\n' +
     (d.sug ? '⭐ Según el voucher paga: <i>' + TG_esc_(d.ordenante) + '</i>\n' : '') +
     '📂 Pestaña: <b>' + (d.pestana === 'original' ? 'Originales' : 'Fotos') + '</b>\n' +
@@ -280,13 +282,14 @@ function TGE_tecladoTG_(k, d) {
               { text: (d.fecha === ayer ? '✔ ' : '') + 'Ayer', callback_data: 'k:' + k + ':fa' },
               { text: (d.fecha !== hoy && d.fecha !== ayer ? '✔ ' + TGE_corta_(d.fecha) : '📅 Otro día'), callback_data: 'k:' + k + ':fd' }]);
   d.nombres.forEach(function (n, i) {
-    fila.push({ text: (i === 0 && d.sug ? '⭐ ' : '') + n, callback_data: 'k:' + k + ':n' + i });
+    fila.push({ text: (i === 0 && d.sug ? '⭐ ' : '') + n, callback_data: 'k:' + k + ':n' + i, style: 'primary' });
     if (fila.length === 2) { filas.push(fila); fila = []; }
   });
   if (fila.length) filas.push(fila);
   filas.push([d.pestana === 'original' ? { text: '📸 Enviar como foto', callback_data: 'k:' + k + ':pfo' }
     : { text: '📄 Enviar como original', callback_data: 'k:' + k + ':por' }]);
-  filas.push([{ text: '➖ Sin nombre (como antes)', callback_data: 'k:' + k + ':sin' }]);
+  filas.push([{ text: '➖ Sin nombre (como antes)', callback_data: 'k:' + k + ':sin', style: 'link' }].concat(
+    d.kAdj ? [{ text: '← Atrás', callback_data: 'k:' + k + ':atr', style: 'link' }] : []));
   return filas;
 }
 
@@ -296,19 +299,26 @@ function TGE_alBotonTG_(ctx, datos, op, k) {
       '. Para cambiar el nombre o la fecha: toque <b>↩️ Deshacer</b> en el mensaje del resultado y vuelva a mandarlo.');
   }
   var guardar = function () { CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(datos), 21600); };
+  if (op === 'atr' && datos.kAdj) {   // ← Atrás: se cancela la espera del nombre y vuelve a «¿Qué hago?»
+    PropertiesService.getScriptProperties().deleteProperty(TGE_PROP_PEND_ + k);
+    var ses0 = TG_sesion_(ctx.chatId); if (ses0.esperando && ses0.esperando.tipo === 'entrega') { ses0.esperando = null; TG_guardarSesion_(ctx.chatId, ses0); }
+    var dA = TG_leerBoton_(datos.kAdj);
+    if (dA) return TG_cartaArchivo_(ctx, datos.kAdj, dA);
+    return TG_tarjeta_(ctx, '⌛ Ese archivo ya venció (los botones duran 6 h): vuelva a mandarlo.', []);
+  }
   if (op === 'fd' || op === 'dv') {   // 📅 abrir / cerrar el selector de días
     datos.verDias = op === 'fd'; guardar();
-    return TG_editar_(ctx.chatId, ctx.msgId, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
+    return TG_tarjeta_(ctx, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
   }
   if (/^d\d{8}$/.test(op)) {   // eligió un día
     datos.fecha = op.slice(1, 5) + '-' + op.slice(5, 7) + '-' + op.slice(7, 9); datos.verDias = false; guardar();
-    return TG_editar_(ctx.chatId, ctx.msgId, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
+    return TG_tarjeta_(ctx, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
   }
   if (op === 'fh' || op === 'fa') {
     datos.fecha = op === 'fh' ? TGE_hoy_() : Utilities.formatDate(new Date(Date.now() - 864e5), 'America/Lima', 'yyyy-MM-dd');
     datos.verDias = false;
     CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(datos), 21600);
-    return TG_editar_(ctx.chatId, ctx.msgId, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
+    return TG_tarjeta_(ctx, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
   }
   if (op === 'fo') {
     return TG_enviar_(ctx.chatId, '📅 Escriba la fecha (<i>15/10</i>) y luego toque el nombre, o escriba los dos juntos: <i>Edit 15/10</i>.');
@@ -316,7 +326,7 @@ function TGE_alBotonTG_(ctx, datos, op, k) {
   if (op === 'pfo' || op === 'por') {   // 📸 / 📄: cambia la pestaña en el MISMO mensaje
     datos.pestana = op === 'pfo' ? 'foto' : 'original';
     CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(datos), 21600);
-    return TG_editar_(ctx.chatId, ctx.msgId, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
+    return TG_tarjeta_(ctx, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
   }
   if (op === 'sin') return TGE_cerrarTG_(ctx, k, datos, null);
   var i = Number(String(op).slice(1));
@@ -336,7 +346,7 @@ function TGE_alTextoTG_(ctx, e, texto) {
     datos.fecha = it.fecha; datos.verDias = false;
     CacheService.getScriptCache().put('tg_b_' + e.k, JSON.stringify(datos), 21600);
     var pend = {}; try { pend = JSON.parse(PropertiesService.getScriptProperties().getProperty(TGE_PROP_PEND_ + e.k) || '{}'); } catch (x) {}
-    if (pend.msg) TG_editar_(ctx.chatId, pend.msg, TGE_textoPregunta_(datos), TGE_tecladoTG_(e.k, datos));
+    if (pend.msg) TG_tarjeta_({ chatId: ctx.chatId, msgId: pend.msg, esBoton: true }, TGE_textoPregunta_(datos), TGE_tecladoTG_(e.k, datos));
     return TG_enviar_(ctx.chatId, '📅 Fecha: <b>' + TG_esc_(TGE_corta_(datos.fecha)) + '</b>. Ahora toque el <b>nombre</b> en el mensaje de arriba (o escríbalo).');
   }
   if (!it.nombre) { volver(); return TG_preguntar_(ctx, texto, []); }   // era una pregunta: se contesta y se sigue esperando el nombre
@@ -356,8 +366,8 @@ function TGE_cerrarTG_(ctx, k, datos, it) {
     adjs = adjs.map(function (a, i) { return { id: a.id, nombre: nombres[i], mime: a.mime, foto: a.foto, pestana: datos.pestana }; });
     try { datos.hecho = TGE_corta_(it.fecha) + ' ' + it.nombre; CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(datos), 21600); } catch (eH) {}
     TGE_usar_(it.nombre, datos.ordenante && datos.nombres[0] === it.nombre ? datos.ordenante : '');
-    if (msgId) TG_editar_(ctx.chatId, msgId, '🏷 <b>' + TG_esc_(TGE_corta_(it.fecha) + ' ' + it.nombre) + '</b> · ' + adjs.length + ' archivo(s)');
-  } else if (msgId) TG_editar_(ctx.chatId, msgId, '➖ Sin nombre: quedan con el nombre de siempre.');
+    if (msgId) TG_tarjeta_({ chatId: ctx.chatId, msgId: msgId, esBoton: true }, '🏷 <b>' + TG_esc_(TGE_corta_(it.fecha) + ' ' + it.nombre) + '</b> · ' + adjs.length + ' archivo(s) · 📂 ' + (datos.pestana === 'original' ? 'Originales' : 'Fotos') + (datos.extra ? '\n' + datos.extra : ''), []);
+  } else if (msgId) TG_tarjeta_({ chatId: ctx.chatId, msgId: msgId, esBoton: true }, '➖ Sin nombre: quedan con el nombre de siempre.', []);
   return TG_registrarVouchers_(ctx, adjs);
 }
 

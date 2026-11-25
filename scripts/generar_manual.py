@@ -190,6 +190,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
+    ('25/11/2026', '🪪 Telegram: archivo recibido como tarjeta paso a paso', 'TG_Bot.js (TG_cartaArchivo_) y TG_Entregas.js: «Recibí el archivo. ¿Qué hago?» → «¿Qué es?» (PDF de varias páginas) → «¿De quién son?» (fecha + nombre) se transforman en el MISMO mensaje con botones dentro (TG_tarjeta_), colores (primary en la acción principal y los nombres) y «← Atrás»; al elegir, la tarjeta queda con lo elegido y sin botones.'),
     ('25/11/2026', '📅 Telegram: escribir solo la fecha', 'TG_Entregas.js (TGE_alTextoTG_): si mientras espera el nombre se escribe solo una fecha («25/11»), cambia la fecha del mensaje y sigue esperando el nombre (antes se iba a la IA como pregunta y Groq daba error 413). El selector de días incluye hoy y ayer.'),
     ('25/11/2026', '↩️ Deshacer (WhatsApp/Telegram) con títulos cortos y reversos', 'TG_Deshacer.js: TGU_indiceArchivos_ solo en pestañas de vouchers y con «Archivo» (antes solo veía Originales por la columna copia «Archivo Original»: no borraba filas de Fotos); TGU_borrarPorNombre_ manda a la papelera el PDF limpio y sus reversos (el archivo cambia de ID al separar reversos). TG_Entregas.js: nombres usados también desde Fotos.'),
     ('25/11/2026', '🗑 Deshacer tanda borra también sus reversos', 'TG_Tandas.js (TGX_deshacer_): además del PDF de procesados, manda a la papelera los archivos de esa tanda en «✍️ Reversos» («<nombre> · …» y «<nombre> (original con reversos).pdf»).'),
