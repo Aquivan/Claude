@@ -26,8 +26,54 @@ var RES_MARCA_TXT_ = { por: '🟡 Por retener (marcado)', ret: '🧾 Retenido (m
 
 function RES_num_(n) { return (Math.round(Number(n || 0) * 100) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 
+/**
+ * 🔎 POSIBLE RETENCIÓN de un voucher SIN comprobante (acordado el 25/11/2026). Solo agrega texto a «Resultado».
+ * RUC del beneficiario: columna «RUC beneficiario» → alias confirmados (⚙️ Config) → mismo nombre exacto en las facturas
+ * del SIRE (si ese nombre tiene un solo RUC). Si el nombre no da un RUC seguro, no se adivina: «Revisar».
+ */
+var RES_NO_RET_NOMBRE_ = /\b(SUNAT|TESORO|BANCO DE LA NACION|ESSALUD|AFP|ONP|SUNARP|MUNICIPALIDAD|PLANILLA)\b/;
+
+/** Antes de leer el padrón: resuelve el RUC del beneficiario de los vouchers sin comprobante. Devuelve {ruc: 1} para el padrón. */
+function RES_prepararPosible_(res, vch, cfg) {
+  var porNombre = {}, rucs = {};
+  res.docs.forEach(function (d) {
+    [[d.emisorNombre, d.emisorRuc], [d.receptorNombre, d.receptorRuc]].forEach(function (x) {
+      var k = normNombre_(x[0]); if (!k || !x[1]) return;
+      (porNombre[k] = porNombre[k] || {})[x[1]] = 1;
+    });
+  });
+  vch.pagos.forEach(function (p) {
+    if (String(p.refs || '').trim()) return;
+    var ruc = p.beneficiarioRuc || '', k = normNombre_(p.beneficiarioNombre);
+    if (!ruc && k && cfg.aliasNombre[k]) ruc = cfg.aliasNombre[k];
+    if (!ruc && k && porNombre[k]) { var o = Object.keys(porNombre[k]); if (o.length === 1) ruc = o[0]; }
+    p._rucBenef = ruc;
+    if (ruc) rucs[ruc] = 1;
+  });
+  (cfg.grupo || []).forEach(function (r) { rucs[r] = 1; });
+  return rucs;
+}
+
+function RES_posible_(p, cfg, padron) {
+  var nom = normNombre_(p.beneficiarioNombre), grupo = cfg.grupo || [], fecha = p.fecha || new Date();
+  var esAgente = function (r) { var x = padron[r] || {}; return x.ar && x.ar <= fecha; };
+  if (!grupo.some(esAgente)) return '';                                  // ninguna empresa del grupo retiene
+  if (nom && RES_NO_RET_NOMBRE_.test(nom)) return '';
+  if (nom && cfg.aliasEmpresa[normHeader_(p.beneficiarioNombre)]) return '';   // es del grupo
+  var rb = p._rucBenef || '';
+  if (rb && grupo.indexOf(rb) >= 0) return '';
+  if (rb) { var pb = padron[rb] || {}; if ((pb.ar && pb.ar <= fecha) || (pb.bc && pb.bc <= fecha)) return ''; }   // agente o buen contribuyente
+  var soles = p.moneda === 'USD' ? p.monto * 3.5 : p.monto;              // aproximado (sin factura no hay monto exacto)
+  if (soles <= RTN_MINIMO_) return '';
+  if (p.pagadorRuc && !esAgente(p.pagadorRuc)) return '';               // su empresa no es agente de retención
+  if (!p.pagadorRuc) return '🔎 Revisar retención (falta Empresa)';
+  if (!rb) return '🔎 Revisar retención (sin RUC del beneficiario)';
+  return '🔎 Posible retención 3% (≈ ' + (p.moneda === 'USD' ? 'US$ ' : '') + RES_num_(p.monto / (1 - RTN_TASA_) * RTN_TASA_) + ')';
+}
+
 /** {fuente: texto} para cada voucher. */
-function RES_textos_(res, vch, cfg, excluidos) {
+function RES_textos_(res, vch, cfg, excluidos, padron) {
+  padron = padron || {};
   var porPago = {}, errPorPago = {}, mapa = {};
   res.docs.forEach(function (d) {
     d.movs.forEach(function (m) { if (m.pagoId && m.modalidad === MODALIDAD.PAGO) (porPago[m.pagoId] = porPago[m.pagoId] || []).push({ m: m, d: d }); });
@@ -42,6 +88,7 @@ function RES_textos_(res, vch, cfg, excluidos) {
       var cat = refs ? categoriaPorTexto_(refs, cfg.categorias) : null;
       t = errs.length ? '⚠️ ' + errs[0].detalle : !refs ? '⏳ Sin comprobante' : cat ? '🏷 ' + (cat.categoria || cat.clave) : '⏳ Sin aplicar';
       if (mk) t += ' · ' + RES_MARCA_TXT_[mk];
+      else if (!refs && !errs.length) { var pos = RES_posible_(p, cfg, padron); if (pos) t += ' · ' + pos; }
     } else {
       var apl = xs.reduce(function (s, x) { return s + (x.m.monto || 0); }, 0), sobra = Math.round((p.monto - apl) * 100) / 100;
       t = sobra > 0.05 ? '💰 Sobran ' + RES_num_(sobra) : '✅ Aplicado';
