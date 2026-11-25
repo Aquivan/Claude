@@ -176,11 +176,11 @@ function TGE_existentes_(ss, base) {
     if (s.indexOf(b) === 0) usados[s] = true;
   };
   try {
-    var libro = SpreadsheetApp.openById(leerConfig_(ss).idVouchers);
-    libro.getSheets().forEach(function (h) {
-      if (h.getLastRow() < 2) return;
-      var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0];
-      var c = enc.map(function (x) { return String(x).trim().toLowerCase(); }).indexOf('archivo original');
+    var cfgV = leerConfig_(ss), libro = SpreadsheetApp.openById(cfgV.idVouchers);
+    cfgV.pestanasVouchers.forEach(function (nomH) {   // solo Originales / Fotos; título corto «Archivo» primero (25/11/2026)
+      var h = libro.getSheetByName(nomH);
+      if (!h || h.getLastRow() < 2) return;
+      var c = indiceColumnas_(h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0])('Archivo', 'Archivo Original');
       if (c < 0) return;
       h.getRange(2, c + 1, h.getLastRow() - 1, 1).getValues().forEach(function (f) { anotar(f[0]); });
     });
