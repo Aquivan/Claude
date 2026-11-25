@@ -66,11 +66,12 @@ function TGU_estado_(ss, acc) {
 /** "Archivo Original" → [{hoja, fila, op, monto}] en todas las pestañas de la hoja de Vouchers. */
 function TGU_indiceArchivos_(ss) {
   var out = {};
-  var libro = SpreadsheetApp.openById(leerConfig_(ss).idVouchers);
-  libro.getSheets().forEach(function (h) {
-    if (h.getLastRow() < 2) return;
-    var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(function (x) { return String(x).trim().toLowerCase(); });
-    var k = enc.indexOf('archivo original');
+  var cfg = leerConfig_(ss), libro = SpreadsheetApp.openById(cfg.idVouchers);
+  // Solo las pestañas de vouchers (no los respaldos ocultos); título corto «Archivo» primero (desde el 25/11/2026)
+  cfg.pestanasVouchers.forEach(function (nom) {
+    var h = libro.getSheetByName(nom);
+    if (!h || h.getLastRow() < 2) return;
+    var k = indiceColumnas_(h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0])('Archivo', 'Archivo Original');
     if (k < 0) return;
     var v = h.getRange(2, 1, h.getLastRow() - 1, k + 1).getValues();
     v.forEach(function (r, i) {
@@ -79,6 +80,31 @@ function TGU_indiceArchivos_(ss) {
     });
   });
   return out;
+}
+
+/**
+ * ✍️ Si el PDF traía reversos, la hoja de Vouchers lo reemplazó por un PDF limpio (otro archivo, mismo nombre) y guardó
+ * los reversos en «✍️ Reversos». Se mandan a la papelera por NOMBRE: el PDF limpio (solo si se borraron sus filas) y
+ * «<nombre> · …» / «<nombre> (original con reversos).pdf». Devuelve cuántos.
+ */
+function TGU_borrarPorNombre_(nombre, hubFilas) {
+  var n = 0, base = String(nombre || '').replace(/\.pdf$/i, '');
+  if (!/\.pdf$/i.test(String(nombre || ''))) return 0;
+  [CTV_PROC_.Originales, CTV_PROC_.Fotos].forEach(function (id) {
+    try {
+      var proc = DriveApp.getFolderById(id);
+      if (hubFilas) { var it = proc.getFilesByName(nombre); while (it.hasNext()) { var f0 = it.next(); if (!f0.isTrashed()) { f0.setTrashed(true); n++; } } }
+      var fr = proc.getFoldersByName('✍️ Reversos');
+      while (fr.hasNext()) {
+        var fs = fr.next().getFiles();
+        while (fs.hasNext()) {
+          var f = fs.next(), nm = f.getName();
+          if (nm.indexOf(base + ' · ') === 0 || nm === base + ' (original con reversos).pdf') { f.setTrashed(true); n++; }
+        }
+      }
+    } catch (e) {}
+  });
+  return n;
 }
 
 function TGU_celdasLote_(ss, lote) {
@@ -132,8 +158,8 @@ function TGU_deshacer_(ss, clave, idEsperado) {
   var archivos = 0;
   est.forEach(function (e) {
     nombres.push(e.a.nombre);
-    if (!e.existe) return;
-    try { DriveApp.getFileById(e.a.id).setTrashed(true); archivos++; } catch (err) { partes.push('⚠️ no pude borrar ' + e.a.nombre + ': ' + err.message); }
+    if (e.existe) { try { DriveApp.getFileById(e.a.id).setTrashed(true); archivos++; } catch (err) { partes.push('⚠️ no pude borrar ' + e.a.nombre + ': ' + err.message); } }
+    archivos += TGU_borrarPorNombre_(e.a.nombre, e.filas.length > 0);
   });
   if (borradas) { try { actualizarTodo_(true); } catch (e) {} }
   var txt = '↩️ <b>Deshecho</b>: ' + TG_esc_(acc.desc || '') +
