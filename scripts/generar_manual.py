@@ -190,6 +190,7 @@ GLOSARIO = [
 
 # Cada mejora nueva: sumar una línea aquí (la más nueva arriba).
 HISTORIAL = [
+    ('25/11/2026', '📅 Telegram: escribir solo la fecha', 'TG_Entregas.js (TGE_alTextoTG_): si mientras espera el nombre se escribe solo una fecha («25/11»), cambia la fecha del mensaje y sigue esperando el nombre (antes se iba a la IA como pregunta y Groq daba error 413). El selector de días incluye hoy y ayer.'),
     ('25/11/2026', '↩️ Deshacer (WhatsApp/Telegram) con títulos cortos y reversos', 'TG_Deshacer.js: TGU_indiceArchivos_ solo en pestañas de vouchers y con «Archivo» (antes solo veía Originales por la columna copia «Archivo Original»: no borraba filas de Fotos); TGU_borrarPorNombre_ manda a la papelera el PDF limpio y sus reversos (el archivo cambia de ID al separar reversos). TG_Entregas.js: nombres usados también desde Fotos.'),
     ('25/11/2026', '🗑 Deshacer tanda borra también sus reversos', 'TG_Tandas.js (TGX_deshacer_): además del PDF de procesados, manda a la papelera los archivos de esa tanda en «✍️ Reversos» («<nombre> · …» y «<nombre> (original con reversos).pdf»).'),
     ('25/11/2026', '🗑 Telegram «Deshacer una tanda»: solo pestañas de vouchers y títulos cortos', 'TG_Tandas.js (TGX_tandas_): recorre solo cfg.pestanasVouchers (antes todas, y el respaldo oculto «🛟 Respaldo O+ …» salía como «#REF! · 2954 filas») y busca «Archivo»/«Procesado» antes que los nombres viejos (Fotos no salía). Fuentes.js: los títulos cortos primero (las columnas viejas de la derecha son copias).'),

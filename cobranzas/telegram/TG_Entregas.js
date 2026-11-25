@@ -266,7 +266,7 @@ function TGE_tecladoTG_(k, d) {
   var hoy = TGE_hoy_(), ayer = Utilities.formatDate(new Date(Date.now() - 864e5), 'America/Lima', 'yyyy-MM-dd');
   if (d.verDias) {   // 📅 elegir otro día: los últimos 14, en el MISMO mensaje
     var dias = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
-    for (var i = 2; i < 16; i++) {
+    for (var i = 0; i < 16; i++) {   // hoy, ayer y los 14 días anteriores
       var dt = new Date(Date.now() - i * 864e5), iso = Utilities.formatDate(dt, 'America/Lima', 'yyyy-MM-dd');
       var dow = Number(Utilities.formatDate(dt, 'America/Lima', 'u')) % 7;
       fila.push({ text: (d.fecha === iso ? '✔ ' : '') + dias[dow] + ' ' + Utilities.formatDate(dt, 'America/Lima', 'dd/MM'), callback_data: 'k:' + k + ':d' + iso.replace(/-/g, '') });
@@ -311,7 +311,7 @@ function TGE_alBotonTG_(ctx, datos, op, k) {
     return TG_editar_(ctx.chatId, ctx.msgId, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
   }
   if (op === 'fo') {
-    return TG_enviar_(ctx.chatId, '📅 Escriba el nombre y la fecha, por ejemplo <i>Edit 15/10</i> o <i>Edit 15/10/26</i>.');
+    return TG_enviar_(ctx.chatId, '📅 Escriba la fecha (<i>15/10</i>) y luego toque el nombre, o escriba los dos juntos: <i>Edit 15/10</i>.');
   }
   if (op === 'pfo' || op === 'por') {   // 📸 / 📄: cambia la pestaña en el MISMO mensaje
     datos.pestana = op === 'pfo' ? 'foto' : 'original';
@@ -331,6 +331,14 @@ function TGE_alTextoTG_(ctx, e, texto) {
   if (!it.conFecha) it.fecha = datos.fecha;
   var volver = function () { var s = TG_sesion_(ctx.chatId); s.esperando = e; TG_guardarSesion_(ctx.chatId, s); };
   if (it.error) { volver(); return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(it.error) + ' Escríbalo así: <i>Edit 15/10</i>.'); }
+  if (!it.nombre && it.conFecha) {   // escribió solo la fecha («25/11»): se cambia la fecha y se sigue esperando el nombre
+    volver();
+    datos.fecha = it.fecha; datos.verDias = false;
+    CacheService.getScriptCache().put('tg_b_' + e.k, JSON.stringify(datos), 21600);
+    var pend = {}; try { pend = JSON.parse(PropertiesService.getScriptProperties().getProperty(TGE_PROP_PEND_ + e.k) || '{}'); } catch (x) {}
+    if (pend.msg) TG_editar_(ctx.chatId, pend.msg, TGE_textoPregunta_(datos), TGE_tecladoTG_(e.k, datos));
+    return TG_enviar_(ctx.chatId, '📅 Fecha: <b>' + TG_esc_(TGE_corta_(datos.fecha)) + '</b>. Ahora toque el <b>nombre</b> en el mensaje de arriba (o escríbalo).');
+  }
   if (!it.nombre) { volver(); return TG_preguntar_(ctx, texto, []); }   // era una pregunta: se contesta y se sigue esperando el nombre
   return TGE_cerrarTG_({ ss: ctx.ss, chatId: ctx.chatId }, e.k, datos, it);
 }
