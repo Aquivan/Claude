@@ -76,11 +76,14 @@ function TGX_mmss_(s) { s = Math.round(Number(s) || 0); return (s >= 60 ? Math.f
 
 /** Las tandas (filas seguidas de un mismo archivo) de las pestañas de Vouchers, la más reciente primero. */
 function TGX_tandas_(ss, max) {
-  var libro = SpreadsheetApp.openById(leerConfig_(ss).idVouchers), out = [];
-  libro.getSheets().forEach(function (h) {
-    if (h.getLastRow() < 2) return;
-    var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(function (x) { return String(x).trim().toLowerCase(); });
-    var kA = enc.indexOf('archivo original'), kP = enc.indexOf('fecha procesamiento');
+  var cfg = leerConfig_(ss), libro = SpreadsheetApp.openById(cfg.idVouchers), out = [];
+  // Solo las pestañas de vouchers (no los respaldos ocultos ni otras). Títulos nuevos primero («Archivo», «Procesado»):
+  // desde el 25/11 la hoja usa títulos cortos y la columna «Archivo Original» que queda a la derecha es una copia suya.
+  cfg.pestanasVouchers.forEach(function (nom) {
+    var h = libro.getSheetByName(nom);
+    if (!h || h.getLastRow() < 2) return;
+    var col = indiceColumnas_(h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0]);
+    var kA = col('Archivo', 'Archivo Original'), kP = col('Procesado', 'Fecha procesamiento', 'Fecha de procesamiento');
     if (kA < 0) return;
     var v = h.getRange(2, 1, h.getLastRow() - 1, Math.max(kA, kP) + 1).getDisplayValues(), cur = null;
     for (var i = 0; i < v.length; i++) {

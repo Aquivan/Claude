@@ -118,9 +118,10 @@ function leerVouchers_(cfg) {
     var enc = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
     var col = indiceColumnas_(enc);
     var c = {
-      fecha: col('Fecha de depos', 'Fecha de deposito'), op: col('Numero de oper', 'Numero de operacion'),
-      banco: col('Banco'), moneda: col('Moneda'), monto: col('Monto'), benefNombre: col('Proveedor (Beneficiario)'),
-      idCliente: col('idCliente'), descripcion: col('Descripcion'), archivo: col('Archivo Original'),
+      // títulos cortos (25/11/2026) primero: las columnas viejas de la derecha («Fecha de deposito», «Archivo Original»…) son copias
+      fecha: col('Fecha deposito', 'Fecha de depos', 'Fecha de deposito'), op: col('N operacion', 'Numero de oper', 'Numero de operacion'),
+      banco: col('Banco'), moneda: col('Moneda'), monto: col('Monto'), benefNombre: col('Beneficiario', 'Proveedor (Beneficiario)'),
+      idCliente: col('Doc depositante', 'idCliente'), descripcion: col('Descripcion'), archivo: col('Archivo', 'Archivo Original'),
       idUsuario: col('ID Usuario'), empresa: col('Empresa'), idBenef: col('ID Beneficiario'),
       refs: col('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc'), porRetener: col('Por Retener'),
       enviadoPor: col('Enviado por'), usuario: col('Cliente (usuario)', 'Cliente'), nota: col('Nota'),
