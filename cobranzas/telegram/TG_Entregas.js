@@ -163,7 +163,9 @@ function TGE_reservar_(ss, nombre, fechaIso, exts) {
       usados[cand.toLowerCase()] = true;
       out.push(cand + String(ext || '').toLowerCase());
     });
-    cache.put(ck, JSON.stringify(Object.keys(usados).slice(-400)), 21600);
+    // ⏱ 10 min basta para que dos envíos seguidos no tomen el mismo nombre; antes 6 h: después de ↩️ Deshacer el nombre
+    // seguía «ocupado» y salía «Edit 3» aunque «Edit» y «Edit 2» ya no existían.
+    cache.put(ck, JSON.stringify(Object.keys(usados).slice(-400)), 600);
     return out;
   } finally { lock.releaseLock(); }
 }
@@ -173,6 +175,7 @@ function TGE_existentes_(ss, base) {
   var usados = {}, b = base.toLowerCase();
   var anotar = function (nom) {
     var s = String(nom || '').trim().replace(/\.[a-z0-9]{2,5}$/i, '').toLowerCase();
+    if (/ · |\(original con reversos\)/.test(s)) return;   // ✍️ archivos de reversos: no ocupan el nombre del escaneo
     if (s.indexOf(b) === 0) usados[s] = true;
   };
   try {
