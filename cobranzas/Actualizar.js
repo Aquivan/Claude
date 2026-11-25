@@ -41,6 +41,7 @@ function huellaExterna_(ss, cfg, liqs) {
   if (reas && reas.getLastRow() > 3) partes.push(hashTexto_(JSON.stringify(reas.getRange(4, 1, reas.getLastRow() - 3, 6).getDisplayValues())));
   try { partes.push('ini:' + INI_huella_(ss)); } catch (e) {}
   try { partes.push('exc:' + EXC_huella_(ss)); } catch (e) {}
+  try { partes.push('mon:' + MON_huella_(ss)); } catch (e) {}
   var conf = ss.getSheetByName(HOJA.CONFIG);
   if (conf) partes.push(hashTexto_(JSON.stringify(conf.getDataRange().getDisplayValues())));
   return partes.join('#');
@@ -114,6 +115,8 @@ function actualizarTodoInterno_(forzar) {
       var ex = EXC_filtrar_(ss, docs), exP = EXC_filtrarPagos_(ss, pagosTodos); docs = ex.docs; pagosTodos = exP.pagos;
       if (ex.n || exP.n) bitacora_(ss, 'Excluidas', t0, ex.n + ' documento(s) y ' + exP.n + ' voucher(s)/movimiento(s) fuera de los reportes');
     } catch (e) { bitacora_(ss, 'Excluidas ERROR', t0, e.message); }
+
+    try { var nMon = MON_aplicar_(ss, pagosTodos); if (nMon) bitacora_(ss, 'Montos de cruce', t0, nMon + ' voucher(s) con montos fijos'); } catch (e) { bitacora_(ss, 'Montos de cruce ERROR', t0, e.message); }   // 🔒 MontosCruce.js
 
     var res = ejecutarCruce_({
       docs: docs, pagos: pagosTodos, decisiones: decisiones,
