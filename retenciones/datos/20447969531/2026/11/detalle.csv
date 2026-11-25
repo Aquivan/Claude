@@ -1,2 +1,3 @@
 empresa_ruc,tipo,periodo,comprobante,fecha_retencion,ruc_agente,ruc_proveedor,proveedor,doc_tipo,doc_numero,doc_fecha,doc_moneda,doc_importe_total,pago_numero,pago_fecha,pago_importe,tipo_cambio,importe_retenido,importe_pagado_neto
 20447969531,Emitido,202611,E001-253,05/11/2026,20447969531,20605062670,DON VALENTIN DEL VALLE S.A.C.,Factura,E001-2122,02/11/2026,PEN,7140.19,1,05/11/2026,7140.19,1.00,214.21,6925.98
+20447969531,Emitido,202611,E001-254,19/11/2026,20447969531,20604785775,UNIDAD DE PROCESAMIENTOS LACTEOS E.I.R.L. - UNILAC E.I.R.L.,Factura,F001-13615,09/11/2026,PEN,6569.53,1,19/11/2026,6569.53,1.00,197.09,6372.44
