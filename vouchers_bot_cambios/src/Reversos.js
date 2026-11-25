@@ -99,7 +99,7 @@ async function REV_comprimir_(pdfDoc) {
   for (let i = 0; i < n; i++) {
     const im = imgs[i];
     if (im && im.jpg) {
-      const jpg = await out.embedJpg(Utilities.base64Decode(im.jpg));
+      const jpg = await out.embedJpg(new Uint8Array(Utilities.base64Decode(im.jpg)));   // los bytes de Apps Script vienen con signo: pdf-lib pide Uint8Array
       const orig = pdfDoc.getPage(i).getSize();
       const w = orig.width, h = orig.width * jpg.height / jpg.width;
       out.addPage([w, h]).drawImage(jpg, { x: 0, y: 0, width: w, height: h });
