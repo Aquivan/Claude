@@ -68,7 +68,10 @@ async function procesarVouchers() {
 
         const archivo = listaArchivos[k];
         const mime    = archivo.getMimeType();
-        const nombre  = archivo.getName();
+        let nombre    = archivo.getName();
+        // 🏷 Nombre repetido (VCH_evitarRepetido_): una imagen con un nombre que ya está en la hoja, o dos archivos con
+        // el mismo nombre en esta vuelta → se le agrega « (2)», « (3)»… Los PDF se revisan en procesarArchivoPDF.
+        try { nombre = VCH_evitarRepetido_(ctx, archivo, carpetas, TIPOS_IMAGEN.has(mime)); } catch (eN) { Logger.log('Nombre repetido (no se pudo revisar): ' + eN.message); }
 
         let mb = 0;
         try { mb = archivo.getSize() / (1024 * 1024); } catch (e) {}
@@ -165,7 +168,9 @@ function crearContexto(hoja) {
     hoja:        hoja,
     ultimaFila:  ultimaFila,
     indiceDup:   new Set(),   // clave "op|banco|monto"
-    indicePag:   {}           // nombreArchivo -> ultima pagina procesada
+    indicePag:   {},          // nombreArchivo -> ultima pagina procesada
+    nombres:     new Set(),   // 🏷 nombres de archivo que ya están en la hoja (col. K)
+    nombresRun:  {}           // 🏷 nombre -> id del archivo que lo usa en esta vuelta
   };
 
   if (ultimaFila < 2) return ctx;
@@ -183,6 +188,7 @@ function crearContexto(hoja) {
 
     if (op) ctx.indiceDup.add(claveDuplicado(op, banco, monto));
 
+    if (arch) ctx.nombres.add(arch);
     if (arch && !isNaN(pag)) {
       if (!ctx.indicePag[arch] || pag > ctx.indicePag[arch]) ctx.indicePag[arch] = pag;
     }
@@ -224,4 +230,64 @@ function cargarPdfLib() {
     .getContentText()
     .replace(/setTimeout\(.*?,.*?(\d*?)\)/g, 'Utilities.sleep($1);return t();'));
   Logger.log('pdf-lib cargado');
+}
+
+
+// ============================================================
+// 🏷 NOMBRES REPETIDOS
+// ------------------------------------------------------------
+// El nombre del archivo (columna K) es como el sistema encuentra el original (visor, reparar imágenes, deshacer
+// tandas) y como retoma un PDF largo. Dos archivos DISTINTOS con el mismo nombre se confundían: un PDF nuevo con el
+// nombre de otro ya terminado se pasaba a Procesados SIN leerlo. Ahora:
+//   · imagen con un nombre que ya está en la hoja, o dos archivos con el mismo nombre en la misma vuelta → « (2)»…
+//   · PDF con el nombre de otro ya procesado completo: si es IDÉNTICO (mismo contenido) se omite como antes; si es
+//     otro documento, se renombra y se lee entero.
+//   · PDF a medias o con páginas agregadas (mismo nombre, más páginas): sigue desde donde se quedó, como siempre.
+// ============================================================
+
+function VCH_evitarRepetido_(ctx, archivo, carpetas, esImagen) {
+  let n = archivo.getName();
+  const id = archivo.getId();
+  if ((ctx.nombresRun[n] && ctx.nombresRun[n] !== id) || (esImagen && ctx.nombres.has(n))) n = VCH_renombrar_(ctx, archivo, carpetas);
+  ctx.nombresRun[n] = id;
+  return n;
+}
+
+/** Le pone al archivo el primer nombre libre «base (2).ext», «base (3).ext»… (ni en la hoja ni en las carpetas). */
+function VCH_renombrar_(ctx, archivo, carpetas) {
+  const viejo = archivo.getName();
+  const m = viejo.match(/^(.*?)(\.[A-Za-z0-9]{1,5})?$/), base = m[1].replace(/\s\(\d+\)$/, ''), ext = m[2] || '';
+  for (let i = 2; i < 1000; i++) {
+    const n = base + ' (' + i + ')' + ext;
+    if (ctx.nombres.has(n) || ctx.nombresRun[n]) continue;
+    if (VCH_existeEn_(n, [carpetas.entrada, carpetas.procesados, CFG.CARPETA_DESCARTADOS_ID])) continue;
+    archivo.setName(n);
+    ctx.nombresRun[n] = archivo.getId();
+    Logger.log('🏷 Nombre repetido: «' + viejo + '» → «' + n + '»');
+    return n;
+  }
+  return viejo;
+}
+
+function VCH_existeEn_(nombre, ids) {
+  return ids.some(function (id) { try { return DriveApp.getFolderById(id).getFilesByName(nombre).hasNext(); } catch (e) { return false; } });
+}
+
+/** ¿Hay en Procesados / Descartados otro archivo con este nombre y EXACTAMENTE el mismo contenido? */
+function VCH_mismoContenido_(archivo, carpetas) {
+  const nombre = archivo.getName(), id = archivo.getId();
+  let firma = null;
+  const dig = function (f) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, f.getBlob().getBytes())); };
+  return [carpetas.procesados, CFG.CARPETA_DESCARTADOS_ID].some(function (cid) {
+    try {
+      const it = DriveApp.getFolderById(cid).getFilesByName(nombre);
+      while (it.hasNext()) {
+        const f = it.next();
+        if (f.getId() === id || f.getSize() !== archivo.getSize()) continue;
+        if (firma == null) firma = dig(archivo);
+        if (dig(f) === firma) return true;
+      }
+    } catch (e) {}
+    return false;
+  });
 }
