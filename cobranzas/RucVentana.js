@@ -101,7 +101,7 @@ function TGQ_rucCandidatos_(ss) {
     var nCol = sh.getLastColumn(), tit = sh.getRange(1, 1, 1, nCol).getDisplayValues()[0].map(norm);
     var col = function (re, def) { var i = tit.findIndex(function (t) { return re.test(t); }); return i >= 0 ? i : def; };
     var I = { f: col(/^fecha de dep|^fecha dep/, 0), op: col(/^numero de op|^n.? de op|^n.? op/, 1), b: col(/^banco/, 2), mon: col(/^moneda/, 3), m: col(/^monto/, 4),
-      p: col(/^proveedor|^beneficiario/, 5), emp: col(/^empresa/, -1), idb: col(/^id benef/, -1), proc: col(/^fecha de proc|^procesad/, 11), arch: col(/^archivo/, 10) };
+      p: col(/^proveedor|^beneficiario/, 5), emp: col(/^empresa/, -1), idb: col(/^id benef|^ruc benef/, -1), proc: col(/^fecha de proc|^procesad/, 11), arch: col(/^archivo/, 10) };
     if (I.idb < 0) return;
     var n = sh.getLastRow() - 1, v = sh.getRange(2, 1, n, nCol).getValues();
     for (var r = 0; r < n; r++) {

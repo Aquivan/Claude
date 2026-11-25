@@ -19,6 +19,7 @@ async function procesarVouchers() {
   try { PG_asegurar_(); } catch (e) { Logger.log('Prueba Gemini: ' + e.message); }
   // 🏷 Títulos cortos de A–N (una sola vez; los demás programas ya reconocen el nombre viejo y el nuevo).
   try { VCH_titulosCortos_(); } catch (e) { Logger.log('Títulos cortos: ' + e.message); }
+  try { VCH_columnasControl_(); } catch (e) { Logger.log('Columnas de control: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'columnas de control · ERROR', '', e.message); }
 
   const inicioEjecucion = Date.now();
   const LIMITE = CFG.LIMITE_TIEMPO_MS;

@@ -144,6 +144,12 @@ function actualizarTodoInterno_(forzar) {
       padron = pl.mapa; infoPadron = pl.info;
       RTN_evaluar_(res, cfg, padron, RTN_detraccionConfig_(ss));
     } catch (e) { bitacora_(ss, 'Retenciones ERROR', t0, e.message); }
+    // 📋 «Resultado» de cada voucher en la hoja de Vouchers (ResultadoVouchers.js)
+    try {
+      var excl = {}; try { excl = EXC_mapa_(ss)._p || {}; } catch (e) {}
+      var nRes = RES_escribir_(cfg, RES_textos_(res, vch, cfg, excl));
+      if (nRes) bitacora_(ss, 'Resultado (Vouchers)', t0, nRes + ' celda(s) actualizadas');
+    } catch (e) { bitacora_(ss, 'Resultado (Vouchers) ERROR', t0, e.message); }
 
     var hoy = new Date();
     var filasDocs = construirFilasDocumentos_(res, cfg, hoy);

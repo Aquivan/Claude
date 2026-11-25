@@ -82,8 +82,8 @@ function HCO_leerVouchers_(id, empresas) {
         return -1;
       };
       var c = { fecha: col('Fecha de depos', 'Fecha deposito'), op: col('Numero de oper', 'N° operación', 'N operacion'), banco: col('Banco'), moneda: col('Moneda'), monto: col('Monto'),
-        nombre: col('Proveedor (Beneficiario)', 'Beneficiario'), idb: col('ID Beneficiario'), empresa: col('Empresa'), idu: col('ID Usuario'),
-        idc: col('idCliente', 'Doc. depositante'), refs: col('Tipo y N Doc', 'Tipo y Nro Doc'), desc: col('Descripcion') };
+        nombre: col('Proveedor (Beneficiario)', 'Beneficiario'), idb: col('ID Beneficiario', 'RUC beneficiario'), empresa: col('Empresa'), idu: col('ID Usuario', 'RUC empresa'),
+        idc: col('idCliente', 'Doc. depositante'), refs: col('Tipo y N Doc', 'Tipo y Nro Doc', 'Comprobantes'), desc: col('Descripcion') };
       if (c.monto < 0 || c.fecha < 0) return;
       var n = h.getLastRow() - 1, cols = {};
       // solo las columnas de datos (las de imágenes hacen lenta la lectura)

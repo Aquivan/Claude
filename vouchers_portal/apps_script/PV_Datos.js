@@ -21,8 +21,9 @@ function PV_columnas_(tit) {
   return {
     f: col(/^fecha de dep|^fecha dep/, 0), op: col(/^numero de op|^n.? de op|^n.? op/, 1), b: col(/^banco/, 2), mon: col(/^moneda/, 3), m: col(/^monto/, 4),
     p: col(/^proveedor|^beneficiario/, 5), cli: col(/^cliente|^depositante/, 7), des: col(/^descripcion/, 8), arch: col(/^archivo/, 10), pag: col(/^pagina|^pag\b/, 12),
-    rev: col(/^revisado/, -1), pr: col(/^por retener/, -1), ret: col(/^retenido/, -1), emp: col(/^empresa/, -1), idb: col(/^id benef/, -1),
-    idu: col(/^id usuario/, -1), doc: col(/^tipo y n/, -1), nota: col(/^nota/, -1), proc: col(/^fecha de proc|^procesad/, 11)
+    rev: col(/^revisado/, -1), pr: col(/^por retener/, -1), ret: col(/^retenido/, -1), emp: col(/^empresa/, -1), idb: col(/^id benef|^ruc benef/, -1),
+    idu: col(/^id usuario|^ruc empresa/, -1), doc: col(/^tipo y n|^comprobantes/, -1), nota: col(/^nota/, -1), proc: col(/^fecha de proc|^procesad/, 11),
+    ctl: col(/^control$/, -1), res: col(/^resultado$/, -1)   // 🗂 25/11/2026: Revisado → chip en «Control»; la retención la dice «Resultado»
   };
 }
 
@@ -50,7 +51,9 @@ function PV_indice_() {
       if (!tx(v, I.op) && !tx(v, I.m) && !tx(v, I.p)) continue;   // fila vacía
       var f = c[I.f] instanceof Date ? Utilities.formatDate(c[I.f], PV_TZ_, 'yyyyMMdd') : '';
       filas.push([h, r + 2, f, tx(v, I.f), tx(v, I.op), tx(v, I.b), tx(v, I.mon), Number(c[I.m]) || 0, tx(v, I.p), tx(v, I.emp),
-        si(v, c, I.rev), si(v, c, I.pr), si(v, c, I.ret), tx(v, I.idb), tx(v, I.cli), tx(v, I.des).slice(0, 160), tx(v, I.arch), tx(v, I.pag),
+        si(v, c, I.rev) || (I.ctl >= 0 && /revisad/i.test(v[I.ctl])) ? 1 : 0,
+        si(v, c, I.pr) || (I.res >= 0 && /retenci/i.test(v[I.res]) && !/no corresponde/i.test(v[I.res])) ? 1 : 0,
+        si(v, c, I.ret) || (I.res >= 0 && /retenci[oó]n aplicada/i.test(v[I.res])) ? 1 : 0, tx(v, I.idb), tx(v, I.cli), tx(v, I.des).slice(0, 160), tx(v, I.arch), tx(v, I.pag),
         tx(v, I.op) && !/DUPLICADO/i.test(tx(v, I.op)) ? PV_claveDup_(c[I.op], c[I.b], c[I.m]) : '', tx(v, I.idu), tx(v, I.doc).slice(0, 120), tx(v, I.nota).slice(0, 120),
         c[I.proc] instanceof Date ? Utilities.formatDate(c[I.proc], PV_TZ_, 'yyyyMMddHHmm') : '']);
     }

@@ -296,9 +296,9 @@ var ANX_HERR_ = {
 function ANX_normalizar_(c, encabezado, v) {
   var h = normHeader_(encabezado);
   if (/^empresa/.test(h)) { var r = AUV_empresaDe_(v, c.cfg); return r ? (c.cfg.nombreEmpresa[r] || v) : v; }
-  if (/^id usuario/.test(h)) { var e = aRuc_(v) || AUV_empresaDe_(v, c.cfg); return e || v; }
+  if (/^id usuario|^ruc empresa/.test(h)) { var e = aRuc_(v) || AUV_empresaDe_(v, c.cfg); return e || v; }
   if (/^id benef|^ruc/.test(h)) return aRuc_(v) || v;
-  if (/^tipo y n|factura/.test(h)) {
+  if (/^tipo y n|factura|^comprobantes/.test(h)) {
     return v.split(/[,;\s]+/).filter(Boolean).map(function (t) {
       t = t.toUpperCase().replace(/^(FACTURA|FACT|FT)[:.\s]*/, '');
       if (/^\d{2}_/.test(t)) return t;

@@ -58,6 +58,9 @@ var COL_NUEVOS_ = {
   'voucher imagen': ['imagen'], 'archivo original': ['archivo'],
   'fecha procesamiento': ['procesado'], 'fecha de procesamiento': ['procesado'], 'fecha proc': ['procesado'],
   'pagina': ['pag'], 'enviado por telegram': ['canal'], 'enviado por': ['canal'],
+  // de la O en adelante (25/11/2026)
+  'id usuario': ['ruc empresa'], 'id beneficiario': ['ruc beneficiario'],
+  'tipo y n doc': ['comprobantes'], 'tipo y nro doc': ['comprobantes'], 'tipo y no doc': ['comprobantes'],
 };
 /** Los nombres a probar para un título: el pedido y su nombre corto nuevo (normalizados). */
 function nombresCol_(n) { var b = normHeader_(n); return [b].concat(COL_NUEVOS_[b] || []); }
