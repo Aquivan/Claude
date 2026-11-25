@@ -455,7 +455,7 @@ function MESA_datos_(tk, lado) {
       nota: String(p.nota || '').slice(0, 80), arch: String(p.archivo || '').slice(0, 80),
       antes: refsDeCopia[p.fuente] ? '' : refs,   // lo que dice HOY la celda de la fila principal (para no pisar cambios de otros)
       rl: parse.refs.map(function (q) { return q.tipo + '_' + q.serie + '-' + q.numero; }),
-      rm: parse.refs.map(function (q) { var g = (monV[p.id] || {})[MON_clave_(q)]; return g != null ? g : q.monto != null ? q.monto : null; }),   // monto por línea («=1500» o 🔒 Montos de cruce)
+      rm: parse.refs.map(function (q) { var g = (monV[p.id] || {})[MON_clave_(q)]; return q.monto != null ? q.monto : g != null ? g : null; }),   // monto por línea («=1500» o 🔒 Montos de cruce)
     };
     if (RX_DEVOLUCION_.test(refs)) x.dev = 1;                                   // ↩️ devolución: no se cruza con facturas
     else if (refs && (parse.noEntendido.length || (!parse.refs.length && refs !== '?'))) x.esp = 1;   // texto especial (PLANILLA, «adelanto»…)
@@ -631,7 +631,7 @@ function MESA_guardar_(tk, cambios) {
   var monCambio = false;
   cambios.forEach(function (x) {
     if (ok.indexOf(x.id) < 0 || !x.montos) return;
-    try { if (MON_guardar_(ss, x.id, x.fu, x.montos, quien)) { monCambio = true; log.push([ahora, quien, lote, x.fu, '🔒 Montos de cruce', '', Object.keys(x.montos).map(function (d) { return d + '=' + Number(x.montos[d]).toFixed(2); }).join(',') || '(sin montos)', x.id]); } }
+    try { if (MON_guardar_(ss, x.id, x.fu, x.montos, quien)) { monCambio = true; log.push([ahora, quien, lote, x.fu, '🔒 Montos de cruce', '', Object.keys(x.montos).map(function (d) { return d + '=' + Number(x.montos[d]).toFixed(2); }).join(',') || '(pasados a la celda)', x.id]); } }
     catch (e) { avisos.push(x.fu + ': no pude guardar los montos (' + e.message + ')'); }
   });
   if (dec.length) {
