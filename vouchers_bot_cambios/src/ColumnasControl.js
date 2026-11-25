@@ -187,9 +187,57 @@ function VCH_columnaRetencion_() {
   if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'columna retención', '', resumen.join(' · ') || 'nada');
 }
 
+// ============================================================
+// 🏢 PESTAÑA «🏢 Empresas» (Empresa → RUC), visible y editable por el usuario — acordado el 25/11/2026
+// ------------------------------------------------------------
+// Se crea UNA vez con lo aprendido hasta hoy (propiedad VCH_EMPRESAS). Desde ahí manda la pestaña: el usuario corrige,
+// agrega o borra filas. Al elegir la «Empresa» en Originales / Fotos se pone su RUC; si se escribe a mano el RUC de una
+// empresa que no está, se agrega como fila nueva. Si la pestaña se borra, no se recrea y nada se rompe (solo deja de
+// ponerse el RUC solo).
+// ============================================================
+
+var CC_HOJA_EMP_ = '🏢 Empresas';
+
+function VCH_hojaEmpresas_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('VCH_HOJA_EMPRESAS') === '1') return;
+  const ss = SpreadsheetApp.openById(CFG.SPREADSHEET_ID);
+  let sh = ss.getSheetByName(CC_HOJA_EMP_), n = 0;
+  if (!sh) {
+    let mapa = {}; try { mapa = JSON.parse(props.getProperty('VCH_EMPRESAS') || '{}'); } catch (x) {}
+    sh = ss.insertSheet(CC_HOJA_EMP_);
+    sh.getRange('A:B').setNumberFormat('@');
+    const filas = [['Empresa', 'RUC']].concat(Object.keys(mapa).sort().map(function (k) { return [k, String(mapa[k])]; }));
+    n = filas.length - 1;
+    sh.getRange(1, 1, filas.length, 2).setValues(filas);
+    sh.getRange(1, 1, 1, 2).setBackground(CC_COLOR_).setFontColor('#ffffff').setFontWeight('bold');
+    sh.setFrozenRows(1); sh.setColumnWidth(1, 180); sh.setColumnWidth(2, 140);
+    sh.getRange('D1').setValue('ℹ️ Empresa (tal como la escribe en la columna «Empresa» de Originales / Fotos) y su RUC de 11 dígitos. ' +
+      'Al elegir la Empresa en un voucher, su «RUC empresa» se pone solo con este RUC. Corrija, agregue o borre filas aquí. ' +
+      'Si escribe a mano el RUC de una empresa que no está, se agrega sola como fila nueva.').setWrap(true).setFontColor('#475569').setVerticalAlignment('top');
+    sh.setColumnWidth(4, 420);
+  }
+  props.setProperty('VCH_HOJA_EMPRESAS', '1');
+  if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'pestaña empresas', '', n ? n + ' empresa(s)' : 'ya existía');
+}
+
+/** {Empresa: RUC}. Desde que existe la pestaña, manda solo ella (antes, lo aprendido en VCH_EMPRESAS). */
+function CC_mapaEmpresas_(ss) {
+  const sh = ss.getSheetByName(CC_HOJA_EMP_), m = {};
+  if (sh) {
+    if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 2).getDisplayValues().forEach(function (r) {
+      const k = String(r[0]).trim(), ruc = String(r[1]).replace(/\D/g, '');
+      if (k && /^\d{11}$/.test(ruc) && !m[k]) m[k] = ruc;
+    });
+    return { mapa: m, hoja: sh };
+  }
+  if (PropertiesService.getScriptProperties().getProperty('VCH_HOJA_EMPRESAS') === '1') return { mapa: m, hoja: null };   // la borró el usuario
+  try { return { mapa: JSON.parse(PropertiesService.getScriptProperties().getProperty('VCH_EMPRESAS') || '{}'), hoja: null }; } catch (x) { return { mapa: m, hoja: null }; }
+}
+
 /**
- * ✏️ Al editar la hoja (disparador simple): al elegir o escribir la «Empresa», se pone su «RUC empresa» (si se conoce).
- * Si se escribe a mano el RUC de una empresa nueva (fuera del grupo), se aprende para la próxima vez.
+ * ✏️ Al editar la hoja (disparador simple): al elegir o escribir la «Empresa», se pone su «RUC empresa» (según «🏢 Empresas»).
+ * Si se escribe a mano el RUC de una empresa que no está en «🏢 Empresas», se agrega allí como fila nueva.
  */
 function onEdit(e) {
   try {
@@ -199,8 +247,7 @@ function onEdit(e) {
     const tit = h.getRange(1, 1, 1, h.getLastColumn()).getDisplayValues()[0].map(CC_norma_);
     const cEmp = tit.indexOf('empresa') + 1, cRuc = tit.indexOf('ruc empresa') + 1;
     if (cEmp < 1 || cRuc < 1) return;
-    const props = PropertiesService.getScriptProperties();
-    let mapa = {}; try { mapa = JSON.parse(props.getProperty('VCH_EMPRESAS') || '{}'); } catch (x) {}
+    const em = CC_mapaEmpresas_(h.getParent()), mapa = em.mapa;
     const c0 = e.range.getColumn(), c1 = c0 + e.range.getNumColumns() - 1, f0 = e.range.getRow(), nf = e.range.getNumRows();
     if (cEmp >= c0 && cEmp <= c1) {   // eligió / escribió la Empresa → su RUC
       const emps = h.getRange(f0, cEmp, nf, 1).getDisplayValues(), rucs = h.getRange(f0, cRuc, nf, 1);
@@ -209,9 +256,9 @@ function onEdit(e) {
         return [r || (String(x[0]).trim() ? actuales[i][0] : '')];
       });
       rucs.setNumberFormat('@').setValues(nuevos);
-    } else if (cRuc >= c0 && cRuc <= c1 && nf === 1) {   // escribió un RUC a mano: se aprende para esa Empresa
+    } else if (cRuc >= c0 && cRuc <= c1 && nf === 1 && em.hoja) {   // RUC a mano de una empresa nueva → fila en «🏢 Empresas»
       const e1 = String(h.getRange(f0, cEmp).getDisplayValue()).trim(), r1 = String(h.getRange(f0, cRuc).getDisplayValue()).replace(/\D/g, '');
-      if (e1 && /^\d{11}$/.test(r1) && !mapa[e1]) { mapa[e1] = r1; props.setProperty('VCH_EMPRESAS', JSON.stringify(mapa)); }
+      if (e1 && /^\d{11}$/.test(r1) && !mapa[e1]) em.hoja.appendRow([e1, r1]);
     }
   } catch (err) { /* nunca molestar al editar */ }
 }
