@@ -31,7 +31,7 @@ function RES_num_(n) { return (Math.round(Number(n || 0) * 100) / 100).toFixed(2
  * RUC del beneficiario: columna «RUC beneficiario» → alias confirmados (⚙️ Config) → mismo nombre exacto en las facturas
  * del SIRE (si ese nombre tiene un solo RUC). Si el nombre no da un RUC seguro, no se adivina: «Revisar».
  */
-var RES_NO_RET_NOMBRE_ = /\b(SUNAT|TESORO|BANCO DE LA NACION|ESSALUD|AFP|ONP|SUNARP|MUNICIPALIDAD|PLANILLA)\b/;
+var RES_NO_RET_NOMBRE_ = /\b(SUNAT|TESORO|BANCO\w*|ESSALUD|AFP\w*|ONP|SUNARP|MUNICIPALIDAD|PLANILLA|BBVA|BCP|INTERBANK|SCOTIABANK|BANBIF|CAJA \w+)\b/;
 
 /** Antes de leer el padrón: resuelve el RUC del beneficiario de los vouchers sin comprobante. Devuelve {ruc: 1} para el padrón. */
 function RES_prepararPosible_(res, vch, cfg) {
