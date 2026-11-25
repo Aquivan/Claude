@@ -301,7 +301,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
       <div class="mas" id="masV">
       <span class="seg" id="sCop" title="Un mismo voucher puede estar en Originales y en Fotos: se cuenta UNA vez (manda Originales)"><button data-v="u" class="on" onclick="seg(this)">Únicos</button><button data-v="a" onclick="seg(this)">Con copias de Fotos</button></span>
       <input id="qB" list="dlB" placeholder="👤 beneficiario (como el filtro de la columna F)" title="Elija un nombre de la lista (como el filtro de la columna «Proveedor (Beneficiario)» de la hoja de Vouchers): muestra todos sus vouchers, con o sin RUC, empresa o factura" style="flex:1;min-width:150px" oninput="tarde(pintar)"><datalist id="dlB"></datalist><button onclick="$('qB').value='';pintar()" title="Quitar el filtro de beneficiario" style="padding:2px 6px">✖</button>
-      <button onclick="rucVentana(window._rucVarios || [])" title="Abre aquí mismo la ventana 🔎 Identificar RUC (la del menú 🧠 Asistente IA): agrupa por nombre los vouchers sin RUC que se ven (o los marcados), busca en lo conocido, SUNAT, internet o leyendo el voucher con IA, y escribe el RUC">🔎 Identificar RUC</button> <label title="Cómo se reparte el dinero al cruzar un voucher con una factura que ya tiene otros pagos" style="font-size:12px">🧮 Al cruzar <select id="selCruce" onchange="cruceModoPoner(this.value)"><option value="libre">usar solo lo libre del voucher (no mover otros)</option><option value="fecha">reacomodar todo por fecha</option></select></label> <button onclick="empVentana()" title="Asignar la empresa del grupo a varios vouchers de una vez (los sin empresa que se ven, o los marcados), con sugerencia">🏢 Asignar empresa</button>
+      <button onclick="rucVentana(window._rucVarios || [])" title="Abre aquí mismo la ventana 🔎 Identificar RUC (la del menú 🧠 Asistente IA): agrupa por nombre los vouchers sin RUC que se ven (o los marcados), busca en lo conocido, SUNAT, internet o leyendo el voucher con IA, y escribe el RUC">🔎 Identificar RUC</button> <label title="Cómo se reparte el dinero al cruzar un voucher con una factura que ya tiene otros pagos" style="font-size:12px">🧮 Al cruzar <select id="selCruce" onchange="cruceModoPoner(this.value)"><option value="preguntar">preguntar cada vez si choca con otros pagos</option><option value="libre">siempre solo lo libre del voucher (no mover otros)</option><option value="fecha">siempre reacomodar todo por fecha</option></select></label> <button onclick="empVentana()" title="Asignar la empresa del grupo a varios vouchers de una vez (los sin empresa que se ven, o los marcados), con sugerencia">🏢 Asignar empresa</button>
       </div>
       <select id="oV" onchange="pintar()" title="Ordenar vouchers" class="oculto"><option value="f">📅 Fecha: más antiguos primero</option><option value="f-">📅 Fecha: más recientes primero</option><option value="m-">💰 Mayor monto</option><option value="m">💰 Menor monto</option><option value="op">🔢 N° de operación</option><option value="fu">📄 Fila de la hoja</option></select>
       <span class="res" id="rV"></span>
@@ -868,9 +868,9 @@ function refsTxtF(id) { return (S.links[id] || []).map(function (k) { var m = S.
 function esSucio(id) { return refsTxt(id) !== (S.origTxt[id] || ''); }
 function sucios() { return Object.keys(S.links).filter(esSucio); }
 function base(d) { return r2(d.tot - d.nc - d.ret - d.det - d.otr - (S.rDelta[d.k] || 0)); }
-function cruceModo() { try { return localStorage.getItem('mesaCruce') || 'libre'; } catch (e) { return 'libre'; } }
+function cruceModo() { try { return localStorage.getItem('mesaCruce') || 'preguntar'; } catch (e) { return 'preguntar'; } }
 function cruceModoPoner(v) { try { localStorage.setItem('mesaCruce', v); } catch (e) {} simular(); pintar(); detalle();
-  estado(v === 'libre' ? '🧮 Al cruzar: solo lo libre del voucher, sin mover los pagos de otros vouchers (y el monto queda fijo al guardar).' : '🧮 Al cruzar: se reacomoda todo por fecha (el voucher más antiguo paga primero).'); }
+  estado(v === 'preguntar' ? '🧮 Al cruzar: si choca con otros pagos le pregunto cada vez (solo lo libre o pagar esta primero).' : v === 'libre' ? '🧮 Al cruzar: siempre solo lo libre del voucher, sin mover los pagos de otros vouchers (el monto queda fijo al guardar).' : '🧮 Al cruzar: siempre se reacomoda todo por fecha (el voucher más antiguo paga primero).'); }
 function simular() {
   // Solo se recalcula lo que tocan los cambios (y lo que comparte facturas con ellos); lo demás queda como lo calculó el motor.
   calcRet();
@@ -888,7 +888,17 @@ function simular() {
   // 🧮 Modo de cruce (⚙ Más filtros → «Al cruzar»): «libre» (por defecto) = los vouchers que usted NO tocó conservan lo que
   // ya tenían aplicado y el que cambió solo usa lo que le queda libre; «fecha» = se reacomoda todo por fecha (como antes).
   var fijos = {};
-  if (cruceModo() === 'libre') Object.keys(vouC).forEach(function (id) { if (cambiados.indexOf(id) < 0) { fijos[id] = 1; delete vouC[id]; } });
+  S.cruceFecha = S.cruceFecha || {};
+  Object.keys(S.cruceFecha).forEach(function (id) { if (cambiados.indexOf(id) < 0) delete S.cruceFecha[id]; });   // guardado o descartado
+  if (cruceModo() !== 'fecha') {
+    var porFecha = {};   // facturas de los vouchers a los que se les eligió «⬆ pagar esta primero»
+    Object.keys(S.cruceFecha).forEach(function (id) { (S.links[id] || []).concat(S.orig[id] || []).forEach(function (k) { porFecha[k] = 1; }); });
+    Object.keys(vouC).forEach(function (id) {
+      if (cambiados.indexOf(id) >= 0) return;
+      if ((S.links[id] || []).concat(S.orig[id] || []).some(function (k) { return porFecha[k]; })) return;
+      fijos[id] = 1; delete vouC[id];
+    });
+  }
   Object.keys(S.links).forEach(function (id) {
     if (vouC[id]) return;
     var v = S.V[id], t = 0;
@@ -1334,13 +1344,14 @@ function unir(id, k) {
   S.sug = S.sug.filter(function (s) { return !(s.p === id && s.ks.every(function (x) { return S.links[id].indexOf(x) >= 0; })); });
   if (!S.act) S.act = id;
   simular();
-  // 📌 modo «libre»: lo que se ve queda FIJO al guardar (01_F001-13468=276.80), así el motor no lo reacomoda por fecha y no
-  // le quita a otro voucher. Si el voucher paga varias, se fija cada línea; si comparte la factura con otros, también.
-  if (cruceModo() === 'libre') {
-    var otrosPagan = Object.keys(S.links).some(function (j) { return j !== id && S.links[j].indexOf(k) >= 0; });
-    if (S.links[id].length > 1 || otrosPagan) S.links[id].forEach(function (j) { if (S.montos[id + '|' + j] == null) S.montos[id + '|' + j] = r2(S.sim.amt[id + '|' + j] || 0); });
-    simular();
+  var modoC = cruceModo();
+  if (modoC === 'preguntar') {   // ¿choca? se compara «solo lo libre» con «pagar esta primero (por fecha)»
+    var A = cruceFoto(id), Bf; S.cruceFecha[id] = 1; simular(); Bf = cruceFoto(id); delete S.cruceFecha[id]; simular();
+    var dif = cruceDif(A, Bf, id);
+    if (dif.length || Math.abs((A[id + '|' + k] || 0) - (Bf[id + '|' + k] || 0)) > 0.005) { pintar(); detalle(); return cruceElegir(id, k, A, Bf, dif); }
+    modoC = 'libre';   // no choca: da lo mismo
   }
+  if (modoC === 'libre') { crucePin(id, k); simular(); }
   pintar(); detalle();
   var x = S.sim.amt[id + '|' + k] || 0, quedaF = S.sim.saldo[k] || 0;
   if (x <= 0.005 && quedaF > 0.05 && S.links[id].length > 1) {   // la factura sí tiene saldo, pero al voucher ya no le queda dinero
@@ -1348,6 +1359,41 @@ function unir(id, k) {
     return opcionesFalta(id, k);
   }
   estado('🔗 ' + v.fu + ' → ' + d.doc + ': ' + fm(x) + (x <= 0.005 ? (quedaF <= 0.05 ? ' (⚠️ la factura ya no tiene saldo)' : ' (⚠️ al voucher ya no le queda dinero)') : x < quedaF + x - 0.05 && quedaF > 0.05 ? ' · la factura queda con saldo ' + fm(quedaF) : '') + (S.sim.sobra[id] > 0.05 ? ' · al voucher le sobran ' + fm(S.sim.sobra[id]) : ' · voucher completo ✅'), x <= 0.005);
+}
+/* 🧮 Cruce que choca con otros pagos: «solo lo libre» vs «pagar esta primero» (ver cruceModo). */
+function cruceFoto(id) { var o = {}; Object.keys(S.sim.amt).forEach(function (x) { o[x] = S.sim.amt[x]; }); o._sobra = S.sim.sobra[id] || 0; return o; }
+function cruceDif(A, B, id) {
+  var out = [];
+  Object.keys(A).concat(Object.keys(B)).filter(function (x, i, a) { return x !== '_sobra' && a.indexOf(x) === i && x.split('|')[0] !== id; }).forEach(function (x) {
+    var a = A[x] || 0, b = B[x] || 0; if (Math.abs(a - b) > 0.005) out.push({ j: x.split('|')[0], k: x.split('|').slice(1).join('|'), a: a, b: b });
+  });
+  return out;
+}
+/** Fija el monto de cada línea del voucher (01_F001-13468=276.80) si paga varias o comparte la factura: así el motor no lo reacomoda. */
+function crucePin(id, k) {
+  var otrosPagan = Object.keys(S.links).some(function (j) { return j !== id && S.links[j].indexOf(k) >= 0; });
+  if (S.links[id].length > 1 || otrosPagan) S.links[id].forEach(function (j) { if (S.montos[id + '|' + j] == null) S.montos[id + '|' + j] = r2(S.sim.amt[id + '|' + j] || 0); });
+}
+function cruceElegir(id, k, A, B, dif) {
+  var v = S.V[id], d = S.D[k], nom = function (j) { var w = S.V[j]; return w ? (w.bco + ' ' + w.op).trim() : j; };
+  var lineas = function (F) { return S.links[id].map(function (j) { return '<div style="font-size:12px">' + (j === k ? '<b>' : '') + esc(S.D[j].doc) + ': ' + fm(F[id + '|' + j] || 0) + (j === k ? '</b>' : '') + '</div>'; }).join(''); };
+  modal('<h3 style="margin-top:0">🧮 ¿Cómo aplico ' + esc(nom(id)) + ' (' + v.mon + ' ' + fm(v.m) + ') a ' + esc(d.doc) + '?</h3>' +
+    '<p style="color:var(--gr);margin-top:0">' + esc(d.doc) + ' ya tiene otros pagos o el voucher ya paga otra factura. Elija:</p>' +
+    '<div class="combo" onclick="cruceUsar(\'' + esc(id) + '\',\'' + esc(k) + '\',\'libre\')"><b>🔒 Solo lo libre del voucher</b> — no les quita nada a los otros vouchers' + lineas(A) +
+      '<div style="font-size:12px;color:#065F46">💰 Le queda a favor: ' + fm(A._sobra) + '</div><div style="font-size:11px;color:var(--gr)">Al guardar se escribe con el monto fijo (ej. ' + esc(d.doc) + '=' + (A[id + '|' + k] || 0).toFixed(2) + ').</div></div>' +
+    '<div class="combo" onclick="cruceUsar(\'' + esc(id) + '\',\'' + esc(k) + '\',\'fecha\')"><b>⬆ Pagar esta primero (por fecha)</b> — el voucher más antiguo paga primero' + lineas(B) +
+      '<div style="font-size:12px;color:#065F46">💰 Le queda a favor: ' + fm(B._sobra) + '</div>' +
+      (dif.length ? '<div style="font-size:12px;color:#B45309">⚠️ Cambia a otros vouchers: ' + dif.map(function (x) { return esc(nom(x.j)) + ' en ' + esc(S.D[x.k] ? S.D[x.k].doc : x.k) + ': ' + fm(x.a) + ' → ' + fm(x.b); }).join(' · ') + '</div>' : '') +
+      '<div style="font-size:11px;color:var(--gr)">Al guardar se escribe solo la factura (sin monto): Cobranzas reparte por fecha.</div></div>' +
+    '<p><button onclick="cruceUsar(\'' + esc(id) + '\',\'' + esc(k) + '\',\'no\')">✖ No cruzar</button> <span style="color:var(--gr);font-size:11.5px">Nada se escribe hasta 💾 Guardar. Para no preguntar: ⚙ Más filtros → 🧮 Al cruzar.</span></p>');
+}
+function cruceUsar(id, k, op) {
+  cerrarModal();
+  if (op === 'no') { S.hist.pop(); S.links[id] = S.links[id].filter(function (x) { return x !== k; }); delete S.montos[id + '|' + k]; simular(); pintar(); detalle(); return estado('No se cruzó.'); }
+  if (op === 'fecha') S.cruceFecha[id] = 1; else { delete S.cruceFecha[id]; simular(); crucePin(id, k); }
+  simular(); pintar(); detalle();
+  var v = S.V[id];
+  estado('🔗 ' + (op === 'fecha' ? '⬆ Pagando primero (por fecha)' : '🔒 Solo lo libre') + ': ' + v.fu + ' → ' + S.links[id].map(function (j) { return S.D[j].doc + ' ' + fm(S.sim.amt[id + '|' + j] || 0); }).join(', ') + ' · a favor ' + fm(S.sim.sobra[id] || 0) + ' (sin guardar).');
 }
 /** Prueba un cambio en un voucher sin dejarlo puesto: devuelve cómo quedarían sus facturas. */
 function probar(id, cambio) {
