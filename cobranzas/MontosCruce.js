@@ -1,10 +1,14 @@
 /**
- * 🔒 MONTOS DE CRUCE: cuánto de un voucher va a cada factura, guardado en Cobranzas (no en la hoja de Vouchers).
+ * 🔒 MONTOS DE CRUCE (en pausa: se eligió la opción A = el monto va en la celda de la hoja de Vouchers, «=monto»).
+ * La Mesa ya no guarda aquí; lo que haya quedado se sigue respetando hasta que se vuelva a guardar ese voucher desde la
+ * Mesa (entonces pasa a la celda y su fila se borra). Lo escrito en la celda siempre manda.
+ *
+ * Diseño original: cuánto de un voucher va a cada factura, guardado en Cobranzas (no en la hoja de Vouchers).
  *
  * La celda «Tipo y Nº Doc.» de la hoja de Vouchers queda limpia, solo con las facturas (01_F001-11963,01_F001-13468).
  * Cuando en la 🧩 Mesa se elige «🔒 solo lo libre» (o se toca una línea y se escribe un monto), ese monto se guarda aquí:
  * hoja «🔒 Montos de cruce» (ID del voucher, voucher, factura, monto, quién, cuándo). Cobranzas lo aplica como si la celda
- * dijera 01_F001-13468=276.80 (el formato «=monto» escrito a mano en la hoja de Vouchers sigue funcionando; este manda).
+ * dijera 01_F001-13468=276.80 (si la celda ya trae «=monto» para esa factura, manda la celda).
  * El ID del voucher es banco|operación|fecha|monto (no cambia aunque se muevan filas).
  */
 
@@ -49,7 +53,7 @@ function MON_aplicar_(ss, pagos) {
     var pr; try { pr = parsearReferencias_(p.refs); } catch (e) { return; }
     if (!pr.refs.length) return;
     p.refs = pr.refs.map(function (r) {
-      var c = MON_clave_(r), x = mm[c] != null ? mm[c] : r.monto;
+      var c = MON_clave_(r), x = r.monto != null ? r.monto : mm[c];   // lo escrito en la celda manda
       return c + (x != null ? '=' + Number(x).toFixed(2) : '');
     }).join(',') + (pr.noEntendido.length ? ' ' + pr.noEntendido.join(' ') : '');
     n++;
