@@ -8,7 +8,7 @@
 //   2. Si hay reversos: en «Entrada» queda un PDF LIMPIO solo con los frentes (mismo nombre) y se lee como siempre;
 //      cada reverso va a la carpeta «✍️ Reversos» (junto a Procesados) como PDF de 1 página
 //      («<archivo> · pág 3 (reverso de pág 2).pdf») + una copia del PDF original completo.
-//   3. Lo escrito a mano va a la columna «✍️ Anotación» de la fila del voucher: «Reverso: Granix» / «Frente: …», con
+//   3. Lo escrito a mano va a la columna «✍️ Anotación» (columna O, al final de A–N) de la fila del voucher: «Reverso: Granix» / «Frente: …», con
 //      enlace al reverso; si la IA duda, «(revisar)». La columna «Nota» no se toca.
 // Automático; se apaga en 🤖 Vouchers → ✍️ Reversos y anotaciones (propiedad VCH_REVERSOS = '0').
 // Si algo falla aquí, el PDF se lee como antes (nunca se detiene el proceso).
@@ -169,18 +169,21 @@ async function REV_separar_(archivo, pdfDoc, nombre, carpetas) {
   return res;
 }
 
-/** Columna «✍️ Anotación» (la crea una sola vez, después de «Nota»). Devuelve su número o -1. */
+/**
+ * Columna «✍️ Anotación»: la crea una sola vez como columna O, al final del bloque que llena el bot (A–N), con el mismo
+ * formato de título que A–N; la línea gruesa queda después (entre «✍️ Anotación» y «Empresa»). Devuelve su número o -1.
+ */
 function REV_columna_(hoja) {
   const tit = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getDisplayValues()[0].map(CC_norma_);
-  for (let i = 14; i < tit.length; i++) if (/anotaci/.test(tit[i])) return i + 1;
+  for (let i = 0; i < tit.length; i++) if (/anotaci/.test(tit[i])) return i + 1;
   const props = PropertiesService.getScriptProperties(), clave = 'VCH_COL_ANOTACION|' + hoja.getName();
   if (props.getProperty(clave) === '1') return -1;   // el usuario la borró: no se vuelve a crear
-  let cNota = -1;
-  for (let i = 14; i < tit.length; i++) if (/^nota/.test(tit[i])) { cNota = i + 1; break; }
-  const despues = cNota > 0 ? cNota : hoja.getLastColumn();
-  hoja.insertColumnAfter(despues);
-  const col = despues + 1;
-  hoja.getRange(1, col).setValue(REV_COLUMNA_).setBackground(CC_COLOR_).setFontColor('#ffffff').setFontWeight('bold');
+  hoja.insertColumnAfter(14);   // después de N («Canal»): el bot escribe A–N por posición, así no se mueve nada de A–N
+  const col = 15;
+  hoja.getRange(1, 14).copyTo(hoja.getRange(1, col), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+  hoja.getRange(1, col).setValue(REV_COLUMNA_);
+  hoja.getRange(1, col, hoja.getMaxRows(), 1).setBorder(null, null, null, false, null, null);
+  hoja.getRange(1, col + 1, hoja.getMaxRows(), 1).setBorder(null, true, null, null, null, null, '#0f172a', SpreadsheetApp.BorderStyle.SOLID_THICK);
   hoja.setColumnWidth(col, 220);
   props.setProperty(clave, '1');
   return col;
