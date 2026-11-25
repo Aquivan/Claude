@@ -207,7 +207,7 @@ function VV_indice() {
     const col = function (re, def) { const i = tit.findIndex(function (t) { return re.test(t); }); return i >= 0 ? i : def; };
     const iF = col(/^fecha de dep|^fecha dep/, 0), iOp = col(/^numero de op|^n.? de op|^n.? op/, 1), iB = col(/^banco/, 2), iMon = col(/^moneda/, 3), iM = col(/^monto/, 4), iP = col(/^proveedor|^beneficiario/, 5);
     const iCli = col(/^cliente|^depositante/, 7), iDes = col(/^descripcion/, 8), iArch = col(/^archivo/, 10), iPag = col(/^pagina|^pag\b/, 12);
-    const iRev = col(/^revisado/, -1), iPR = col(/^por retener/, -1), iRet = col(/^retenido/, -1), iEmp = col(/^empresa/, -1), iIdB = col(/^id benef/, -1);
+    const iRev = col(/^revisado/, -1), iPR = col(/^por retener/, -1), iRet = col(/^retenido/, -1), iCtl = col(/^control$/, -1), iRes = col(/^resultado$/, -1), iEmp = col(/^empresa/, -1), iIdB = col(/^id benef|^ruc benef/, -1);
     const rg = sh.getRange(2, 1, n, nCol), ver = rg.getDisplayValues(), crudo = rg.getValues();
     for (let r = 0; r < n; r++) {
       const v = ver[r], c = crudo[r];
@@ -216,7 +216,9 @@ function VV_indice() {
       const op = String(c[iOp] == null ? '' : c[iOp]).trim();
       const si = function (i) { return i >= 0 && (c[i] === true || /^(true|si|sí|x|✔)$/i.test(String(v[i]).trim())); };
       filas.push([h, r + 2, f, v[iF], v[iOp], v[iB], v[iMon], Number(c[iM]) || 0, v[iP], iEmp >= 0 ? v[iEmp] : '',
-        si(iRev) ? 1 : 0, si(iPR) ? 1 : 0, si(iRet) ? 1 : 0, iIdB >= 0 ? v[iIdB] : '', v[iCli], v[iDes], v[iArch], v[iPag],
+        si(iRev) || (iCtl >= 0 && /revisad/i.test(v[iCtl])) ? 1 : 0,
+        si(iPR) || (iRes >= 0 && /retenci/i.test(v[iRes]) && !/no corresponde/i.test(v[iRes])) ? 1 : 0,
+        si(iRet) || (iRes >= 0 && /retenci[oó]n aplicada/i.test(v[iRes])) ? 1 : 0, iIdB >= 0 ? v[iIdB] : '', v[iCli], v[iDes], v[iArch], v[iPag],
         op ? claveDuplicado(op, c[iB], c[iM]) : '',
         norma(v.filter(function (x, i) { return i !== 9; }).join(' | '))]);
     }

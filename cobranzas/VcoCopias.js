@@ -20,7 +20,7 @@
 
 var VCO_COLS_ = [
   ['ID Usuario'], ['Empresa'], ['ID Beneficiario'], ['Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc'],
-  ['Por Retener'], ['Retenido'], ['Revisado Voucher', 'Revisado'], ['Nota'],
+  ['Por Retener'], ['Retenido'], ['Revisado Voucher', 'Revisado'], ['Control'], ['Nota'],
 ];
 
 function VCO_vacio_(v) { return v === '' || v == null || v === false || String(v).trim() === '' || /^false$/i.test(String(v).trim()); }

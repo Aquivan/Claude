@@ -28,8 +28,8 @@ const AYV_SECCIONES_ = [
     '• **Beneficiario**: a quién se le pagó. **Doc. depositante** / **Depositante**: quién pagó (RUC o DNI y nombre, como se leen en el voucher).',
     '• **Descripción**: el tipo de operación (depósito, transferencia, pago SUNAT…).',
     '• **Imagen**: la miniatura. **Archivo** y **Pág.**: de qué archivo y qué página salió. **Procesado**: fecha y hora en que se leyó. **Canal**: cómo llegó (Telegram, WhatsApp, carpeta). Si llega un archivo con un nombre que ya existe, se renombra solo «(2)», «(3)».',
-    '• **Revisado Voucher**: márquelo cuando usted ya lo revisó.',
-    '• **Por Retener** / **Retenido**: si a ese pago le corresponde retención y si ya se emitió.',
+    '• De la O en adelante (lo que completa usted, la Mesa o el sistema; títulos en verde): **Empresa** (abreviatura; puede escribir otra de fuera del grupo) · **RUC empresa** (se pone solo al elegir la Empresa) · **RUC beneficiario** · **Comprobantes** (01_ factura, 02_ recibo por honorarios, 03_ boleta…; con =monto si paga solo una parte) · **Control** (👀 Revisado, 📄 Original físico, ⚠️ Observado…: puede marcar varias; la lista se edita en Datos → Validación) · **Nota** · **Resultado** (lo escribe Cobranzas: ✅ aplicado, 💰 sobra, ⚠️ problema, y la retención: aplicada con su CRE, falta, o no corresponde).',
+    
     '• **Empresa**, **ID Beneficiario**, **ID Usuario**: datos para cruzar con las facturas (los sugiere el 🧠 Asistente IA).'
   ] },
   { id: 'visor', e: '🪟', t: 'Visor de voucher (ver y corregir)', p: [

@@ -589,8 +589,8 @@ function actualizarIdx(x, d) {
   if ((v = pick(/^fecha de dep|^fecha dep/)) !== undefined) x[3] = v; if ((v = pick(/^numero de op|^n.? de op|^n.? op/)) !== undefined) x[4] = v;
   if ((v = pick(/^banco/)) !== undefined) x[5] = v; if ((v = pick(/^moneda/)) !== undefined) x[6] = v;
   if ((v = pick(/^monto/)) !== undefined) x[7] = Number(String(v).replace(/,/g, '')) || 0; if ((v = pick(/^proveedor|^beneficiario/)) !== undefined) x[8] = v;
-  if ((v = pick(/^empresa/)) !== undefined) x[9] = v; if ((v = pick(/^revisado/)) !== undefined) x[10] = v === true ? 1 : 0;
-  if ((v = pick(/^id benef/)) !== undefined) x[13] = v;
+  if ((v = pick(/^empresa/)) !== undefined) x[9] = v; if ((v = pick(/^revisado/)) !== undefined) x[10] = v === true ? 1 : 0; if ((v = pick(/^control$/)) !== undefined) x[10] = /revisad/i.test(String(v)) ? 1 : 0;
+  if ((v = pick(/^id benef|^ruc benef/)) !== undefined) x[13] = v;
   x.txt = norma(x.slice(3, 22).join(' | ') + ' ' + fm(x[7])); pintarLista();
 }
 
