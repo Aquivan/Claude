@@ -124,6 +124,7 @@ function leerVouchers_(cfg) {
       idUsuario: col('ID Usuario'), empresa: col('Empresa'), idBenef: col('ID Beneficiario'),
       refs: col('Tipo y N Doc', 'Tipo y Nro Doc', 'Tipo y No Doc'), porRetener: col('Por Retener'),
       enviadoPor: col('Enviado por'), usuario: col('Cliente (usuario)', 'Cliente'), nota: col('Nota'),
+      retMarca: col('Retencion'), control: col('Control'),   // opcionales (25/11/2026): si no están, todo sigue automático
     };
     // Pestaña sin los encabezados de siempre (pegada sin títulos o con las columnas en otro
     // orden): se lee A–J reconociendo cada columna por su contenido (o con el mapa que ya
@@ -169,6 +170,7 @@ function leerVouchers_(cfg) {
         usuario: c.usuario >= 0 ? String(r[c.usuario] || '').trim() : '',
         nota: c.nota >= 0 ? String(r[c.nota] || '').trim() : '',
         archivo: c.archivo >= 0 ? String(r[c.archivo] || '').trim() : '',
+        retMarca: RES_marca_(c.retMarca >= 0 ? r[c.retMarca] : '', c.control >= 0 ? r[c.control] : ''),
       };
       agregar(pago);
     });

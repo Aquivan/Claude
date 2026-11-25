@@ -131,6 +131,62 @@ function VCH_columnasControl_() {
   if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'columnas de control', '', (resumen.join(' · ') || 'nada') + ' · empresas: ' + Object.keys(emp).join(', '));
 }
 
+// ============================================================
+// 🧾 COLUMNA «Retención» (OPCIONAL), una sola vez — acordado con el usuario el 25/11/2026
+// ------------------------------------------------------------
+// Al lado de «Control»: 🟡 Por retener · ✅ Retenido · 🚫 No corresponde (una sola opción). Cobranzas la lee solo si
+// existe (por su título) y la combina con lo automático en «Resultado»; si se borra o se renombra, nada se rompe.
+// Se llena con lo que tenían los checks antiguos (del respaldo «🛟 Respaldo O+ …»):
+//   Retenido ☑ → ✅ Retenido · Por retener ☑ + Revisado ☑ → ✅ Retenido · Por retener ☑ solo → 🟡 Por retener.
+// ============================================================
+
+var CC_RET_OPC_ = ['🟡 Por retener', '✅ Retenido', '🚫 No corresponde'];
+
+function VCH_columnaRetencion_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('VCH_COLUMNAS_CONTROL') !== '1' || props.getProperty('VCH_COL_RETENCION') === '1') return;
+  const resumen = [];
+  [CFG.SHEET_ORIGINALES, CFG.SHEET_FOTOS].forEach(function (nombre) {
+    const h = obtenerHoja(nombre);
+    if (!h || h.getLastColumn() < 15) return;
+    let tit = h.getRange(1, 1, 1, h.getLastColumn()).getDisplayValues()[0].map(CC_norma_);
+    if (tit.indexOf('retencion') >= 0) { resumen.push(nombre + ': ya estaba'); return; }
+    const cCtl = tit.indexOf('control') + 1;
+    if (cCtl < 1) { resumen.push(nombre + ': sin «Control»'); return; }
+    h.insertColumnAfter(cCtl);
+    const col = cCtl + 1, n = h.getLastRow();
+    h.getRange(1, col).setValue('Retención').setBackground(CC_COLOR_).setFontColor('#ffffff').setFontWeight('bold');
+    h.setColumnWidth(col, 140);
+    // marcas antiguas desde el respaldo (misma fila)
+    let pr = 0, rt = 0;
+    const resp = h.getParent().getSheetByName('🛟 Respaldo O+ ' + nombre);
+    if (resp && resp.getLastRow() > 1 && n > 1) {
+      const rt0 = resp.getRange(1, 1, 1, resp.getLastColumn()).getDisplayValues()[0].map(CC_norma_);
+      const ix = function (re) { for (let i = 0; i < rt0.length; i++) if (re.test(rt0[i])) return i; return -1; };
+      const iRev = ix(/^revisado/), iPr = ix(/^por retener/), iRet = ix(/^retenid/);
+      if (iPr >= 0 || iRet >= 0) {
+        const filas = Math.min(n, resp.getLastRow()) - 1;
+        const v = resp.getRange(2, 1, filas, resp.getLastColumn()).getValues();
+        const si = function (x) { return x === true || /^(true|si|sí|x|✔|✅)$/i.test(String(x).trim()); };
+        const vals = v.map(function (r) {
+          const p = iPr >= 0 && si(r[iPr]), ret = iRet >= 0 && si(r[iRet]), rev = iRev >= 0 && si(r[iRev]);
+          if (ret || (p && rev)) { rt++; return ['✅ Retenido']; }
+          if (p) { pr++; return ['🟡 Por retener']; }
+          return [''];
+        });
+        if (pr + rt) h.getRange(2, col, vals.length, 1).setValues(vals);
+      }
+    }
+    try {
+      h.getRange(2, col, h.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation()
+        .requireValueInList(CC_RET_OPC_, true).setAllowInvalid(true).build());
+    } catch (e) { Logger.log('Retención (validación): ' + e.message); }
+    resumen.push(nombre + ': lista · por retener ' + pr + ' · retenido ' + rt);
+  });
+  props.setProperty('VCH_COL_RETENCION', '1');
+  if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'columna retención', '', resumen.join(' · ') || 'nada');
+}
+
 /**
  * ✏️ Al editar la hoja (disparador simple): al elegir o escribir la «Empresa», se pone su «RUC empresa» (si se conoce).
  * Si se escribe a mano el RUC de una empresa nueva (fuera del grupo), se aprende para la próxima vez.

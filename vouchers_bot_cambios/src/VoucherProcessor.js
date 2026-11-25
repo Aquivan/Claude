@@ -20,6 +20,7 @@ async function procesarVouchers() {
   // 🏷 Títulos cortos de A–N (una sola vez; los demás programas ya reconocen el nombre viejo y el nuevo).
   try { VCH_titulosCortos_(); } catch (e) { Logger.log('Títulos cortos: ' + e.message); }
   try { VCH_columnasControl_(); } catch (e) { Logger.log('Columnas de control: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'columnas de control · ERROR', '', e.message); }
+  try { VCH_columnaRetencion_(); } catch (e) { Logger.log('Columna retención: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'columna retención · ERROR', '', e.message); }
 
   const inicioEjecucion = Date.now();
   const LIMITE = CFG.LIMITE_TIEMPO_MS;

@@ -9,6 +9,22 @@
  * cambió (la huella de Cobranzas se guarda al final, así esta escritura no provoca otro recálculo).
  */
 
+/**
+ * Marca manual de retención del voucher (OPCIONAL): columna «Retención» (🟡 Por retener · ✅ Retenido · 🚫 No corresponde)
+ * o, si no hay, el chip «🧾 Retención manual» de «Control» (= retenido). Devuelve 'por' | 'ret' | 'no' | ''.
+ * Solo cambia el texto de «Resultado»; ningún cálculo de Cobranzas depende de esto.
+ */
+function RES_marca_(ret, control) {
+  var t = normHeader_(ret);
+  if (/no corresponde|sin retencion/.test(t)) return 'no';
+  if (/retenido/.test(t)) return 'ret';
+  if (/por retener/.test(t)) return 'por';
+  if (/retencion manual/.test(normHeader_(control))) return 'ret';
+  return '';
+}
+
+var RES_MARCA_TXT_ = { por: '🟡 Por retener (marcado)', ret: '🧾 Retenido (marcado)', no: '🚫 Sin retención (marcado)' };
+
 function RES_num_(n) { return (Math.round(Number(n || 0) * 100) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 
 /** {fuente: texto} para cada voucher. */
@@ -20,12 +36,13 @@ function RES_textos_(res, vch, cfg, excluidos) {
   (res.errores || []).forEach(function (e) { if (e.pagoId) (errPorPago[e.pagoId] = errPorPago[e.pagoId] || []).push(e); });
   vch.pagos.forEach(function (p) {
     if (!p.fuente) return;
-    var refs = String(p.refs || '').trim(), xs = porPago[p.id] || [], errs = errPorPago[p.id] || [], t;
+    var refs = String(p.refs || '').trim(), xs = porPago[p.id] || [], errs = errPorPago[p.id] || [], t, mk = p.retMarca || '';
     if (excluidos[p.id]) t = '🚫 Excluido (' + excluidos[p.id] + ')';
     else if (RX_DEVOLUCION_.test(refs)) t = '↩️ Devolución';
     else if (!xs.length) {
       var cat = refs ? categoriaPorTexto_(refs, cfg.categorias) : null;
       t = errs.length ? '⚠️ ' + errs[0].detalle : !refs ? '⏳ Sin comprobante' : cat ? '🏷 ' + (cat.categoria || cat.clave) : '⏳ Sin aplicar';
+      if (mk) t += ' · ' + RES_MARCA_TXT_[mk];
     } else {
       var apl = xs.reduce(function (s, x) { return s + (x.m.monto || 0); }, 0), sobra = Math.round((p.monto - apl) * 100) / 100;
       t = sobra > 0.05 ? '💰 Sobran ' + RES_num_(sobra) : '✅ Aplicado';
@@ -34,13 +51,20 @@ function RES_textos_(res, vch, cfg, excluidos) {
       var rt = docs.filter(function (d) { return d.rtn && d.rtn.aplica; });
       if (rt.length) {
         var falta = rt.reduce(function (s, d) { return s + Math.max(0, (d.rtn.esperada || 0) - (d.rtn.retenida || 0)); }, 0);
-        if (falta > 1) t += ' · ⚠️ Falta retención 3% (' + RES_num_(falta) + ')';
-        else {
+        if (falta > 1) {
+          if (mk === 'ret') t += ' · 🧾 Retenido (marcado) · ' + (p.fecha && Date.now() - p.fecha.getTime() > 7 * 86400000   // más de 7 días sin CRE: revisar
+            ? '⚠️ sin CRE en SUNAT (' + RES_num_(falta) + ')' : 'CRE de SUNAT pendiente');
+          else if (mk === 'no') t += ' · ⚠️ Marcado «no corresponde», pero el sistema calcula 3% (' + RES_num_(falta) + ')';
+          else t += ' · ⚠️ Falta retención 3% (' + RES_num_(falta) + ')' + (mk === 'por' ? ' · 🟡 marcado por retener' : '');
+        } else {
           var cres = [];
           rt.forEach(function (d) { d.movs.forEach(function (m) { if (m.modalidad === MODALIDAD.RETENCION && m.operacion && cres.indexOf(m.operacion) < 0) cres.push(m.operacion); }); });
           t += ' · 🧾 Retención aplicada' + (cres.length ? ' ' + cres.slice(0, 3).join(', ') : '');
         }
-      } else if (docs.some(function (d) { return d.rtn; })) t += ' · No corresponde retención';
+      } else if (docs.some(function (d) { return d.rtn; })) {
+        if (mk === 'ret' || mk === 'por') t += ' · ' + RES_MARCA_TXT_[mk] + ' · ⚠️ el sistema calcula que no corresponde';
+        else t += ' · No corresponde retención';
+      } else if (mk) t += ' · ' + RES_MARCA_TXT_[mk];
     }
     mapa[p.fuente] = String(t).slice(0, 300);
   });
