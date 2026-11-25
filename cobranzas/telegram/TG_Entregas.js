@@ -256,20 +256,34 @@ function TGE_textoPregunta_(d) {
     'Quedarán como <code>' + TG_esc_(TGE_corta_(d.fecha)) + ' Nombre</code>' + (d.adjs.length > 1 ? ', <code>… Nombre 2</code>…' : '') + '\n' +
     (d.sug ? '⭐ Según el voucher paga: <i>' + TG_esc_(d.ordenante) + '</i>\n' : '') +
     '📂 Pestaña: <b>' + (d.pestana === 'original' ? 'Originales' : 'Fotos') + '</b>\n' +
-    'Toque un nombre o escríbalo (o dígalo 🎤). Si es de otro día: <i>Edit 15/10</i> o <i>Edit ayer</i>.';
+    '📅 Fecha: <b>' + TG_esc_(TGE_corta_(d.fecha)) + '</b>' + (d.fecha === TGE_hoy_() ? ' (hoy)' : '') + '\n' +
+    '1️⃣ Si no es de hoy, cambie la <b>fecha</b> primero (botones de abajo).\n' +
+    '2️⃣ Toque el <b>nombre</b> (o escríbalo / dígalo 🎤; también <i>Edit 15/10</i>): ahí se registra.';
 }
 
 function TGE_tecladoTG_(k, d) {
   var filas = [], fila = [];
+  var hoy = TGE_hoy_(), ayer = Utilities.formatDate(new Date(Date.now() - 864e5), 'America/Lima', 'yyyy-MM-dd');
+  if (d.verDias) {   // 📅 elegir otro día: los últimos 14, en el MISMO mensaje
+    var dias = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+    for (var i = 2; i < 16; i++) {
+      var dt = new Date(Date.now() - i * 864e5), iso = Utilities.formatDate(dt, 'America/Lima', 'yyyy-MM-dd');
+      var dow = Number(Utilities.formatDate(dt, 'America/Lima', 'u')) % 7;
+      fila.push({ text: (d.fecha === iso ? '✔ ' : '') + dias[dow] + ' ' + Utilities.formatDate(dt, 'America/Lima', 'dd/MM'), callback_data: 'k:' + k + ':d' + iso.replace(/-/g, '') });
+      if (fila.length === 4) { filas.push(fila); fila = []; }
+    }
+    if (fila.length) filas.push(fila);
+    filas.push([{ text: '⬅️ Volver', callback_data: 'k:' + k + ':dv' }, { text: '✍️ Escribir otra fecha', callback_data: 'k:' + k + ':fo' }]);
+    return filas;
+  }
+  filas.push([{ text: (d.fecha === hoy ? '✔ ' : '') + 'Hoy', callback_data: 'k:' + k + ':fh' },
+              { text: (d.fecha === ayer ? '✔ ' : '') + 'Ayer', callback_data: 'k:' + k + ':fa' },
+              { text: (d.fecha !== hoy && d.fecha !== ayer ? '✔ ' + TGE_corta_(d.fecha) : '📅 Otro día'), callback_data: 'k:' + k + ':fd' }]);
   d.nombres.forEach(function (n, i) {
     fila.push({ text: (i === 0 && d.sug ? '⭐ ' : '') + n, callback_data: 'k:' + k + ':n' + i });
     if (fila.length === 2) { filas.push(fila); fila = []; }
   });
   if (fila.length) filas.push(fila);
-  var hoy = TGE_hoy_(), ayer = Utilities.formatDate(new Date(Date.now() - 864e5), 'America/Lima', 'yyyy-MM-dd');
-  filas.push([{ text: (d.fecha === hoy ? '✔ ' : '') + 'Hoy', callback_data: 'k:' + k + ':fh' },
-              { text: (d.fecha === ayer ? '✔ ' : '') + 'Ayer', callback_data: 'k:' + k + ':fa' },
-              { text: (d.fecha !== hoy && d.fecha !== ayer ? '✔ ' + TGE_corta_(d.fecha) : '📅 Otra fecha'), callback_data: 'k:' + k + ':fo' }]);
   filas.push([d.pestana === 'original' ? { text: '📸 Enviar como foto', callback_data: 'k:' + k + ':pfo' }
     : { text: '📄 Enviar como original', callback_data: 'k:' + k + ':por' }]);
   filas.push([{ text: '➖ Sin nombre (como antes)', callback_data: 'k:' + k + ':sin' }]);
@@ -277,8 +291,22 @@ function TGE_tecladoTG_(k, d) {
 }
 
 function TGE_alBotonTG_(ctx, datos, op, k) {
+  if (!PropertiesService.getScriptProperties().getProperty(TGE_PROP_PEND_ + k)) {   // ya se registró (botón viejo)
+    return TG_enviar_(ctx.chatId, 'ℹ️ Ese archivo <b>ya quedó registrado</b>' + (datos.hecho ? ' como <b>' + TG_esc_(datos.hecho) + '</b>' : '') +
+      '. Para cambiar el nombre o la fecha: toque <b>↩️ Deshacer</b> en el mensaje del resultado y vuelva a mandarlo.');
+  }
+  var guardar = function () { CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(datos), 21600); };
+  if (op === 'fd' || op === 'dv') {   // 📅 abrir / cerrar el selector de días
+    datos.verDias = op === 'fd'; guardar();
+    return TG_editar_(ctx.chatId, ctx.msgId, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
+  }
+  if (/^d\d{8}$/.test(op)) {   // eligió un día
+    datos.fecha = op.slice(1, 5) + '-' + op.slice(5, 7) + '-' + op.slice(7, 9); datos.verDias = false; guardar();
+    return TG_editar_(ctx.chatId, ctx.msgId, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
+  }
   if (op === 'fh' || op === 'fa') {
     datos.fecha = op === 'fh' ? TGE_hoy_() : Utilities.formatDate(new Date(Date.now() - 864e5), 'America/Lima', 'yyyy-MM-dd');
+    datos.verDias = false;
     CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(datos), 21600);
     return TG_editar_(ctx.chatId, ctx.msgId, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
   }
@@ -318,6 +346,7 @@ function TGE_cerrarTG_(ctx, k, datos, it) {
   if (it && it.nombre) {
     var nombres = TGE_reservar_(ctx.ss, it.nombre, it.fecha, adjs.map(function (a) { return TGE_ext_(a.nombre, a.mime); }));
     adjs = adjs.map(function (a, i) { return { id: a.id, nombre: nombres[i], mime: a.mime, foto: a.foto, pestana: datos.pestana }; });
+    try { datos.hecho = TGE_corta_(it.fecha) + ' ' + it.nombre; CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(datos), 21600); } catch (eH) {}
     TGE_usar_(it.nombre, datos.ordenante && datos.nombres[0] === it.nombre ? datos.ordenante : '');
     if (msgId) TG_editar_(ctx.chatId, msgId, '🏷 <b>' + TG_esc_(TGE_corta_(it.fecha) + ' ' + it.nombre) + '</b> · ' + adjs.length + ' archivo(s)');
   } else if (msgId) TG_editar_(ctx.chatId, msgId, '➖ Sin nombre: quedan con el nombre de siempre.');
