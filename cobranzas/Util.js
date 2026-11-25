@@ -48,12 +48,30 @@ function normHeader_(s) {
  * PRIMERA columna cuyo encabezado normalizado empieza con alguno de los
  * nombres dados, o -1.
  */
+// 🏷 Nombres cortos de la hoja de Vouchers (A–N, nov. 2026): quien busca el título de siempre también encuentra el nuevo.
+// Solo coincidencia EXACTA con el nombre nuevo (si no, «Pág.» encontraría «Pagado» o «Archivo» cualquier «Archivo…»).
+var COL_NUEVOS_ = {
+  'fecha de depos': ['fecha deposito'], 'fecha de deposito': ['fecha deposito'],
+  'numero de oper': ['n operacion'], 'numero de operacion': ['n operacion'],
+  'proveedor (beneficiario)': ['beneficiario'],
+  'idcliente': ['doc depositante'], 'cliente (usuario)': ['depositante'],
+  'voucher imagen': ['imagen'], 'archivo original': ['archivo'],
+  'fecha procesamiento': ['procesado'], 'fecha de procesamiento': ['procesado'], 'fecha proc': ['procesado'],
+  'pagina': ['pag'], 'enviado por telegram': ['canal'], 'enviado por': ['canal'],
+};
+/** Los nombres a probar para un título: el pedido y su nombre corto nuevo (normalizados). */
+function nombresCol_(n) { var b = normHeader_(n); return [b].concat(COL_NUEVOS_[b] || []); }
+
 function indiceColumnas_(encabezados) {
   var norm = encabezados.map(normHeader_);
   return function () {
     for (var a = 0; a < arguments.length; a++) {
       var buscado = normHeader_(arguments[a]);
       for (var i = 0; i < norm.length; i++) if (norm[i] === buscado) return i;
+    }
+    for (var c = 0; c < arguments.length; c++) {   // 🏷 el nombre corto nuevo, exacto
+      var nuevos = COL_NUEVOS_[normHeader_(arguments[c])] || [];
+      for (var k = 0; k < norm.length; k++) if (nuevos.indexOf(norm[k]) >= 0) return k;
     }
     for (var b = 0; b < arguments.length; b++) {
       var pref = normHeader_(arguments[b]);

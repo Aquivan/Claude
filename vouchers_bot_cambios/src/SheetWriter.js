@@ -211,10 +211,10 @@ function obtenerHoja(nombrePestana) {
 
 function asegurarCabeceras(hoja) {
   const CAB = [
-    'Fecha de depos', 'Numero de oper', 'Banco', 'Moneda', 'Monto',
-    'Proveedor (Beneficiario)', 'idCliente', 'Cliente (usuario)',
-    'Descripcion', 'Voucher Imagen', 'Archivo Original', 'Fecha Procesamiento', 'Pagina',
-    'Enviado por Telegram'
+    'Fecha depósito', 'N° operación', 'Banco', 'Moneda', 'Monto',
+    'Beneficiario', 'Doc. depositante', 'Depositante',
+    'Descripción', 'Imagen', 'Archivo', 'Procesado', 'Pág.',
+    'Canal'
   ];
   if (hoja.getRange(1, 1, 1, CAB.length).getValues()[0].every(function(c) { return c === ''; })) {
     hoja.getRange(1, 1, 1, CAB.length).setValues([CAB])

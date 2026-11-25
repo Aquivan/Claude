@@ -19,8 +19,8 @@ function PV_columnas_(tit) {
   tit = tit.map(PV_NORMA_);
   var col = function (re, def) { var i = tit.findIndex(function (t) { return re.test(t); }); return i >= 0 ? i : def; };
   return {
-    f: col(/^fecha de dep/, 0), op: col(/^numero de op|^n.? de op/, 1), b: col(/^banco/, 2), mon: col(/^moneda/, 3), m: col(/^monto/, 4),
-    p: col(/^proveedor/, 5), cli: col(/^cliente/, 7), des: col(/^descripcion/, 8), arch: col(/^archivo original/, 10), pag: col(/^pagina/, 12),
+    f: col(/^fecha de dep|^fecha dep/, 0), op: col(/^numero de op|^n.? de op|^n.? op/, 1), b: col(/^banco/, 2), mon: col(/^moneda/, 3), m: col(/^monto/, 4),
+    p: col(/^proveedor|^beneficiario/, 5), cli: col(/^cliente|^depositante/, 7), des: col(/^descripcion/, 8), arch: col(/^archivo/, 10), pag: col(/^pagina|^pag\b/, 12),
     rev: col(/^revisado/, -1), pr: col(/^por retener/, -1), ret: col(/^retenido/, -1), emp: col(/^empresa/, -1), idb: col(/^id benef/, -1),
     idu: col(/^id usuario/, -1), doc: col(/^tipo y n/, -1), nota: col(/^nota/, -1), proc: col(/^fecha de proc|^procesad/, 11)
   };

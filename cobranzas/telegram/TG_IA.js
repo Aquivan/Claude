@@ -387,7 +387,7 @@ function TG_voucherBlob_(libro, fuente, modo, diag) {
   var fila = parseInt(p[1], 10), nc = sh.getLastColumn();
   var enc = sh.getRange(1, 1, 1, nc).getDisplayValues()[0];
   var val = sh.getRange(fila, 1, 1, nc).getValues()[0];
-  var txt = function (n) { var j = enc.map(normHeader_).indexOf(normHeader_(n)); return j >= 0 ? val[j] : ''; };
+  var txt = function (n) { var e = enc.map(normHeader_), j = -1; nombresCol_(n).some(function (x) { j = e.indexOf(x); return j >= 0; }); return j >= 0 ? val[j] : ''; };
   var celda = function () {
     var hay = false;
     for (var j = 0; j < nc; j++) {

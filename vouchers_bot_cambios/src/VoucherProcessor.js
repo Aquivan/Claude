@@ -17,6 +17,8 @@ async function procesarVouchers() {
 
   // 🧪 Prueba de modelos Gemini: si hay una versión nueva, la programa aparte (no demora este procesamiento).
   try { PG_asegurar_(); } catch (e) { Logger.log('Prueba Gemini: ' + e.message); }
+  // 🏷 Títulos cortos de A–N (una sola vez; los demás programas ya reconocen el nombre viejo y el nuevo).
+  try { VCH_titulosCortos_(); } catch (e) { Logger.log('Títulos cortos: ' + e.message); }
 
   const inicioEjecucion = Date.now();
   const LIMITE = CFG.LIMITE_TIEMPO_MS;
@@ -290,4 +292,34 @@ function VCH_mismoContenido_(archivo, carpetas) {
     } catch (e) {}
     return false;
   });
+}
+
+
+// ============================================================
+// 🏷 TÍTULOS CORTOS DE LA HOJA (A–N), una sola vez
+// Cada título se cambia SOLO si hoy dice lo esperado (si alguien lo cambió a mano, se deja). Las posiciones no se
+// mueven: el procesamiento sigue escribiendo A–N igual. Lo demás (O en adelante) no se toca.
+// ============================================================
+var VCH_TITULOS_ = [
+  [/^fecha de dep/, 'Fecha depósito'], [/^numero de op|^n.? de op/, 'N° operación'], [/^banco/, 'Banco'], [/^moneda/, 'Moneda'],
+  [/^monto/, 'Monto'], [/^proveedor/, 'Beneficiario'], [/^idcliente/, 'Doc. depositante'], [/^cliente/, 'Depositante'],
+  [/^descripcion/, 'Descripción'], [/^voucher/, 'Imagen'], [/^archivo original/, 'Archivo'], [/^fecha de proc|^fecha proc/, 'Procesado'],
+  [/^pagina/, 'Pág.'], [/^enviado por/, 'Canal']
+];
+
+function VCH_titulosCortos_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('VCH_TITULOS_CORTOS') === '1') return;
+  const norma = function (t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); };
+  const cambios = [];
+  [CFG.SHEET_ORIGINALES, CFG.SHEET_FOTOS].forEach(function (nombre) {
+    const h = obtenerHoja(nombre);
+    if (!h || h.getLastColumn() < 14) return;
+    const rg = h.getRange(1, 1, 1, 14), v = rg.getValues()[0], nuevo = v.slice();
+    let n = 0;
+    VCH_TITULOS_.forEach(function (x, i) { if (x[0].test(norma(v[i])) && v[i] !== x[1]) { nuevo[i] = x[1]; n++; } });
+    if (n) { rg.setValues([nuevo]); cambios.push(nombre + ': ' + n); }
+  });
+  props.setProperty('VCH_TITULOS_CORTOS', '1');
+  if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'títulos cortos', '', cambios.length ? 'Títulos cambiados · ' + cambios.join(' · ') : 'Nada que cambiar');
 }
