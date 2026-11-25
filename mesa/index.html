@@ -358,6 +358,7 @@ table.mini th{color:var(--gr);font-weight:normal}table.mini tr.pie td{font-weigh
   <button onclick="limpiarCruces()" title="Quitar todos los cruces del proveedor / empresa filtrados, para volver a cruzar desde cero (no se escribe nada hasta Guardar)">🧹 Quitar cruces</button>
   <button id="bDes" onclick="deshacerLocal()" title="Deshacer el último cruce (sin guardar) · Ctrl+Z" disabled>↶</button>
   <button id="bDescartar" onclick="descartar()" disabled>✖ Descartar cambios</button>
+  <button id="bVerAntes" onclick="verAntes()" style="display:none" title="Ver cómo queda el estado de cuenta con estos cambios ANTES de guardar: saldo de antes tachado → saldo después, y las líneas nuevas 🆕">👀 Ver antes de guardar</button>
   <button id="bGuardar" class="p" onclick="guardar()" disabled>💾 Guardar</button>
   <button onclick="historial()" title="Qué se escribió en la hoja, cuándo y si sigue así">📜 Historial</button>
   <button onclick="deshacerGuardado()" title="Vuelve atrás su último guardado (si nadie cambió esas celdas después)">↩️ Deshacer último guardado</button>
@@ -950,6 +951,7 @@ function simular() {
   var n = cambiados.length + rSucios().length;
   $('bGuardar').disabled = !n; $('bDescartar').disabled = !n; $('bDes').disabled = !S.hist.length;
   $('bGuardar').textContent = '💾 Guardar' + (n ? ' (' + n + ')' : '');
+  if ($('bVerAntes')) $('bVerAntes').style.display = n && S.modo !== 'e' ? '' : 'none';
 }
 
 /* ------------------------------------------------ filtros y listas */
@@ -1882,6 +1884,14 @@ function empGuardar() {
     estado(r.mensaje + (r.avisos && r.avisos.length ? ' · ⚠️ ' + r.avisos.join(' ') : '')); esperarRecalculo();
   }).MESA_empresaVarios(TK, S.lado, lista);
 }
+/* 👀 Ver antes de guardar: pasa al Estado de cuenta en «⚖️ Comparar» (solo lo que cambia: saldo antes → después). */
+function verAntes() {
+  var b = document.querySelector('#sModo button[data-v="e"]'); if (!b) return;
+  var c = xfSeg('eVis').filter(function (x) { return x.v === 'comp'; })[0];
+  cambiarModo(b);
+  if (c) c.b.click();
+  estado('👀 Así queda con sus cambios SIN guardar (solo lo que cambia: saldo antes tachado → después). Para volver: 💳 Vouchers. Para guardar: 💾 Guardar.');
+}
 function completarDatos(id) {
   var v = S.V[id]; if (!v) return;
   var pagar = S.lado === 'Por pagar', emp = pagar ? v.pr : v.br, otro = pagar ? v.br : v.pr;
@@ -2017,7 +2027,7 @@ function rCambios() {
 function cambiarModo(b) {
   segOn('sModo', b.dataset.v); S.modo = b.dataset.v; S.act = ''; S.actR = ''; S.selV = {};
   var e = S.modo === 'e';
-  $('main').style.display = e ? 'none' : ''; $('rep').style.display = e ? 'flex' : 'none'; $('ayuda').style.display = e ? 'none' : ''; $('guia').style.display = e ? 'none' : '';
+  $('main').style.display = e ? 'none' : ''; $('rep').style.display = e ? 'flex' : 'none'; if ($('bVerAntes')) $('bVerAntes').style.display = !e && !$('bGuardar').disabled ? '' : 'none'; $('ayuda').style.display = e ? 'none' : ''; $('guia').style.display = e ? 'none' : '';
   if (e) { pintar(); detalle(); return; }
   var r = S.modo === 'r';
   $('sVou').style.display = r ? 'none' : ''; $('sCop').style.display = r ? 'none' : ''; $('sRet').style.display = r ? '' : 'none';
