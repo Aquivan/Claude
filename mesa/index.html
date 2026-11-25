@@ -1422,7 +1422,7 @@ function cruceElegir(id, k, A, B, dif) {
   modal('<h3 style="margin-top:0">🧮 ¿Cómo aplico ' + esc(nom(id)) + ' (' + v.mon + ' ' + fm(v.m) + ') a ' + esc(d.doc) + '?</h3>' +
     '<p style="color:var(--gr);margin-top:0">' + esc(d.doc) + ' ya tiene otros pagos o el voucher ya paga otra factura. Elija:</p>' +
     '<div class="combo" onclick="cruceUsar(\'' + esc(id) + '\',\'' + esc(k) + '\',\'libre\')"><b>🔒 Solo lo libre del voucher</b> — no les quita nada a los otros vouchers' + lineas(A) +
-      '<div style="font-size:12px;color:#065F46">💰 Le queda a favor: ' + fm(A._sobra) + '</div><div style="font-size:11px;color:var(--gr)">En la hoja de Vouchers queda solo la factura; el monto (' + fm(A[id + '|' + k] || 0) + ') se guarda en Cobranzas («🔒 Montos de cruce»).</div></div>' +
+      '<div style="font-size:12px;color:#065F46">💰 Le queda a favor: ' + fm(A._sobra) + '</div><div style="font-size:11px;color:var(--gr)">Al guardar se escribe en la hoja de Vouchers con el monto fijo (' + esc(d.doc) + '=' + (A[id + '|' + k] || 0).toFixed(2) + ').</div></div>' +
     '<div class="combo" onclick="cruceUsar(\'' + esc(id) + '\',\'' + esc(k) + '\',\'fecha\')"><b>⬆ Pagar esta primero (por fecha)</b> — el voucher más antiguo paga primero' + lineas(B) +
       '<div style="font-size:12px;color:#065F46">💰 Le queda a favor: ' + fm(B._sobra) + '</div>' +
       (dif.length ? '<div style="font-size:12px;color:#B45309">⚠️ Cambia a otros vouchers: ' + dif.map(function (x) { return esc(nom(x.j)) + ' en ' + esc(S.D[x.k] ? S.D[x.k].doc : x.k) + ': ' + fm(x.a) + ' → ' + fm(x.b); }).join(' · ') + '</div>' : '') +
@@ -1676,9 +1676,9 @@ function guardar() {
   var ids = sucios(), rs = rSucios(); if (!ids.length && !rs.length) return;
   var cambios = ids.map(function (id) {
     var v = S.V[id], lk = S.links[id], d0 = lk.length ? S.D[lk[0]] : null;
-    // 🔒 la celda solo con las facturas; los montos fijos van a «🔒 Montos de cruce» de Cobranzas (MontosCruce.js)
-    var mm = {}; if (!v.dev) lk.forEach(function (k) { var m = S.montos[id + '|' + k]; if (m != null) mm[S.D[k].doc] = m; });
-    return { id: id, fu: v.fu, dups: v.dups, antes: v.antes != null ? v.antes : v.refs, refs: v.dev ? refsTxt(id) : lk.map(function (k) { return S.D[k].doc; }).join(','), montos: v.dev ? null : mm,
+    // Opción A (elegida): el monto fijo va EN la celda («01_F001-13468=276.80»), un solo lugar. montos {} = si quedó algo
+    // en «🔒 Montos de cruce» de Cobranzas para este voucher, se borra (ya está en la celda).
+    return { id: id, fu: v.fu, dups: v.dups, antes: v.antes != null ? v.antes : v.refs, refs: refsTxt(id), montos: v.dev ? null : {},
       quitar: (S.orig[id] || []).filter(function (k) { return lk.indexOf(k) < 0; }),
       benef: d0 ? d0.emi : '', usu: d0 ? d0.rec : '', reemplazar: !!S.reempl[id] };
   });
