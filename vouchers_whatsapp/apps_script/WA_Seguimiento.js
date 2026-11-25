@@ -24,7 +24,7 @@ function WA_cadaMinuto() {
     if (!Object.keys(WA_props_().getProperties()).some(function (k) { return k.indexOf('WA_IAP_') === 0; })) WA_props_().setProperty('WA_HAY_IA', '0');
   }
   if (props.WA_HAY_PROC === '1') { try { WA_seguirProcesar_(props); } catch (e) { console.error('Procesar documento: ' + e.message); } }
-  var hayPreg = Object.keys(props).some(function (k) { return k.indexOf('WA_PREG_') === 0; });
+  var hayPreg = Object.keys(props).some(function (k) { return k.indexOf('WA_PREG_') === 0 || k.indexOf('WA_MP_') === 0; });
   var procesar = props.WA_PROCESAR_PEND === '1';
   if (!tandas.length && !hayCola && !hayPreg && !procesar) return;
 

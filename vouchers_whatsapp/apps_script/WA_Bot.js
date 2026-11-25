@@ -108,6 +108,7 @@ function WA_procesarMensaje_(m, nombre) {
     if (bid.indexOf('en:') === 0) WA_botonNombre_(de, bid);
     else if (bid.indexOf('pr:') === 0) WA_procesarBoton_(de, bid);     // 🧾 Procesar documento
     else if (bid.indexOf('un:') === 0) WA_deshacerBoton_(de, bid);     // ↩️ Deshacer
+    else if (bid.indexOf('mp:') === 0) WA_botonMultipagina_(de, bid);   // 📚 / 📄 PDF de varias páginas
     else WA_boton_(de, bid);
     return;
   }
@@ -119,6 +120,7 @@ function WA_procesarMensaje_(m, nombre) {
     if (WA_procesarNombre_(de, cuerpo)) return;   // 🧾 nombre pedido con "🏷 Cambiar nombre"
     if (WA_greTexto_(m, de, nombre, cuerpo)) return;   // 🚚 "guía …": las fotos juntadas o las que esperan nombre (WA_Gre.js)
     // 🏷 ¿De quién son? — respuesta a la pregunta, o "de Edit" antes de reenviar.
+    if (WA_respuestaMultipagina_(de, cuerpo)) return;   // «varios» / «factura» a «¿Qué es?»
     if (WA_respuestaNombre_(de, cuerpo).tomado) return;
     if (WA_esEtiqueta_(cuerpo) && WA_etiquetaPrevia_(de, cuerpo)) return;
     WA_preguntarIA_(m, de, nombre, cuerpo);

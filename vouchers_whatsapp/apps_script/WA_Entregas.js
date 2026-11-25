@@ -199,8 +199,21 @@ function WA_finalizar_(de, it) {
   if (!filas.length) return;
   // Un PDF de varias páginas (orden de compra + voucher + factura…) no va entero a la hoja de Vouchers:
   // se revisa con IA para registrar solo la página del voucher (con el nombre que ya dio).
-  if (filas.some(function (i) { return /\.pdf$/i.test(String(datos[i][4])) && WA_paginasPdf_(datos[i][9]) > 1; })) {
-    WA_enviarTexto_(de, '📄 El PDF tiene varias páginas: lo reviso con IA para registrar *solo el voucher* y completar la factura.');
+  // 📚 Pero si es un ESCANEO de varios vouchers (con sus reversos ✍️), va ENTERO: primero se pregunta qué es.
+  if ((!it || it.modo !== 'lote') && filas.some(function (i) { return /\.pdf$/i.test(String(datos[i][4])) && WA_paginasPdf_(datos[i][9]) > 1; })) {
+    if (!it || !it.modo) {
+      WA_props_().setProperty('WA_MP_' + de, JSON.stringify({ it: it || null, t: Date.now() }));
+      var s0 = WA_graph_('POST', WA_prop_('WA_PHONE_ID') + '/messages', {
+        messaging_product: 'whatsapp', to: de, type: 'interactive',
+        interactive: { type: 'button', body: { text: '📄 *El PDF tiene varias páginas. ¿Qué es?*\n\n' +
+          '📚 *Varios vouchers*: escaneo de varios vouchers (frente y, si tiene algo escrito, su reverso justo después). Va entero a la hoja de Vouchers y lo escrito a mano pasa a «✍️ Anotación».\n' +
+          '📄 *Voucher + factura*: registra solo la página del voucher y completa la factura.' },
+          action: { buttons: [{ type: 'reply', reply: { id: 'mp:lote', title: '📚 Varios vouchers' } }, { type: 'reply', reply: { id: 'mp:uno', title: '📄 Voucher + factura' } }] } }
+      });
+      if (!s0.ok) WA_enviarTexto_(de, '📄 El PDF tiene varias páginas. Responda *varios* (varios vouchers con reversos) o *factura* (un voucher con su factura).');
+      return;
+    }
+    WA_enviarTexto_(de, '📄 Lo reviso con IA para registrar *solo el voucher* y completar la factura.');
     WA_revisarConIA_(de, it && it.nombre ? it : null);
     return;
   }
@@ -230,8 +243,33 @@ function WA_finalizar_(de, it) {
   if (WA_acuse_(hoja, datos, de)) WA_procesarAhora_(de);   // ⚡ procesa y avisa el resultado YA
 }
 
+/** 📚 / 📄 respuesta a «¿Qué es?» (botón mp:lote / mp:uno, o texto «varios» / «factura»). */
+function WA_botonMultipagina_(de, bid) {
+  var x = WA_leerJson_('WA_MP_' + de);
+  if (!x) { WA_enviarTexto_(de, 'Ese archivo ya se registró 👍'); return; }
+  WA_props_().deleteProperty('WA_MP_' + de);
+  var it = x.it || {};
+  it.modo = /lote$/.test(bid) ? 'lote' : 'uno';
+  if (it.modo === 'lote') WA_enviarTexto_(de, '📚 Lo mando entero a la hoja de Vouchers: registra cada voucher y, si después de un voucher viene su *reverso* con algo escrito a mano, lo pasa a la columna *✍️ Anotación*.');
+  WA_finalizar_(de, it);
+}
+function WA_respuestaMultipagina_(de, texto) {
+  if (!WA_leerJson_('WA_MP_' + de)) return false;
+  var t = String(texto || '').trim().toLowerCase();
+  if (/^(varios|lote|vouchers|📚)/.test(t)) { WA_botonMultipagina_(de, 'mp:lote'); return true; }
+  if (/^(factura|uno|un voucher|voucher \+ factura|📄)/.test(t)) { WA_botonMultipagina_(de, 'mp:uno'); return true; }
+  return false;
+}
+
 /** WA_cadaMinuto: preguntas sin contestar → se procesan con el nombre de antes. */
 function WA_vencidosNombre_(props) {
+  Object.keys(props).filter(function (k) { return k.indexOf('WA_MP_') === 0; }).forEach(function (k) {   // «¿Qué es?» sin respuesta: como antes
+    var x = null; try { x = JSON.parse(props[k]); } catch (e) {}
+    if (x && Date.now() - x.t < WA_ESPERA_NOMBRE_MS_) return;
+    var de = k.slice('WA_MP_'.length);
+    WA_enviarTexto_(de, '⌛ No me dijo qué era el PDF: lo reviso como un voucher con su factura.');
+    WA_botonMultipagina_(de, 'mp:uno');
+  });
   Object.keys(props).filter(function (k) { return k.indexOf('WA_PREG_') === 0; }).forEach(function (k) {
     var x = null;
     try { x = JSON.parse(props[k]); } catch (e) {}
