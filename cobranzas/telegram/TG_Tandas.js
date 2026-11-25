@@ -137,11 +137,15 @@ function TGX_deshacer_(ss, x, quien) {
     try {
       var base = String(x.archivo).replace(/\.pdf$/i, ''), fr = DriveApp.getFolderById(carpeta).getFoldersByName('✍️ Reversos');
       while (fr.hasNext()) {
-        var fs = fr.next().getFiles();
-        while (fs.hasNext()) {
-          var f = fs.next(), n = f.getName();
-          if (n.indexOf(base + ' · ') === 0 || n === base + ' (original con reversos).pdf') { f.setTrashed(true); papelera++; }
-        }
+        var dirR = fr.next(), dirs = [dirR], sub = dirR.getFolders();   // también la subcarpeta «páginas (para los enlaces)»
+        while (sub.hasNext()) dirs.push(sub.next());
+        dirs.forEach(function (dir) {
+          var fs = dir.getFiles();
+          while (fs.hasNext()) {
+            var f = fs.next(), nm = f.getName();
+            if (nm.indexOf(base + ' · ') === 0 || nm === base + ' (original con reversos).pdf') { f.setTrashed(true); papelera++; }
+          }
+        });
       }
     } catch (e) {}
   }

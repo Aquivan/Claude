@@ -16,6 +16,7 @@
 
 var REV_CARPETA_ = '✍️ Reversos';
 var REV_COLUMNA_ = '✍️ Anotación';
+var REV_SUB_ = 'páginas (para los enlaces)';
 
 function REV_activo_() { return PropertiesService.getScriptProperties().getProperty('VCH_REVERSOS') !== '0'; }
 
@@ -162,8 +163,22 @@ async function REV_separar_(archivo, pdfDoc, nombre, carpetas) {
         pg.drawText(txt, { x: mb.x + 10, y: mb.y + h + fs * 0.55, size: fs, font: fuente, color: PDFLib.rgb(0.1, 0.1, 0.1) });
       } catch (eE) { Logger.log('✍️ Etiqueta del reverso: ' + eE.message); }
     });
-    const f = carpeta.createFile(Utilities.newBlob([...new Int8Array(await d.save())], MimeType.PDF, base + ' · reversos.pdf'));
-    Object.keys(anot).forEach(function (k) { if (/Reverso/.test(anot[k].t)) anot[k].id = f.getId(); });
+    carpeta.createFile(Utilities.newBlob([...new Int8Array(await d.save())], MimeType.PDF, base + ' · reversos.pdf'));
+    // 🔗 El visor de Drive siempre abre un PDF en la página 1: para que el enlace de «✍️ Anotación» muestre EXACTO su
+    // reverso, cada uno se guarda también solo (1 página, con su franja) en la subcarpeta «páginas» (no estorba a la vista).
+    let sub = null;
+    for (let q = 0; q < revs.length; q++) {
+      const k = revs[q].k;
+      if (!k || !anot[k]) continue;
+      try {
+        if (!sub) { const it = carpeta.getFoldersByName(REV_SUB_); sub = it.hasNext() ? it.next() : carpeta.createFolder(REV_SUB_); }
+        const u = await PDFLib.PDFDocument.create();
+        const [pq] = await u.copyPages(d, [q]);
+        u.addPage(pq);
+        const f1 = sub.createFile(Utilities.newBlob([...new Int8Array(await u.save())], MimeType.PDF, base + ' · reverso del voucher pág ' + k + '.pdf'));
+        anot[k].id = f1.getId();
+      } catch (e1) { Logger.log('✍️ Reverso suelto pág ' + k + ': ' + e1.message); }
+    }
   }
 
   let res = { anot: anot };
