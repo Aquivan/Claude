@@ -1176,6 +1176,7 @@ function TGP_wa_(q) {
   }
   if (q.modo === 'decidir') { var dd = TGP_decidir_(ss, q.k, q.op); dd.ok = !dd.error; return dd; }
   if (q.modo === 'pestana') { var d = TGP_cambiarPestana_(q.k, q.pestana); d.ok = !d.error; return d; }
+  if (q.modo === 'cancelarTodo') { var hk = TGK_cancelar_(ss, clave); return { ok: true, hecho: hk }; }   // ✖ WhatsApp «cancelar» (TG_Cancelar.js)
   if (q.modo === 'seguir') {   // ⏳ WhatsApp: archivos que acaban de ir a Entrada (avisos de avance en los pasos importantes, TG_Avance.js)
     AVT_seguir_((q.nombres || []).map(function (n) { return { nombre: String(n) }; }), { canal: 'wa', numero: String(q.numero || '').replace(/\D/g, '') });
     return { ok: true };

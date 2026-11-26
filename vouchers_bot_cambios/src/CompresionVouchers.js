@@ -119,6 +119,12 @@ function CMPV_web_(q) {
     var p = PropertiesService.getScriptProperties(), lote = String(q.lote || '').replace(/\W/g, ''), k = CMPV_PROP_ + lote;
     var L = JSON.parse(p.getProperty(k) || 'null');
     if (!L) return { ok: false, error: 'lote desconocido o ya terminado' };
+    // ✖ /cancelar (Telegram / WhatsApp) mandó el archivo a la papelera: el robot se detiene y no sube nada
+    if (q.accion === 'cmp_datos' || q.accion === 'cmp_mover') {
+      let cancelado = false;
+      try { cancelado = DriveApp.getFileById(L.id).isTrashed(); } catch (e) { cancelado = true; }
+      if (cancelado) { p.deleteProperty(k); AV_(L.nombre, { etapa: 'error', error: 'cancelado' }); return { ok: false, error: 'cancelado por la persona' }; }
+    }
     if (q.accion === 'cmp_datos') {
       // 🔑 permiso temporal (1 h) para bajar el PDF y subir las partes (el robot lo enmascara y no lo guarda)
       return { ok: true, token: ScriptApp.getOAuthToken(), id: L.id, nombre: L.nombre, entrada: L.entrada, mb: L.mb, mime: L.mime || 'application/pdf', blanco: !!L.blanco };   // ✂️ blanco = también recortar los espacios en blanco

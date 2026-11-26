@@ -222,6 +222,7 @@ function WA_comando_(de, texto) {
   }
   if (/^estado[\s!.?]*$/.test(t)) { WA_enviarTexto_(de, WA_textoEstado_(de)); return true; }
   if (/^\/?(deshacer|desh[aá]z(lo)?|deshaga)\b/.test(t)) { WA_deshacerVer_(de); return true; }
+  if (/^\/?(cancelar|cancela|detener|det[eé]n|parar|para|stop)[\s!.]*$/.test(t)) { WA_cancelarTodo_(de); return true; }   // ✖ WA_Entregas.js
   if (/^preguntar\s+nombres?\s+(si|sí|no)\b/.test(t)) {
     var si = !/\bno\b/.test(t);
     WA_props_().setProperty('WA_PREGUNTAR_NOMBRE', si ? '1' : '0');
@@ -237,6 +238,7 @@ function WA_comando_(de, texto) {
     '• Escriba "original" o "foto" en el comentario para cambiarlo solo esa vez\n' +
     '• *modo original* / *modo foto* / *modo auto*\n' +
     '• *estado*: lo que está en cola\n' +
+    '• *cancelar*: detiene todo lo pendiente (lo que espera nombre, lo que está en cola y el robot que reduce el peso)\n' +
     '• 🧾 En la lista "¿De quién son?" elija *Revisar con IA*: lee cada página, ve si el voucher ya está y completa la factura\n' +
     '• ↩️ *deshacer*: deshace la última acción (filas, archivos y datos)\n' +
     '• 🏷 Al terminar cada tanda le pregunto *de quién son* (un toque). También puede escribir antes *de Edit* o *de Edit 15/10*. ' +

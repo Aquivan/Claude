@@ -414,6 +414,7 @@ var TG_COMANDOS_ = [
   ['modelos', '🔭 Modelos de IA nuevos: buscarlos y probarlos (administradores)'],
   ['recordatorios', '⏰ Mis recordatorios'],
   ['avisos', '🔔 Elegir mis avisos'],
+  ['cancelar', '✖ Cancelar / detener todo lo pendiente'],
   ['olvidar', '🧹 Empezar una conversación nueva'],
   ['ayuda', '❓ Qué puedo hacer'],
 ];
