@@ -68,6 +68,7 @@ async function LIMP_releer_(t, h, plan) {
   let hechos = 0;
   for (const k in grupos) {
     const g = grupos[k];
+    if (Date.now() - INICIO_EJECUCION_ > 150000) { g.forEach(function (p) { p.motivo += ' · sin tiempo para releer'; }); continue; }
     try {
       const r = await RP_leer_(t, g[0].fila);
       g.forEach(function (p, i) {
@@ -103,7 +104,7 @@ async function LIMP_grupos_(t, h, plan) {
   const cache = {};
   const releer = async function (i) {
     if (cache[i] !== undefined) return cache[i];
-    if (releidas >= 40) return (cache[i] = null);
+    if (releidas >= 40 || Date.now() - INICIO_EJECUCION_ > 150000) return (cache[i] = null);   // ⏱ máx. 2½ min: deja tiempo a los vouchers nuevos
     releidas++;
     try {
       const r = await RP_leer_(t, i + 2), propio = REP_normOp_(v[i][1]);
