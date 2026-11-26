@@ -350,8 +350,16 @@ function VCH_limpiezaFusion_() {
       ok.push({ x: x, cambios: cambios });
     });
     if (!ok.length) return;
-    const ss = h.getParent(), nomR = '🛟 Respaldo duplicados ' + t + ' (2)';
-    if (!ss.getSheetByName(nomR)) { const r = h.copyTo(ss).setName(nomR); r.hideSheet(); }
+    // 🛟 respaldo: la hoja ya es muy pesada para copiar la pestaña entera (Google falla: «Service Spreadsheets failed»), así
+    // que se guarda un CSV con las filas que se tocan (la repetida y su original, todas las columnas + la nota de Canal).
+    const filasR = [tit.slice(0)];
+    ok.forEach(function (it) {
+      [it.x[0], it.x[1]].forEach(function (f) {
+        const fila = h.getRange(f, 1, 1, h.getLastColumn()).getDisplayValues()[0];
+        filasR.push(['fila ' + f + (f === it.x[0] ? ' (repetida)' : ' (original)')].concat(fila.slice(1)).concat([String(h.getRange(f, 14).getNote() || '')]));
+      });
+    });
+    DriveApp.getFolderById(CFG.CARPETA_FOTOS_PROCESADOS_ID).createFile('🛟 Respaldo limpieza duplicados (2) · ' + t + '.csv', LIMP_csv_(filasR), MimeType.CSV);
     let pasados = 0;
     ok.forEach(function (it) {
       const x = it.x, a = v[x[0] - 2];
