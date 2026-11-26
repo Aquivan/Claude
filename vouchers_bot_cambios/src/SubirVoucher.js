@@ -1,5 +1,5 @@
 // ============================================================
-// 📤 SUBIR VOUCHERS DESDE LA HOJA (menú 🤖 Vouchers)
+// 📤 SUBIR VOUCHERS DESDE LA HOJA (menú ✨ Vouchers)
 // ------------------------------------------------------------
 // Ventana para elegir o arrastrar PDF e imágenes, ponerles el nombre que
 // uno quiera y dejarlos en la carpeta de ENTRADA de Originales o de Fotos.

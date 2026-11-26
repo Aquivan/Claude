@@ -29,6 +29,6 @@ El código original del bot de Vouchers también está en el repositorio `Aquiva
 4. Las claves (API keys, tokens) nunca van en el código ni en GitHub: van en Propiedades del script o en Secrets.
 5. **Toda función nueva se documenta en la Ayuda**, en palabras simples (qué hace, cómo se usa paso a paso, palabras técnicas):
    - Cobranzas, Telegram y WhatsApp → `cobranzas/Ayuda.js` (`AYU_SECCIONES_`; se ve en la hoja con ❓ Ayuda, en Telegram con /ayuda y en WhatsApp con «ayuda temas»).
-   - Hoja de Vouchers → `vouchers_bot_cambios/src/AyudaVouchers.js` (`AYV_SECCIONES_`; menú 🤖 Vouchers → ❓ Ayuda).
+   - Hoja de Vouchers → `vouchers_bot_cambios/src/AyudaVouchers.js` (`AYV_SECCIONES_`; menú ✨ Vouchers → ❓ Ayuda).
    - Hoja de Guías → `GR_hojaAyuda_` en `guias/apps_script/GR_Hoja.js` (pestaña 📖 Ayuda).
 6. **Toda función o proyecto nuevo se suma al 📘 Manual del proyecto** (`docs/MANUAL_DEL_PROYECTO.xlsx` y `.md`, para novatos): explicarlo en `scripts/generar_manual.py` (listas PROYECTOS, CLAVES, COMANDOS, FLUJOS y una línea en HISTORIAL) y volver a generarlo con `python3 scripts/generar_manual.py`. Archivos, funciones, robots, propiedades y menús se leen solos del código. Nunca escribir ahí valores de claves, teléfonos ni datos de clientes.

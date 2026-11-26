@@ -218,7 +218,7 @@ function RP_visorAplicar(id, i) {
   CacheService.getUserCache().remove('rp_' + id);
   RP_imagenFila_(r.hoja, r.fila).catch(function (e) { Logger.log('Releer (visor): imagen ' + e.message); });
   return { ok: true, mensaje: '✅ Fila ' + r.fila + ' actualizada' + (r.dup ? ' (como [DUPLICADO]: ese N° ya está en la fila ' + r.dup + ')' : '') +
-    '. La imagen de la página se pone en unos segundos. Para volver atrás: menú 🤖 Vouchers → ↩️ Deshacer la última relectura.' };
+    '. La imagen de la página se pone en unos segundos. Para volver atrás: menú ✨ Vouchers → ↩️ Deshacer la última relectura.' };
 }
 
 /** Vuelve a poner en la columna J la imagen de la página de la fila (versión más nueva del archivo). */

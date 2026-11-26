@@ -54,7 +54,7 @@ var AYU_SECCIONES_ = [
     '• 🧾 **Actualizar padrones SUNAT**: agentes de retención, buenos contribuyentes y SSCO (sirven para saber si corresponde retener).',
     '• 📋 **Vouchers procesados**: ver lo que entró (por día o por tanda), buscar el RUC que falta (padrón SUNAT e internet), escribirlo en Vouchers y analizar con IA a qué factura corresponde.',
     '• 🔎 **Identificar RUC de los proveedores (vouchers sin RUC)**: es **la misma ventana** en la hoja de Vouchers, en esta hoja (🧠 Asistente IA → 🔎 Identificar RUC) y dentro de la 🧩 Mesa (botón **🔎 Identificar RUC**, con los vouchers sin RUC que se ven o los marcados). En la hoja de Vouchers puede seleccionar filas de Originales o Fotos; sin filas (o desde Cobranzas) se abre **📋 Elegir vouchers sin RUC** (últimos procesados, 7 o 30 días, todos; por empresa, responsable, moneda o nombre). Busca el RUC (alias, SIRE, otros vouchers, honorarios, retenciones) y con Sí lo escribe en ID Beneficiario (solo celdas vacías; ↩️ Deshacer últimos cambios de la IA). En Cobranzas el mismo menú pide las filas («Originales 2656-2666»).',
-    '• 🔁 **Volver a leer una página con IA**: «volver a leer Originales 2666» o «releer Fotos 382» (Telegram y WhatsApp). Usa la versión más nueva del archivo, muestra ANTES/AHORA y con ✅ reemplaza los datos del voucher (no toca lo que usted agregó; ↩️ Deshacer). También en la hoja de Vouchers: menú 🤖 Vouchers → 🔁 Volver a leer.',
+    '• 🔁 **Volver a leer una página con IA**: «volver a leer Originales 2666» o «releer Fotos 382» (Telegram y WhatsApp). Usa la versión más nueva del archivo, muestra ANTES/AHORA y con ✅ reemplaza los datos del voucher (no toca lo que usted agregó; ↩️ Deshacer). También en la hoja de Vouchers: menú ✨ Vouchers → 🔁 Volver a leer.',
     '• En Telegram, el aviso **💳 voucher(s) nuevo(s)** trae el botón **🔎 Identificar RUC de los proveedores**: busca el RUC de ESOS vouchers (alias, SIRE, otros vouchers, padrón SUNAT e internet) y ofrece escribirlo con ✅ (se puede deshacer).',
     '• 🔎 **RUC por nombre**: encuentra el RUC de un nombre (en sus facturas y en el padrón) y lo recuerda como alias.',
     '• ♻️ **Respaldos**: guarda o restaura lo que se escribió a mano.',
@@ -101,7 +101,7 @@ var AYU_SECCIONES_ = [
   { id: 'vouchers', e: '🖼', t: 'Sistema de Vouchers (cómo entran y se revisan)', p: [
     'Cada voucher (constancia bancaria) se guarda como una fila con su **imagen**, banco, número de operación, monto, fecha y beneficiario. Esos datos los **lee la IA** de la foto o del PDF.',
     '**Cómo entran**: por Telegram o WhatsApp (reenviando), o dejándolos en la carpeta de Drive de entrada. El sistema los procesa cada pocos minutos.',
-    '**En la hoja de Vouchers** (menú 🤖 Vouchers):',
+    '**En la hoja de Vouchers** (menú ✨ Vouchers):',
     '• 🪟 **Visor de voucher**: clic en una fila y ve el voucher **original** en grande (la página exacta del PDF), con los datos al lado para **corregirlos**; 📋 copiar imagen; 🗗 ventana aparte que se agranda.',
     '• 🔧 **Reparar imágenes**: rehace las que quedaron como «Ver PDF» o vacías.',
     '• 🧠 **Asistente IA**: sugiere el ID del beneficiario y la factura de los vouchers sin RUC; usted marca ✔ y pasa.',

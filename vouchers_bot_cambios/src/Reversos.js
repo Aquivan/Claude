@@ -10,7 +10,7 @@
 //      y una copia COMPRIMIDA del original completo a «✍️ Reversos» (las páginas como JPG).
 //   3. Lo escrito a mano va a la columna «✍️ Anotación» (columna O, al final de A–N) de la fila del voucher: «Reverso: Granix» / «Frente: …», con
 //      enlace al reverso; si la IA duda, «(revisar)». La columna «Nota» no se toca.
-// Automático; se apaga en 🤖 Vouchers → ✍️ Reversos y anotaciones (propiedad VCH_REVERSOS = '0').
+// Automático; se apaga en ✨ Vouchers → ✍️ Reversos y anotaciones (propiedad VCH_REVERSOS = '0').
 // Si algo falla aquí, el PDF se lee como antes (nunca se detiene el proceso).
 // ============================================================
 

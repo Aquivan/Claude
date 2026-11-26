@@ -7,7 +7,7 @@
  * página de la columna M, la IA la lee y muestra ANTES / AHORA con ✅ Reemplazar. Solo cambia A..I (datos del
  * voucher) y la fecha de proceso; la imagen (J) se rehace sola con la reparación automática de la hoja de Vouchers.
  * No toca lo que la persona agregó (columnas O en adelante). Botón ↩️ Deshacer. Lo mismo está en la hoja de
- * Vouchers: menú 🤖 Vouchers → 🔁 Volver a leer con IA la página de la fila seleccionada.
+ * Vouchers: menú ✨ Vouchers → 🔁 Volver a leer con IA la página de la fila seleccionada.
  */
 
 var TGRL_RX_ = /\b(?:vuelv[ae]s?|volver)\s+a\s+leer\b|\brele(?:er|e|é|a)\b/i;
