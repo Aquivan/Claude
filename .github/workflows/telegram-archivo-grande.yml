@@ -30,6 +30,7 @@ jobs:
         with:
           sparse-checkout: |
             scripts/telegram_archivo_grande.py
+            scripts/requisitos_telegram.txt
             cobranzas/.clasp.json
           sparse-checkout-cone-mode: false
 
@@ -56,6 +57,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip   # ⚡ las herramientas quedan guardadas entre una vez y otra
+          cache-dependency-path: scripts/requisitos_telegram.txt
 
       - name: Herramientas (Telethon)
         run: |

@@ -42,6 +42,56 @@ def paginas_pdf(ruta):
         return 0
 
 
+PEDAZO = 512 * 1024   # lo máximo que Telegram entrega por pedido
+HILOS = 8            # pedidos a la vez
+
+
+async def bajar_paralelo(cli, m, destino, avance):
+    """Baja el archivo en pedazos de 512 KB, HILOS a la vez, cada uno escrito en su lugar del archivo."""
+    import asyncio as aio
+    total = int(getattr(m.file, "size", 0) or 0)
+    if total <= 0:
+        raise RuntimeError("no sé el tamaño del archivo")
+    partes = (total + PEDAZO - 1) // PEDAZO
+    with open(destino, "wb") as f:
+        f.truncate(total)
+    fd = os.open(destino, os.O_WRONLY)
+    hecho = [0]
+    cola = aio.Queue()
+    for i in range(partes):
+        cola.put_nowait(i)
+
+    async def trabajador():
+        while True:
+            try:
+                i = cola.get_nowait()
+            except aio.QueueEmpty:
+                return
+            for intento in range(4):
+                try:
+                    datos = b""
+                    async for trozo in cli.iter_download(m.document or m.media, offset=i * PEDAZO, request_size=PEDAZO, limit=1, file_size=total):
+                        datos += trozo
+                    if not datos:
+                        raise RuntimeError("pedazo vacío")
+                    break
+                except Exception:  # noqa: BLE001
+                    if intento == 3:
+                        raise
+                    await aio.sleep(1 + intento * 2)
+            os.pwrite(fd, datos, i * PEDAZO)
+            hecho[0] += len(datos)
+            avance(hecho[0], total)
+
+    try:
+        await aio.gather(*[trabajador() for _ in range(HILOS)])
+    finally:
+        os.close(fd)
+    if hecho[0] != total or os.path.getsize(destino) != total:
+        raise RuntimeError("faltaron pedazos (%d de %d bytes)" % (hecho[0], total))
+    return destino
+
+
 async def bajar(api_id, api_hash, token_bot, msg_id, destino):
     from telethon import TelegramClient   # aquí (no arriba): «Avisar si falló» corre aunque no se haya instalado
     from telethon.sessions import StringSession
@@ -58,12 +108,23 @@ async def bajar(api_id, api_hash, token_bot, msg_id, destino):
             if time.time() - ultimo[0] > 10:
                 ultimo[0] = time.time()
                 print("  bajando… %.0f de %.0f MB" % (hecho / 1048576, (total or 0) / 1048576))
-                try:   # ⏳ avance en vivo: el bot edita el mensaje «📥 lo baja un robot»
-                    bot({"accion": "tgb_avance", "mb": round(hecho / 1048576), "total": round((total or 0) / 1048576)})
-                except Exception:  # noqa: BLE001
-                    pass
+                # ⏳ avance en vivo: el bot edita el mensaje «📥 lo baja un robot» (aparte, para no frenar la descarga)
+                import threading
 
-        ruta = await cli.download_media(m, file=destino, progress_callback=avance)
+                def _avisar(mb=round(hecho / 1048576), tot=round((total or 0) / 1048576)):
+                    try:
+                        bot({"accion": "tgb_avance", "mb": mb, "total": tot})
+                    except Exception:  # noqa: BLE001
+                        pass
+                threading.Thread(target=_avisar, daemon=True).start()
+
+        ruta = None
+        try:   # ⚡ 8 pedazos a la vez (unas 4 a 10 veces más rápido)
+            ruta = await bajar_paralelo(cli, m, destino, avance)
+        except Exception as e:  # noqa: BLE001
+            print("::warning::La descarga en paralelo falló (" + str(e)[:120] + "): se baja como antes, un pedazo tras otro.")
+        if not ruta:
+            ruta = await cli.download_media(m, file=destino, progress_callback=avance)
         mime = getattr(getattr(m, "file", None), "mime_type", None) or "application/octet-stream"
         return ruta, mime
     finally:
