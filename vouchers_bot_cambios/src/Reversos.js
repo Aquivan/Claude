@@ -66,9 +66,9 @@ function REV_prompt_(n, empresas) {
 }
 
 /** Clasifica las páginas de un PDF (base64) con Gemini. Devuelve [{pagina,tipo,manuscrito,dudoso}]. */
-function REV_clasificar_(base64, n, empresas) {
+function REV_clasificar_(base64, n, empresas, mime) {
   const payload = {
-    contents: [{ parts: [{ text: REV_prompt_(n, empresas) }, { inline_data: { mime_type: 'application/pdf', data: base64 } }] }],
+    contents: [{ parts: [{ text: REV_prompt_(n, empresas) }, { inline_data: { mime_type: mime || 'application/pdf', data: base64 } }] }],
     generationConfig: { temperature: 0.1, maxOutputTokens: 8192, responseMimeType: 'application/json' }
   };
   const modelos = modelosGemini_(['gemini-3.5-flash-lite'], false, false);   // ⚡ liviano primero: solo clasificar (antes 3 min)
@@ -296,4 +296,26 @@ function REV_menuInterruptor() {
   if (r !== ui.Button.YES) return;
   props.setProperty('VCH_REVERSOS', activo ? '0' : '1');
   ui.alert(activo ? '⏸ Apagado: los PDF se leen como antes.' : '✅ Activado.');
+}
+
+
+/**
+ * 📸 FOTO suelta (JPG/PNG: WhatsApp, Telegram, Drive, 📤 Subir vouchers): lo escrito a mano y las etiquetas digitales de la
+ * foto van a «✍️ Anotación» de las filas de esa foto (mismo interruptor que los reversos). Una foto que es SOLO un reverso no
+ * se puede emparejar con su voucher (llegan por separado): para reversos conviene un PDF (frente → reverso).
+ * filas = números de fila escritos para esa foto.
+ */
+function REV_anotarFoto_(ctx, base64, mime, filas) {
+  if (!REV_activo_() || !filas.length) return;
+  try {
+    const arr = REV_clasificar_(base64, 1, REV_empresas_(), mime) || [];
+    const o = arr[0] || {};
+    const m = String(o.manuscrito || '').trim(), et = String(o.etiqueta || '').trim();
+    const p = [];
+    if (m) p.push((String(o.tipo || '').toLowerCase() === 'reverso' ? 'Reverso' : 'Frente') + ': ' + m + (o.dudoso === true ? ' (revisar)' : ''));
+    if (et) p.push('Etiqueta: ' + et);
+    if (!p.length) return;
+    ctx.anotPend = (ctx.anotPend || []).concat(filas.map(function (f) { return { fila: f, t: p.join(' · '), id: '' }; }));
+    REV_escribir_(ctx);
+  } catch (e) { Logger.log('✍️ Foto: ' + e.message); }
 }
