@@ -27,6 +27,8 @@ async function procesarVouchers() {
   try { VCH_limpiezaFusion_(); } catch (e) { Logger.log('Limpieza fusión: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · ERROR', '', e.message); }
   try { await VCH_verificarQuitadas_(); } catch (e) { Logger.log('Verificar quitadas: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza · verificación · ERROR', '', e.message); }
   try { VCH_autoEmpresa_(); } catch (e) { Logger.log('Completar Empresa: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'completar Empresa · ERROR', '', e.message); }
+  // 📦 PDF de más de 45 MB → robot que los comprime (CompresionVouchers.js). Nunca traba lo demás.
+  CMPV_revisar_();
 
   const inicioEjecucion = Date.now();
   const LIMITE = CFG.LIMITE_TIEMPO_MS;
@@ -85,12 +87,12 @@ async function procesarVouchers() {
 
         let mb = 0;
         try { mb = archivo.getSize() / (1024 * 1024); } catch (e) {}
-        // 📦 PDF pesado: lo comprime un robot (Cobranzas → CompresionVouchers.js). Mientras dice «📦 comprimiendo» (o en los
-        // primeros 25 min, hasta que Cobranzas lo vea) se deja en Entrada; si el robot falla o tarda más, sigue como siempre.
+        // 📦 PDF pesado: lo comprime un robot (CompresionVouchers.js, lanzado arriba con CMPV_revisar_). Mientras dice
+        // «📦 comprimiendo» se deja en Entrada; si el robot falla, tarda más o está apagado, sigue como siempre.
         if (mb > CFG.MAX_MB_ARCHIVO && TIPOS_PDF.has(mime)) {
           let desc = '', edadMin = 999;
           try { desc = String(archivo.getDescription() || ''); edadMin = (Date.now() - archivo.getLastUpdated().getTime()) / 60000; } catch (eD) {}
-          if ((desc.indexOf('📦 comprimiendo') === 0 && edadMin < 100) || (!desc && edadMin < 25)) {
+          if (desc.indexOf('📦 comprimiendo') === 0 && edadMin < 100) {
             Logger.log('📦 ' + nombre + ' (' + mb.toFixed(1) + ' MB): espera al robot que lo comprime.');
             continue;
           }

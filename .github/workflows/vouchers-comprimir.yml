@@ -1,5 +1,5 @@
-# 📦 Comprimir un PDF de vouchers muy pesado (proyecto Cobranzas: cobranzas/CompresionVouchers.js + scripts/comprimir_vouchers.py).
-# Lo lanza la hoja de Cobranzas con un "lote": el nombre y el ID del archivo NO van en las entradas ni en el registro
+# 📦 Comprimir un PDF de vouchers muy pesado (hoja Sistema de Vouchers: vouchers_bot_cambios/src/CompresionVouchers.js + scripts/comprimir_vouchers.py).
+# Lo lanza la hoja de Vouchers con un "lote": el nombre y el ID del archivo NO van en las entradas ni en el registro
 # (el repositorio es público); el robot se los pide al bot junto con un permiso temporal de Drive (enmascarado).
 
 name: Comprimir PDF de vouchers
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       lote:
-        description: "Lote que dejó la hoja de Cobranzas"
+        description: "Lote que dejó la hoja de Vouchers"
         required: true
 
 run-name: "Comprimir PDF de vouchers · lote ${{ inputs.lote }}"
@@ -29,26 +29,26 @@ jobs:
         with:
           sparse-checkout: |
             scripts/comprimir_vouchers.py
-            cobranzas/.clasp.json
           sparse-checkout-cone-mode: false
 
-      - name: Dirección del bot
+      - name: Dirección de la hoja de Vouchers
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: 1D9dcCYU-Nqw7bgjFYPcTSUTcyrVE25AK03_zx4ZTUknId-lUieAV6J1G
         run: |
           [ -n "$CLASPRC_JSON" ] || { echo "::error::Falta el secret CLASPRC_JSON"; exit 1; }
           npm install -g @google/clasp@3.3.0 >/dev/null 2>&1
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"; chmod 600 "$HOME/.clasprc.json"
-          cd cobranzas
+          mkdir -p /tmp/vch && cd /tmp/vch && printf '{"scriptId":"%s","rootDir":"/tmp/vch"}' "$SCRIPT_ID" > .clasp.json
           ID=$(clasp --json list-deployments 2>/dev/null | python3 -c "
           import json,sys
           t=sys.stdin.read()
           try: d=json.loads(t[t.index('['):])
           except Exception: d=[]
-          b=[x for x in d if (x.get('description') or '').startswith('Asistente Telegram')]
+          b=[x for x in d if x.get('deploymentId') and (x.get('versionNumber') or (x.get('deploymentConfig') or {}).get('versionNumber'))]
           print(b[0]['deploymentId'] if b else '')")
           rm -f "$HOME/.clasprc.json"
-          [ -n "$ID" ] || { echo "::error::No encontré la aplicación web del bot"; exit 1; }
+          [ -n "$ID" ] || { echo "::error::No encontré la aplicación web de la hoja de Vouchers"; exit 1; }
           echo "::add-mask::$ID"
           echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
 

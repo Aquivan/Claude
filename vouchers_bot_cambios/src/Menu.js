@@ -16,6 +16,7 @@ function onOpen() {
     .addItem('↩️ Deshacer el último completado de Empresa', 'AE_menuDeshacer')
     .addItem('✍️ Leer anotaciones de las filas seleccionadas (escrito a mano / etiquetas)', 'REV_menuAnotarSeleccion')
     .addItem('✍️ Reversos y anotaciones a mano: activar / apagar', 'REV_menuInterruptor')
+    .addItem('📦 Comprimir PDF pesados (robot): encender / apagar / 🔑 token', 'CMPV_menu')
     .addItem('↩️ Deshacer la última relectura', 'RP_deshacer')
     .addSubMenu(SpreadsheetApp.getUi().createMenu('📂 Abrir carpetas en Drive')
       .addItem('📸 Fotos — procesadas (las que ya están en la hoja)', 'CV_fotosProcesadas')
