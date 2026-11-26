@@ -47,6 +47,8 @@
   <label style="margin-left:8px">Nombre para todos:</label>
   <input type="text" id="base" placeholder="ej. BCP Granix octubre" style="width:200px">
   <button onclick="renombrarTodos()" title="Pone ese nombre a todos, numerados: «… 1», «… 2»">🔤 Aplicar</button>
+  <label style="margin-left:8px" title="Un robot recorta el fondo que sobra alrededor de cada voucher y comprime (Jpegli de Google) antes de leerlo. Si ya pesa poco, queda igual.">
+    <input type="checkbox" id="comprimir"> 🗜 Reducir peso (recortar bordes y comprimir)</label>
 </header>
 <main>
   <div id="zona" onclick="document.getElementById('archivos').click()">
@@ -218,7 +220,7 @@ function subirTodo() {
         else { it.estado = 'error'; it.error = (r && r.error) || 'No se pudo subir.'; if (/existe/.test(it.error)) it.repetido = true; }
         siguiente();
       }).withFailureHandler(function (e) { it.estado = 'error'; it.error = e.message; siguiente(); })
-        .SV_subir({ nombre: nombreDe(it), mime: it.f.type, datos: datos, destino: it.destino });
+        .SV_subir({ nombre: nombreDe(it), mime: it.f.type, datos: datos, destino: it.destino, comprimir: document.getElementById('comprimir').checked });
     }).catch(function (e) { it.estado = 'error'; it.error = e.message; siguiente(); });
   })();
 }

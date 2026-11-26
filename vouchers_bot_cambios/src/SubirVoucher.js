@@ -26,7 +26,7 @@ function SV_repetidos(nombres) {
 }
 
 /**
- * Sube un archivo. a = {nombre, mime, datos (base64), destino: 'original'|'foto'}.
+ * Sube un archivo. a = {nombre, mime, datos (base64), destino: 'original'|'foto', comprimir: true = 🗜 Reducir peso con el robot}.
  * Devuelve {ok, nombre, url} o {ok:false, error}.
  */
 function SV_subir(a) {
@@ -39,6 +39,7 @@ function SV_subir(a) {
     if (bytes.length > CFG.MAX_MB_ARCHIVO * 1024 * 1024) return { ok: false, error: 'Pesa más de ' + CFG.MAX_MB_ARCHIVO + ' MB.' };
     const carpeta = DriveApp.getFolderById(carpetasParaTipo_(a.destino === 'foto' ? 'foto' : 'original').entrada);
     const f = carpeta.createFile(Utilities.newBlob(bytes, a.mime, nombre));
+    if (a.comprimir) { try { f.setDescription(CMPV_PEDIDO_ + ' · 📤 Subir'); } catch (eC) {} }   // 🗜 Reducir peso (CompresionVouchers.js)
     return { ok: true, nombre: f.getName(), url: f.getUrl() };
   } catch (e) {
     return { ok: false, error: e.message };

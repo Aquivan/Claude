@@ -445,7 +445,7 @@ function TG_procesarYResultado_(ss, hechos) {
   try { idx = TGU_indiceArchivos_(ss); } catch (e) {}
   var lineas = hechos.map(function (h) {
     var f = idx[h.nombre] || [];
-    if (!f.length) return '⏳ ' + TG_esc_(h.nombre) + ': aún en cola (máx. 10 min' + (h.mb > 45 ? '; pesa ' + h.mb + ' MB: primero se comprime' : '') + ')';
+    if (!f.length) return '⏳ ' + TG_esc_(h.nombre) + ': aún en cola (máx. 10 min' + (h.comprimir || h.mb > 45 ? '; 🗜 primero el robot le reduce el peso' : '') + ')';
     return f.map(function (x) {
       return /^\[DUPLICADO\]/.test(x.op) ? '🔁 ' + TG_esc_(h.nombre) + ': <b>ya estaba registrado</b> en ' + x.hoja + '!' + x.fila + ' (no se volvió a registrar; quedó anotado en esa fila y el archivo en «🔁 Repetidos»)'
         : /^\[/.test(x.op) ? '❌ ' + TG_esc_(h.nombre) + ': no se encontró un voucher legible'
@@ -464,7 +464,8 @@ function TG_registrarVouchers_(ctx, adjs) {
       var esFoto = a.pestana ? a.pestana === 'foto' : (a.foto || /^image\//.test(a.mime));   // 📂 elegida en "¿De quién son?"
       var destino = DriveApp.getFolderById(esFoto ? cfg.carpetaFotos : cfg.carpetaOriginales);
       var copia = DriveApp.getFileById(a.id).makeCopy(a.nombre, destino);
-      hechos.push({ id: copia.getId(), nombre: a.nombre, mb: a.mb || 0 });
+      if (a.comprimir) copia.setDescription('📦 comprimir (pedido) · Telegram');   // 🗜 Reducir peso: lo toma el robot de la hoja de Vouchers
+      hechos.push({ id: copia.getId(), nombre: a.nombre, mb: a.mb || 0, comprimir: !!a.comprimir });
       n++;
     } catch (e) { errores.push(a.nombre + ': ' + e.message); }
   });

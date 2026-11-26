@@ -90,7 +90,7 @@ async function procesarVouchers() {
         try { mb = archivo.getSize() / (1024 * 1024); } catch (e) {}
         // 📦 PDF pesado: lo comprime un robot (CompresionVouchers.js, lanzado arriba con CMPV_revisar_). Mientras dice
         // «📦 comprimiendo» se deja en Entrada; si el robot falla, tarda más o está apagado, sigue como siempre.
-        if (mb > CFG.MAX_MB_ARCHIVO && TIPOS_PDF.has(mime)) {
+        if (TIPOS_PDF.has(mime) || TIPOS_IMAGEN.has(mime)) {   // grande, o 🗜 «Reducir peso» pedido a mano (cualquier tamaño)
           let desc = '', edadMin = 999;
           try { desc = String(archivo.getDescription() || ''); edadMin = (Date.now() - archivo.getLastUpdated().getTime()) / 60000; } catch (eD) {}
           if (desc.indexOf('📦 comprimiendo') === 0 && edadMin < 100) {
