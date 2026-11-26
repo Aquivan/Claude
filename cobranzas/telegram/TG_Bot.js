@@ -441,18 +441,51 @@ function TG_transcribir_(ss, blob) {
 /** ⚡ Pide a la hoja de Vouchers procesar YA y arma una línea por archivo (Telegram y WhatsApp). */
 function TG_procesarYResultado_(ss, hechos) {
   var t0 = Date.now(), rp = TGP_procesarYa_();   // ⏱ la hoja dice en qué se fue el tiempo
+  var r = TG_lineasResultado_(ss, hechos);
+  r.tt = TGP_textoTiempos_(rp, t0);
+  return r;
+}
+
+/**
+ * 📋 Una línea por voucher de esos archivos (lo que hay HOY en la hoja). Con muchos (un escaneo de 100 páginas) se resume:
+ * la cuenta y los primeros. filasRuc = «pestaña|N° op|monto» de los nuevos (para 🔎 Identificar RUC).
+ */
+function TG_lineasResultado_(ss, hechos) {
   var idx = {};
   try { idx = TGU_indiceArchivos_(ss); } catch (e) {}
-  var lineas = hechos.map(function (h) {
+  var lineas = [], filasRuc = [], total = { nuevos: 0, rep: 0, mal: 0 };
+  hechos.forEach(function (h) {
     var f = idx[h.nombre] || [];
-    if (!f.length) return '⏳ ' + TG_esc_(h.nombre) + ': aún en cola (máx. 10 min' + (h.comprimir || h.mb > 45 ? '; 🗜 primero el robot le reduce el peso' : '') + ')';
-    return f.map(function (x) {
-      return /^\[DUPLICADO\]/.test(x.op) ? '🔁 ' + TG_esc_(h.nombre) + ': <b>ya estaba registrado</b> en ' + x.hoja + '!' + x.fila + ' (no se volvió a registrar; quedó anotado en esa fila y el archivo en «🔁 Repetidos»)'
-        : /^\[/.test(x.op) ? '❌ ' + TG_esc_(h.nombre) + ': no se encontró un voucher legible'
-        : '✅ <b>' + x.hoja + '!' + x.fila + '</b> · op ' + TG_esc_(x.op) + ' · ' + Number(x.monto || 0).toFixed(2);
-    }).join('\n');
+    if (!f.length) {   // ¿se partió al reducir el peso? «nombre (parte 1 de 2).pdf»
+      var base = String(h.nombre).replace(/\.pdf$/i, '');
+      Object.keys(idx).forEach(function (n) { if (n.indexOf(base + ' (parte ') === 0) f = f.concat(idx[n]); });
+    }
+    if (!f.length) { lineas.push('⏳ ' + TG_esc_(h.nombre) + ': aún en cola (máx. 10 min' + (h.comprimir || h.mb > 45 ? '; 🗜 primero el robot le reduce el peso' : '') + ')'); return; }
+    f.forEach(function (x) {
+      if (/^\[DUPLICADO\]/.test(x.op)) { total.rep++; lineas.push('🔁 ' + TG_esc_(h.nombre) + ': <b>ya estaba registrado</b> en ' + x.hoja + '!' + x.fila + ' (no se volvió a registrar; quedó anotado en esa fila y el archivo en «🔁 Repetidos»)'); }
+      else if (/^\[/.test(x.op)) { total.mal++; lineas.push('❌ ' + TG_esc_(h.nombre) + ': no se encontró un voucher legible'); }
+      else {
+        total.nuevos++;
+        lineas.push('✅ <b>' + x.hoja + '!' + x.fila + '</b> · op ' + TG_esc_(x.op) + ' · ' + Number(x.monto || 0).toFixed(2));
+        filasRuc.push([x.hoja, String(x.op || '').replace(/\D/g, ''), aNumero_(x.monto)].join('|'));
+      }
+    });
   });
-  return { lineas: lineas, tt: TGP_textoTiempos_(rp, t0) };
+  if (lineas.length > 12) {   // escaneo grande: la cuenta y los primeros 10
+    lineas = ['<b>' + total.nuevos + '</b> voucher(s) nuevo(s)' + (total.rep ? ' · ' + total.rep + ' ya estaban' : '') + (total.mal ? ' · ' + total.mal + ' sin voucher legible' : '')]
+      .concat(lineas.slice(0, 10), ['<i>… y ' + (lineas.length - 10) + ' más (en la hoja de Vouchers)</i>']);
+  }
+  return { lineas: lineas, filasRuc: filasRuc };
+}
+
+/** Botones del 📋 Resultado: ↩️ Deshacer y, si hay nuevos, 💬 ¿A qué facturas? y 🔎 Identificar RUC (los mismos del aviso de cada hora). */
+function TG_botonesResultado_(filasRuc) {
+  var f = [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]];
+  if ((filasRuc || []).length) {
+    f.push([{ text: '💬 ¿A qué facturas corresponden?', callback_data: 'k:' + TG_guardarBoton_({ t: 'sug', texto: 'Los vouchers registrados hoy: ¿a qué facturas corresponden y cuáles todavía no se usan en ninguna?' }, 86400) }]);
+    f.push([{ text: '🔎 Identificar RUC de los proveedores', callback_data: 'k:' + TG_guardarBoton_({ t: 'tgqruc', filas: filasRuc.slice(0, 200) }, 86400) }]);
+  }
+  return f;
 }
 
 /** 📥 Copia los archivos a la carpeta de entrada del Sistema de Vouchers (su proceso automático los registra). */
@@ -472,9 +505,14 @@ function TG_registrarVouchers_(ctx, adjs) {
   if (hechos.length) TGU_anotar_(ctx.chatId, { desc: '📥 ' + hechos.length + ' voucher(s) a la hoja de Vouchers: ' + hechos.map(function (h) { return h.nombre; }).slice(0, 3).join(', '), archivos: hechos });
   // ⚡ Que la hoja de Vouchers los procese YA y se responda con el resultado (sin esperar su vuelta de 10 min).
   if (hechos.length && PropertiesService.getScriptProperties().getProperty('TGP_PROCESAR_URL')) {
+    // ⏳ Un solo mensaje que se va actualizando (TG_Avance.js) y al final pasa a ser el 📋 Resultado
+    var msg = TG_enviar_(ctx.chatId, '⏳ <b>Procesando</b>\n' + hechos.map(function (h) { return AVT_linea_(null, h.nombre); }).join('\n') + '\n<i>Este mensaje se actualiza solo.</i>');
+    if (msg) AVT_seguir_(hechos, { canal: 'tg', chat: String(ctx.chatId), msg: msg });
     TG_accion_(ctx.chatId, 'typing');
-    var res = TG_procesarYResultado_(ctx.ss, hechos), lineas = res.lineas, tt = res.tt;
-    TG_enviar_(ctx.chatId, '📋 <b>Resultado</b>\n' + lineas.join('\n') + (tt ? '\n<i>' + TG_esc_(tt) + '</i>' : ''), [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]]);
+    var t0 = Date.now(), rp = TGP_procesarYa_(), tt = TGP_textoTiempos_(rp, t0);
+    if (msg && AVT_mostrarTG_('avtm_' + ctx.chatId + '_' + msg, { tt: tt })) return;
+    var res = TG_lineasResultado_(ctx.ss, hechos);   // sin mensaje de avance: el resultado de siempre
+    TG_enviar_(ctx.chatId, '📋 <b>Resultado</b>\n' + res.lineas.join('\n') + (tt ? '\n<i>' + TG_esc_(tt) + '</i>' : ''), TG_botonesResultado_(res.filasRuc));
     return;
   }
   TG_enviar_(ctx.chatId, (n ? '📥 <b>' + n + ' archivo(s) enviados al Sistema de Vouchers</b> (carpeta de entrada de ' +

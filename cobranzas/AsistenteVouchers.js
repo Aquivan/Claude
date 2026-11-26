@@ -32,6 +32,7 @@ function VCH_doPost_(e) {
         var r = CHAT_enviarEn_(ss, q.msg || {}, op);
         delete r.c; delete r.final;
         return TGW_json_(r);
+      case 'avance': return TGW_json_(AVT_recibir_(q));   // ⏳ avance en vivo de un archivo (TG_Avance.js)
       case 'aplicar': return TGW_json_(ANX_aplicarDet_(ss, q.ids || [], !!q.reemplazar));
       case 'deshacer': return TGW_json_({ mensaje: ANX_deshacer_(ss) });
       case 'resumen': return TGW_json_({ pedido: CIA_RESUMEN_TXT_ });

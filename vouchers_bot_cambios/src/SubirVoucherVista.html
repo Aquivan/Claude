@@ -57,6 +57,7 @@
   </div>
   <input type="file" id="archivos" multiple accept="application/pdf,image/*" style="display:none" onchange="agregar(this.files); this.value=''">
   <div id="lista"></div>
+  <div id="avance" style="display:none;margin-top:10px;padding:8px 10px;border:1px solid #c7d2fe;border-radius:8px;background:#eef2ff;font-size:13px;line-height:1.6"></div>
 </main>
 <footer>
   <span class="esp" id="estado">Elija uno o más archivos.</span>
@@ -208,6 +209,7 @@ function subirTodo() {
       pintar();
       estado('✅ ' + bien + ' de ' + pend.length + ' subido(s). Se procesan solos en unos 10 minutos, o toque ▶ Procesar ahora.');
       if (bien) document.getElementById('btnProcesar').style.display = '';
+      if (bien) seguirAvance();   // ⏳ avance en vivo de lo subido
       return;
     }
     var it = pend[i++], barra = document.getElementById('b' + it.id);
@@ -223,6 +225,28 @@ function subirTodo() {
         .SV_subir({ nombre: nombreDe(it), mime: it.f.type, datos: datos, destino: it.destino, comprimir: document.getElementById('comprimir').checked });
     }).catch(function (e) { it.estado = 'error'; it.error = e.message; siguiente(); });
   })();
+}
+
+// ⏳ Avance en vivo (Avance.js): cada 5 s, mientras la ventana esté abierta y quede algo sin terminar.
+var avTimer = null;
+function seguirAvance() {
+  var nombres = items.filter(function (it) { return it.estado === 'subido'; }).map(function (it) { return nombreDe(it); });
+  if (!nombres.length || avTimer) return;
+  var caja = document.getElementById('avance');
+  var vuelta = function () {
+    google.script.run.withSuccessHandler(function (lista) {
+      lista = lista || [];
+      caja.style.display = '';
+      caja.innerHTML = '<b>⏳ Avance</b><br>' + nombres.map(function (n) {
+        var e = lista.filter(function (x) { return x.clave === n.toLowerCase().replace(/\.(pdf|jpe?g|png|webp|gif|bmp|tiff?)$/i, ''); })[0];
+        return '• ' + esc(n) + ': ' + esc(e ? e.texto : '🕐 Esperando su turno (se procesa en ~1 min o en la vuelta de 10 min)');
+      }).join('<br>');
+      var todos = nombres.every(function (n) { return lista.some(function (x) { return x.clave === n.toLowerCase().replace(/\.(pdf|jpe?g|png|webp|gif|bmp|tiff?)$/i, '') && /^(fin|error)$/.test(x.etapa); }); });
+      if (todos) { clearInterval(avTimer); avTimer = null; estado('✅ Terminado. Puede cerrar esta ventana.'); }
+    }).SV_avance(nombres);
+  };
+  vuelta();
+  avTimer = setInterval(vuelta, 5000);
 }
 
 function procesar() {

@@ -77,6 +77,7 @@ function CMPV_revisar_() {
           f.setDescription(CMPV_MARCA_ + ' (lote ' + lote + ')');
           CMPV_gh_('/actions/workflows/' + CMPV_WF_ + '/dispatches', 'post', { ref: CMPV_repo_().rama, inputs: { lote: lote } });
           hechos.push(f.getName() + ' (' + mb + ' MB)');
+          AV_(f.getName(), { etapa: 'comprimir', mb: mb });   // ⏳ avance en vivo (Avance.js)
         } catch (e) {
           p.deleteProperty(CMPV_PROP_ + lote);
           try { f.setDescription('📦 no se pudo comprimir: ' + String(e.message).slice(0, 150)); } catch (e2) {}
@@ -122,6 +123,10 @@ function CMPV_web_(q) {
       // 🔑 permiso temporal (1 h) para bajar el PDF y subir las partes (el robot lo enmascara y no lo guarda)
       return { ok: true, token: ScriptApp.getOAuthToken(), id: L.id, nombre: L.nombre, entrada: L.entrada, mb: L.mb, mime: L.mime || 'application/pdf' };
     }
+    if (q.accion === 'cmp_avance') {   // ⏳ el robot va por la página x de N
+      AV_(L.nombre, { etapa: 'comprimir', pag: Number(q.pag) || 0, total: Number(q.total) || 0 });
+      return { ok: true };
+    }
     if (q.accion === 'cmp_mover') {   // antes de subir: el original sale de Entrada (así no hay dos con el mismo nombre)
       var f = DriveApp.getFileById(L.id);
       f.moveTo(CMPV_carpetaGrandes_(L.entrada));
@@ -138,16 +143,20 @@ function CMPV_web_(q) {
         f2.setDescription('📦 no se pudo comprimir: ' + String(q.error || '').slice(0, 150));
       } catch (e) {}
       if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'comprimir PDF · ERROR', '', L.nombre + ' · ' + String(q.error || '').slice(0, 300));
+      AV_(L.nombre, { etapa: 'sinCambio' });   // ⏳ sigue sin reducir (se lee igual)
+      try { programarReintentoAutomatico_(); } catch (e) {}
       return { ok: true };
     }
     if (String(q.sinCambio) === '1') {   // ya estaba liviano: queda el original tal cual
       try { DriveApp.getFileById(L.id).setDescription('📦 no hacía falta comprimir (ya pesaba poco)'); } catch (e) {}
       if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'comprimir · no hacía falta', '', L.nombre + ' (' + (L.kb || 0) + ' KB)');
+      AV_(L.nombre, { etapa: 'sinCambio' });
       try { programarReintentoAutomatico_(); } catch (e) {}
       return { ok: true };
     }
     if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'comprimir PDF · listo', '', L.nombre + ': ' + L.mb + ' MB → ' + q.mb + ' MB' +
       (Number(q.partes) > 1 ? ' en ' + q.partes + ' partes' : '') + ' · ' + q.paginas + ' pág · ' + (q.recortadas || 0) + ' recortadas · ' + (q.motor || ''));
+    AV_(L.nombre, { etapa: 'comprimido', mb: L.mb, mbFin: q.mb });   // ⏳
     try { programarReintentoAutomatico_(); } catch (e) {}   // procesar las partes en ~1 minuto
     return { ok: true };
   } catch (e) {

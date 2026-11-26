@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
 import urllib.request
 
@@ -119,8 +120,14 @@ def main():
             npag = 1
         else:
             doc = fitz.open(stream=pdf, filetype="pdf")
-            paginas = []
+            paginas, ultimo = [], time.time()
             for p in doc:
+                if time.time() - ultimo > 15:   # ⏳ avance en vivo (la hoja se lo pasa a Telegram / WhatsApp)
+                    ultimo = time.time()
+                    try:
+                        bot({"accion": "cmp_avance", "pag": len(paginas), "total": len(doc)})
+                    except Exception:  # noqa: BLE001
+                        pass
                 esc = LADO / max(p.rect.width, p.rect.height) * 1.6   # un poco más grande y luego se achica (mejor calidad)
                 pix = p.get_pixmap(matrix=fitz.Matrix(esc, esc), alpha=False)
                 img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)[:, :, :3].copy()

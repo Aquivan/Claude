@@ -258,6 +258,11 @@ function WA_finalizar_(de, it) {
     var corta = it.fecha.split('-'); corta = corta[2] + '-' + corta[1] + '-' + corta[0].slice(2);
     WA_enviarTexto_(de, (it.dicho ? '🎤 _' + it.dicho + '_\n' : '') + '🏷 *' + corta + ' ' + it.nombre + '* · ' + filas.length + ' archivo(s).');
   }
+  // ⏳ Avance en vivo (Cobranzas → TG_Avance.js): avisa los pasos importantes de ESTOS archivos (reducir peso, mitad de un PDF largo)
+  try {
+    var segN = filas.filter(function (i) { return datos[i][6] === 'En cola'; }).map(function (i) { return String(datos[i][4]); });
+    if (segN.length) WA_cobranzas_('procesar', { modo: 'seguir', numero: de, nombres: segN });
+  } catch (eS) { console.warn('Avance: ' + eS.message); }
   if (WA_acuse_(hoja, datos, de)) WA_procesarAhora_(de);   // ⚡ procesa y avisa el resultado YA
 }
 

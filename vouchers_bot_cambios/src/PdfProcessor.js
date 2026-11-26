@@ -46,6 +46,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
     try { mismo = VCH_mismoContenido_(archivo, carpetas); } catch (eM) { Logger.log('No pude comparar con el PDF anterior: ' + eM.message); }
     if (mismo) {
       Logger.log('PDF idéntico a uno ya procesado: se omite · ' + nombre);
+      AV_(nombre, { etapa: 'fin', pag: totalPags, total: totalPags, repetidos: 1 });   // ⏳
       moverArchivo(archivo, carpetas.entrada, carpetas.procesados);
       return { seDetuvo: false, resumenes: [] };
     }
@@ -56,6 +57,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
   // ✍️ Reversos y anotaciones a mano (Reversos.js): solo al empezar un PDF. Si trae reversos, se sigue con el PDF limpio.
   let anot = REV_anotLeer_(nombre);
   if (startIdx === 0 && anot === null && REV_activo_()) {
+    AV_(nombre, { etapa: 'reversos', total: totalPags });   // ⏳ avance en vivo (Avance.js)
     const tRev = Date.now();
     try {
       const r = await REV_separar_(archivo, pdfDoc, nombre, carpetas);
@@ -91,6 +93,8 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
   let alguno = false;
   let repetidosArchivo = 0;   // 🔁 vouchers de este PDF que ya estaban
   const resumenes = [];
+  AV_(nombre, { etapa: 'inicio', pag: startIdx, total: totalPags });   // ⏳ avance en vivo (Avance.js)
+  let avPag = startIdx;
 
   for (let loteInicio = startIdx; loteInicio < totalPags; loteInicio += TAM_LOTE) {
     // ⏱ Un lote de 10 páginas tarda ~1,5-2 min (leer + filas + imágenes): solo se empieza si queda ese tiempo antes del
@@ -107,6 +111,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
     for (let i = loteInicio; i < loteFin; i++) indicesLote.push(i);
     const numPaginasLote = indicesLote.length;
 
+    const avN0 = resumenes.length;   // ⏳ para contar los vouchers de este lote
     try {
       // Un solo PDF con todas las paginas del lote juntas, para UNA sola
       // llamada a Gemini (en vez de una por pagina).
@@ -299,6 +304,12 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
         try { IMG_repararPronto_(); } catch (eR) { Logger.log('No se pudo programar la reparación: ' + eR.message); }
       }
 
+      // ⏳ avance en vivo: páginas leídas y vouchers de este lote
+      avPag = loteInicio + paginasLeidas;
+      const avLote = resumenes.slice(avN0);
+      AV_(nombre, { etapa: 'leer', pag: avPag, total: totalPags, nuevos: avLote.filter(function (r) { return !r.duplicado; }).length,
+        repetidos: avLote.filter(function (r) { return r.duplicado; }).length });
+
       if (cortado) { pdfIncompleto = true; break; }   // ⏱ lo que falta, en la próxima ejecución (1 min)
 
     } catch (eLote) {
@@ -324,6 +335,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
     if (typeof TIEMPOS_ !== 'undefined') TIEMPOS_.pausas += CFG.PAUSA_MS;
   }
 
+  AV_(nombre, pdfIncompleto ? { etapa: 'pausa', pag: avPag, total: totalPags } : { etapa: 'fin', pag: totalPags, total: totalPags });   // ⏳
   if (!pdfIncompleto) {
     REV_anotBorrar_(nombre);
     if (!alguno && startIdx === 0 && repetidosArchivo > 0) REP_moverArchivo_(archivo, carpetas);   // 🔁 todo repetido

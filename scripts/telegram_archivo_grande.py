@@ -58,6 +58,10 @@ async def bajar(api_id, api_hash, token_bot, msg_id, destino):
             if time.time() - ultimo[0] > 10:
                 ultimo[0] = time.time()
                 print("  bajando… %.0f de %.0f MB" % (hecho / 1048576, (total or 0) / 1048576))
+                try:   # ⏳ avance en vivo: el bot edita el mensaje «📥 lo baja un robot»
+                    bot({"accion": "tgb_avance", "mb": round(hecho / 1048576), "total": round((total or 0) / 1048576)})
+                except Exception:  # noqa: BLE001
+                    pass
 
         ruta = await cli.download_media(m, file=destino, progress_callback=avance)
         mime = getattr(getattr(m, "file", None), "mime_type", None) or "application/octet-stream"

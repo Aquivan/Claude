@@ -215,6 +215,12 @@ function TG_avisoVouchers_(c, V) {
       jM = TG_col_(t.columnas, 'Monto'), jP = TG_col_(t.columnas, 'Proveedor'), jEm = TG_col_(t.columnas, 'Empresa');
     var g = function (f, j) { return j >= 0 ? f[j] : ''; };
     var nuevas = TG_nuevos_(V, 'vou' + p, t.filas, function (f) { return [p, TG_fecha_(aFecha_(g(f, jF)) || g(f, jF)), g(f, jO), g(f, jM)].join('|'); });
+    // ⏳ Los que la persona ya vio en su 📋 Resultado (Telegram / WhatsApp, TG_Avance.js) no se repiten aquí
+    var jA = TG_col_(t.columnas, 'Archivo'); if (jA < 0) jA = TG_col_(t.columnas, 'Archivo Original');
+    if (jA >= 0 && nuevas.length) {
+      var cc = CacheService.getScriptCache(), ks = nuevas.map(function (f) { return 'avt_rep_' + AVT_clave_(f[jA]); }), vistos = cc.getAll(ks);
+      nuevas = nuevas.filter(function (f, i) { return !vistos[ks[i]]; });
+    }
     if (!nuevas.length) return;
     res.push({ html: '💳 <b>' + nuevas.length + ' voucher(s) nuevo(s)</b> en ' + TG_esc_(p) + '\n' + nuevas.slice(0, 10).map(function (f) {
       return '• ' + TG_fecha_(aFecha_(g(f, jF)) || g(f, jF)) + ' · ' + TG_esc_(g(f, jB)) + ' ' + (/USD|\$/.test(g(f, jMo)) ? 'US$ ' : 'S/ ') + TG_num_(aNumero_(g(f, jM))) +
