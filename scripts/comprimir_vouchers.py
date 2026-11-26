@@ -35,7 +35,7 @@ except ImportError:
 LADO = 1600          # px del lado largo
 CALIDAD = 80         # calidad JPG (Jpegli / Pillow)
 MAX_PARTE = 38 * 1024 * 1024
-BLANCO_DELTA = 75   # ✂️ qué tan oscuro debe ser algo para contar como contenido (lo transparentado del reverso queda fuera)
+BLANCO_DELTA = 105  # ✂️ qué tan oscuro debe ser algo (gris) para contar como contenido; lo de color cuenta siempre (26/11: con 75 lo transparentado del reverso frenaba el recorte)
 
 
 def bot(cuerpo):
@@ -82,7 +82,10 @@ def recortar_blanco(img):
     g = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     h, w = g.shape
     papel = float(np.percentile(g, 90))
-    tinta = (g < papel - BLANCO_DELTA).astype(np.uint8) * 255
+    tinta = g < papel - BLANCO_DELTA                       # impreso / escrito oscuro (lo transparentado queda fuera)
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+    tinta = tinta | ((hsv[:, :, 1] > 90) & (hsv[:, :, 2] > 60))   # de COLOR: etiquetas, tinta azul, sellos
+    tinta = tinta.astype(np.uint8) * 255
     b = int(0.015 * max(h, w))
     tinta[:b, :] = 0; tinta[-b:, :] = 0; tinta[:, :b] = 0; tinta[:, -b:] = 0
     tinta = cv2.morphologyEx(tinta, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))   # polvo
