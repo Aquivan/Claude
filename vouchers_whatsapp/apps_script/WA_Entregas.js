@@ -84,7 +84,7 @@ function WA_preguntarDeQuien_(de, datos, filas) {
   }
   var sug = r.sugerido;
   var nombres = (sug ? [sug.nombre] : []).concat((r.nombres || []).filter(function (n) { return !sug || n.toLowerCase() !== sug.nombre.toLowerCase(); }))
-    .filter(String).slice(0, 4);   // WhatsApp deja 10 filas en la lista (la 10.ª es 🗜 Reducir peso)
+    .filter(String).slice(0, 3);   // WhatsApp deja 10 filas en la lista (9.ª 🗜 Reducir peso, 10.ª ✂️ Recortar blancos)
   var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
   // Mientras la IA sugería el nombre pudo llegar otro archivo de la misma tanda: se vuelve a contar.
   datos = WA_hoja_().getDataRange().getValues();
@@ -127,9 +127,8 @@ function WA_listaNombre_(de, preg, n, pestana, datos, filas) {
     !pestana ? { id: 'en:pfo', title: '📸 Todo como foto', description: 'Ahora cada uno va según su tipo: mandar todo a Fotos' }
       : pestana === 'original' ? { id: 'en:pfo', title: '📸 Enviar como foto', description: 'Ahora va a Originales: cambiar a la pestaña Fotos' }
       : { id: 'en:por', title: '📄 Enviar como original', description: 'Ahora va a Fotos: cambiar a la pestaña Originales' },
-    preg.cmp === 'blanco' ? { id: 'en:cmp', title: '🗜✂️ + blancos ✅', description: 'Reduce peso y recorta los blancos. Tóquelo para NO reducir' }
-      : preg.cmp ? { id: 'en:cmp', title: '🗜 Reducir peso ✅', description: 'Tóquelo para además ✂️ recortar los espacios en blanco' }
-      : { id: 'en:cmp', title: '🗜 Reducir · ✂️ recortar', description: '1 toque: reduce y recorta bordes · 2 toques: además los blancos' },
+    { id: 'en:cmp', title: (preg.cmp ? '✅ ' : '') + '🗜 Reducir peso', description: preg.cmp ? 'Elegido. Tóquelo para quitarlo' : 'Recorta los bordes y comprime antes de leerlo' },
+    { id: 'en:blc', title: (preg.cmp === 'blanco' ? '✅ ' : '') + '✂️ Recortar blancos', description: preg.cmp === 'blanco' ? 'Elegido. Tóquelo para quitarlo' : 'Además quita el papel en blanco alrededor de lo escrito' },
     { id: 'en:sin', title: '➖ Sin nombre', description: 'Como antes (nombre del archivo o la fecha)' },
     { id: 'en:ia', title: '🧾 Revisar con IA', description: 'Ve si ya está, registra solo el voucher y completa la factura' }
   ]);
@@ -159,7 +158,8 @@ function WA_botonNombre_(de, id) {
   if (op === 'sin') { WA_finalizar_(de, null); return; }
   if (op === 'pfo' || op === 'por') { WA_cambiarPestanaEspera_(de, preg, op === 'pfo' ? 'foto' : 'original'); return; }
   if (op === 'ia') { WA_revisarConIA_(de); return; }   // 🧾 Procesar documento (WA_Procesar.js)
-  if (op === 'cmp') { WA_alternarCompresion_(de, preg); return; }
+  if (op === 'cmp') { WA_alternarCompresion_(de, preg, preg.cmp ? false : true); return; }
+  if (op === 'blc') { WA_alternarCompresion_(de, preg, preg.cmp === 'blanco' ? true : 'blanco'); return; }
   var nombre = preg.nombres[Number(op.slice(1))];
   if (nombre) WA_finalizar_(de, { nombre: nombre, fecha: preg.fecha, ordenante: preg.sug && op === 'n0' ? preg.ordenante : '' });
 }
