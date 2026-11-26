@@ -77,7 +77,6 @@ function onOpen() {
       .addItem('💾 Guardar RUC confirmados (✔) como alias', 'menuGuardarRucConfirmados')
       .addItem('🔎 Completar solo (RUC beneficiario por nombre): encender / apagar', 'menuRbaInterruptor')
       .addItem('↩️ Deshacer el último completado de RUC beneficiario', 'menuRbaDeshacer'))
-    .addItem('📦 Comprimir PDF pesados de vouchers (robot GitHub): encender / apagar', 'menuCmpInterruptor')
 
     .addSubMenu(ui.createMenu('♻️ Respaldos de datos manuales')
       .addItem('💾 Guardar respaldo ahora', 'menuRespaldarAhora')

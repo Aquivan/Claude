@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""📦 Comprime (y parte si hace falta) un PDF de vouchers muy pesado (proyecto Cobranzas: cobranzas/CompresionVouchers.js).
+"""📦 Comprime (y parte si hace falta) un PDF de vouchers muy pesado (hoja Sistema de Vouchers: vouchers_bot_cambios/src/CompresionVouchers.js).
 
 El repositorio es público: el nombre y el ID del archivo NO van en las entradas ni en el registro. Con el «lote» se le pide
-al bot (canal=gh) el permiso temporal de Drive y el ID; se baja el PDF directo de Drive, y por cada página:
+a la hoja de Vouchers (canal=gh) el permiso temporal de Drive y el ID; se baja el PDF directo de Drive, y por cada página:
   1. se dibuja la página (con lo escrito y las etiquetas digitales) a buena resolución (PyMuPDF / MuPDF);
   2. se RECORTA el fondo que sobra alrededor del voucher (OpenCV: el papel es la zona clara más grande), con margen;
   3. se deja en ~1600 px del lado largo;
   4. se comprime como JPG con Jpegli (Google) si está, o Pillow;
 y se arma el PDF con img2pdf (sin volver a comprimir). Si pasa de ~38 MB se parte. Se pide mover el original a
 «📦 Originales grandes» y se suben las partes a la carpeta de Entrada con el mismo nombre (o «… (parte 1 de 2)»).
-Cualquier error se devuelve al bot y el PDF sigue el proceso normal. El permiso no se imprime nunca.
+Cualquier error se devuelve a la hoja y el PDF sigue el proceso normal. El permiso no se imprime nunca.
 """
 import io
 import json
@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 import urllib.request
 
 import cv2
@@ -32,10 +33,11 @@ MAX_PARTE = 38 * 1024 * 1024
 
 
 def bot(cuerpo):
+    """Llama a la hoja de Vouchers (doGet ?canal=gh). Solo responde a una corrida de este workflow que esté corriendo."""
     url = os.environ["BOT_URL"]
-    cuerpo = dict(cuerpo, run=os.environ.get("GITHUB_RUN_ID", ""), lote=os.environ["LOTE"])
-    req = urllib.request.Request(url + ("&" if "?" in url else "?") + "canal=gh", data=json.dumps(cuerpo).encode(),
-                                 headers={"Content-Type": "application/json"}, method="POST")
+    q = dict(cuerpo, canal="gh", run=os.environ.get("GITHUB_RUN_ID", ""), lote=os.environ["LOTE"])
+    q = {k: ("1" if v is True else "0" if v is False else str(v)) for k, v in q.items()}
+    req = urllib.request.Request(url + ("&" if "?" in url else "?") + urllib.parse.urlencode(q), method="GET")
     with urllib.request.urlopen(req, timeout=180) as r:
         return json.loads(r.read().decode() or "{}")
 
