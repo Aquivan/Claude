@@ -55,6 +55,8 @@ function VDT_deshacer(x) {
         const it = carpeta.getFilesByName(x.archivo);
         while (it.hasNext()) { it.next().setTrashed(true); papelera++; }
         const base = String(x.archivo).replace(/\.pdf$/i, ''), fr = carpeta.getFoldersByName(REV_CARPETA_);
+        const fb = carpeta.getFoldersByName('🔎 Buscables');   // 🔎 su copia buscable (CompresionVouchers.js)
+        while (fb.hasNext()) { const ib = fb.next().getFilesByName(base + ' (buscable).pdf'); while (ib.hasNext()) { ib.next().setTrashed(true); papelera++; } }
         while (fr.hasNext()) {
           const dirR = fr.next(), dirs = [dirR], sub = dirR.getFolders();
           while (sub.hasNext()) dirs.push(sub.next());

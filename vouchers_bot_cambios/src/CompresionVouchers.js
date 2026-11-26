@@ -105,6 +105,13 @@ function CMPV_runValido_(run) {
   return !!ok;
 }
 
+/** Carpeta «🔎 Buscables» dentro de Procesados: copias con texto (Ctrl+F). No entran a la cola de lectura. */
+function CMPV_carpetaBuscables_(entrada) {
+  var proc = DriveApp.getFolderById(entrada === CFG.CARPETA_FOTOS_ENTRADA_ID ? CFG.CARPETA_FOTOS_PROCESADOS_ID : CFG.CARPETA_ORIGINALES_PROCESADOS_ID);
+  var it = proc.getFoldersByName('🔎 Buscables');
+  return it.hasNext() ? it.next() : proc.createFolder('🔎 Buscables');
+}
+
 /** Carpeta «📦 Originales grandes» dentro de Procesados (Originales o Fotos, según de qué Entrada vino). */
 function CMPV_carpetaGrandes_(entrada) {
   var proc = DriveApp.getFolderById(entrada === CFG.CARPETA_FOTOS_ENTRADA_ID ? CFG.CARPETA_FOTOS_PROCESADOS_ID : CFG.CARPETA_ORIGINALES_PROCESADOS_ID);
@@ -127,7 +134,7 @@ function CMPV_web_(q) {
     }
     if (q.accion === 'cmp_datos') {
       // 🔑 permiso temporal (1 h) para bajar el PDF y subir las partes (el robot lo enmascara y no lo guarda)
-      return { ok: true, token: ScriptApp.getOAuthToken(), id: L.id, nombre: L.nombre, entrada: L.entrada, mb: L.mb, mime: L.mime || 'application/pdf', blanco: !!L.blanco };   // ✂️ blanco = también recortar los espacios en blanco
+      return { ok: true, token: ScriptApp.getOAuthToken(), id: L.id, nombre: L.nombre, entrada: L.entrada, mb: L.mb, mime: L.mime || 'application/pdf', blanco: !!L.blanco, buscables: CMPV_carpetaBuscables_(L.entrada).getId() };   // 🔎 copia buscable aparte   // ✂️ blanco = también recortar los espacios en blanco
     }
     if (q.accion === 'cmp_avance') {   // ⏳ el robot va por la página x de N
       AV_(L.nombre, { etapa: 'comprimir', pag: Number(q.pag) || 0, total: Number(q.total) || 0 });
@@ -161,7 +168,7 @@ function CMPV_web_(q) {
       return { ok: true };
     }
     if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'comprimir PDF · listo', '', L.nombre + ': ' + L.mb + ' MB → ' + q.mb + ' MB' +
-      (Number(q.partes) > 1 ? ' en ' + q.partes + ' partes' : '') + ' · ' + q.paginas + ' pág · ' + (q.recortadas || 0) + ' recortadas' + (L.blanco ? ' · ✂️ ' + (q.blancos || 0) + ' sin blancos' : '') + ' · ' + (q.motor || ''));
+      (Number(q.partes) > 1 ? ' en ' + q.partes + ' partes' : '') + ' · ' + q.paginas + ' pág · ' + (q.recortadas || 0) + ' recortadas' + (L.blanco ? ' · ✂️ ' + (q.blancos || 0) + ' sin blancos' : '') + (String(q.buscable) === '1' ? ' · 🔎 copia buscable' : '') + ' · ' + (q.motor || ''));
     AV_(L.nombre, { etapa: 'comprimido', mb: L.mb, mbFin: q.mb });   // ⏳
     try { programarReintentoAutomatico_(); } catch (e) {}   // procesar las partes en ~1 minuto
     return { ok: true };

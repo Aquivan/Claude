@@ -106,6 +106,8 @@ function TGU_borrarPorNombre_(nombre, hubFilas) {
     try {
       var proc = DriveApp.getFolderById(id);
       if (hubFilas) { var it = proc.getFilesByName(nombre); while (it.hasNext()) { var f0 = it.next(); if (!f0.isTrashed()) { f0.setTrashed(true); n++; } } }
+      var fb = proc.getFoldersByName('🔎 Buscables');   // 🔎 copia buscable del robot de reducir peso
+      while (fb.hasNext()) { var ib = fb.next().getFilesByName(base + ' (buscable).pdf'); while (ib.hasNext()) { var fB = ib.next(); if (!fB.isTrashed()) { fB.setTrashed(true); n++; } } }
       var fr = proc.getFoldersByName('✍️ Reversos');
       while (fr.hasNext()) {
         var dirR = fr.next(), dirs = [dirR], sub = dirR.getFolders();   // también la subcarpeta «páginas (para los enlaces)»

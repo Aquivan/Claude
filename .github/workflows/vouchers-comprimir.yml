@@ -56,9 +56,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Herramientas (PyMuPDF, OpenCV, img2pdf, Jpegli de Google)
+      - name: Herramientas (PyMuPDF, OpenCV, img2pdf, Jpegli de Google, RapidOCR)
         run: |
           pip install --quiet "pymupdf==1.25.5" "opencv-python-headless==4.11.0.86" "img2pdf==0.6.1" "pillow==11.2.1" "numpy<2.3"
+          # 🔎 RapidOCR (modelos PP-OCR de PaddleOCR, liviano): recorte por texto y copia buscable. Si no se instala, se recorta como antes.
+          pip install --quiet "rapidocr==3.10.0" "onnxruntime==1.32.0" || echo "::warning::Sin RapidOCR: recorte clásico y sin copia buscable"
           # Jpegli (Google, dentro de libjxl): si no se puede bajar, el robot usa Pillow
           mkdir -p /tmp/jxl && cd /tmp/jxl && \
             (curl -fsSL -o jxl.tgz https://github.com/libjxl/libjxl/releases/download/v0.11.1/jxl-linux-x86_64-static-v0.11.1.tar.gz && \
