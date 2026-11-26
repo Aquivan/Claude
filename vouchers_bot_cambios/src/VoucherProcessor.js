@@ -24,6 +24,7 @@ async function procesarVouchers() {
   try { VCH_hojaEmpresas_(); } catch (e) { Logger.log('Pestaña empresas: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'pestaña empresas · ERROR', '', e.message); }
   try { await VCH_limpiezaDuplicados_(); } catch (e) { Logger.log('Limpieza duplicados: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · ERROR', '', e.message); }
   try { VCH_limpiezaAprobada_(); } catch (e) { Logger.log('Limpieza aprobada: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · ERROR', '', e.message); }
+  try { VCH_limpiezaFusion_(); } catch (e) { Logger.log('Limpieza fusión: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · ERROR', '', e.message); }
 
   const inicioEjecucion = Date.now();
   const LIMITE = CFG.LIMITE_TIEMPO_MS;

@@ -305,3 +305,86 @@ function VCH_limpiezaAprobada_() {
   props.setProperty('VCH_LIMP_APROBADA2', 'hecho');
   if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · aplicada', '', (hechos.join(' | ') || 'nada') + (saltados.length ? ' · NO tocadas: ' + saltados.join(', ') : ''));
 }
+
+// ============================================================
+// 🔀 LAS 8 QUE TENÍAN DATOS A MANO (opción B, aprobada 26/11/2026): lo que tenga la repetida en las columnas de control
+// pasa al original SOLO donde el original está vacío («Control»: se juntan las opciones). Si en alguna columna los dos
+// tienen algo distinto, esa fila NO se toca. Luego, como antes: nota «🔁 N veces», respaldo y borrar. Filas con su número
+// de HOY (después de la limpieza anterior); se verifica que sigan coincidiendo. Una sola vez (VCH_LIMP_FUSION).
+// ============================================================
+var LIMP_FUSION_ = { Originales: [[142, 141]], Fotos: [[55, 54], [78, 44], [151, 140], [261, 258], [336, 320], [337, 321], [351, 349]] };
+
+function VCH_limpiezaFusion_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('VCH_LIMP_FUSION') === 'hecho' || props.getProperty('VCH_LIMP_APROBADA2') !== 'hecho') return;
+  const hechos = [], saltados = [];
+  [[CFG.SHEET_ORIGINALES, 'Originales'], [CFG.SHEET_FOTOS, 'Fotos']].forEach(function (par) {
+    const t = par[0], lista = LIMP_FUSION_[par[1]] || [], h = obtenerHoja(t);
+    if (!h || !lista.length) return;
+    const n = h.getLastRow() - 1, v = h.getRange(2, 1, n, 14).getValues();
+    const tit = h.getRange(1, 1, 1, h.getLastColumn()).getDisplayValues()[0].map(CC_norma_);
+    const cols = [];
+    tit.forEach(function (x, i) { if (i >= 14 && /^(empresa|ruc empresa|ruc beneficiario|comprobantes|control|retencion|nota)$/.test(x)) cols.push({ c: i + 1, nom: x }); });
+    const ok = [];
+    lista.forEach(function (x) {
+      const a = v[x[0] - 2], o = v[x[1] - 2];
+      if (!a || !o) { saltados.push(t + '!' + x[0] + ' (no existe)'); return; }
+      const mismo = String(a[2]).trim().toUpperCase() === String(o[2]).trim().toUpperCase() && String(a[3]).trim().toUpperCase() === String(o[3]).trim().toUpperCase() &&
+        Math.abs((Number(a[4]) || 0) - (Number(o[4]) || 0)) < 0.005 && LIMP_dia_(a[0]) === LIMP_dia_(o[0]) && REP_normOp_(a[1]) === REP_normOp_(o[1]) && String(o[1]).charAt(0) !== '[';
+      if (!mismo) { saltados.push(t + '!' + x[0] + ' (ya no coincide con ' + x[1] + ')'); return; }
+      // ¿se puede juntar sin pisar nada?
+      const cambios = [], conflictos = [];
+      cols.forEach(function (k) {
+        const va = String(h.getRange(x[0], k.c).getDisplayValue()).trim(), vo = String(h.getRange(x[1], k.c).getDisplayValue()).trim();
+        if (!va || va === vo) return;
+        if (!vo) { cambios.push({ c: k.c, val: va }); return; }   // como se ve (RUC con sus 11 dígitos, texto)
+        if (k.nom === 'control') {   // se juntan las opciones
+          const set = vo.split(/\s*,\s*/).filter(Boolean);
+          va.split(/\s*,\s*/).forEach(function (q) { if (q && set.indexOf(q) < 0) set.push(q); });
+          cambios.push({ c: k.c, val: set.join(', ') });
+          return;
+        }
+        conflictos.push(k.nom + ' («' + va.slice(0, 30) + '» vs «' + vo.slice(0, 30) + '»)');
+      });
+      if (conflictos.length) { saltados.push(t + '!' + x[0] + ' (distinto en ' + conflictos.join('; ') + ')'); return; }
+      ok.push({ x: x, cambios: cambios });
+    });
+    if (!ok.length) return;
+    const ss = h.getParent(), nomR = '🛟 Respaldo duplicados ' + t + ' (2)';
+    if (!ss.getSheetByName(nomR)) { const r = h.copyTo(ss).setName(nomR); r.hideSheet(); }
+    let pasados = 0;
+    ok.forEach(function (it) {
+      const x = it.x, a = v[x[0] - 2];
+      it.cambios.forEach(function (cb) { h.getRange(x[1], cb.c).setValue(cb.val); pasados++; });
+      const c = h.getRange(x[1], 14);
+      const proc = a[11] instanceof Date ? Utilities.formatDate(a[11], 'America/Lima', 'dd/MM/yyyy HH:mm') : String(a[11] || '');
+      const clave = '«' + String(a[10] || '').trim() + '»' + (a[12] ? ' pág ' + a[12] : '');
+      let nota = String(c.getNote() || '');
+      if (nota.indexOf(clave) < 0) {
+        if (nota.indexOf('🔁 Recibido también:') < 0) nota = (nota ? nota + '\n\n' : '') + '🔁 Recibido también:';
+        nota += '\n• ' + proc + ' · ' + (String(a[13] || '') || 'Carpeta Drive') + ' · ' + clave + ' (limpieza 26/11' + (it.cambios.length ? ', se pasaron sus datos a esta fila' : '') + ')';
+        const veces = (nota.match(/^• /mg) || []).length + 1;
+        const base = String(c.getDisplayValue() || '').replace(/\s*·\s*🔁 \d+ veces/g, '').trim();
+        c.setNote(nota.slice(0, 9000)).setValue(base + ' · 🔁 ' + veces + ' veces');
+      }
+    });
+    const archivos = {};
+    ok.map(function (it) { archivos[String(v[it.x[0] - 2][10] || '').trim()] = 1; return it.x[0]; })
+      .sort(function (a, b) { return b - a; }).forEach(function (f) { h.deleteRow(f); });
+    const nn = h.getLastRow() - 1, quedan = {};
+    if (nn > 0) h.getRange(2, 11, nn, 1).getValues().forEach(function (r) { quedan[String(r[0]).trim()] = 1; });
+    const carpetas = t === CFG.SHEET_FOTOS ? carpetasParaTipo_('foto') : carpetasParaTipo_('original');
+    let movidos = 0;
+    Object.keys(archivos).forEach(function (a) {
+      if (!a || quedan[a]) return;
+      try {
+        const proc = DriveApp.getFolderById(carpetas.procesados), it = proc.getFilesByName(a);
+        const fr = proc.getFoldersByName(REP_CARPETA_), dest = fr.hasNext() ? fr.next() : proc.createFolder(REP_CARPETA_);
+        while (it.hasNext()) { it.next().moveTo(dest); movidos++; }
+      } catch (e) { Logger.log('🧹 Mover ' + a + ': ' + e.message); }
+    });
+    hechos.push(t + ': ' + ok.length + ' fila(s) quitadas (' + pasados + ' dato(s) pasados al original), ' + movidos + ' archivo(s) a 🔁 Repetidos');
+  });
+  props.setProperty('VCH_LIMP_FUSION', 'hecho');
+  if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · juntadas', '', (hechos.join(' | ') || 'nada') + (saltados.length ? ' · NO tocadas: ' + saltados.join(', ') : ''));
+}
