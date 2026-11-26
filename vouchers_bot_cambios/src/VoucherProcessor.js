@@ -27,6 +27,7 @@ async function procesarVouchers() {
   try { VCH_limpiezaFusion_(); } catch (e) { Logger.log('Limpieza fusión: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · ERROR', '', e.message); }
   try { await VCH_verificarQuitadas_(); } catch (e) { Logger.log('Verificar quitadas: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza · verificación · ERROR', '', e.message); }
   try { VCH_autoEmpresa_(); } catch (e) { Logger.log('Completar Empresa: ' + e.message); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'completar Empresa · ERROR', '', e.message); }
+  try { if (PropertiesService.getScriptProperties().getProperty('VCH_CABECERA_MANUAL') !== '1') VCH_separadorManual_(); } catch (e) { Logger.log('Línea de columnas manuales: ' + e.message); }
   // 📦 PDF de más de 45 MB → robot que los comprime (CompresionVouchers.js). Nunca traba lo demás.
   CMPV_revisar_();
 
@@ -140,6 +141,8 @@ async function procesarVouchers() {
     const seg = Math.round((Date.now() - inicioEjecucion) / 1000);
     Logger.log('RESUMEN -> procesados: ' + procesados + ' | errores: ' + conError +
                ' | apartados: ' + apartados + ' | tiempo: ' + seg + 's');
+
+    try { VCH_separadorManual_(); } catch (eB) { Logger.log('Línea de columnas manuales: ' + eB.message); }   // ┃ las filas nuevas también
 
     if (typeof REG_anotar_ === 'function') {   // 🩺 registro técnico: el resumen y lo que pasó (sin claves)
       const t = typeof TIEMPOS_ !== 'undefined' ? TIEMPOS_ : {};
