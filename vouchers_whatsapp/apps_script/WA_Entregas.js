@@ -129,7 +129,7 @@ function WA_listaNombre_(de, preg, n, pestana, datos, filas) {
       : { id: 'en:por', title: '📄 Enviar como original', description: 'Ahora va a Fotos: cambiar a la pestaña Originales' },
     preg.cmp === 'blanco' ? { id: 'en:cmp', title: '🗜✂️ + blancos ✅', description: 'Reduce peso y recorta los blancos. Tóquelo para NO reducir' }
       : preg.cmp ? { id: 'en:cmp', title: '🗜 Reducir peso ✅', description: 'Tóquelo para además ✂️ recortar los espacios en blanco' }
-      : { id: 'en:cmp', title: '🗜 Reducir peso', description: 'Un robot recorta los bordes y comprime antes de leerlo' },
+      : { id: 'en:cmp', title: '🗜 Reducir · ✂️ recortar', description: '1 toque: reduce y recorta bordes · 2 toques: además los blancos' },
     { id: 'en:sin', title: '➖ Sin nombre', description: 'Como antes (nombre del archivo o la fecha)' },
     { id: 'en:ia', title: '🧾 Revisar con IA', description: 'Ve si ya está, registra solo el voucher y completa la factura' }
   ]);
