@@ -32,6 +32,7 @@ function procesarArchivoImagen(archivo, ctx, remitente, carpetas) {
   }
 
   let alguno = false, repetidos = 0;
+  const filasFoto = [];   // ✍️ para «Anotación»
 
   for (let idx = 0; idx < vouchers.length; idx++) {
     const v      = vouchers[idx];
@@ -51,12 +52,14 @@ function procesarArchivoImagen(archivo, ctx, remitente, carpetas) {
     registrarEnIndice(ctx, v.nOperacion, v.banco, montoV, fila, v.fecha);
     if (casi) REP_marcarCasi_(ctx, fila, casi);
     insertarImagenBase64(ctx.hoja, fila, 10, base64, mime, nombre);
+    filasFoto.push(fila);
     flushSeguro_();   // UN solo flush por voucher
     alguno = true;
     resumenes.push({ banco: v.banco, moneda: v.moneda, monto: montoV, nOperacion: v.nOperacion, duplicado: false });
   }
 
   REP_aplicar_(ctx);
+  REV_anotarFoto_(ctx, base64, mime, filasFoto);   // ✍️ lo escrito a mano / etiquetas de la foto
   if (!alguno && repetidos) REP_moverArchivo_(archivo, carpetas);   // 🔁 la foto entera era repetida
   else moverArchivo(archivo, carpetas.entrada, alguno ? carpetas.procesados : CFG.CARPETA_DESCARTADOS_ID);
   return resumenes;
