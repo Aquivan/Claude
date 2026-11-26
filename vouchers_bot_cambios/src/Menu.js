@@ -12,6 +12,8 @@ function onOpen() {
     .addItem('👁 Visor de voucher: panel lateral', 'VV_abrir')
     .addItem('🔁 Volver a leer con IA la página de la fila seleccionada', 'RP_releerFilaActiva')
     .addItem('🗑 Deshacer una tanda (borrar las filas de un PDF o foto)', 'VDT_menuAbrir')
+    .addItem('🏢 Completar Empresa sola: encender / apagar', 'AE_menuInterruptor')
+    .addItem('↩️ Deshacer el último completado de Empresa', 'AE_menuDeshacer')
     .addItem('✍️ Reversos y anotaciones a mano: activar / apagar', 'REV_menuInterruptor')
     .addItem('↩️ Deshacer la última relectura', 'RP_deshacer')
     .addSubMenu(SpreadsheetApp.getUi().createMenu('📂 Abrir carpetas en Drive')
