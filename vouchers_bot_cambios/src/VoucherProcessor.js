@@ -230,7 +230,9 @@ function crearContexto(hoja) {
 }
 
 function claveDuplicado(op, banco, monto) {
-  return op.toString().trim().toLowerCase() + '|' +
+  // 🔁 El N° de operación se compara SIN ceros al inicio ni guiones/espacios (26/11/2026): la IA lee «0225064» pero la hoja
+  // guarda 225064 (la celda lo vuelve número y se come el 0). Antes no coincidían y un escaneo repetido entraba de nuevo.
+  return op.toString().trim().toLowerCase().replace(/[^0-9a-z]/g, '').replace(/^0+/, '') + '|' +
          (banco || '').toString().trim().toLowerCase() + '|' +
          (Math.round((parseFloat(monto) || 0) * 100) / 100).toFixed(2);
 }
