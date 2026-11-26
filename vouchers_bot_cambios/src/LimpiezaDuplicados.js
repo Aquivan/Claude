@@ -245,7 +245,7 @@ var LIMP_APROBADOS_ = {
 
 function VCH_limpiezaAprobada_() {
   const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('VCH_LIMP_APROBADA') === 'hecho') return;
+  if (props.getProperty('VCH_LIMP_APROBADA2') === 'hecho') return;
   const hechos = [], saltados = [];
   [[CFG.SHEET_ORIGINALES, 'Originales'], [CFG.SHEET_FOTOS, 'Fotos']].forEach(function (par) {
     const t = par[0], lista = LIMP_APROBADOS_[par[1]] || [], h = obtenerHoja(t);
@@ -261,7 +261,8 @@ function VCH_limpiezaAprobada_() {
       const opA = String(a[1] || '').trim(), opO = String(o[1] || '').trim();
       const opOk = opA === '[DUPLICADO]' || REP_normOp_(opA) === REP_normOp_(opO);
       if (!mismo || !opOk || opO.charAt(0) === '[') { saltados.push(t + '!' + x[0] + ' (ya no coincide con ' + x[1] + ')'); return false; }
-      const propio = (ext[x[0] - 2] || []).some(function (c, k) { return String(c).trim() && !/^resultado|anotaci/.test(tit[14 + k] || ''); });
+      // solo las columnas que llena la persona (Empresa, RUC, Comprobantes, Control, Retención, Nota); no las copias de la derecha
+      const propio = (ext[x[0] - 2] || []).some(function (c, k) { return String(c).trim() && /^(empresa|ruc empresa|ruc beneficiario|comprobantes|control|retencion|nota)$/.test(tit[14 + k] || ''); });
       if (propio) { saltados.push(t + '!' + x[0] + ' (tiene datos puestos a mano)'); return false; }
       return true;
     });
@@ -301,6 +302,6 @@ function VCH_limpiezaAprobada_() {
     });
     hechos.push(t + ': ' + ok.length + ' fila(s) quitadas, ' + movidos + ' archivo(s) a 🔁 Repetidos');
   });
-  props.setProperty('VCH_LIMP_APROBADA', 'hecho');
+  props.setProperty('VCH_LIMP_APROBADA2', 'hecho');
   if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · aplicada', '', (hechos.join(' | ') || 'nada') + (saltados.length ? ' · NO tocadas: ' + saltados.join(', ') : ''));
 }
