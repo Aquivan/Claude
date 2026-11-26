@@ -21,11 +21,15 @@ import tempfile
 import urllib.parse
 import urllib.request
 
-import cv2
-import fitz  # PyMuPDF
-import img2pdf
-import numpy as np
-from PIL import Image
+try:
+    import cv2
+    import fitz  # PyMuPDF
+    import img2pdf
+    import numpy as np
+    from PIL import Image
+except ImportError:
+    if "--fallo" not in sys.argv:   # «Avisar si falló» corre aunque no se hayan instalado
+        raise
 
 LADO = 1600          # px del lado largo
 CALIDAD = 80         # calidad JPG (Jpegli / Pillow)
@@ -147,4 +151,10 @@ def main():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == "--fallo":
+        try:
+            bot({"accion": "cmp_fin", "ok": False, "error": sys.argv[2][:200]})
+        except Exception as e:  # noqa: BLE001
+            print("::warning::No se pudo avisar a la hoja: " + str(e)[:150])
+        sys.exit(0)
     sys.exit(main())

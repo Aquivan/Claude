@@ -15,8 +15,6 @@ import tempfile
 import time
 import urllib.request
 
-from telethon import TelegramClient
-from telethon.sessions import StringSession
 
 
 def bot(cuerpo):
@@ -45,6 +43,8 @@ def paginas_pdf(ruta):
 
 
 async def bajar(api_id, api_hash, token_bot, msg_id, destino):
+    from telethon import TelegramClient   # aquí (no arriba): «Avisar si falló» corre aunque no se haya instalado
+    from telethon.sessions import StringSession
     cli = TelegramClient(StringSession(), api_id, api_hash)
     await cli.start(bot_token=token_bot)
     try:
@@ -105,5 +105,16 @@ def main():
         return 1
 
 
+def avisar_fallo(motivo):
+    """Paso «Avisar si falló» del workflow: el bot le dice a la persona que lo mande por otro medio (si el lote sigue abierto)."""
+    try:
+        bot({"accion": "tgb_fin", "ok": False, "error": motivo[:200]})
+    except Exception as e:  # noqa: BLE001
+        print("::warning::No se pudo avisar al bot: " + str(e)[:150])
+    return 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == "--fallo":
+        sys.exit(avisar_fallo(sys.argv[2]))
     sys.exit(main())
