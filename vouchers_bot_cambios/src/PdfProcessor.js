@@ -89,6 +89,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
 
   let pdfIncompleto = false;
   let alguno = false;
+  let repetidosArchivo = 0;   // 🔁 vouchers de este PDF que ya estaban
   const resumenes = [];
 
   for (let loteInicio = startIdx; loteInicio < totalPags; loteInicio += TAM_LOTE) {
@@ -237,19 +238,20 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
             const montoV = parsearMonto(v.monto);
 
             if (esDuplicadoCtx(ctx, v.nOperacion, v.banco, montoV)) {
-              Logger.log('  Pag.' + numeroPaginaReal + ' duplicado: ' + v.nOperacion + ' / ' + v.banco + ' / ' + montoV);
-              escribirFilaVoucher(ctx, {
-                fecha: v.fecha, nOperacion: '[DUPLICADO]', banco: v.banco, moneda: v.moneda,
-                monto: montoV, proveedor: v.proveedor, idCliente: v.idCliente,
-                cliente: v.cliente, descripcion: v.descripcion
-              }, nombre, numeroPaginaReal, 'Duplicado exacto', remitente);
-              resumenes.push({ banco: v.banco, moneda: v.moneda, monto: montoV, nOperacion: v.nOperacion, duplicado: true });
+              // 🔁 Repetido (Repetidos.js): NO se crea fila; se anota en la fila del voucher original (Canal + nota).
+              const fOrig = REP_original_(ctx, v, montoV);
+              Logger.log('  Pag.' + numeroPaginaReal + ' repetido de la fila ' + fOrig + ': ' + v.nOperacion + ' / ' + v.banco + ' / ' + montoV);
+              REP_anotar_(ctx, fOrig, nombre, numeroPaginaReal, remitente);
+              resumenes.push({ banco: v.banco, moneda: v.moneda, monto: montoV, nOperacion: v.nOperacion, duplicado: true, filaOriginal: fOrig });
+              repetidosArchivo++;
               filasInsertadas++;
               continue;
             }
 
+            const casi = REP_casi_(ctx, v, montoV);   // ⚠️ mismo voucher con un dígito mal leído?
             const fila = escribirFilaVoucher(ctx, v, nombre, numeroPaginaReal, null, remitente);
-            registrarEnIndice(ctx, v.nOperacion, v.banco, montoV);
+            registrarEnIndice(ctx, v.nOperacion, v.banco, montoV, fila, v.fecha);
+            if (casi) REP_marcarCasi_(ctx, fila, casi);
             if (anot[numeroPaginaReal]) (ctx.anotPend = ctx.anotPend || []).push({ fila: fila, t: anot[numeroPaginaReal].t, id: anot[numeroPaginaReal].id });
             tareasImg.push({ fila: fila, indiceGlobal: indiceGlobal, numeroPaginaReal: numeroPaginaReal });
             alguno = true;
@@ -267,7 +269,8 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
       } finally {
         ctx.diferir = false;
         escribirPendientes_(ctx);
-        REV_escribir_(ctx);   // ✍️ después de las filas (necesita la fila ya escrita)
+        REV_escribir_(ctx);
+        REP_aplicar_(ctx);   // 🔁 notas de repetidos / casi iguales (después de las filas)   // ✍️ después de las filas (necesita la fila ya escrita)
       }
 
       // 🖼 Imágenes: la ya hecha (NVIDIA/Groq o preparadas a la vez) directo; si no hay, como siempre por Drive.
@@ -323,7 +326,8 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
 
   if (!pdfIncompleto) {
     REV_anotBorrar_(nombre);
-    moverArchivo(archivo, carpetas.entrada, (alguno || startIdx > 0) ? carpetas.procesados : CFG.CARPETA_DESCARTADOS_ID);
+    if (!alguno && startIdx === 0 && repetidosArchivo > 0) REP_moverArchivo_(archivo, carpetas);   // 🔁 todo repetido
+    else moverArchivo(archivo, carpetas.entrada, (alguno || startIdx > 0) ? carpetas.procesados : CFG.CARPETA_DESCARTADOS_ID);
   }
 
   return { seDetuvo: pdfIncompleto, resumenes: resumenes };
