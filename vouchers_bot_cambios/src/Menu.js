@@ -14,6 +14,7 @@ function onOpen() {
     .addItem('🗑 Deshacer una tanda (borrar las filas de un PDF o foto)', 'VDT_menuAbrir')
     .addItem('🏢 Completar Empresa sola: encender / apagar', 'AE_menuInterruptor')
     .addItem('↩️ Deshacer el último completado de Empresa', 'AE_menuDeshacer')
+    .addItem('✍️ Leer anotaciones de las filas seleccionadas (escrito a mano / etiquetas)', 'REV_menuAnotarSeleccion')
     .addItem('✍️ Reversos y anotaciones a mano: activar / apagar', 'REV_menuInterruptor')
     .addItem('↩️ Deshacer la última relectura', 'RP_deshacer')
     .addSubMenu(SpreadsheetApp.getUi().createMenu('📂 Abrir carpetas en Drive')
