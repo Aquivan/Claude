@@ -172,6 +172,7 @@ var TG_ATAJOS_ = {
   '📊 Resumen': '/resumen', '📋 Menú': '/menu', '💰 Por cobrar': '/cobrar', '💸 Por pagar': '/pagar',
   '📬 SUNAT': '/notificaciones', '⬇ Descargar': '/descargar', '❓ Ayuda': '/ayuda',
   'nvidia': '/nvidia', 'Nvidia': '/nvidia', 'NVIDIA': '/nvidia',   // 🟩 probar modelos de NVIDIA (TG_Nvidia.js)
+  'cancelar': '/cancelar', 'Cancelar': '/cancelar', 'CANCELAR': '/cancelar', 'detener': '/cancelar', 'Detener': '/cancelar', 'parar': '/cancelar', 'Parar': '/cancelar',   // ✖ TG_Cancelar.js
 };
 
 function TG_tecladoFijo_() {
@@ -288,9 +289,13 @@ function TG_comando_(ctx, texto) {
       var ses = TG_sesion_(chatId); ses.esperando = { tipo: 'recordar' }; TG_guardarSesion_(chatId, ses);
       return TG_enviar_(chatId, '⏰ ¿Qué le recuerdo y cuándo? Ej.: <i>"el 20 a las 9am declarar IGV de GRANIX"</i>');
     case 'avisos': return TG_enviarAvisos_(ctx, null);
+    case 'cancelar': case 'detener': case 'parar': case 'stop':   // ✖ cancela todo lo pendiente (TG_Cancelar.js)
+      return TG_enviar_(chatId, TGK_texto_(TGK_cancelar_(ctx.ss, chatId)));
     case 'olvidar': case 'nuevo': case 'reset':
+      var canc = [];
+      try { canc = TGK_cancelar_(ctx.ss, chatId); } catch (e) { console.warn('Cancelar al olvidar: ' + e.message); }   // ✖ que nada pendiente se registre solo después
       TG_guardarSesion_(chatId, { hist: [], adj: [], esperando: null });
-      return TG_enviar_(chatId, '🧹 Listo, empezamos una conversación nueva (olvidé lo anterior y los archivos que me mandó).');
+      return TG_enviar_(chatId, '🧹 Listo, empezamos una conversación nueva (olvidé lo anterior y los archivos que me mandó).' + (canc.length ? '\n\n' + TGK_texto_(canc) : ''));
     case 'id': return TG_enviar_(chatId, 'Su ID de Telegram: <code>' + chatId + '</code>');
     case 'usuarios':
       if (ctx.usuario.rol !== 'admin') return TG_enviar_(chatId, 'Solo para administradores.');
@@ -318,7 +323,7 @@ function TG_textoAyuda_() {
     '📊 Las listas largas se las mando también en <b>Excel</b>.\n' +
     '⬇ <b>/descargar</b> pide a SUNAT (SIRE, retenciones, honorarios, buzón, detracciones) · <b>/estado</b> dice si las automáticas corrieron.\n' +
     '⚡ <b>/sire</b> baja solo el reporte del SIRE, rápido (ej. <code>/sire granix 202601-202609</code>, <code>/sire todas mes anterior</code>).\n' +
-    '🔔 <b>/avisos</b> elige qué le aviso solo · ⏰ <b>/recordatorios</b> · 🧹 <b>/olvidar</b> empieza de cero.\n\n' +
+    '🔔 <b>/avisos</b> elige qué le aviso solo · ⏰ <b>/recordatorios</b> · 🧹 <b>/olvidar</b> empieza de cero · ✖ <b>/cancelar</b> detiene todo lo pendiente.\n\n' +
     '🔒 Solo consulto y propongo: nunca pago ni presento nada en SUNAT, y lo que se escribe en las hojas siempre se lo pregunto antes.';
 }
 

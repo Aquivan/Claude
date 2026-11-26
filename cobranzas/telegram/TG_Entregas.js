@@ -297,7 +297,7 @@ function TGE_tecladoTG_(k, d) {
   // 🗜 / ✂️ opcionales, dos botones siempre visibles (✅ = elegido). ✂️ incluye reducir el peso.
   filas.push([{ text: (d.comprimir ? '✅ ' : '') + '🗜 Reducir peso', callback_data: 'k:' + k + ':cmp' },
     { text: (d.comprimir === 'blanco' ? '✅ ' : '') + '✂️ Recortar blancos', callback_data: 'k:' + k + ':blc' }]);
-  filas.push([{ text: '➖ Sin nombre (como antes)', callback_data: 'k:' + k + ':sin', style: 'link' }].concat(
+  filas.push([{ text: '➖ Sin nombre (como antes)', callback_data: 'k:' + k + ':sin', style: 'link' }, { text: '✖ Cancelar', callback_data: 'k:' + k + ':can' }].concat(
     d.kAdj ? [{ text: '← Atrás', callback_data: 'k:' + k + ':atr', style: 'link' }] : []));
   return filas;
 }
@@ -314,6 +314,11 @@ function TGE_alBotonTG_(ctx, datos, op, k) {
     var dA = TG_leerBoton_(datos.kAdj);
     if (dA) return TG_cartaArchivo_(ctx, datos.kAdj, dA);
     return TG_tarjeta_(ctx, '⌛ Ese archivo ya venció (los botones duran 6 h): vuelva a mandarlo.', []);
+  }
+  if (op === 'can') {   // ✖ no registrar este archivo
+    PropertiesService.getScriptProperties().deleteProperty(TGE_PROP_PEND_ + k);
+    var sesC = TG_sesion_(ctx.chatId); if (sesC.esperando && sesC.esperando.tipo === 'entrega') { sesC.esperando = null; TG_guardarSesion_(ctx.chatId, sesC); }
+    return TG_tarjeta_(ctx, '✖ <b>Cancelado</b>: ese archivo no se registra.', []);
   }
   if (op === 'fd' || op === 'dv') {   // 📅 abrir / cerrar el selector de días
     datos.verDias = op === 'fd'; guardar();

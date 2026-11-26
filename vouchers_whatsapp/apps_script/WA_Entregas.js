@@ -314,3 +314,29 @@ function WA_paginasPdf_(id) {
     return n;
   } catch (e) { return 0; }
 }
+
+/**
+ * ✖ «cancelar» / «detener»: todo lo pendiente de esta persona. Lo que espera nombre o está en cola sale de Entrada
+ * (a la papelera de Drive, 30 días) y no se lee; el resumen de 🧾 Revisar con IA se cancela. Lo ya registrado: «deshacer».
+ */
+function WA_cancelarTodo_(de) {
+  var hecho = [], pr = WA_props_();
+  var k = pr.getProperty('WA_PRK_' + de);
+  if (k) { try { WA_cobranzas_('procesar', { modo: 'cancelar', numero: de, k: k }); hecho.push('🧾 el resumen de Revisar con IA'); } catch (e) {} }
+  ['WA_PREG_', 'WA_MP_', 'WA_PRK_', 'WA_PRA_', 'WA_PRN_', 'WA_ETQ_'].forEach(function (x) {
+    if (pr.getProperty(x + de)) { pr.deleteProperty(x + de); if (x === 'WA_PREG_') hecho.push('🏷 la pregunta «¿De quién son?»'); }
+  });
+  var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues();
+  for (var i = 1; i < datos.length; i++) {
+    if (String(datos[i][2]) !== de || ['Espera', 'En cola'].indexOf(String(datos[i][6])) < 0) continue;
+    try { DriveApp.getFileById(datos[i][9]).setTrashed(true); } catch (e) {}
+    hoja.getRange(i + 1, 7, 1, 2).setValues([['Cancelado', '✖ cancelado por la persona']]);
+    hecho.push('📄 ' + datos[i][4] + ' (salió de la cola)');
+  }
+  try {   // lo que Cobranzas tenga pendiente de este número (📚 varios vouchers, partes del robot de reducir peso…)
+    var r = WA_cobranzas_('procesar', { modo: 'cancelarTodo', numero: de });
+    ((r && r.hecho) || []).forEach(function (h) { if (hecho.indexOf(h) < 0) hecho.push(h); });
+  } catch (e) {}
+  WA_enviarTexto_(de, hecho.length ? '✖ *Cancelado*:\n• ' + hecho.join('\n• ') + '\n_Si algo ya alcanzó a registrarse en la hoja, escriba *deshacer*._'
+    : '✖ No había nada pendiente que cancelar. Lo que ya está en la hoja se quita con *deshacer*.');
+}

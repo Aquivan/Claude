@@ -28,7 +28,12 @@ function REP_indexar_(ctx, op, banco, monto, fila, fecha) {
 }
 
 /** Fila del voucher original de un duplicado exacto (0 si no se sabe). */
-function REP_original_(ctx, v, monto) { return (ctx.filaDup || {})[claveDuplicado(v.nOperacion, v.banco, monto)] || 0; }
+function REP_original_(ctx, v, monto) {
+  const k = claveDuplicado(v.nOperacion, v.banco, monto);
+  if ((ctx.filaDup || {})[k]) return ctx.filaDup[k];
+  // en la otra pestaña (Originales ↔ Fotos): {hoja, fila}
+  return ctx.otroDup && ctx.otroDup[k] ? { hoja: ctx.otraHoja, fila: ctx.otroDup[k] } : 0;
+}
 
 /** ¿Un solo carácter de diferencia? (cambiado, de más o de menos) */
 function REP_unoDistinto_(a, b) {
@@ -62,7 +67,8 @@ function REP_cuando_() { return Utilities.formatDate(new Date(), 'America/Lima',
 /** Repetido exacto: se anota en la fila original (se aplica después de escribir las filas del lote). */
 function REP_anotar_(ctx, filaOrig, nombre, pag, remitente) {
   if (!filaOrig) return;
-  (ctx.repPend = ctx.repPend || []).push({ fila: filaOrig, tipo: 'rep',
+  const enOtra = typeof filaOrig === 'object';
+  (ctx.repPend = ctx.repPend || []).push({ fila: enOtra ? filaOrig.fila : filaOrig, hoja: enOtra ? filaOrig.hoja : null, tipo: 'rep',
     linea: '• ' + REP_cuando_() + ' · ' + (remitente || 'Carpeta Drive') + ' · «' + nombre + '»' + (pag ? ' pág ' + pag : '') });
 }
 
@@ -80,7 +86,7 @@ function REP_aplicar_(ctx) {
   if (!pend.length) return;
   pend.forEach(function (p) {
     try {
-      const c = ctx.hoja.getRange(p.fila, REP_COL_CANAL_);
+      const c = (p.hoja || ctx.hoja).getRange(p.fila, REP_COL_CANAL_);
       let nota = String(c.getNote() || ''), val = String(c.getDisplayValue() || '');
       const base = val.replace(/\s*·\s*(🔁 \d+ veces|⚠️ ¿repetido\?)/g, '').trim();
       if (p.tipo === 'rep') {

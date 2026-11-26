@@ -43,7 +43,7 @@ function procesarArchivoImagen(archivo, ctx, remitente, carpetas) {
       const fOrig = REP_original_(ctx, v, montoV);
       REP_anotar_(ctx, fOrig, nombre, idx + 1, remitente);
       repetidos++;
-      resumenes.push({ banco: v.banco, moneda: v.moneda, monto: montoV, nOperacion: v.nOperacion, duplicado: true, filaOriginal: fOrig });
+      resumenes.push({ banco: v.banco, moneda: v.moneda, monto: montoV, nOperacion: v.nOperacion, duplicado: true, filaOriginal: typeof fOrig === 'object' ? fOrig.hoja.getName() + '!' + fOrig.fila : fOrig });
       continue;
     }
 
