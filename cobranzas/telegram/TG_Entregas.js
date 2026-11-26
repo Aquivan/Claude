@@ -261,7 +261,7 @@ function TGE_textoPregunta_(d) {
     'Quedarán como <code>' + TG_esc_(TGE_corta_(d.fecha)) + ' Nombre</code>' + (d.adjs.length > 1 ? ', <code>… Nombre 2</code>…' : '') + '\n' +
     (d.sug ? '⭐ Según el voucher paga: <i>' + TG_esc_(d.ordenante) + '</i>\n' : '') +
     '📂 Pestaña: <b>' + (d.pestana === 'original' ? 'Originales' : 'Fotos') + '</b>\n' +
-    (!d.comprimir ? '<i>🗜 Opcional: «Reducir peso» 1 toque = reduce y recorta los bordes · 2 toques = además ✂️ los espacios en blanco.</i>\n' : '') +
+    (!d.comprimir ? '<i>Opcional: 🗜 Reducir peso (recorta los bordes y comprime) · ✂️ Recortar blancos (además quita el papel en blanco alrededor de lo escrito).</i>\n' : '') +
     (d.comprimir ? '🗜 Reducir peso: <b>sí</b> (un robot recorta los bordes y comprime antes de leerlo)' +
       (d.comprimir === 'blanco' ? ' <b>+ ✂️ recorta los espacios en blanco</b>' : '') + '\n' : '') +
     '📅 Fecha: <b>' + TG_esc_(TGE_corta_(d.fecha)) + '</b>' + (d.fecha === TGE_hoy_() ? ' (hoy)' : '') + '\n' +
@@ -293,8 +293,10 @@ function TGE_tecladoTG_(k, d) {
   });
   if (fila.length) filas.push(fila);
   filas.push([d.pestana === 'original' ? { text: '📸 Enviar como foto', callback_data: 'k:' + k + ':pfo' }
-    : { text: '📄 Enviar como original', callback_data: 'k:' + k + ':por' },
-    { text: d.comprimir === 'blanco' ? '🗜✂️ + blancos ✅' : d.comprimir ? '🗜 Reducir peso ✅' : '🗜 Reducir peso · ✂️ recortar', callback_data: 'k:' + k + ':cmp' }]);
+    : { text: '📄 Enviar como original', callback_data: 'k:' + k + ':por' }]);
+  // 🗜 / ✂️ opcionales, dos botones siempre visibles (✅ = elegido). ✂️ incluye reducir el peso.
+  filas.push([{ text: (d.comprimir ? '✅ ' : '') + '🗜 Reducir peso', callback_data: 'k:' + k + ':cmp' },
+    { text: (d.comprimir === 'blanco' ? '✅ ' : '') + '✂️ Recortar blancos', callback_data: 'k:' + k + ':blc' }]);
   filas.push([{ text: '➖ Sin nombre (como antes)', callback_data: 'k:' + k + ':sin', style: 'link' }].concat(
     d.kAdj ? [{ text: '← Atrás', callback_data: 'k:' + k + ':atr', style: 'link' }] : []));
   return filas;
@@ -335,8 +337,10 @@ function TGE_alBotonTG_(ctx, datos, op, k) {
     CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(datos), 21600);
     return TG_tarjeta_(ctx, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
   }
-  if (op === 'cmp') {   // 🗜 Reducir peso (robot de la hoja de Vouchers: recorta bordes y comprime) — se prende / apaga en el MISMO mensaje
-    datos.comprimir = !datos.comprimir ? true : datos.comprimir === true ? 'blanco' : false; guardar();   // no → sí → sí + ✂️ blancos → no
+  if (op === 'cmp' || op === 'blc') {   // 🗜 Reducir peso / ✂️ Recortar blancos (robot de la hoja de Vouchers) — se prenden / apagan en el MISMO mensaje
+    if (op === 'cmp') datos.comprimir = datos.comprimir ? false : true;   // apagar 🗜 apaga también ✂️
+    else datos.comprimir = datos.comprimir === 'blanco' ? true : 'blanco';   // ✂️ incluye 🗜
+    guardar();
     return TG_tarjeta_(ctx, TGE_textoPregunta_(datos), TGE_tecladoTG_(k, datos));
   }
   if (op === 'sin') return TGE_cerrarTG_(ctx, k, datos, null);
