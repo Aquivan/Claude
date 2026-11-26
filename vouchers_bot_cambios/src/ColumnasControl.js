@@ -236,6 +236,37 @@ function CC_mapaEmpresas_(ss) {
 }
 
 /**
+ * ✏️ CORRECCIÓN A MANO DE LO QUE PUSO EL SISTEMA (26/11/2026): si la persona cambia una celda de Empresa, RUC empresa,
+ * RUC beneficiario o ✍️ Anotación que había llenado el sistema (nota «🏢 Completado solo…», «🔎 Completado solo por
+ * nombre…», «♻️ Devuelta…», o la columna ✍️ Anotación que es toda del sistema), la nota de la celda suma
+ * «✏️ Corregido a mano el … (antes decía: …)». Así se distingue lo puesto por el sistema de lo corregido.
+ */
+var CC_MARCAS_SISTEMA_ = /🏢 Completado solo|🔎 Completado solo por nombre|♻️ Devuelta|⚠️ Depositó con DNI/;
+function CC_marcarCorreccion_(e, h, tit) {
+  const c0 = e.range.getColumn(), nc = e.range.getNumColumns(), f0 = e.range.getRow(), nf = e.range.getNumRows();
+  if (nf * nc > 300) return;
+  const cuando = Utilities.formatDate(new Date(), 'America/Lima', 'dd/MM/yyyy HH:mm');
+  for (let j = 0; j < nc; j++) {
+    const nom = tit[c0 - 1 + j] || '';
+    const esAnot = /anotaci/.test(nom);
+    if (!esAnot && !/^(empresa|ruc empresa|ruc beneficiario)$/.test(nom)) continue;
+    const rg = h.getRange(f0, c0 + j, nf, 1), notas = rg.getNotes(), vals = rg.getDisplayValues();
+    let cambio = false;
+    for (let i = 0; i < nf; i++) {
+      const nota = String(notas[i][0] || '');
+      if (!esAnot && !CC_MARCAS_SISTEMA_.test(nota)) continue;   // nunca la llenó el sistema: es suya, no hace falta marcar
+      const antes = nf === 1 && nc === 1 && e.oldValue !== undefined ? String(e.oldValue) : '';
+      const ahora = String(vals[i][0] || '');
+      if (antes && antes === ahora) continue;
+      const linea = '✏️ ' + (ahora ? 'Corregido' : 'Borrado') + ' a mano el ' + cuando + (antes ? ' (antes decía: ' + antes.slice(0, 80) + ')' : '');
+      notas[i][0] = (nota ? nota + '\n' : '') + linea;
+      cambio = true;
+    }
+    if (cambio) rg.setNotes(notas);
+  }
+}
+
+/**
  * ✏️ Al editar la hoja (disparador simple): al elegir o escribir la «Empresa», se pone su «RUC empresa» (según «🏢 Empresas»).
  * Si se escribe a mano el RUC de una empresa que no está en «🏢 Empresas», se agrega allí como fila nueva.
  */
@@ -245,6 +276,7 @@ function onEdit(e) {
     const h = e.range.getSheet(), nombre = h.getName();
     if ([CFG.SHEET_ORIGINALES, CFG.SHEET_FOTOS].indexOf(nombre) < 0 || e.range.getRow() < 2 || e.range.getColumn() < 15) return;
     const tit = h.getRange(1, 1, 1, h.getLastColumn()).getDisplayValues()[0].map(CC_norma_);
+    try { CC_marcarCorreccion_(e, h, tit); } catch (eM) { /* nunca molestar al editar */ }
     const cEmp = tit.indexOf('empresa') + 1, cRuc = tit.indexOf('ruc empresa') + 1;
     if (cEmp < 1 || cRuc < 1) return;
     const em = CC_mapaEmpresas_(h.getParent()), mapa = em.mapa;
