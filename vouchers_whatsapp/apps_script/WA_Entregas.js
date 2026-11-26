@@ -115,7 +115,7 @@ function WA_listaNombre_(de, preg, n, pestana, datos, filas) {
     'Quedarán como _' + corta + ' Nombre_' + (n > 1 ? ', _… Nombre 2_…' : '') + '\n' +
     (sug ? '⭐ Según el voucher paga: _' + preg.ordenante + '_\n' : '') +
     '📂 Pestaña: *' + (pestana === 'original' ? 'Originales' : pestana === 'foto' ? 'Fotos' : 'Fotos y Originales (según el archivo)') + '* (puede cambiarla en la lista)\n' +
-    (preg.cmp ? '🗜 Reducir peso: *sí* (un robot recorta los bordes y comprime antes de leerlo)\n' : '') +
+    (preg.cmp ? '🗜 Reducir peso: *sí* (un robot recorta los bordes y comprime antes de leerlo)' + (preg.cmp === 'blanco' ? ' *+ ✂️ recorta los espacios en blanco*' : '') + '\n' : '') +
     '\nElija de la lista o escríbame el nombre (o dígalo 🎤). Si es de otro día: *Edit 15/10* o *Edit ayer*.';
   var filasLista = nombres.map(function (nm, i) {
     var fila = { id: 'en:n' + i, title: ((i === 0 && sug ? '⭐ ' : '') + nm).slice(0, 24) };
@@ -127,7 +127,8 @@ function WA_listaNombre_(de, preg, n, pestana, datos, filas) {
     !pestana ? { id: 'en:pfo', title: '📸 Todo como foto', description: 'Ahora cada uno va según su tipo: mandar todo a Fotos' }
       : pestana === 'original' ? { id: 'en:pfo', title: '📸 Enviar como foto', description: 'Ahora va a Originales: cambiar a la pestaña Fotos' }
       : { id: 'en:por', title: '📄 Enviar como original', description: 'Ahora va a Fotos: cambiar a la pestaña Originales' },
-    preg.cmp ? { id: 'en:cmp', title: '🗜 Reducir peso: SÍ ✅', description: 'Tóquelo para NO reducir el peso' }
+    preg.cmp === 'blanco' ? { id: 'en:cmp', title: '🗜✂️ + blancos ✅', description: 'Reduce peso y recorta los blancos. Tóquelo para NO reducir' }
+      : preg.cmp ? { id: 'en:cmp', title: '🗜 Reducir peso ✅', description: 'Tóquelo para además ✂️ recortar los espacios en blanco' }
       : { id: 'en:cmp', title: '🗜 Reducir peso', description: 'Un robot recorta los bordes y comprime antes de leerlo' },
     { id: 'en:sin', title: '➖ Sin nombre', description: 'Como antes (nombre del archivo o la fecha)' },
     { id: 'en:ia', title: '🧾 Revisar con IA', description: 'Ve si ya está, registra solo el voucher y completa la factura' }
@@ -172,6 +173,7 @@ function WA_respuestaNombre_(de, texto, audio) {
   if (!preg) return { tomado: false };
   if (!audio && /^sin\s+nombre\b/i.test(texto)) { WA_finalizar_(de, null); return { tomado: true }; }
   if (!audio && /^(?:🗜\s*)?(?:reducir(?:\s+(?:el\s+)?peso)?|comprimir(?:lo|los)?)$/i.test(String(texto).trim())) { WA_alternarCompresion_(de, preg); return { tomado: true }; }
+  if (!audio && /^(?:✂️\s*)?recortar(?:\s+(?:los\s+)?(?:espacios\s+(?:en\s+)?)?blancos?)?$/i.test(String(texto).trim())) { WA_alternarCompresion_(de, preg, 'blanco'); return { tomado: true }; }
   var mp = !audio && String(texto).trim().match(/^(?:enviar\s+)?(?:a\s+|como\s+)?(originale?s?|fotos?)$/i);   // "original" / "foto"
   if (mp) { WA_cambiarPestanaEspera_(de, preg, /^o/i.test(mp[1]) ? 'original' : 'foto'); return { tomado: true }; }
   if (!audio && !WA_pareceNombre_(texto)) return { tomado: false };
@@ -198,8 +200,8 @@ function WA_etiquetaPrevia_(de, texto) {
  * it = {nombre, fecha:'yyyy-MM-dd', ordenante?, dicho?} o null (sin nombre: queda el de antes).
  */
 /** 🗜 Reducir peso: se prende / apaga para la tanda que espera el nombre y se vuelve a mostrar la lista. */
-function WA_alternarCompresion_(de, preg) {
-  preg.cmp = !preg.cmp;
+function WA_alternarCompresion_(de, preg, valor) {
+  preg.cmp = valor !== undefined ? valor : !preg.cmp ? true : preg.cmp === true ? 'blanco' : false;   // no → sí → sí + ✂️ blancos → no
   WA_props_().setProperty('WA_PREG_' + de, JSON.stringify(preg));
   var datos = WA_hoja_().getDataRange().getValues(), filas = WA_filasEspera_(datos, de);
   if (!filas.length) { WA_enviarTexto_(de, 'Esos vouchers ya se registraron 👍'); return; }
@@ -209,9 +211,9 @@ function WA_alternarCompresion_(de, preg) {
 function WA_finalizar_(de, it) {
   var hoja = WA_hoja_(), datos = hoja.getDataRange().getValues();
   var filas = WA_filasEspera_(datos, de);
-  var cmp = !!(WA_leerJson_('WA_PREG_' + de) || {}).cmp;   // 🗜 Reducir peso (se lee antes de borrar la pregunta)
-  if (it && it.cmp) cmp = true;
-  if (cmp) it = Object.assign({}, it || {}, { cmp: true });   // sigue aunque antes se pregunte «¿Qué es?» (PDF de varias páginas)
+  var cmp = (WA_leerJson_('WA_PREG_' + de) || {}).cmp || false;   // 🗜 Reducir peso (true) o + ✂️ blancos ('blanco'); se lee antes de borrar la pregunta
+  if (it && it.cmp) cmp = it.cmp;
+  if (cmp) it = Object.assign({}, it || {}, { cmp: cmp });   // sigue aunque antes se pregunte «¿Qué es?» (PDF de varias páginas)
   WA_props_().deleteProperty('WA_PREG_' + de);
   if (!filas.length) return;
   // Un PDF de varias páginas (orden de compra + voucher + factura…) no va entero a la hoja de Vouchers:
@@ -248,7 +250,7 @@ function WA_finalizar_(de, it) {
       var f = DriveApp.getFileById(r0[9]);
       if (nuevo !== r0[4]) f.setName(nuevo);
       f.moveTo(DriveApp.getFolderById(WA_VOUCHERS_.entrada[r0[3]]));
-      if (cmp) f.setDescription('📦 comprimir (pedido) · WhatsApp');   // lo toma el robot de la hoja de Vouchers
+      if (cmp) f.setDescription('📦 comprimir (pedido)' + (cmp === 'blanco' ? ' ✂️' : '') + ' · WhatsApp');   // lo toma el robot de la hoja de Vouchers
     } catch (e) { estado = 'Error'; res = 'No pude pasarlo a Entrada: ' + String(e.message).slice(0, 150); }
     datos[i][4] = nuevo; datos[i][6] = estado; datos[i][7] = res;
     hoja.getRange(i + 1, 5).setValue(nuevo);

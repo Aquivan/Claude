@@ -35,6 +35,7 @@ except ImportError:
 LADO = 1600          # px del lado largo
 CALIDAD = 80         # calidad JPG (Jpegli / Pillow)
 MAX_PARTE = 38 * 1024 * 1024
+BLANCO_DELTA = 75   # ✂️ qué tan oscuro debe ser algo para contar como contenido (lo transparentado del reverso queda fuera)
 
 
 def bot(cuerpo):
@@ -75,6 +76,30 @@ def recortar(img):
     return img[y0:y1, x0:x1], True
 
 
+def recortar_blanco(img):
+    """✂️ Opcional: recorta el papel en blanco alrededor de lo impreso / escrito / sellos / etiquetas (con margen).
+    Lo que se transparenta del reverso (gris claro) NO cuenta como contenido; el filo del escáner tampoco."""
+    g = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    h, w = g.shape
+    papel = float(np.percentile(g, 90))
+    tinta = (g < papel - BLANCO_DELTA).astype(np.uint8) * 255
+    b = int(0.015 * max(h, w))
+    tinta[:b, :] = 0; tinta[-b:, :] = 0; tinta[:, :b] = 0; tinta[:, -b:] = 0
+    tinta = cv2.morphologyEx(tinta, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))   # polvo
+    tinta = cv2.dilate(tinta, np.ones((15, 15), np.uint8))
+    n, _, st, _ = cv2.connectedComponentsWithStats(tinta)
+    cajas = [st[i] for i in range(1, n) if st[i][4] > 0.0004 * h * w]
+    if not cajas:
+        return img, False
+    x0 = min(c[0] for c in cajas); y0 = min(c[1] for c in cajas)
+    x1 = max(c[0] + c[2] for c in cajas); y1 = max(c[1] + c[3] for c in cajas)
+    m = max(25, int(0.04 * max(h, w)))
+    x0, y0, x1, y1 = max(0, x0 - m), max(0, y0 - m), min(w, x1 + m), min(h, y1 + m)
+    if (x1 - x0) * (y1 - y0) > 0.9 * w * h:   # casi no hay blanco que quitar
+        return img, False
+    return img[y0:y1, x0:x1], True
+
+
 def a_jpg(img, cjpegli):
     pil = Image.fromarray(img)
     if cjpegli:
@@ -104,7 +129,8 @@ def main():
         print("Bajado: %.1f MB" % (len(pdf) / 1048576))
         base = nombre.rsplit(".", 1)[0] if "." in nombre[-6:] else nombre
         es_foto = str(d.get("mime", "")).startswith("image/")
-        recortadas, archivos = 0, []
+        recortadas, blancos, archivos = 0, 0, []
+        blanco = bool(d.get("blanco"))   # ✂️ la persona pidió también recortar los blancos
         if es_foto:   # 🗜 una foto: se recorta, se achica y queda como JPG
             img = cv2.imdecode(np.frombuffer(pdf, np.uint8), cv2.IMREAD_COLOR)
             if img is None:
@@ -112,6 +138,9 @@ def main():
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img, rec = recortar(img)
             recortadas += 1 if rec else 0
+            if blanco:
+                img, rb = recortar_blanco(img)
+                blancos += 1 if rb else 0
             h, w = img.shape[:2]
             f = LADO / float(max(h, w))
             if f < 1:
@@ -133,6 +162,9 @@ def main():
                 img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)[:, :, :3].copy()
                 img, rec = recortar(img)
                 recortadas += 1 if rec else 0
+                if blanco:
+                    img, rb = recortar_blanco(img)
+                    blancos += 1 if rb else 0
                 h, w = img.shape[:2]
                 f = LADO / float(max(h, w))
                 if f < 1:
@@ -151,8 +183,8 @@ def main():
                 nom = nombre if len(partes) == 1 else "%s (parte %d de %d).pdf" % (base, i + 1, len(partes))
                 archivos.append((nom, img2pdf.convert(imgs, layout_fun=img2pdf.get_fixed_dpi_layout_fun((150, 150))), "application/pdf"))
         total = sum(len(b) for _, b, _ in archivos)
-        print("Comprimido: %.1f MB → %.1f MB · %d pág · %d recortadas · %d parte(s) · %s" % (len(pdf) / 1048576, total / 1048576, npag, recortadas, len(archivos), motor))
-        if len(archivos) == 1 and total >= len(pdf) * 0.9:   # casi no baja (ya estaba liviano): queda el original
+        print("Comprimido: %.1f MB → %.1f MB · %d pág · %d recortadas · %d sin blancos · %d parte(s) · %s" % (len(pdf) / 1048576, total / 1048576, npag, recortadas, blancos, len(archivos), motor))
+        if len(archivos) == 1 and total >= len(pdf) * 0.9 and not blancos:   # casi no baja (ya estaba liviano): queda el original
             print("No hacía falta: el original ya pesaba poco.")
             bot({"accion": "cmp_fin", "ok": True, "sinCambio": True})
             return 0
@@ -165,7 +197,7 @@ def main():
             _, cab = drive(token, "POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true", meta,
                            {"Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Type": tipo, "X-Upload-Content-Length": str(len(b))})
             drive(token, "PUT", cab["Location"], b, {"Content-Type": tipo})
-        bot({"accion": "cmp_fin", "ok": True, "mb": round(total / 1048576, 1), "partes": len(archivos), "paginas": npag, "recortadas": recortadas, "motor": motor})
+        bot({"accion": "cmp_fin", "ok": True, "mb": round(total / 1048576, 1), "partes": len(archivos), "paginas": npag, "recortadas": recortadas, "blancos": blancos, "motor": motor})
         return 0
     except Exception as e:  # noqa: BLE001
         msg = str(e)[:300]

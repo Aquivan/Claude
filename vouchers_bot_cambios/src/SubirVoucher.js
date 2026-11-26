@@ -39,7 +39,7 @@ function SV_subir(a) {
     if (bytes.length > CFG.MAX_MB_ARCHIVO * 1024 * 1024) return { ok: false, error: 'Pesa más de ' + CFG.MAX_MB_ARCHIVO + ' MB.' };
     const carpeta = DriveApp.getFolderById(carpetasParaTipo_(a.destino === 'foto' ? 'foto' : 'original').entrada);
     const f = carpeta.createFile(Utilities.newBlob(bytes, a.mime, nombre));
-    if (a.comprimir) { try { f.setDescription(CMPV_PEDIDO_ + ' · 📤 Subir'); } catch (eC) {} }   // 🗜 Reducir peso (CompresionVouchers.js)
+    if (a.comprimir || a.blanco) { try { f.setDescription(CMPV_PEDIDO_ + (a.blanco ? ' ✂️' : '') + ' · 📤 Subir'); } catch (eC) {} }   // ✂️ = también recortar blancos   // 🗜 Reducir peso (CompresionVouchers.js)
     return { ok: true, nombre: f.getName(), url: f.getUrl() };
   } catch (e) {
     return { ok: false, error: e.message };
