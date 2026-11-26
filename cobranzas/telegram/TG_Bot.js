@@ -497,7 +497,7 @@ function TG_registrarVouchers_(ctx, adjs) {
       var esFoto = a.pestana ? a.pestana === 'foto' : (a.foto || /^image\//.test(a.mime));   // 📂 elegida en "¿De quién son?"
       var destino = DriveApp.getFolderById(esFoto ? cfg.carpetaFotos : cfg.carpetaOriginales);
       var copia = DriveApp.getFileById(a.id).makeCopy(a.nombre, destino);
-      if (a.comprimir) copia.setDescription('📦 comprimir (pedido) · Telegram');   // 🗜 Reducir peso: lo toma el robot de la hoja de Vouchers
+      if (a.comprimir) copia.setDescription('📦 comprimir (pedido)' + (a.comprimir === 'blanco' ? ' ✂️' : '') + ' · Telegram');   // ✂️ = también recortar blancos   // 🗜 Reducir peso: lo toma el robot de la hoja de Vouchers
       hechos.push({ id: copia.getId(), nombre: a.nombre, mb: a.mb || 0, comprimir: !!a.comprimir });
       n++;
     } catch (e) { errores.push(a.nombre + ': ' + e.message); }

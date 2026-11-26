@@ -49,6 +49,8 @@
   <button onclick="renombrarTodos()" title="Pone ese nombre a todos, numerados: «… 1», «… 2»">🔤 Aplicar</button>
   <label style="margin-left:8px" title="Un robot recorta el fondo que sobra alrededor de cada voucher y comprime (Jpegli de Google) antes de leerlo. Si ya pesa poco, queda igual.">
     <input type="checkbox" id="comprimir"> 🗜 Reducir peso (recortar bordes y comprimir)</label>
+  <label style="margin-left:8px" title="Además corta el papel en blanco que sobra alrededor de lo impreso o escrito (deja un margen). Lo que se transparenta del reverso no cuenta.">
+    <input type="checkbox" id="blanco" onchange="if (this.checked) document.getElementById('comprimir').checked = true"> ✂️ y recortar los espacios en blanco</label>
 </header>
 <main>
   <div id="zona" onclick="document.getElementById('archivos').click()">
@@ -222,7 +224,7 @@ function subirTodo() {
         else { it.estado = 'error'; it.error = (r && r.error) || 'No se pudo subir.'; if (/existe/.test(it.error)) it.repetido = true; }
         siguiente();
       }).withFailureHandler(function (e) { it.estado = 'error'; it.error = e.message; siguiente(); })
-        .SV_subir({ nombre: nombreDe(it), mime: it.f.type, datos: datos, destino: it.destino, comprimir: document.getElementById('comprimir').checked });
+        .SV_subir({ nombre: nombreDe(it), mime: it.f.type, datos: datos, destino: it.destino, comprimir: document.getElementById('comprimir').checked, blanco: document.getElementById('blanco').checked });
     }).catch(function (e) { it.estado = 'error'; it.error = e.message; siguiente(); });
   })();
 }
