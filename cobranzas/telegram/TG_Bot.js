@@ -438,6 +438,23 @@ function TG_transcribir_(ss, blob) {
   return String(t || '').replace(/^["“]|["”]$/g, '').trim();
 }
 
+/** ⚡ Pide a la hoja de Vouchers procesar YA y arma una línea por archivo (Telegram y WhatsApp). */
+function TG_procesarYResultado_(ss, hechos) {
+  var t0 = Date.now(), rp = TGP_procesarYa_();   // ⏱ la hoja dice en qué se fue el tiempo
+  var idx = {};
+  try { idx = TGU_indiceArchivos_(ss); } catch (e) {}
+  var lineas = hechos.map(function (h) {
+    var f = idx[h.nombre] || [];
+    if (!f.length) return '⏳ ' + TG_esc_(h.nombre) + ': aún en cola (máx. 10 min' + (h.mb > 45 ? '; pesa ' + h.mb + ' MB: primero se comprime' : '') + ')';
+    return f.map(function (x) {
+      return /^\[DUPLICADO\]/.test(x.op) ? '🔁 ' + TG_esc_(h.nombre) + ': <b>ya estaba registrado</b> en ' + x.hoja + '!' + x.fila + ' (no se volvió a registrar; quedó anotado en esa fila y el archivo en «🔁 Repetidos»)'
+        : /^\[/.test(x.op) ? '❌ ' + TG_esc_(h.nombre) + ': no se encontró un voucher legible'
+        : '✅ <b>' + x.hoja + '!' + x.fila + '</b> · op ' + TG_esc_(x.op) + ' · ' + Number(x.monto || 0).toFixed(2);
+    }).join('\n');
+  });
+  return { lineas: lineas, tt: TGP_textoTiempos_(rp, t0) };
+}
+
 /** 📥 Copia los archivos a la carpeta de entrada del Sistema de Vouchers (su proceso automático los registra). */
 function TG_registrarVouchers_(ctx, adjs) {
   var cfg = TG_cfg_(ctx.ss);
@@ -447,7 +464,7 @@ function TG_registrarVouchers_(ctx, adjs) {
       var esFoto = a.pestana ? a.pestana === 'foto' : (a.foto || /^image\//.test(a.mime));   // 📂 elegida en "¿De quién son?"
       var destino = DriveApp.getFolderById(esFoto ? cfg.carpetaFotos : cfg.carpetaOriginales);
       var copia = DriveApp.getFileById(a.id).makeCopy(a.nombre, destino);
-      hechos.push({ id: copia.getId(), nombre: a.nombre });
+      hechos.push({ id: copia.getId(), nombre: a.nombre, mb: a.mb || 0 });
       n++;
     } catch (e) { errores.push(a.nombre + ': ' + e.message); }
   });
@@ -455,19 +472,7 @@ function TG_registrarVouchers_(ctx, adjs) {
   // ⚡ Que la hoja de Vouchers los procese YA y se responda con el resultado (sin esperar su vuelta de 10 min).
   if (hechos.length && PropertiesService.getScriptProperties().getProperty('TGP_PROCESAR_URL')) {
     TG_accion_(ctx.chatId, 'typing');
-    var t0 = Date.now(), rp = TGP_procesarYa_();   // ⏱ la hoja dice en qué se fue el tiempo
-    var idx = {};
-    try { idx = TGU_indiceArchivos_(ctx.ss); } catch (e) {}
-    var lineas = hechos.map(function (h) {
-      var f = idx[h.nombre] || [];
-      if (!f.length) return '⏳ ' + TG_esc_(h.nombre) + ': aún en cola (máx. 10 min)';
-      return f.map(function (x) {
-        return /^\[DUPLICADO\]/.test(x.op) ? '🔁 ' + TG_esc_(h.nombre) + ': <b>ya estaba registrado</b> en ' + x.hoja + '!' + x.fila + ' (no se volvió a registrar; quedó anotado en esa fila y el archivo en «🔁 Repetidos»)'
-          : /^\[/.test(x.op) ? '❌ ' + TG_esc_(h.nombre) + ': no se encontró un voucher legible'
-          : '✅ <b>' + x.hoja + '!' + x.fila + '</b> · op ' + TG_esc_(x.op) + ' · ' + Number(x.monto || 0).toFixed(2);
-      }).join('\n');
-    });
-    var tt = TGP_textoTiempos_(rp, t0);
+    var res = TG_procesarYResultado_(ctx.ss, hechos), lineas = res.lineas, tt = res.tt;
     TG_enviar_(ctx.chatId, '📋 <b>Resultado</b>\n' + lineas.join('\n') + (tt ? '\n<i>' + TG_esc_(tt) + '</i>' : ''), [[{ text: '↩️ Deshacer', callback_data: 'k:' + TG_guardarBoton_({ t: 'deshacer' }) }]]);
     return;
   }

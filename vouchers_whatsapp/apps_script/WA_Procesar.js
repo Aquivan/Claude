@@ -46,6 +46,7 @@ function WA_mostrarPlan_(de, r) {
   if (!r || !r.ok) { WA_enviarTexto_(de, '⚠️ ' + ((r && r.error) || 'No pude revisarlo.') + '\nMándemelo de nuevo o elija otra opción.'); return; }
   WA_trozos_(WA_md_(r.texto)).forEach(function (t) { WA_enviarTexto_(de, t); });
   WA_botonesPlan_(de, r, '¿Lo hago?');
+  if (r.varios && r.k) WA_botonVarios_(de, r.k);   // 📚 escaneo de varios vouchers: botón aparte (WhatsApp deja solo 3 por mensaje)
   // 🧾 La retención se revisa DESPUÉS de mostrar el resumen (así el resumen no espera): ¿emito el CRE?
   var sig = r.siguientes || [];
   if (!sig.length && r.k) { try { var c = WA_cobranzas_('procesar', { modo: 'cre', numero: de, k: r.k }); sig = (c && c.siguientes) || []; } catch (e) {} }
@@ -95,6 +96,16 @@ function WA_botonesDuda_(de, r) {
   if (!s.ok) WA_enviarTexto_(de, '⚠️ No pude mostrar las opciones (' + (s.error || 'WhatsApp') + '). Cancele y mándeme el archivo de nuevo.');
 }
 
+/** 📚 «Son varios vouchers»: el PDF va entero a la hoja de Vouchers (lee cada página) con el nombre del resumen. */
+function WA_botonVarios_(de, k) {
+  var s = WA_graph_('POST', WA_prop_('WA_PHONE_ID') + '/messages', {
+    messaging_product: 'whatsapp', to: de, type: 'interactive',
+    interactive: { type: 'button', body: { text: '📚 Parece un escaneo de *varios vouchers*. Para registrar TODAS las páginas toque el botón (la hoja de Vouchers lee cada página).' },
+      action: { buttons: [{ type: 'reply', reply: { id: 'pr:' + k + ':vvar', title: '📚 Son varios' } }] } }
+  });
+  if (!s.ok) WA_enviarTexto_(de, '📚 Si son varios vouchers, mándeme el PDF otra vez y elija *📚 Varios vouchers*.');
+}
+
 /** Botones "pr:<k>:si|nom|no|q<n>_…". */
 function WA_procesarBoton_(de, id) {
   var p = String(id).split(':'), k = p[1], op = p[2];
@@ -110,6 +121,16 @@ function WA_procesarBoton_(de, id) {
     try { rp = WA_cobranzas_('procesar', { modo: 'pestana', numero: de, k: k, pestana: op === 'dfo' ? 'foto' : 'original' }); } catch (e) { rp = { ok: false, error: e.message }; }
     if (!rp || !rp.ok) { WA_enviarTexto_(de, '⚠️ ' + ((rp && rp.error) || 'No respondió Cobranzas.')); return; }
     WA_botonesPlan_(de, rp, '📂 Listo: irá a la pestaña *' + rp.textoPestana + '*. ¿Lo hago?');
+    return;
+  }
+  if (op === 'vvar') {   // 📚 era un escaneo de varios vouchers
+    WA_props_().deleteProperty('WA_PRK_' + de);
+    WA_enviarTexto_(de, '📚 Lo mando entero a la hoja de Vouchers para que lea cada página…');
+    var rv;
+    try { rv = WA_cobranzas_('procesar', { modo: 'varios', numero: de, k: k }); } catch (e) { rv = { ok: false, error: e.message }; }
+    if (!rv || !rv.ok) { WA_enviarTexto_(de, '⚠️ ' + ((rv && rv.error) || 'No respondió Cobranzas.')); return; }
+    WA_marcarRevisando_(de, 'Revisado IA', String(rv.texto || '').replace(/<[^>]+>/g, '').slice(0, 300), k);
+    WA_trozos_(WA_md_(rv.texto)).forEach(function (t) { WA_enviarTexto_(de, t); });
     return;
   }
   if (op === 'nom') {

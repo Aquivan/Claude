@@ -366,7 +366,7 @@ function TGE_cerrarTG_(ctx, k, datos, it) {
   var adjs = datos.adjs.map(function (a) { return Object.assign({}, a, datos.pestana ? { pestana: datos.pestana } : {}); });
   if (it && it.nombre) {
     var nombres = TGE_reservar_(ctx.ss, it.nombre, it.fecha, adjs.map(function (a) { return TGE_ext_(a.nombre, a.mime); }));
-    adjs = adjs.map(function (a, i) { return { id: a.id, nombre: nombres[i], mime: a.mime, foto: a.foto, pestana: datos.pestana }; });
+    adjs = adjs.map(function (a, i) { return { id: a.id, nombre: nombres[i], mime: a.mime, foto: a.foto, pestana: datos.pestana, mb: a.mb || 0 }; });
     try { datos.hecho = TGE_corta_(it.fecha) + ' ' + it.nombre; CacheService.getScriptCache().put('tg_b_' + k, JSON.stringify(datos), 21600); } catch (eH) {}
     TGE_usar_(it.nombre, datos.ordenante && datos.nombres[0] === it.nombre ? datos.ordenante : '');
     if (msgId) TG_tarjeta_({ chatId: ctx.chatId, msgId: msgId, esBoton: true }, '🏷 <b>' + TG_esc_(TGE_corta_(it.fecha) + ' ' + it.nombre) + '</b> · ' + adjs.length + ' archivo(s) · 📂 ' + (datos.pestana === 'original' ? 'Originales' : 'Fotos') + (datos.extra ? '\n' + datos.extra : ''), []);

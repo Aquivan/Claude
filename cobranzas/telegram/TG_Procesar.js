@@ -106,7 +106,7 @@ function TGP_leerVarios_(c, adjs) {
       var nPag = /pdf/i.test(mime) ? TGP_paginasPdf_(blob) : 1;
       var clave = hashTexto_('tgp5|' + bytes.length + '|' + Utilities.base64Encode(bytes.slice(0, 3000)));
       var r = AUV_cacheGet_(cache, 'tgp', clave);
-      if (r) { out[i] = TGP_docsDe_(r, mime); return; }
+      if (r) { out[i] = TGP_docsDe_(r, mime); out[i].nPag = nPag; return; }
       pend.push({ i: i, clave: clave, mime: mime, nPag: nPag, opts: { sistema: TGP_SISTEMA_, maxTokens: 8000,
         adjunto: { mime: /pdf/i.test(mime) ? 'application/pdf' : mime, base64: Utilities.base64Encode(bytes) },
         texto: 'ARCHIVO: ' + adj.nombre + (nPag > 1 ? ' (PDF de ' + nPag + ' páginas: revisa TODAS, una por una; puede haber varios vouchers, y reversos de vouchers que no son documentos)' : '') +
@@ -132,13 +132,18 @@ function TGP_leerVarios_(c, adjs) {
       // se reintenta SOLO con la IA principal (Gemini lee el PDF completo); si igual, se avisa y no se guarda.
       var soloP1 = function (r) { var d = (r && r.documentos) || []; return x.nPag > 1 && !d.some(function (q) { return Number(q.pagina) > 1; }); };
       if (soloP1(rr.r)) {
-        try { var o2 = {}; for (var kk in x.opts) o2[kk] = x.opts[kk]; o2._sinRespaldo = true; var r2 = IA_llamarSeguro_(c.ia, o2); if (r2 && !soloP1(r2)) rr = { ok: true, r: r2 }; } catch (e2) {}
+        var porQue = 'Gemini también leyó solo la 1.ª página';
+        try { var o2 = {}; for (var kk in x.opts) o2[kk] = x.opts[kk]; o2._sinRespaldo = true; var r2 = IA_llamarSeguro_(c.ia, o2); if (r2 && !soloP1(r2)) rr = { ok: true, r: r2 }; }
+        catch (e2) { porQue = 'Gemini no respondió: ' + String(e2.message || e2).slice(0, 120); }
+        if (soloP1(rr.r)) { try { REG_anotar_('Cobranzas', 'procesar documento · solo pág. 1', '', adjs[x.i].nombre + ' (' + x.nPag + ' pág) · ' + porQue + (rr.r._leidoPor ? ' · leyó ' + rr.r._leidoPor : '')); } catch (eR) {} }
       }
-      if (soloP1(rr.r)) {
-        rr.r.observaciones = '⚠️ Solo se pudo revisar la página 1 de ' + x.nPag + ' (la IA principal no respondió). Vuelva a intentarlo en unos minutos' +
-          ' o, si es un escaneo de varios vouchers, use 📚 Varios vouchers. ' + String(rr.r.observaciones || '');
+      var p1 = soloP1(rr.r);
+      if (p1) {
+        rr.r.observaciones = '⚠️ Solo se pudo revisar la página 1 de ' + x.nPag + ' (' + (porQue || 'la IA principal no respondió') + '). ' +
+          'Si son varios vouchers, toque 📚 Son varios vouchers. ' + String(rr.r.observaciones || '');
       } else AUV_cachePut_(cache, 'tgp', x.clave, rr.r);
       out[x.i] = TGP_docsDe_(rr.r, x.mime);
+      out[x.i].soloP1 = p1; out[x.i].nPag = x.nPag;
     });
     AUV_cacheGuardar_(cache);
   }
@@ -294,9 +299,14 @@ function TGP_analizar_(ss, adjs, op) {
   });
   // Una sola fecha y nombre para todos los nuevos (como una tanda); se cambia con 🏷.
   var nuevos = items.filter(function (x) { return x.tipo === 'nuevo'; });
+  // 📚 ¿Es un escaneo de VARIOS vouchers? (PDF de varias páginas con 2+ vouchers, o la IA leyó solo la 1.ª página)
+  var varios = leidos.some(function (x) {
+    if (!x.r || x.r.error || !(x.r.nPag > 1)) return false;
+    return x.r.soloP1 || (x.r.docs || []).filter(function (d) { return TGP_tipo_(d) === 'voucher'; }).length >= 2;
+  });
   var plan = { t: 'procesar', canal: op.canal, destino: op.destino, clave: op.clave, adjs: adjs, items: items,
     nombre: op.nombre || (nuevos.length ? nuevos[0].nombre : ''), ordenante: op.nombre ? '' : (nuevos.length ? nuevos[0].ordenante : ''),
-    fecha: op.fecha || TGE_hoy_(), resumen: resumenArch, pestana: /^(foto|original)$/.test(op.pestana || '') ? op.pestana : '' };
+    fecha: op.fecha || TGE_hoy_(), resumen: resumenArch, pestana: /^(foto|original)$/.test(op.pestana || '') ? op.pestana : '', varios: varios };
   // ⏱ dónde se fue el tiempo (para saberlo con datos, no suponerlo)
   var sg = function (ms) { return Math.max(0, Math.round(ms / 100) / 10) + ' s'; }, tFin = Date.now();
   plan.tiempos = 'lectura ' + sg(tLeer - t0) + (adjs.length > 1 ? ' (' + adjs.length + ' archivos a la vez)' : '') +
@@ -536,10 +546,11 @@ function TGP_texto_(k, p) {
   if (nuevos) L.push('\n📂 Pestaña: <b>' + TGP_textoPestana_(p) + '</b>');
   if (nuevos) L.push('🏷 Se guardará como <b>' + TG_esc_(TGE_corta_(p.fecha) + ' ' + p.nombre) + '</b>' + (nuevos > 1 ? ', … 2…' : '') + ' (puede cambiarlo).');
   if (p.tiempos) L.push('\n⏱ <i>' + TG_esc_(p.tiempos) + '</i>');
+  if (p.varios) L.push('\n📚 <b>Parece un escaneo de varios vouchers.</b> Para registrar TODAS las páginas toque <b>📚 Son varios vouchers</b> (la hoja de Vouchers lee cada página).');
   L.push('\n<i>El archivo original queda en la carpeta temporal (se borra sola en 7 días). Todo se puede deshacer.</i>');
   if (preg) L.push('\n🤔 <b>Antes de hacer nada, dígame la duda del voucher ' + preg.n + '</b> (botones abajo).');
   return { texto: L.join('\n'), k: k, hayAcciones: acciones > 0, hayNuevos: nuevos > 0, pregunta: preg, etiqueta: TGE_corta_(p.fecha) + ' ' + p.nombre, msg: p.msg || 0,
-    pestana: TGP_pestanaEfectiva_(p), textoPestana: TGP_textoPestana_(p) };
+    pestana: TGP_pestanaEfectiva_(p), textoPestana: TGP_textoPestana_(p), varios: !!p.varios };
 }
 
 /** 'foto' | 'original' | 'mixto' (PDF a Originales y fotos a Fotos, cuando no se eligió). */
@@ -1025,7 +1036,14 @@ function TGP_hayVariasPaginas_(adjs) {
 }
 
 function TGP_tecladoTG_(r) {
-  if (!r.hayAcciones) return null;
+  var fv = r.varios ? [{ text: '📚 Son varios vouchers (todas las páginas)', callback_data: 'k:' + r.k + ':vvar' }] : null;
+  if (!r.hayAcciones) return fv ? [fv] : null;
+  var f0 = TGP_tecladoTGBase_(r);
+  if (fv && !r.pregunta) f0.push(fv);
+  return f0;
+}
+
+function TGP_tecladoTGBase_(r) {
   if (r.pregunta) {   // primero se resuelve la duda; recién después aparece ✅ Hacerlo
     return r.pregunta.botones.map(function (b) { return [{ text: b.title + (b.desc && /^Es /.test(b.title) ? ' · ' + b.desc : ''), callback_data: 'k:' + r.k + ':' + b.op }]; })
       .concat([[{ text: '✖ Cancelar todo', callback_data: 'k:' + r.k + ':no' }]]);
@@ -1049,6 +1067,14 @@ function TGP_alBotonTG_(ctx, op, k) {
     var rp = TGP_cambiarPestana_(k, op === 'dfo' ? 'foto' : 'original');
     if (rp.error) return TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(rp.error));
     return TG_editar_(ctx.chatId, ctx.msgId, rp.texto, TGP_tecladoTG_(rp));
+  }
+  if (op === 'vvar') {   // 📚 era un escaneo de varios vouchers: va entero a la hoja de Vouchers (lee cada página), con ¿de quién son?
+    var pv = TG_leerBoton_(k);
+    if (!pv) return TG_enviar_(ctx.chatId, 'Ese resumen ya venció (dura 6 horas). Mándeme el archivo de nuevo.');
+    if (TG_yaVisto_('tgp' + k)) return TG_enviar_(ctx.chatId, 'Eso ya se hizo.');
+    var sv = TG_sesion_(ctx.chatId);
+    if (sv.procPend === k) { delete sv.procPend; TG_guardarSesion_(ctx.chatId, sv); }
+    return TGE_preguntarTG_(ctx, pv.adjs, '', '📚 <i>Varios vouchers: la hoja de Vouchers lee cada página; los reversos con algo escrito a mano pasan a «✍️ Anotación».</i>');
   }
   if (op === 'nom') {
     var ses = TG_sesion_(ctx.chatId); ses.esperando = { tipo: 'procnombre', k: k }; TG_guardarSesion_(ctx.chatId, ses);
@@ -1125,6 +1151,24 @@ function TGP_wa_(q) {
   }
   if (q.modo === 'decidir') { var dd = TGP_decidir_(ss, q.k, q.op); dd.ok = !dd.error; return dd; }
   if (q.modo === 'pestana') { var d = TGP_cambiarPestana_(q.k, q.pestana); d.ok = !d.error; return d; }
+  if (q.modo === 'varios') {   // 📚 WhatsApp: era un escaneo de varios vouchers → entero a la hoja de Vouchers, con el nombre del resumen
+    var pv = TG_leerBoton_(q.k);
+    if (!pv) return { ok: false, error: 'Ese resumen ya venció (dura 6 horas). Mándeme el archivo de nuevo.' };
+    if (TG_yaVisto_('tgp' + q.k)) return { ok: true, texto: 'Eso ya se hizo.' };
+    var cfgV = TG_cfg_(ss), hechos = [], errores = [];
+    var nombres = TGE_reservar_(ss, pv.nombre || 'Voucher', pv.fecha || TGE_hoy_(), pv.adjs.map(function (a) { return TGE_ext_(a.nombre, a.mime); }));
+    pv.adjs.forEach(function (a, i) {
+      try {
+        var esFoto = pv.pestana ? pv.pestana === 'foto' : /^image\//.test(a.mime);
+        var cp = DriveApp.getFileById(a.id).makeCopy(nombres[i], DriveApp.getFolderById(esFoto ? cfgV.carpetaFotos : cfgV.carpetaOriginales));
+        hechos.push({ id: cp.getId(), nombre: nombres[i], mb: a.mb || 0 });
+      } catch (e) { errores.push(a.nombre + ': ' + e.message); }
+    });
+    if (hechos.length) TGU_anotar_(clave, { desc: '📥 ' + hechos.length + ' voucher(s) a la hoja de Vouchers: ' + hechos.map(function (h) { return h.nombre; }).join(', '), archivos: hechos });
+    var rv = hechos.length ? TG_procesarYResultado_(ss, hechos) : { lineas: [], tt: '' };
+    return { ok: true, texto: '📚 <b>Varios vouchers</b> · ' + TG_esc_(nombres.join(', ')) + '\n📋 <b>Resultado</b>\n' + rv.lineas.join('\n') +
+      (rv.tt ? '\n<i>' + TG_esc_(rv.tt) + '</i>' : '') + (errores.length ? '\n⚠️ ' + TG_esc_(errores.join('; ')) : '') };
+  }
   if (q.modo === 'mensajes') {
     var p = PropertiesService.getScriptProperties(), m = [];
     try { m = JSON.parse(p.getProperty(TGP_PROP_MSG_ + clave) || '[]'); } catch (e) {}
