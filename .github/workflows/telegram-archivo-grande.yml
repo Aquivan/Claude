@@ -1,0 +1,64 @@
+# 📥 Bajar un archivo de más de 20 MB que le mandaron al bot de Telegram (proyecto Cobranzas: cobranzas/telegram/TG_Grandes.js
+# + scripts/telegram_archivo_grande.py). Lo lanza el bot con un "lote": el nombre, el chat y el mensaje NO van en las
+# entradas ni en el registro (el repositorio es público); el robot se los pide al bot junto con los permisos (enmascarados).
+# Necesita los secretos TG_API_ID y TG_API_HASH (my.telegram.org → Development Tools).
+
+name: Telegram · archivo grande
+
+on:
+  workflow_dispatch:
+    inputs:
+      lote:
+        description: "Lote que dejó el bot de Telegram"
+        required: true
+
+run-name: "Telegram · archivo grande · lote ${{ inputs.lote }}"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telegram-archivo-grande-${{ inputs.lote }}
+  cancel-in-progress: false
+
+jobs:
+  bajar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/telegram_archivo_grande.py
+            cobranzas/.clasp.json
+          sparse-checkout-cone-mode: false
+
+      - name: Dirección del bot
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          [ -n "$CLASPRC_JSON" ] || { echo "::error::Falta el secret CLASPRC_JSON"; exit 1; }
+          npm install -g @google/clasp@3.3.0 >/dev/null 2>&1
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"; chmod 600 "$HOME/.clasprc.json"
+          cd cobranzas
+          ID=$(clasp --json list-deployments 2>/dev/null | python3 -c "
+          import json,sys
+          t=sys.stdin.read()
+          try: d=json.loads(t[t.index('['):])
+          except Exception: d=[]
+          b=[x for x in d if (x.get('description') or '').startswith('Asistente Telegram')]
+          print(b[0]['deploymentId'] if b else '')")
+          rm -f "$HOME/.clasprc.json"
+          [ -n "$ID" ] || { echo "::error::No encontré la aplicación web del bot"; exit 1; }
+          echo "::add-mask::$ID"
+          echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
+
+      - name: Herramientas (Telethon)
+        run: pip install --quiet "telethon==1.40.0" "cryptg==0.5.0.post0" "pypdf==5.4.0"
+
+      - name: Bajar de Telegram y subir a Drive
+        env:
+          LOTE: ${{ inputs.lote }}
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        run: python3 scripts/telegram_archivo_grande.py
