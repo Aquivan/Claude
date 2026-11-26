@@ -396,3 +396,74 @@ function VCH_limpiezaFusion_() {
   props.setProperty('VCH_LIMP_FUSION', 'hecho');
   if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · juntadas', '', (hechos.join(' | ') || 'nada') + (saltados.length ? ' · NO tocadas: ' + saltados.join(', ') : ''));
 }
+
+// ============================================================
+// ♻️ VERIFICAR 2 QUITADAS DUDOSAS (26/11/2026): Fotos (antes) 90 y 94 eran «misma operación» sin el -1/-2. Si su página es un
+// FINANCIAMIENTO con 2+ registros del mismo monto (como D00004800906 de Fotos!54/55), la quitada era un voucher REAL:
+// se relee la página con la IA y, si hay más registros que filas en la hoja, se DEVUELVE la fila desde «🛟 Respaldo
+// duplicados Fotos» (al final de la pestaña, con su N° -2…) y se corrige la nota «🔁» del original. Una sola vez.
+// ============================================================
+var LIMP_VERIFICAR_ = [{ fila: 90, op: 'D00004629433', monto: 325000 }, { fila: 94, op: 'D00004646857', monto: 250000 }];
+
+async function LIMP_leerPagina_(archivo, pagina) {
+  let f = RP_archivoMasNuevo_(archivo);
+  if (!f) {   // ¿pasó a «🔁 Repetidos»?
+    [CFG.CARPETA_FOTOS_PROCESADOS_ID, CFG.CARPETA_ORIGINALES_PROCESADOS_ID].forEach(function (id) {
+      if (f) return;
+      try { const fr = DriveApp.getFolderById(id).getFoldersByName(REP_CARPETA_); if (fr.hasNext()) { const it = fr.next().getFilesByName(archivo); if (it.hasNext()) f = it.next(); } } catch (e) {}
+    });
+  }
+  if (!f) throw new Error('no encontré «' + archivo + '»');
+  if (/pdf/i.test(f.getMimeType()) || /\.pdf$/i.test(archivo)) {
+    cargarPdfLib();
+    const doc = await PDFLib.PDFDocument.load(new Uint8Array(f.getBlob().getBytes()));
+    const uno = await PDFLib.PDFDocument.create();
+    const [p] = await uno.copyPages(doc, [Math.max(0, (pagina || 1) - 1)]);
+    uno.addPage(p);
+    return llamarGemini(Utilities.base64Encode(Utilities.newBlob([...new Int8Array(await uno.save())], MimeType.PDF, 'p.pdf').getBytes()), 'application/pdf', true) || [];
+  }
+  return llamarGemini(Utilities.base64Encode(f.getBlob().getBytes()), f.getMimeType(), false) || [];
+}
+
+async function VCH_verificarQuitadas_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('VCH_LIMP_VERIF') === 'hecho' || props.getProperty('VCH_LIMP_FUSION') !== 'hecho') return;
+  const h = obtenerHoja(CFG.SHEET_FOTOS), resp = h && h.getParent().getSheetByName('🛟 Respaldo duplicados ' + CFG.SHEET_FOTOS);
+  const res = [];
+  if (!h || !resp) { props.setProperty('VCH_LIMP_VERIF', 'hecho'); if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza · verificación', '', 'sin respaldo: no se pudo verificar'); return; }
+  const base = function (op) { return REP_normOp_(String(op || '').replace(/-\d+$/, '')); };
+  for (let q = 0; q < LIMP_VERIFICAR_.length; q++) {
+    const x = LIMP_VERIFICAR_[q];
+    try {
+      const nc = resp.getLastColumn(), fr = resp.getRange(x.fila, 1, 1, nc).getValues()[0];
+      if (base(fr[1]) !== base(x.op) || Math.abs((Number(fr[4]) || 0) - x.monto) > 0.01) { res.push('fila ' + x.fila + ': el respaldo no coincide (no se tocó)'); continue; }
+      const leidos = await LIMP_leerPagina_(String(fr[10] || '').trim(), parseInt(fr[12], 10) || 1);
+      const regs = leidos.filter(function (v) { return base(v.nOperacion) === base(x.op) && Math.abs(parsearMonto(v.monto) - x.monto) < 0.01; });
+      const n = h.getLastRow() - 1, vals = h.getRange(2, 1, n, 14).getValues();
+      const enHoja = vals.map(function (r, i) { return { r: r, f: i + 2 }; }).filter(function (o) { return base(o.r[1]) === base(x.op) && Math.abs((Number(o.r[4]) || 0) - x.monto) < 0.01; });
+      if (regs.length <= enHoja.length) { res.push(x.op + ': la página tiene ' + regs.length + ' registro(s) y la hoja ' + enHoja.length + ' → estaba bien quitada'); continue; }
+      // devolver la fila (al final), con el N° del registro que falta
+      const usados = enHoja.map(function (o) { return String(o.r[1]).trim(); });
+      const falta = regs.filter(function (v) { return usados.indexOf(String(v.nOperacion).trim()) < 0; })[0] || regs[regs.length - 1];
+      const fila = fr.slice(0, Math.min(nc, h.getLastColumn()));
+      fila[1] = String(falta.nOperacion || fr[1]); fila[9] = '';   // J (imagen): se repone con «🔧 Reparar imágenes»
+      const dest = h.getLastRow() + 1;
+      h.getRange(dest, 1, 1, fila.length).setValues([fila.map(function (c) { return (c && typeof c === 'object' && !(c instanceof Date)) ? '' : c; })]);
+      h.getRange(dest, 14).setNote('♻️ Devuelta el 26/11/2026: era otro registro (' + fila[1] + ') del mismo financiamiento; la limpieza de duplicados la había quitado por error.');
+      // la nota «🔁» del original ya no corresponde a este archivo/página
+      const clave = '«' + String(fr[10] || '').trim() + '»' + (fr[12] ? ' pág ' + fr[12] : '');
+      enHoja.forEach(function (o) {
+        const c = h.getRange(o.f, 14), nota = String(c.getNote() || '');
+        if (nota.indexOf(clave) < 0) return;
+        const lineas = nota.split('\n').filter(function (l) { return l.indexOf(clave) < 0; });
+        const veces = lineas.filter(function (l) { return /^• /.test(l); }).length;
+        const nueva = veces ? lineas.join('\n') : lineas.filter(function (l) { return l.indexOf('🔁 Recibido también:') < 0; }).join('\n').trim();
+        const val = String(c.getDisplayValue() || '').replace(/\s*·\s*🔁 \d+ veces/g, '').trim();
+        c.setNote(nueva).setValue(veces ? val + ' · 🔁 ' + (veces + 1) + ' veces' : val);
+      });
+      res.push(x.op + ': la página tiene ' + regs.length + ' registros → DEVUELTA en Fotos!' + dest + ' como ' + fila[1]);
+    } catch (e) { res.push(x.op + ': no se pudo verificar (' + e.message + ')'); }
+  }
+  props.setProperty('VCH_LIMP_VERIF', 'hecho');
+  if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza · verificación', '', res.join(' | '));
+}
