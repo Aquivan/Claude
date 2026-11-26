@@ -51,3 +51,8 @@ function SV_procesarPronto() {
   programarReintentoAutomatico_();
   return true;
 }
+
+/** ⏳ Avance en vivo de los archivos subidos (Avance.js): [{clave, etapa, texto}]. */
+function SV_avance(nombres) {
+  return AV_leer_(nombres).map(function (e) { return { clave: AV_clave_(e.nombre), etapa: e.etapa, texto: AV_texto_(e) }; });
+}

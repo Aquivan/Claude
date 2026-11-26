@@ -67,6 +67,7 @@ async function procesarVouchers() {
       while (it.hasNext()) listaArchivos.push(it.next());
 
       if (listaArchivos.length === 0) continue;
+      listaArchivos.forEach(function (f) { try { AV_(f.getName(), { etapa: 'cola' }); } catch (eA) {} });   // ⏳ «en cola» (no pisa lo que ya empezó)
       if (!huboArchivos && typeof REG_anotar_ === 'function') {   // 🩺 si después no aparece su «fin», Google cortó la ejecución
         REG_anotar_('Vouchers', 'inicio', '', listaArchivos.length + ' archivo(s) en Entrada (' + carpetas.tipo + '): ' +
           listaArchivos.slice(0, 5).map(function (f) { return f.getName(); }).join(', '));
@@ -100,6 +101,7 @@ async function procesarVouchers() {
         }
         if (mb > CFG.MAX_MB_ARCHIVO) {
           Logger.log('APARTADO por tamano (' + mb.toFixed(1) + ' MB): ' + nombre);
+          AV_(nombre, { etapa: 'error', error: 'pesa ' + mb.toFixed(1) + ' MB (más de ' + CFG.MAX_MB_ARCHIVO + '): no se pudo leer' });   // ⏳
           escribirFilaVoucher(ctx, {
             fecha:'', nOperacion:'[ARCHIVO GRANDE]', banco:'', moneda:'', monto:0,
             proveedor:'Archivo de ' + mb.toFixed(1) + ' MB. Comprimelo y vuelve a subirlo.',
@@ -113,7 +115,9 @@ async function procesarVouchers() {
 
         try {
           if (TIPOS_IMAGEN.has(mime)) {
-            procesarArchivoImagen(archivo, ctx, '', carpetas);
+            AV_(nombre, { etapa: 'inicio', pag: 0, total: 1 });   // ⏳ avance en vivo (Avance.js)
+            const rsI = procesarArchivoImagen(archivo, ctx, '', carpetas) || [];
+            AV_(nombre, { etapa: 'fin', pag: 1, total: 1, nuevos: rsI.filter(function (r) { return !r.duplicado; }).length, repetidos: rsI.filter(function (r) { return r.duplicado; }).length });
             procesados++;
           } else if (TIPOS_PDF.has(mime)) {
             const resultado = await procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, '', carpetas);
@@ -122,6 +126,7 @@ async function procesarVouchers() {
           }
         } catch (err) {
           conError++;
+          AV_(nombre, { etapa: 'error', error: String(err.message).slice(0, 150) });   // ⏳
           Logger.log('ERROR en ' + nombre + ': ' + err.message);
           escribirFilaVoucher(ctx, {
             fecha:'', nOperacion:'[ERROR]', banco:'', moneda:'', monto:0,

@@ -1151,6 +1151,10 @@ function TGP_wa_(q) {
   }
   if (q.modo === 'decidir') { var dd = TGP_decidir_(ss, q.k, q.op); dd.ok = !dd.error; return dd; }
   if (q.modo === 'pestana') { var d = TGP_cambiarPestana_(q.k, q.pestana); d.ok = !d.error; return d; }
+  if (q.modo === 'seguir') {   // ⏳ WhatsApp: archivos que acaban de ir a Entrada (avisos de avance en los pasos importantes, TG_Avance.js)
+    AVT_seguir_((q.nombres || []).map(function (n) { return { nombre: String(n) }; }), { canal: 'wa', numero: String(q.numero || '').replace(/\D/g, '') });
+    return { ok: true };
+  }
   if (q.modo === 'varios') {   // 📚 WhatsApp: era un escaneo de varios vouchers → entero a la hoja de Vouchers, con el nombre del resumen
     var pv = TG_leerBoton_(q.k);
     if (!pv) return { ok: false, error: 'Ese resumen ya venció (dura 6 horas). Mándeme el archivo de nuevo.' };
@@ -1165,6 +1169,7 @@ function TGP_wa_(q) {
       } catch (e) { errores.push(a.nombre + ': ' + e.message); }
     });
     if (hechos.length) TGU_anotar_(clave, { desc: '📥 ' + hechos.length + ' voucher(s) a la hoja de Vouchers: ' + hechos.map(function (h) { return h.nombre; }).join(', '), archivos: hechos });
+    if (hechos.length) AVT_seguir_(hechos, { canal: 'wa', numero: String(q.numero || '').replace(/\D/g, '') });   // ⏳ avisos de avance
     var rv = hechos.length ? TG_procesarYResultado_(ss, hechos) : { lineas: [], tt: '' };
     return { ok: true, texto: '📚 <b>Varios vouchers</b> · ' + TG_esc_(nombres.join(', ')) + '\n📋 <b>Resultado</b>\n' + rv.lineas.join('\n') +
       (rv.tt ? '\n<i>' + TG_esc_(rv.tt) + '</i>' : '') + (errores.length ? '\n⚠️ ' + TG_esc_(errores.join('; ')) : '') };

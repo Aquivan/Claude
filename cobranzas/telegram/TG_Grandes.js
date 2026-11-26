@@ -44,8 +44,12 @@ function TGB_intentar_(ctx, m, nombre) {
     try { REG_anotar_('Telegram', 'archivo grande · ERROR', '', nombre + ' · ' + e.message); } catch (e2) {}
     return true;
   }
-  TG_enviar_(ctx.chatId, '📥 Recibí <b>' + TG_esc_(nombre) + '</b> (' + mb + ' MB). Telegram no deja a los bots bajarlo directo (más de 20 MB): ' +
-    'lo baja un robot. Le aviso aquí en unos minutos.', null, { responderA: m.message_id });
+  var aviso = TG_enviar_(ctx.chatId, '📥 Recibí <b>' + TG_esc_(nombre) + '</b> (' + mb + ' MB). Telegram no deja a los bots bajarlo directo (más de 20 MB): ' +
+    'lo baja un robot. Este mensaje se actualiza solo.', null, { responderA: m.message_id });
+  if (aviso) {   // ⏳ para editar este mismo mensaje con el avance (TG_Avance.js)
+    var Lx = JSON.parse(p.getProperty(TGB_PROP_ + lote) || 'null');
+    if (Lx) { Lx.aviso = aviso; p.setProperty(TGB_PROP_ + lote, JSON.stringify(Lx)); }
+  }
   try { REG_anotar_('Telegram', 'archivo grande · enviado al robot', '', mb + ' MB'); } catch (e) {}
   return true;
 }
@@ -62,6 +66,7 @@ function TGB_gh_(q) {
     return { ok: true, bot: TG_token_(), drive: ScriptApp.getOAuthToken(), chat: L.chat, msg: L.msg, nombre: L.nombre, mb: L.mb,
       carpeta: IMP_carpeta_(ss).getId(), titulo: 'telegram m' + L.msg + ' ' + marca + ' - ' + L.nombre };
   }
+  if (q.accion === 'tgb_avance') { AVT_bajandoTG_(L, Number(q.mb) || 0, Number(q.total) || 0); return { ok: true }; }   // ⏳
   if (q.accion !== 'tgb_fin') return { ok: false, error: 'accion desconocida' };
   p.deleteProperty(k);
   if (!q.ok || !q.id) {
@@ -70,6 +75,7 @@ function TGB_gh_(q) {
     try { REG_anotar_('Telegram', 'archivo grande · ERROR', '', L.nombre + ' · ' + String(q.error || '').slice(0, 300)); } catch (e) {}
     return { ok: true };
   }
+  if (L.aviso) TG_editar_(L.chat, L.aviso, '📥 <b>' + TG_esc_(L.nombre) + '</b> (' + L.mb + ' MB): ✅ bajado' + (q.seg ? ' en ' + q.seg + ' s' : '') + '.');
   var f = DriveApp.getFileById(String(q.id));
   var mime = f.getMimeType() || L.mime || TG_mimePorNombre_(L.nombre) || 'application/octet-stream';
   var adj = { id: f.getId(), nombre: L.nombre, mime: mime, grupo: 'm' + L.msg, foto: false, t: Date.now(), mb: L.mb };
