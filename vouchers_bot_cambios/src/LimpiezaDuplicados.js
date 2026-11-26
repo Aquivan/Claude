@@ -230,3 +230,77 @@ async function VCH_limpiezaDuplicados_() {
   props.setProperty('VCH_LIMP_DUP4', 'hecho');
   if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · aplicada', '', hechos.join(' | ') + ' · ' + resumen);
 }
+
+// ============================================================
+// ✅ APLICAR LA LISTA APROBADA por el usuario el 26/11/2026 (vista previa revisada fila por fila).
+// Solo estas filas; antes de tocar cada una se verifica que sigue siendo la misma (banco, moneda, monto y fecha iguales a
+// su original; si las dos tienen operación, la misma). Quedan FUERA a propósito Fotos 177 y 178 (posible financiamiento de
+// 2 registros leído sin el -1/-2) y los «revisar a mano». Una sola vez (propiedad VCH_LIMP_APROBADA).
+// ============================================================
+var LIMP_APROBADOS_ = {
+  Originales: [[142, 141], [977, 973], [2857, 2856]],
+  Fotos: [[393, 389], [396, 389], [394, 390], [397, 390], [78, 44], [55, 54], [90, 89], [94, 93], [153, 142], [212, 194],
+    [242, 201], [243, 202], [244, 203], [267, 264], [342, 326], [343, 327], [357, 355]]
+};
+
+function VCH_limpiezaAprobada_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('VCH_LIMP_APROBADA') === 'hecho') return;
+  const hechos = [], saltados = [];
+  [[CFG.SHEET_ORIGINALES, 'Originales'], [CFG.SHEET_FOTOS, 'Fotos']].forEach(function (par) {
+    const t = par[0], lista = LIMP_APROBADOS_[par[1]] || [], h = obtenerHoja(t);
+    if (!h || !lista.length) return;
+    const n = h.getLastRow() - 1, v = h.getRange(2, 1, n, 14).getValues();
+    const tit = h.getRange(1, 1, 1, h.getLastColumn()).getDisplayValues()[0].map(CC_norma_);
+    const ext = h.getLastColumn() > 14 ? h.getRange(2, 15, n, h.getLastColumn() - 14).getDisplayValues() : [];
+    const ok = lista.filter(function (x) {
+      const a = v[x[0] - 2], o = v[x[1] - 2];
+      if (!a || !o) { saltados.push(t + '!' + x[0] + ' (no existe)'); return false; }
+      const mismo = String(a[2]).trim().toUpperCase() === String(o[2]).trim().toUpperCase() && String(a[3]).trim().toUpperCase() === String(o[3]).trim().toUpperCase() &&
+        Math.abs((Number(a[4]) || 0) - (Number(o[4]) || 0)) < 0.005 && LIMP_dia_(a[0]) === LIMP_dia_(o[0]);
+      const opA = String(a[1] || '').trim(), opO = String(o[1] || '').trim();
+      const opOk = opA === '[DUPLICADO]' || REP_normOp_(opA) === REP_normOp_(opO);
+      if (!mismo || !opOk || opO.charAt(0) === '[') { saltados.push(t + '!' + x[0] + ' (ya no coincide con ' + x[1] + ')'); return false; }
+      const propio = (ext[x[0] - 2] || []).some(function (c, k) { return String(c).trim() && !/^resultado|anotaci/.test(tit[14 + k] || ''); });
+      if (propio) { saltados.push(t + '!' + x[0] + ' (tiene datos puestos a mano)'); return false; }
+      return true;
+    });
+    if (!ok.length) return;
+    // respaldo completo de la pestaña (oculto)
+    const ss = h.getParent(), nomR = '🛟 Respaldo duplicados ' + t;
+    if (!ss.getSheetByName(nomR)) { const r = h.copyTo(ss).setName(nomR); r.hideSheet(); }
+    // notas en los originales
+    ok.forEach(function (x) {
+      const a = v[x[0] - 2], c = h.getRange(x[1], 14);
+      const proc = a[11] instanceof Date ? Utilities.formatDate(a[11], 'America/Lima', 'dd/MM/yyyy HH:mm') : String(a[11] || '');
+      const clave = '«' + String(a[10] || '').trim() + '»' + (a[12] ? ' pág ' + a[12] : '');
+      let nota = String(c.getNote() || '');
+      if (nota.indexOf(clave) >= 0) return;
+      if (nota.indexOf('🔁 Recibido también:') < 0) nota = (nota ? nota + '\n\n' : '') + '🔁 Recibido también:';
+      nota += '\n• ' + proc + ' · ' + (String(a[13] || '') || 'Carpeta Drive') + ' · ' + clave + ' (limpieza 26/11)';
+      const veces = (nota.match(/^• /mg) || []).length + 1;
+      const base = String(c.getDisplayValue() || '').replace(/\s*·\s*🔁 \d+ veces/g, '').trim();
+      c.setNote(nota.slice(0, 9000)).setValue(base + ' · 🔁 ' + veces + ' veces');
+    });
+    // borrar de abajo hacia arriba
+    const archivos = {};
+    ok.map(function (x) { archivos[String(v[x[0] - 2][10] || '').trim()] = 1; return x[0]; })
+      .sort(function (a, b) { return b - a; }).forEach(function (f) { h.deleteRow(f); });
+    // archivos que quedaron sin filas → Procesados/🔁 Repetidos
+    const nn = h.getLastRow() - 1, quedan = {};
+    if (nn > 0) h.getRange(2, 11, nn, 1).getValues().forEach(function (r) { quedan[String(r[0]).trim()] = 1; });
+    const carpetas = t === CFG.SHEET_FOTOS ? carpetasParaTipo_('foto') : carpetasParaTipo_('original');
+    let movidos = 0;
+    Object.keys(archivos).forEach(function (a) {
+      if (!a || quedan[a]) return;
+      try {
+        const proc = DriveApp.getFolderById(carpetas.procesados), it = proc.getFilesByName(a);
+        const fr = proc.getFoldersByName(REP_CARPETA_), dest = fr.hasNext() ? fr.next() : proc.createFolder(REP_CARPETA_);
+        while (it.hasNext()) { it.next().moveTo(dest); movidos++; }
+      } catch (e) { Logger.log('🧹 Mover ' + a + ': ' + e.message); }
+    });
+    hechos.push(t + ': ' + ok.length + ' fila(s) quitadas, ' + movidos + ' archivo(s) a 🔁 Repetidos');
+  });
+  props.setProperty('VCH_LIMP_APROBADA', 'hecho');
+  if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · aplicada', '', (hechos.join(' | ') || 'nada') + (saltados.length ? ' · NO tocadas: ' + saltados.join(', ') : ''));
+}
