@@ -44,6 +44,7 @@ async function RP_releerFilaActiva() {
     if (elegido < 0 || elegido >= r.leidos.length) { ui.alert('Número no válido. No cambié nada.'); return; }
   }
   const nuevo = r.leidos[elegido];
+  r.dup = (r.dups || [])[elegido] || 0;   // el repetido del voucher ELEGIDO
   const msg = 'Archivo: ' + r.archivo + ' · página ' + r.pagina + '\n(versión del ' + r.version + ')\n\n' +
     'ANTES:  ' + RP_linea_(r.antes) + '\nAHORA:  ' + RP_linea_(nuevo) +
     (r.dup ? '\n\n⚠️ Ese N° de operación ya está en la fila ' + r.dup + ': se anotará como [DUPLICADO].' : '') +
@@ -88,19 +89,20 @@ async function RP_leer_(nombreHoja, fila) {
   if (!leidos || !leidos.length) throw new Error('La IA no encontró ningún voucher legible en la página ' + pagina + ' de "' + archivo + '". No cambié nada.');
   leidos.forEach(function (x) { x.monto = parsearMonto(x.monto); });
   const antes = { fecha: v[0], nOperacion: v[1], banco: v[2], moneda: v[3], monto: v[4], proveedor: v[5] };
-  // ¿El N° nuevo ya está en otra fila de la misma pestaña?
-  let dup = 0;
-  const n = leidos[0];
-  if (n.nOperacion) {
-    const datos = hoja.getRange(2, 1, hoja.getLastRow() - 1, 5).getValues(), clave = claveDuplicado(n.nOperacion, n.banco, n.monto);
-    for (let i = 0; i < datos.length; i++) {
-      if (i + 2 !== fila && claveDuplicado(datos[i][1], datos[i][2], datos[i][4]) === clave) { dup = i + 2; break; }
-    }
-  }
+  // ¿El N° nuevo ya está en otra fila de la misma pestaña? Para CADA voucher leído (antes solo el 1.º: al elegir el 2 de un
+  // financiamiento de 2 registros, se marcaba [DUPLICADO] por el -1 que estaba en otra fila — pasó con Fotos!55, 26/11/2026).
+  const datosH = hoja.getRange(2, 1, hoja.getLastRow() - 1, 5).getValues();
+  const dups = leidos.map(function (n) {
+    if (!n.nOperacion) return 0;
+    const clave = claveDuplicado(n.nOperacion, n.banco, n.monto);
+    for (let i = 0; i < datosH.length; i++) if (i + 2 !== fila && claveDuplicado(datosH[i][1], datosH[i][2], datosH[i][4]) === clave) return i + 2;
+    return 0;
+  });
+  const dup = dups[0];
   const extra = hoja.getLastColumn() > 14 ? hoja.getRange(fila, 15, 1, hoja.getLastColumn() - 14).getValues()[0] : [];
   const agregado = extra.some(function (x) { return x !== '' && x !== false && x !== null; });
   return { archivo: archivo, pagina: pagina, version: Utilities.formatDate(f.getDateCreated(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm'),
-    leidos: leidos, antes: antes, dup: dup, agregado: agregado, base64: base64, mime: mime, paginaBlob: paginaBlob, esPdf: esPdf };
+    leidos: leidos, antes: antes, dup: dup, dups: dups, agregado: agregado, base64: base64, mime: mime, paginaBlob: paginaBlob, esPdf: esPdf };
 }
 
 /** Escribe A..I y L (guarda lo de antes para deshacer). */
@@ -191,7 +193,7 @@ function RP_visorIniciar(hoja, fila) {
   cache.put('rp_' + id, JSON.stringify({ listo: false }), 1800);
   RP_leer_(hoja, Number(fila)).then(function (r) {
     cache.put('rp_' + id, JSON.stringify({ listo: true, hoja: hoja, fila: Number(fila), archivo: r.archivo, pagina: r.pagina, version: r.version,
-      antes: RP_linea_(r.antes), leidos: r.leidos, lineas: r.leidos.map(RP_linea_), dup: r.dup, agregado: r.agregado }), 1800);
+      antes: RP_linea_(r.antes), leidos: r.leidos, lineas: r.leidos.map(RP_linea_), dup: r.dup, dups: r.dups, agregado: r.agregado }), 1800);
   }).catch(function (e) {
     cache.put('rp_' + id, JSON.stringify({ listo: true, error: String(e && e.message || e) }), 1800);
   });
@@ -209,6 +211,7 @@ function RP_visorAplicar(id, i) {
   if (!r || r.error || !r.leidos) return { error: (r && r.error) || 'La lectura venció. Vuelva a leer.' };
   const v = r.leidos[Number(i) || 0];
   if (!v) return { error: 'Esa opción ya no existe.' };
+  r.dup = (r.dups || [])[Number(i) || 0] || 0;   // el repetido del voucher ELEGIDO (no del 1.º)
   RP_escribir_(r.hoja, r.fila, v, r.dup, 'visor de voucher');
   CacheService.getUserCache().remove('rp_' + id);
   RP_imagenFila_(r.hoja, r.fila).catch(function (e) { Logger.log('Releer (visor): imagen ' + e.message); });
