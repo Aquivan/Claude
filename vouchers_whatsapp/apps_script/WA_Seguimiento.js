@@ -148,10 +148,23 @@ function WA_indiceVouchers_() {
     var h = ss.getSheetByName(WA_VOUCHERS_.pestana[tipo]);
     if (!h || h.getLastRow() < 2) return;
     var desde = Math.max(2, h.getLastRow() - 1999);
-    h.getRange(desde, 1, h.getLastRow() - desde + 1, 11).getValues().forEach(function (f) {
+    var vals = h.getRange(desde, 1, h.getLastRow() - desde + 1, 11).getValues();
+    vals.forEach(function (f) {
       var k = tipo + '|' + f[10];
       (indice[k] = indice[k] || []).push(f);
     });
+    // 🔁 Repetidos: sin fila propia; la nota de «Canal» (N) del voucher original lista «archivo» de quienes lo reenviaron.
+    try {
+      h.getRange(desde, 14, h.getLastRow() - desde + 1, 1).getNotes().forEach(function (nt, i) {
+        var t = String(nt[0] || '');
+        if (t.indexOf('🔁') < 0) return;
+        (t.match(/«[^»]+»/g) || []).forEach(function (m) {
+          var f = vals[i].slice(); f[1] = '[DUPLICADO]'; f[2] = String(f[2] || '') + ' · ya en ' + WA_VOUCHERS_.pestana[tipo] + '!' + (desde + i);
+          var k = tipo + '|' + m.slice(1, -1).trim();
+          (indice[k] = indice[k] || []).push(f);
+        });
+      });
+    } catch (e) {}
   });
   return indice;
 }

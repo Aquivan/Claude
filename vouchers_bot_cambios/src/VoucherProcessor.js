@@ -182,6 +182,7 @@ function crearContexto(hoja) {
 
   // Una sola lectura de B..M (cols 2 a 13) para armar ambos indices.
   const datos = hoja.getRange(2, 2, ultimaFila - 1, 12).getValues();
+  const fechas = hoja.getRange(2, 1, ultimaFila - 1, 1).getValues();   // col A (🔁 «casi iguales»: fecha a ≤ 5 días)
 
   for (let i = 0; i < datos.length; i++) {
     const row = datos[i];
@@ -192,6 +193,7 @@ function crearContexto(hoja) {
     const pag   = parseInt(row[11], 10);                            // col M
 
     if (op) ctx.indiceDup.add(claveDuplicado(op, banco, monto));
+    if (op) REP_indexar_(ctx, op, banco, monto, i + 2, fechas[i][0]);   // 🔁 para ubicar el original y los «casi iguales»
 
     if (arch) ctx.nombres.add(arch);
     if (arch && !isNaN(pag)) {
@@ -218,9 +220,10 @@ function obtenerUltimaPaginaProcesadaCtx(ctx, nombreArchivo) {
   return ctx.indicePag[nombreArchivo.trim()] || 0;
 }
 
-function registrarEnIndice(ctx, nOperacion, banco, monto) {
+function registrarEnIndice(ctx, nOperacion, banco, monto, fila, fecha) {
   if (nOperacion && nOperacion.toString().trim() !== '') {
     ctx.indiceDup.add(claveDuplicado(nOperacion, banco, monto));
+    if (fila) { let f = null; try { f = parsearFecha(fecha); } catch (e) {} REP_indexar_(ctx, nOperacion, banco, monto, fila, f); }
   }
 }
 

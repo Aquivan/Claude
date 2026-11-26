@@ -59,7 +59,7 @@ function TGU_estado_(ss, acc) {
       var it = f.getParents();
       while (it.hasNext()) if (entrada.indexOf(it.next().getId()) >= 0) enEntrada = true;
     } catch (e) {}
-    return { a: a, filas: idx[String(a.nombre).trim()] || [], enEntrada: enEntrada, existe: existe };
+    return { a: a, filas: (idx[String(a.nombre).trim()] || []).filter(function (f) { return !f.rep; }), enEntrada: enEntrada, existe: existe };   // 🔁 la fila del original no es de este envío
   });
 }
 
@@ -78,6 +78,18 @@ function TGU_indiceArchivos_(ss) {
       var n = String(r[k] || '').trim();
       if (n) (out[n] = out[n] || []).push({ hoja: h.getName(), fila: i + 2, op: String(r[1] || ''), monto: r[4] });
     });
+    // 🔁 Repetidos (hoja de Vouchers, Repetidos.js): no tienen fila propia; la nota de «Canal» (N) del voucher original
+    // dice «🔁 Recibido también: • … «archivo» pág N». Se cuentan como [DUPLICADO] de esa fila (para avisar «ya estaba»).
+    try {
+      h.getRange(2, 14, h.getLastRow() - 1, 1).getNotes().forEach(function (nt, i) {
+        var t = String(nt[0] || '');
+        if (t.indexOf('🔁') < 0) return;
+        (t.match(/«[^»]+»/g) || []).forEach(function (m) {
+          var a = m.slice(1, -1).trim();
+          (out[a] = out[a] || []).push({ hoja: h.getName(), fila: i + 2, op: '[DUPLICADO]', monto: v[i] ? v[i][4] : '', rep: true });   // rep: la fila es del ORIGINAL (nunca se borra)
+        });
+      });
+    } catch (e) {}
   });
   return out;
 }

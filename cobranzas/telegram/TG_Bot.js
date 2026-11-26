@@ -461,7 +461,7 @@ function TG_registrarVouchers_(ctx, adjs) {
       var f = idx[h.nombre] || [];
       if (!f.length) return '⏳ ' + TG_esc_(h.nombre) + ': aún en cola (máx. 10 min)';
       return f.map(function (x) {
-        return /^\[DUPLICADO\]/.test(x.op) ? '⚠️ ' + x.hoja + '!' + x.fila + ': ya estaba registrado (duplicado)'
+        return /^\[DUPLICADO\]/.test(x.op) ? '🔁 ' + TG_esc_(h.nombre) + ': <b>ya estaba registrado</b> en ' + x.hoja + '!' + x.fila + ' (no se volvió a registrar; quedó anotado en esa fila y el archivo en «🔁 Repetidos»)'
           : /^\[/.test(x.op) ? '❌ ' + TG_esc_(h.nombre) + ': no se encontró un voucher legible'
           : '✅ <b>' + x.hoja + '!' + x.fila + '</b> · op ' + TG_esc_(x.op) + ' · ' + Number(x.monto || 0).toFixed(2);
       }).join('\n');
