@@ -53,7 +53,9 @@ async function RP_releerFilaActiva() {
   if (ui.alert('🔁 Volver a leer · fila ' + fila, msg, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
   const res = RP_escribir_(hoja.getName(), fila, nuevo, r.dup, 'menú de la hoja');
   await RP_imagen_(hoja.getName(), fila, r);
-  ui.alert('🔁 Volver a leer', '✅ Fila ' + fila + ' actualizada' + (res.dup ? ' (marcada como duplicado)' : '') + '.', ui.ButtonSet.OK);
+  let anot = '';
+  try { if (REV_activo_()) anot = REV_anotarFila_(hoja, fila, r.base64, r.mime); } catch (e) { Logger.log('Releer: anotación ' + e.message); }   // ✍️ también lo escrito / etiquetas
+  ui.alert('🔁 Volver a leer', '✅ Fila ' + fila + ' actualizada' + (res.dup ? ' (marcada como duplicado)' : '') + '.' + (anot ? '\n✍️ Anotación: ' + anot : ''), ui.ButtonSet.OK);
 }
 
 /** Lee otra vez la pagina de hoja!fila. NO escribe nada. */

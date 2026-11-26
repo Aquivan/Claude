@@ -319,3 +319,75 @@ function REV_anotarFoto_(ctx, base64, mime, filas) {
     REV_escribir_(ctx);
   } catch (e) { Logger.log('✍️ Foto: ' + e.message); }
 }
+
+/** Página de una fila (su archivo, columna K, página M) como base64 lista para la IA. → {base64, mime} */
+async function REV_paginaDeFila_(hoja, fila) {
+  const v = hoja.getRange(fila, 1, 1, 14).getValues()[0];
+  const archivo = String(v[10] || '').trim(), pagina = parseInt(v[12], 10) || 1;
+  if (!archivo) throw new Error('sin archivo');
+  const f = RP_archivoMasNuevo_(archivo);
+  if (!f) throw new Error('no encontré «' + archivo + '»');
+  if (/pdf/i.test(f.getMimeType()) || /\.pdf$/i.test(archivo)) {
+    cargarPdfLib();
+    const doc = await PDFLib.PDFDocument.load(new Uint8Array(f.getBlob().getBytes()));
+    if (pagina > doc.getPageCount()) throw new Error('la página ' + pagina + ' no existe');
+    const uno = await PDFLib.PDFDocument.create();
+    const [p] = await uno.copyPages(doc, [pagina - 1]);
+    uno.addPage(p);
+    return { base64: Utilities.base64Encode(Utilities.newBlob([...new Int8Array(await uno.save())], MimeType.PDF, 'p.pdf').getBytes()), mime: 'application/pdf' };
+  }
+  return { base64: Utilities.base64Encode(f.getBlob().getBytes()), mime: f.getMimeType() };
+}
+
+/**
+ * Lee lo escrito a mano y las etiquetas de la página y lo pone en «✍️ Anotación» de la fila. Lo que ya decía del REVERSO
+ * (y su enlace) se conserva; lo del frente / etiqueta se reemplaza. Devuelve el texto puesto ('' si no había nada).
+ */
+function REV_anotarFila_(hoja, fila, base64, mime) {
+  const arr = REV_clasificar_(base64, 1, REV_empresas_(), mime) || [];
+  const o = arr[0] || {};
+  const m = String(o.manuscrito || '').trim(), et = String(o.etiqueta || '').trim();
+  const nuevo = [];
+  if (m) nuevo.push('Frente: ' + m + (o.dudoso === true ? ' (revisar)' : ''));
+  if (et) nuevo.push('Etiqueta: ' + et);
+  const col = REV_columna_(hoja);
+  if (col < 0) return '';
+  const celda = hoja.getRange(fila, col), rt = celda.getRichTextValue(), antes = String(celda.getDisplayValue() || '');
+  const link = rt ? rt.getLinkUrl() : null;
+  const rev = antes.split(' · ').filter(function (x) { return /^Reverso/.test(x.trim()); });
+  const texto = nuevo.concat(rev).join(' · ');
+  if (texto === antes) return texto;
+  if (!texto) { if (!rev.length && antes && /^(Frente|Etiqueta)/.test(antes)) celda.setValue(''); return ''; }
+  if (link) celda.setRichTextValue(SpreadsheetApp.newRichTextValue().setText(texto).setLinkUrl(link).build());
+  else celda.setValue(texto);
+  return texto;
+}
+
+/** ✍️ Menú: leer las anotaciones de las filas seleccionadas (no cambia los datos del voucher). */
+async function REV_menuAnotarSeleccion() {
+  const ui = SpreadsheetApp.getUi(), hoja = SpreadsheetApp.getActiveSheet();
+  if ([CFG.SHEET_ORIGINALES, CFG.SHEET_FOTOS].indexOf(hoja.getName()) < 0) { ui.alert('✍️ Leer anotaciones', 'Seleccione filas en «' + CFG.SHEET_ORIGINALES + '» o «' + CFG.SHEET_FOTOS + '».', ui.ButtonSet.OK); return; }
+  const filas = [];
+  (hoja.getActiveRangeList() ? hoja.getActiveRangeList().getRanges() : [hoja.getActiveRange()]).forEach(function (r) {
+    for (let f = r.getRow(); f < r.getRow() + r.getNumRows(); f++) if (f >= 2 && filas.indexOf(f) < 0) filas.push(f);
+  });
+  if (!filas.length) { ui.alert('✍️ Leer anotaciones', 'Seleccione una o varias filas con vouchers.', ui.ButtonSet.OK); return; }
+  if (filas.length > 30 && ui.alert('✍️ Leer anotaciones', 'Seleccionó ' + filas.length + ' filas. Se leerán las primeras que alcancen en ~4 minutos (unas 20-30). ¿Sigo?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  const t0 = Date.now(), cache = {};
+  let hechas = 0, con = 0, errores = 0, hasta = 0;
+  for (let i = 0; i < filas.length; i++) {
+    if (Date.now() - t0 > 240000) break;
+    const f = filas[i];
+    hasta = f;
+    try {
+      SpreadsheetApp.getActiveSpreadsheet().toast('Fila ' + f + ' (' + (i + 1) + ' de ' + filas.length + ')…', '✍️ Leer anotaciones', 30);
+      const k = hoja.getRange(f, 11).getDisplayValue() + '|' + hoja.getRange(f, 13).getDisplayValue();   // misma página: se lee una vez
+      const pg = cache[k] || (cache[k] = await REV_paginaDeFila_(hoja, f));
+      if (REV_anotarFila_(hoja, f, pg.base64, pg.mime)) con++;
+      hechas++;
+    } catch (e) { errores++; Logger.log('✍️ Fila ' + f + ': ' + e.message); }
+  }
+  ui.alert('✍️ Leer anotaciones', '✅ Revisadas ' + hechas + ' fila(s): ' + con + ' con algo escrito o etiqueta (en «✍️ Anotación»).' +
+    (errores ? '\n⚠️ ' + errores + ' no se pudieron leer (archivo no encontrado).' : '') +
+    (hechas + errores < filas.length ? '\n⏱ Quedaron ' + (filas.length - hechas - errores) + ' sin revisar (después de la fila ' + hasta + '): selecciónelas y vuelva a usar esta opción.' : ''), ui.ButtonSet.OK);
+}
