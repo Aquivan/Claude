@@ -1,0 +1,66 @@
+# 📦 Comprimir un PDF de vouchers muy pesado (proyecto Cobranzas: cobranzas/CompresionVouchers.js + scripts/comprimir_vouchers.py).
+# Lo lanza la hoja de Cobranzas con un "lote": el nombre y el ID del archivo NO van en las entradas ni en el registro
+# (el repositorio es público); el robot se los pide al bot junto con un permiso temporal de Drive (enmascarado).
+
+name: Comprimir PDF de vouchers
+
+on:
+  workflow_dispatch:
+    inputs:
+      lote:
+        description: "Lote que dejó la hoja de Cobranzas"
+        required: true
+
+run-name: "Comprimir PDF de vouchers · lote ${{ inputs.lote }}"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vouchers-comprimir-${{ inputs.lote }}
+  cancel-in-progress: false
+
+jobs:
+  comprimir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/comprimir_vouchers.py
+            cobranzas/.clasp.json
+          sparse-checkout-cone-mode: false
+
+      - name: Dirección del bot
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          [ -n "$CLASPRC_JSON" ] || { echo "::error::Falta el secret CLASPRC_JSON"; exit 1; }
+          npm install -g @google/clasp@3.3.0 >/dev/null 2>&1
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"; chmod 600 "$HOME/.clasprc.json"
+          cd cobranzas
+          ID=$(clasp --json list-deployments 2>/dev/null | python3 -c "
+          import json,sys
+          t=sys.stdin.read()
+          try: d=json.loads(t[t.index('['):])
+          except Exception: d=[]
+          b=[x for x in d if (x.get('description') or '').startswith('Asistente Telegram')]
+          print(b[0]['deploymentId'] if b else '')")
+          rm -f "$HOME/.clasprc.json"
+          [ -n "$ID" ] || { echo "::error::No encontré la aplicación web del bot"; exit 1; }
+          echo "::add-mask::$ID"
+          echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
+
+      - name: Herramientas (PyMuPDF, OpenCV, img2pdf, Jpegli de Google)
+        run: |
+          pip install --quiet "pymupdf==1.25.5" "opencv-python-headless==4.11.0.86" "img2pdf==0.6.1" "pillow==11.2.1" "numpy<2.3"
+          # Jpegli (Google, dentro de libjxl): si no se puede bajar, el robot usa Pillow
+          mkdir -p /tmp/jxl && cd /tmp/jxl && \
+            (curl -fsSL -o jxl.tgz https://github.com/libjxl/libjxl/releases/download/v0.11.1/jxl-linux-x86_64-static-v0.11.1.tar.gz && \
+             tar xzf jxl.tgz && ls tools/cjpegli) || echo "::warning::Sin Jpegli: se usa Pillow"
+
+      - name: Comprimir y devolver a Drive
+        env:
+          LOTE: ${{ inputs.lote }}
+        run: python3 scripts/comprimir_vouchers.py

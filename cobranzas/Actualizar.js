@@ -7,6 +7,7 @@
  */
 
 function actualizacionAutomatica__reg() {
+  try { CMP_revisar_(); } catch (e) { Logger.log('Comprimir PDF pesados: ' + e.message); }   // 📦 (CompresionVouchers.js): nunca traba lo demás
   try {
     actualizarTodo_(false);
   } catch (e) {
