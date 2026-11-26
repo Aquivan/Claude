@@ -116,3 +116,27 @@ function TGQ_rucCandidatos_(ss) {
   });
   return { filas: out, ultimoProc: ultimo };
 }
+
+/** 🖼 La foto del voucher de esa fila (de la celda de imagen) y el enlace a su archivo en Drive (PDF o foto). */
+function RUCV_verVoucher(fuente) {
+  return RUCV_try_(function () {
+    var p = String(fuente || '').split('!');
+    if (['Originales', 'Fotos'].indexOf(p[0]) === -1 || !(parseInt(p[1], 10) >= 2)) throw new Error('Fila no válida.');
+    var libro = SpreadsheetApp.openById(leerConfig_(RUCV_ss_()).idVouchers), out = {};
+    var r = TG_voucherBlob_(libro, fuente, 'imagen');
+    if (r && r.blob) out.img = 'data:' + (r.blob.getContentType() || 'image/jpeg') + ';base64,' + Utilities.base64Encode(r.blob.getBytes());
+    else out.error = (r && r.error) || 'sin foto';
+    // el archivo original (por su nombre en «Archivo»), para abrirlo en Drive
+    var sh = libro.getSheetByName(p[0]), enc = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0], c = indiceColumnas_(enc);
+    var fila = sh.getRange(Number(p[1]), 1, 1, sh.getLastColumn()).getValues()[0];
+    var ka = c('Archivo', 'Archivo Original'), kp = c('Pag', 'Pagina'), kd = c('Fecha deposito', 'Fecha'), km = c('Monto');
+    var nom = ka >= 0 ? String(fila[ka] || '').trim() : '';
+    if (kp >= 0) out.pag = String(fila[kp] || '');
+    out.info = [kd >= 0 && fila[kd] instanceof Date ? Utilities.formatDate(fila[kd], 'America/Lima', 'dd/MM/yyyy') : '', km >= 0 ? String(fila[km]) : '', nom].filter(String).join(' · ');
+    if (nom) {
+      var it = DriveApp.getFilesByName(nom);
+      while (it.hasNext()) { var f = it.next(); if (!f.isTrashed()) { out.url = f.getUrl(); break; } }
+    }
+    return out;
+  });
+}
