@@ -349,6 +349,7 @@ function TG_alArchivo_(ctx, m, texto) {
   if (m.photo) { var g = m.photo[m.photo.length - 1]; fileId = g.file_id; nombre = 'foto ' + m.message_id + '.jpg'; }
   else if (m.document) { fileId = m.document.file_id; nombre = m.document.file_name || ('archivo ' + m.message_id); }
   else if (m.voice || m.audio || m.video_note) { var a = m.voice || m.audio || m.video_note; fileId = a.file_id; nombre = (m.audio && m.audio.file_name) || ('voz ' + m.message_id + '.ogg'); voz = true; }
+  if (!voz && TGB_intentar_(ctx, m, nombre)) return;   // 📥 más de 20 MB: lo baja un robot (TG_Grandes.js)
   var blob;
   try { blob = TG_bajarArchivo_(fileId, nombre); } catch (e) { return TG_enviar_(chatId, '⚠️ No pude bajar el archivo: ' + TG_esc_(e.message)); }
 

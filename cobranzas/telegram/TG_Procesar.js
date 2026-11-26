@@ -1019,6 +1019,7 @@ function TGP_paginasPdf_(blob) {
 /** ¿Algún archivo es un PDF de varias páginas? (orden de compra + voucher + factura…: va a 🧾 Procesar). */
 function TGP_hayVariasPaginas_(adjs) {
   return (adjs || []).some(function (a) {
+    if (a.paginas) return a.paginas > 1;   // 📥 archivo grande: las páginas las contó el robot (TG_Grandes.js)
     try { var f = DriveApp.getFileById(a.id); return /pdf/i.test(f.getMimeType()) && TGP_paginasPdf_(f.getBlob()) > 1; } catch (e) { return false; }
   });
 }

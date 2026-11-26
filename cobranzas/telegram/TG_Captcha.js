@@ -42,6 +42,10 @@ function TGC_doPost_(e) {
       if (!run || !TGC_runValido_(cfg, run, /(^|\/)sunat-comprobante\.ya?ml$/)) return TGW_json_({ ok: false, error: 'Forbidden' });
       return TGW_json_(SCP_gh_(q));
     }
+    if (/^tgb_/.test(String(q.accion || ''))) {   // 📥 archivo de más de 20 MB bajado por el robot (TG_Grandes.js)
+      if (!run || !TGC_runValido_(cfg, run, /(^|\/)telegram-archivo-grande\.ya?ml$/)) return TGW_json_({ ok: false, error: 'Forbidden' });
+      return TGW_json_(TGB_gh_(q));
+    }
     if (/^rpn_/.test(String(q.accion || ''))) {
       if (!run || !TGC_runValido_(cfg, run, /(^|\/)ruc-por-nombre\.ya?ml$/)) return TGW_json_({ ok: false, error: 'Forbidden' });
       return TGW_json_(RPN_gh_(q));
