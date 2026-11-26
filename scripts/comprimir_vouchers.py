@@ -101,44 +101,64 @@ def main():
         nombre, entrada = d["nombre"], d["entrada"]
         pdf, _ = drive(token, "GET", "https://www.googleapis.com/drive/v3/files/%s?alt=media&supportsAllDrives=true" % d["id"])
         print("Bajado: %.1f MB" % (len(pdf) / 1048576))
-        doc = fitz.open(stream=pdf, filetype="pdf")
-        paginas, recortadas = [], 0
-        for p in doc:
-            esc = LADO / max(p.rect.width, p.rect.height) * 1.6   # un poco más grande y luego se achica (mejor calidad)
-            pix = p.get_pixmap(matrix=fitz.Matrix(esc, esc), alpha=False)
-            img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)[:, :, :3].copy()
+        base = nombre.rsplit(".", 1)[0] if "." in nombre[-6:] else nombre
+        es_foto = str(d.get("mime", "")).startswith("image/")
+        recortadas, archivos = 0, []
+        if es_foto:   # 🗜 una foto: se recorta, se achica y queda como JPG
+            img = cv2.imdecode(np.frombuffer(pdf, np.uint8), cv2.IMREAD_COLOR)
+            if img is None:
+                raise RuntimeError("no se pudo abrir la imagen")
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img, rec = recortar(img)
             recortadas += 1 if rec else 0
             h, w = img.shape[:2]
             f = LADO / float(max(h, w))
             if f < 1:
                 img = cv2.resize(img, (int(w * f), int(h * f)), interpolation=cv2.INTER_AREA)
-            paginas.append(a_jpg(img, cjpegli))
-        # partes de hasta ~38 MB
-        partes, act, peso = [], [], 0
-        for j in paginas:
-            if act and peso + len(j) > MAX_PARTE:
-                partes.append(act); act, peso = [], 0
-            act.append(j); peso += len(j)
-        if act:
-            partes.append(act)
-        base = nombre[:-4] if nombre.lower().endswith(".pdf") else nombre
-        archivos = []
-        for i, imgs in enumerate(partes):
-            nom = nombre if len(partes) == 1 else "%s (parte %d de %d).pdf" % (base, i + 1, len(partes))
-            archivos.append((nom, img2pdf.convert(imgs, layout_fun=img2pdf.get_fixed_dpi_layout_fun((150, 150)))))
-        total = sum(len(b) for _, b in archivos)
-        print("Comprimido: %.1f MB → %.1f MB · %d pág · %d recortadas · %d parte(s) · %s" % (len(pdf) / 1048576, total / 1048576, len(paginas), recortadas, len(archivos), motor))
+            archivos.append((nombre if nombre.lower().endswith((".jpg", ".jpeg")) else base + ".jpg", a_jpg(img, cjpegli), "image/jpeg"))
+            npag = 1
+        else:
+            doc = fitz.open(stream=pdf, filetype="pdf")
+            paginas = []
+            for p in doc:
+                esc = LADO / max(p.rect.width, p.rect.height) * 1.6   # un poco más grande y luego se achica (mejor calidad)
+                pix = p.get_pixmap(matrix=fitz.Matrix(esc, esc), alpha=False)
+                img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)[:, :, :3].copy()
+                img, rec = recortar(img)
+                recortadas += 1 if rec else 0
+                h, w = img.shape[:2]
+                f = LADO / float(max(h, w))
+                if f < 1:
+                    img = cv2.resize(img, (int(w * f), int(h * f)), interpolation=cv2.INTER_AREA)
+                paginas.append(a_jpg(img, cjpegli))
+            npag = len(paginas)
+            # partes de hasta ~38 MB
+            partes, act, peso = [], [], 0
+            for j in paginas:
+                if act and peso + len(j) > MAX_PARTE:
+                    partes.append(act); act, peso = [], 0
+                act.append(j); peso += len(j)
+            if act:
+                partes.append(act)
+            for i, imgs in enumerate(partes):
+                nom = nombre if len(partes) == 1 else "%s (parte %d de %d).pdf" % (base, i + 1, len(partes))
+                archivos.append((nom, img2pdf.convert(imgs, layout_fun=img2pdf.get_fixed_dpi_layout_fun((150, 150))), "application/pdf"))
+        total = sum(len(b) for _, b, _ in archivos)
+        print("Comprimido: %.1f MB → %.1f MB · %d pág · %d recortadas · %d parte(s) · %s" % (len(pdf) / 1048576, total / 1048576, npag, recortadas, len(archivos), motor))
+        if len(archivos) == 1 and total >= len(pdf) * 0.9:   # casi no baja (ya estaba liviano): queda el original
+            print("No hacía falta: el original ya pesaba poco.")
+            bot({"accion": "cmp_fin", "ok": True, "sinCambio": True})
+            return 0
         # el original sale de Entrada y suben las partes
         r = bot({"accion": "cmp_mover"})
         if not r.get("ok"):
             raise RuntimeError("no se pudo mover el original: " + str(r.get("error")))
-        for nom, b in archivos:
-            meta = json.dumps({"name": nom, "parents": [entrada], "mimeType": "application/pdf"}).encode()
+        for nom, b, tipo in archivos:
+            meta = json.dumps({"name": nom, "parents": [entrada], "mimeType": tipo}).encode()
             _, cab = drive(token, "POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true", meta,
-                           {"Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Type": "application/pdf", "X-Upload-Content-Length": str(len(b))})
-            drive(token, "PUT", cab["Location"], b, {"Content-Type": "application/pdf"})
-        bot({"accion": "cmp_fin", "ok": True, "mb": round(total / 1048576, 1), "partes": len(archivos), "paginas": len(paginas), "recortadas": recortadas, "motor": motor})
+                           {"Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Type": tipo, "X-Upload-Content-Length": str(len(b))})
+            drive(token, "PUT", cab["Location"], b, {"Content-Type": tipo})
+        bot({"accion": "cmp_fin", "ok": True, "mb": round(total / 1048576, 1), "partes": len(archivos), "paginas": npag, "recortadas": recortadas, "motor": motor})
         return 0
     except Exception as e:  # noqa: BLE001
         msg = str(e)[:300]

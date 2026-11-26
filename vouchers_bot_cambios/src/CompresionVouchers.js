@@ -21,6 +21,7 @@ var CMPV_WF_ = 'vouchers-comprimir.yml';
 var CMPV_PROP_ = 'CMPV_L_';
 var CMPV_TOKEN_ = 'VCH_GITHUB_TOKEN';
 var CMPV_MARCA_ = '📦 comprimiendo';
+var CMPV_PEDIDO_ = '📦 comprimir (pedido)';   // descripción que deja Telegram / WhatsApp / 📤 Subir cuando la persona pide «🗜 Reducir peso»
 
 function CMPV_activo_() { return PropertiesService.getScriptProperties().getProperty('VCH_COMPRIMIR') !== '0'; }
 
@@ -63,12 +64,15 @@ function CMPV_revisar_() {
       var it;
       try { it = DriveApp.getFolderById(idCarp).getFiles(); } catch (e) { return; }
       while (it.hasNext()) {
-        var f = it.next();
-        if (!/pdf/i.test(f.getMimeType()) || f.getSize() < CMPV_MB_ * 1024 * 1024) continue;
-        var d = String(f.getDescription() || '');
-        if (d.indexOf('📦') === 0) continue;   // ya está en cola o ya se intentó
+        var f = it.next(), mime = f.getMimeType(), d = String(f.getDescription() || '');
+        // 🗜 pedido a mano (Telegram, WhatsApp o 📤 Subir: «Reducir peso»): PDF o foto de cualquier tamaño
+        var pedido = d.indexOf(CMPV_PEDIDO_) === 0 && (/pdf/i.test(mime) || /^image\//i.test(mime));
+        if (!pedido) {
+          if (!/pdf/i.test(mime) || f.getSize() < CMPV_MB_ * 1024 * 1024) continue;
+          if (d.indexOf('📦') === 0) continue;   // ya está en cola o ya se intentó
+        }
         var lote = Utilities.getUuid().replace(/-/g, '').slice(0, 16), mb = Math.round(f.getSize() / 1048576);
-        p.setProperty(CMPV_PROP_ + lote, JSON.stringify({ id: f.getId(), nombre: f.getName(), entrada: idCarp, mb: mb, t: Date.now() }));
+        p.setProperty(CMPV_PROP_ + lote, JSON.stringify({ id: f.getId(), nombre: f.getName(), entrada: idCarp, mb: mb, kb: Math.round(f.getSize() / 1024), mime: mime, pedido: pedido, t: Date.now() }));
         try {
           f.setDescription(CMPV_MARCA_ + ' (lote ' + lote + ')');
           CMPV_gh_('/actions/workflows/' + CMPV_WF_ + '/dispatches', 'post', { ref: CMPV_repo_().rama, inputs: { lote: lote } });
@@ -116,7 +120,7 @@ function CMPV_web_(q) {
     if (!L) return { ok: false, error: 'lote desconocido o ya terminado' };
     if (q.accion === 'cmp_datos') {
       // 🔑 permiso temporal (1 h) para bajar el PDF y subir las partes (el robot lo enmascara y no lo guarda)
-      return { ok: true, token: ScriptApp.getOAuthToken(), id: L.id, nombre: L.nombre, entrada: L.entrada, mb: L.mb };
+      return { ok: true, token: ScriptApp.getOAuthToken(), id: L.id, nombre: L.nombre, entrada: L.entrada, mb: L.mb, mime: L.mime || 'application/pdf' };
     }
     if (q.accion === 'cmp_mover') {   // antes de subir: el original sale de Entrada (así no hay dos con el mismo nombre)
       var f = DriveApp.getFileById(L.id);
@@ -134,6 +138,12 @@ function CMPV_web_(q) {
         f2.setDescription('📦 no se pudo comprimir: ' + String(q.error || '').slice(0, 150));
       } catch (e) {}
       if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'comprimir PDF · ERROR', '', L.nombre + ' · ' + String(q.error || '').slice(0, 300));
+      return { ok: true };
+    }
+    if (String(q.sinCambio) === '1') {   // ya estaba liviano: queda el original tal cual
+      try { DriveApp.getFileById(L.id).setDescription('📦 no hacía falta comprimir (ya pesaba poco)'); } catch (e) {}
+      if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'comprimir · no hacía falta', '', L.nombre + ' (' + (L.kb || 0) + ' KB)');
+      try { programarReintentoAutomatico_(); } catch (e) {}
       return { ok: true };
     }
     if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'comprimir PDF · listo', '', L.nombre + ': ' + L.mb + ' MB → ' + q.mb + ' MB' +
