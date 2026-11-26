@@ -294,3 +294,32 @@ function onEdit(e) {
     }
   } catch (err) { /* nunca molestar al editar */ }
 }
+
+// ============================================================
+// ┃ LÍNEA ENTRE LO QUE LLENA EL SISTEMA (A–O) Y LO QUE SE LLENA A MANO (desde «Empresa»)
+// ------------------------------------------------------------
+// Las filas nuevas (las crea Sheets al escribir más abajo) no traen el borde: después de cada procesamiento se
+// vuelve a poner en TODA la columna «Empresa». Y una sola vez, los títulos desde «Empresa» van en otro color
+// (índigo) para que se distingan de los de A–O.
+// ============================================================
+var CC_COLOR_MANUAL_ = '#3730a3';
+
+function VCH_separadorManual_() {
+  const ss = SpreadsheetApp.openById(CFG.SPREADSHEET_ID), p = PropertiesService.getScriptProperties();
+  const cabecera = p.getProperty('VCH_CABECERA_MANUAL') !== '1';
+  [CFG.SHEET_ORIGINALES, CFG.SHEET_FOTOS].forEach(function (nom) {
+    const h = ss.getSheetByName(nom);
+    if (!h) return;
+    const tit = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(CC_norma_);
+    const col = tit.indexOf(CC_norma_('Empresa')) + 1;
+    if (col < 2) return;
+    h.getRange(1, col, h.getMaxRows(), 1).setBorder(null, true, null, null, null, null, '#0f172a', SpreadsheetApp.BorderStyle.SOLID_THICK);
+    if (cabecera) {
+      let fin = col;   // hasta «Resultado» (las copias de la derecha no se tocan)
+      const res = tit.indexOf(CC_norma_('Resultado')) + 1;
+      if (res > col) fin = res;
+      h.getRange(1, col, 1, fin - col + 1).setBackground(CC_COLOR_MANUAL_).setFontColor('#ffffff').setFontWeight('bold');
+    }
+  });
+  if (cabecera) p.setProperty('VCH_CABECERA_MANUAL', '1');
+}
