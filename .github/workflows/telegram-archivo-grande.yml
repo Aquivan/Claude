@@ -53,8 +53,15 @@ jobs:
           echo "::add-mask::$ID"
           echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Herramientas (Telethon)
-        run: pip install --quiet "telethon==1.40.0" "cryptg==0.5.0.post0" "pypdf==5.4.0"
+        run: |
+          pip install --quiet "telethon==1.40.0" "pypdf==5.4.0"
+          # cryptg solo acelera la descarga: si no se instala, igual funciona
+          pip install --quiet --only-binary=:all: "cryptg==0.5.0.post0" || echo "::warning::Sin cryptg: la descarga es más lenta"
 
       - name: Bajar de Telegram y subir a Drive
         env:
@@ -62,3 +69,10 @@ jobs:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
         run: python3 scripts/telegram_archivo_grande.py
+
+      # Si algo falló ANTES de que el robot pudiera avisar (instalación, dirección del bot…), se le avisa igual a la persona.
+      - name: Avisar si falló
+        if: failure() && env.BOT_URL != ''
+        env:
+          LOTE: ${{ inputs.lote }}
+        run: python3 scripts/telegram_archivo_grande.py --fallo "el robot no pudo prepararse (paso ${{ job.status }})"

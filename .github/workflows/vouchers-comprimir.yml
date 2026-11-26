@@ -52,6 +52,10 @@ jobs:
           echo "::add-mask::$ID"
           echo "BOT_URL=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Herramientas (PyMuPDF, OpenCV, img2pdf, Jpegli de Google)
         run: |
           pip install --quiet "pymupdf==1.25.5" "opencv-python-headless==4.11.0.86" "img2pdf==0.6.1" "pillow==11.2.1" "numpy<2.3"
@@ -64,3 +68,10 @@ jobs:
         env:
           LOTE: ${{ inputs.lote }}
         run: python3 scripts/comprimir_vouchers.py
+
+      # Si algo falló antes de que el robot pudiera avisar, el PDF vuelve al proceso normal enseguida (sin esperar 90 min).
+      - name: Avisar si falló
+        if: failure() && env.BOT_URL != ''
+        env:
+          LOTE: ${{ inputs.lote }}
+        run: python3 scripts/comprimir_vouchers.py --fallo "el robot no pudo prepararse"
