@@ -151,6 +151,7 @@ function actualizarTodoInterno_(forzar) {
       var mapaRes = RES_textos_(res, vch, cfg, excl, padron);
       try { RES_retencionInicial_(cfg, mapaRes); } catch (e) { REG_anotar_('Cobranzas', 'retención inicial · ERROR', '', e.message); }
       var nRes = RES_escribir_(cfg, mapaRes);
+      try { var rba = RBA_completar_(cfg, res, vch); if (rba) bitacora_(ss, 'RUC beneficiario por nombre', t0, rba); } catch (eR) { bitacora_(ss, 'RUC beneficiario por nombre ERROR', t0, eR.message); }
       if (nRes) bitacora_(ss, 'Resultado (Vouchers)', t0, nRes + ' celda(s) actualizadas');
     } catch (e) { bitacora_(ss, 'Resultado (Vouchers) ERROR', t0, e.message); }
 

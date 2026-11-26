@@ -74,7 +74,9 @@ function onOpen() {
       .addItem('🤖 Analizar con IA: factura, empresa y retención pendiente', 'menuAnalizarIAProcesados'))
     .addSubMenu(ui.createMenu('🔎 RUC por nombre (vouchers sin RUC)')
       .addItem('🔎 Buscar los RUC que faltan', 'menuBuscarRucPorNombre')
-      .addItem('💾 Guardar RUC confirmados (✔) como alias', 'menuGuardarRucConfirmados'))
+      .addItem('💾 Guardar RUC confirmados (✔) como alias', 'menuGuardarRucConfirmados')
+      .addItem('🔎 Completar solo (RUC beneficiario por nombre): encender / apagar', 'menuRbaInterruptor')
+      .addItem('↩️ Deshacer el último completado de RUC beneficiario', 'menuRbaDeshacer'))
 
     .addSubMenu(ui.createMenu('♻️ Respaldos de datos manuales')
       .addItem('💾 Guardar respaldo ahora', 'menuRespaldarAhora')
