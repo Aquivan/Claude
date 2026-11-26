@@ -53,11 +53,45 @@ function LIMP_csv_(filas) {
   return filas.map(function (r) { return r.map(function (x) { const s = String(x == null ? '' : x); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(','); }).join('\n');
 }
 
-function VCH_limpiezaDuplicados_() {
-  const props = PropertiesService.getScriptProperties(), estado = props.getProperty('VCH_LIMP_DUP') || '';
+/**
+ * 🔁 Los dudosos (varios posibles originales) y los sin original se vuelven a LEER con la IA (RP_leer_, el mismo «Volver a
+ * leer»): con su N° de operación real se busca el original EXACTO (op + banco + monto). Si un archivo/página tiene varios
+ * vouchers (p. ej. un financiamiento de 2 registros), cada fila [DUPLICADO] de esa página toma el voucher en su orden.
+ */
+async function LIMP_releer_(t, h, plan) {
+  const pend = plan.filter(function (p) { return !p.orig && p.archivo; });
+  if (!pend.length) return 0;
+  const n = h.getLastRow() - 1, v = h.getRange(2, 1, n, 5).getValues(), porClave = {};
+  v.forEach(function (r, i) { if (String(r[1] || '').charAt(0) !== '[' && r[1]) porClave[claveDuplicado(r[1], r[2], r[4])] = i + 2; });
+  const grupos = {};
+  pend.forEach(function (p) { const k = p.archivo + '|' + (p.pag || 1); (grupos[k] = grupos[k] || []).push(p); });
+  let hechos = 0;
+  for (const k in grupos) {
+    const g = grupos[k];
+    try {
+      const r = await RP_leer_(t, g[0].fila);
+      g.forEach(function (p, i) {
+        const x = r.leidos[i];
+        if (!x || !x.nOperacion) { p.motivo += ' · releído: sin voucher ' + (i + 1); return; }
+        const o = porClave[claveDuplicado(x.nOperacion, x.banco, x.monto)];
+        p.opReleida = x.nOperacion;
+        if (o) { p.orig = o; p.motivo = 'original seguro (releído: op ' + x.nOperacion + ')'; hechos++; }
+        else p.motivo += ' · releído op ' + x.nOperacion + ': no está en la hoja';
+      });
+    } catch (e) { g.forEach(function (p) { p.motivo += ' · no se pudo releer (' + String(e.message).slice(0, 60) + ')'; }); }
+  }
+  return hechos;
+}
+
+async function VCH_limpiezaDuplicados_() {
+  const props = PropertiesService.getScriptProperties(), estado = props.getProperty('VCH_LIMP_DUP2') || '';
   if (estado === 'hecho' || (estado === 'vista' && !LIMP_APLICAR_)) return;
   const tabs = [CFG.SHEET_ORIGINALES, CFG.SHEET_FOTOS], planes = {};
-  tabs.forEach(function (t) { const h = obtenerHoja(t); planes[t] = h ? LIMP_plan_(h) : []; });
+  for (let q = 0; q < tabs.length; q++) {
+    const t = tabs[q], h = obtenerHoja(t);
+    planes[t] = h ? LIMP_plan_(h) : [];
+    if (h && planes[t].length) { try { await LIMP_releer_(t, h, planes[t]); } catch (e) { Logger.log('🧹 Releer: ' + e.message); } }
+  }
 
   // 1) vista previa (siempre se rehace)
   const filas = [['Pestaña', 'Fila [DUPLICADO]', 'Fecha', 'Banco', 'Moneda', 'Monto', 'Beneficiario', 'Archivo', 'Pág', 'Procesado', 'Canal', 'Resultado', 'Fila original', 'Posibles']];
@@ -77,7 +111,7 @@ function VCH_limpiezaDuplicados_() {
     carp.createFile(nom, LIMP_csv_(filas), MimeType.CSV);
   } catch (e) { Logger.log('🧹 CSV: ' + e.message); }
   if (!LIMP_APLICAR_) {
-    props.setProperty('VCH_LIMP_DUP', 'vista');
+    props.setProperty('VCH_LIMP_DUP2', 'vista');
     if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · vista previa', '', resumen);
     return;
   }
@@ -125,6 +159,6 @@ function VCH_limpiezaDuplicados_() {
     });
     hechos.push(t + ': ' + borrar.length + ' fila(s) borradas, ' + movidos + ' archivo(s) a 🔁 Repetidos');
   });
-  props.setProperty('VCH_LIMP_DUP', 'hecho');
+  props.setProperty('VCH_LIMP_DUP2', 'hecho');
   if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · aplicada', '', hechos.join(' | ') + ' · ' + resumen);
 }
