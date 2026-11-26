@@ -83,18 +83,66 @@ async function LIMP_releer_(t, h, plan) {
   return hechos;
 }
 
+/**
+ * 🟩 Repetidos que el sistema viejo NO marcó (las filas en verde del usuario: mismo banco, moneda, monto y fecha). Por cada
+ * grupo así, si los N° de operación son iguales salvo ceros/guiones o un carácter (¿un dígito mal leído?), se vuelven a
+ * LEER las dos filas con la IA: si la operación releída es la MISMA, es repetido confirmado (queda la fila más antigua);
+ * si no, son vouchers distintos (p. ej. un financiamiento de 2 registros) y no se tocan. Máx. 40 relecturas por vuelta.
+ */
+async function LIMP_grupos_(t, h, plan) {
+  const n = h.getLastRow() - 1;
+  if (n < 1) return { grupos: 0, distintos: 0, releidas: 0 };
+  const v = h.getRange(2, 1, n, 14).getValues(), g = {};
+  v.forEach(function (r, i) {
+    const op = String(r[1] || '').trim();
+    if (!op || op.charAt(0) === '[') return;
+    const k = String(r[2]).trim().toUpperCase() + '|' + String(r[3]).trim().toUpperCase() + '|' + (Math.round((Number(r[4]) || 0) * 100) / 100).toFixed(2) + '|' + LIMP_dia_(r[0]);
+    (g[k] = g[k] || []).push(i);
+  });
+  let grupos = 0, distintos = 0, releidas = 0;
+  const cache = {};
+  const releer = async function (i) {
+    if (cache[i] !== undefined) return cache[i];
+    if (releidas >= 40) return (cache[i] = null);
+    releidas++;
+    try {
+      const r = await RP_leer_(t, i + 2), propio = REP_normOp_(v[i][1]);
+      let mejor = r.leidos[0];   // en una página con varios vouchers: el de operación más parecida a la de la fila
+      r.leidos.forEach(function (x) { const o = REP_normOp_(x.nOperacion); if (o === propio || (REP_unoDistinto_(o, propio) && REP_normOp_(mejor.nOperacion) !== propio)) mejor = x; });
+      return (cache[i] = REP_normOp_(mejor && mejor.nOperacion));
+    } catch (e) { return (cache[i] = null); }
+  };
+  for (const k in g) {
+    const idx = g[k];
+    if (idx.length < 2) continue;
+    grupos++;
+    for (let a = 0; a < idx.length; a++) for (let b = a + 1; b < idx.length; b++) {
+      const i = idx[a], j = idx[b], oi = REP_normOp_(v[i][1]), oj = REP_normOp_(v[j][1]);
+      if (!(oi === oj || REP_unoDistinto_(oi, oj))) { distintos++; continue; }
+      const ri = await releer(i), rj = await releer(j);
+      const base = { fecha: LIMP_dia_(v[j][0]), banco: v[j][2], moneda: v[j][3], monto: v[j][4], benef: v[j][5], archivo: String(v[j][10] || '').trim(),
+        procesado: v[j][11] instanceof Date ? Utilities.formatDate(v[j][11], 'America/Lima', 'dd/MM/yyyy HH:mm') : String(v[j][11] || ''), pag: v[j][12], canal: String(v[j][13] || ''),
+        candidatos: [i + 2], fila: j + 2, verde: true };
+      if (ri && rj && ri === rj) plan.push(Object.assign(base, { orig: i + 2, motivo: 'repetido confirmado (releído: op ' + ri + ' en ' + (i + 2) + ' y ' + (j + 2) + ')' }));
+      else plan.push(Object.assign(base, { orig: 0, motivo: ri && rj ? 'distintos al releer (op ' + ri + ' / ' + rj + '): no se toca' : 'casi igual, no se pudo releer: revisar a mano' }));
+    }
+  }
+  return { grupos: grupos, distintos: distintos, releidas: releidas };
+}
+
 async function VCH_limpiezaDuplicados_() {
-  const props = PropertiesService.getScriptProperties(), estado = props.getProperty('VCH_LIMP_DUP2') || '';
+  const props = PropertiesService.getScriptProperties(), estado = props.getProperty('VCH_LIMP_DUP3') || '';
   if (estado === 'hecho' || (estado === 'vista' && !LIMP_APLICAR_)) return;
-  const tabs = [CFG.SHEET_ORIGINALES, CFG.SHEET_FOTOS], planes = {};
+  const tabs = [CFG.SHEET_ORIGINALES, CFG.SHEET_FOTOS], planes = {}, infoG = {};
   for (let q = 0; q < tabs.length; q++) {
     const t = tabs[q], h = obtenerHoja(t);
     planes[t] = h ? LIMP_plan_(h) : [];
     if (h && planes[t].length) { try { await LIMP_releer_(t, h, planes[t]); } catch (e) { Logger.log('🧹 Releer: ' + e.message); } }
+    if (h) { try { infoG[t] = await LIMP_grupos_(t, h, planes[t]); } catch (e) { Logger.log('🧹 Grupos: ' + e.message); } }
   }
 
   // 1) vista previa (siempre se rehace)
-  const filas = [['Pestaña', 'Fila [DUPLICADO]', 'Fecha', 'Banco', 'Moneda', 'Monto', 'Beneficiario', 'Archivo', 'Pág', 'Procesado', 'Canal', 'Resultado', 'Fila original', 'Posibles']];
+  const filas = [['Pestaña', 'Fila a quitar', 'Fecha', 'Banco', 'Moneda', 'Monto', 'Beneficiario', 'Archivo', 'Pág', 'Procesado', 'Canal', 'Resultado', 'Fila original', 'Posibles']];
   tabs.forEach(function (t) {
     planes[t].forEach(function (p) {
       filas.push([t, p.fila, p.fecha, p.banco, p.moneda, p.monto, p.benef, p.archivo, p.pag, p.procesado, p.canal, p.motivo, p.orig || '', p.candidatos.join(' ')]);
@@ -102,8 +150,10 @@ async function VCH_limpiezaDuplicados_() {
   });
   const resumen = tabs.map(function (t) {
     const pl = planes[t];
-    return t + ': ' + pl.length + ' [DUPLICADO] · ' + pl.filter(function (p) { return p.orig; }).length + ' con original seguro · ' +
-      pl.filter(function (p) { return !p.orig && p.candidatos.length; }).length + ' dudosos · ' + pl.filter(function (p) { return !p.candidatos.length; }).length + ' sin original';
+    const d = pl.filter(function (p) { return !p.verde; }), vv = pl.filter(function (p) { return p.verde; }), gi = infoG[t] || {};
+    return t + ': ' + d.length + ' [DUPLICADO] (' + d.filter(function (p) { return p.orig; }).length + ' con original seguro) · ' +
+      (gi.grupos || 0) + ' grupos mismo banco/monto/fecha: ' + vv.filter(function (p) { return p.orig; }).length + ' repetidos confirmados, ' +
+      vv.filter(function (p) { return !p.orig; }).length + ' a revisar, ' + (gi.distintos || 0) + ' pares distintos · ' + (gi.releidas || 0) + ' relecturas IA';
   }).join(' | ');
   try {
     const carp = DriveApp.getFolderById(CFG.CARPETA_FOTOS_PROCESADOS_ID), nom = '🧹 Limpieza de duplicados — ' + (LIMP_APLICAR_ ? 'aplicada' : 'vista previa') + '.csv';
@@ -111,7 +161,7 @@ async function VCH_limpiezaDuplicados_() {
     carp.createFile(nom, LIMP_csv_(filas), MimeType.CSV);
   } catch (e) { Logger.log('🧹 CSV: ' + e.message); }
   if (!LIMP_APLICAR_) {
-    props.setProperty('VCH_LIMP_DUP2', 'vista');
+    props.setProperty('VCH_LIMP_DUP3', 'vista');
     if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · vista previa', '', resumen);
     return;
   }
@@ -119,8 +169,18 @@ async function VCH_limpiezaDuplicados_() {
   // 2) aplicar (solo los de original seguro)
   const hechos = [];
   tabs.forEach(function (t) {
-    const h = obtenerHoja(t), pl = planes[t].filter(function (p) { return p.orig; });
-    if (!h || !pl.length) return;
+    const h = obtenerHoja(t);
+    if (!h) return;
+    const tit = h.getRange(1, 1, 1, h.getLastColumn()).getDisplayValues()[0].map(CC_norma_);
+    const pl = planes[t].filter(function (p) {
+      if (!p.orig) return false;
+      if (h.getLastColumn() <= 14) return true;
+      const ext = h.getRange(p.fila, 15, 1, h.getLastColumn() - 14).getDisplayValues()[0];   // de la O en adelante
+      const propio = ext.some(function (x, k) { const nm = tit[14 + k] || ''; return String(x).trim() && !/^resultado|anotaci/.test(nm); });
+      if (propio) { p.motivo += ' · NO se borra: la fila tiene datos puestos a mano (empresa, comprobantes…)'; return false; }
+      return true;
+    });
+    if (!pl.length) return;
     const ss = h.getParent(), nomR = '🛟 Respaldo duplicados ' + t;
     if (!ss.getSheetByName(nomR)) { const r = h.copyTo(ss).setName(nomR); r.hideSheet(); }
     // a) notas en la fila original (antes de borrar: las notas se mueven con su celda)
@@ -159,6 +219,6 @@ async function VCH_limpiezaDuplicados_() {
     });
     hechos.push(t + ': ' + borrar.length + ' fila(s) borradas, ' + movidos + ' archivo(s) a 🔁 Repetidos');
   });
-  props.setProperty('VCH_LIMP_DUP2', 'hecho');
+  props.setProperty('VCH_LIMP_DUP3', 'hecho');
   if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · aplicada', '', hechos.join(' | ') + ' · ' + resumen);
 }
