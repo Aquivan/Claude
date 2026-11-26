@@ -46,6 +46,25 @@ var TGP_T0_ = Date.now();   // inicio de ESTA ejecución (el código global corr
 function TGP_seg_() { return (Date.now() - TGP_T0_) / 1000; }
 var TGP_PUEDE_SEGUIR_ = false;   // true = si no alcanza el tiempo, la revisión sigue sola en segundo plano (TGP_seguirAnalisis)
 
+/**
+ * ⏳ Avance en vivo de 🧾 Procesar documento en Telegram: el mensaje «🧾 Leyendo…» se edita con cada paso
+ * (✓ lo hecho con su tiempo · ⏳ lo que está haciendo). fin = true lo cierra con «✓ Revisado en N s».
+ */
+var TGP_AV_ = null;
+function TGP_av_(paso, fin) {
+  var a = TGP_AV_;
+  if (!a) return;
+  try {
+    var ahora = Date.now(), seg = function (ms) { return Math.round(ms / 1000) + ' s'; };
+    if (a.pasos.length) { var u = a.pasos[a.pasos.length - 1]; if (!u.fin) u.fin = ahora; }
+    if (paso) a.pasos.push({ t: paso, ini: ahora });
+    if (fin && paso) a.pasos[a.pasos.length - 1].fin = ahora;
+    var lineas = a.pasos.map(function (x) { return (x.fin ? (/^⚠️/.test(x.t) ? '' : '✓ ') : '⏳ ') + x.t.replace(/…$/, '') + (x.fin ? ' · ' + seg(x.fin - x.ini) : '…'); });
+    TG_editar_(a.chat, a.msg, a.titulo + ' · ' + seg(ahora - a.t0) + '\n' + lineas.join('\n') + (fin && !paso ? '\n<i>✓ Revisado: el resumen va abajo.</i>' : ''));
+    if (fin) TGP_AV_ = null;
+  } catch (e) { console.warn('Avance de Procesar: ' + e.message); }
+}
+
 function TGP_iaLectora_(c, opts) {
   var prov = IA_PROVEEDORES_[c.ia.proveedor] || {}, sp = PropertiesService.getScriptProperties();
   var lector = sp.getProperty('TGP_MODELO_LECTOR') || TGP_MODELO_LECTOR_;
@@ -132,6 +151,7 @@ function TGP_leerVarios_(c, adjs) {
       // se reintenta SOLO con la IA principal (Gemini lee el PDF completo); si igual, se avisa y no se guarda.
       var soloP1 = function (r) { var d = (r && r.documentos) || []; return x.nPag > 1 && !d.some(function (q) { return Number(q.pagina) > 1; }); };
       if (soloP1(rr.r)) {
+        TGP_av_('🔁 La IA de respaldo leyó solo la 1.ª página de ' + x.nPag + ': lo reintento con Gemini…');
         var porQue = 'Gemini también leyó solo la 1.ª página';
         try { var o2 = {}; for (var kk in x.opts) o2[kk] = x.opts[kk]; o2._sinRespaldo = true; var r2 = IA_llamarSeguro_(c.ia, o2); if (r2 && !soloP1(r2)) rr = { ok: true, r: r2 }; }
         catch (e2) { porQue = 'Gemini no respondió: ' + String(e2.message || e2).slice(0, 120); }
@@ -234,6 +254,7 @@ function TGP_analizar_(ss, adjs, op) {
   var lect = TGP_leerVarios_(c, adjs);
   var leidos = adjs.map(function (a, i) { return { a: a, r: lect[i] || { error: 'sin lectura' } }; });
   var tLeer = Date.now();
+  TGP_av_('🔎 Buscando en la hoja de vouchers y en las facturas…');
   leidos.forEach(function (x) {
     if (x.r.error) { resumenArch.push('⚠️ ' + TG_esc_(x.a.nombre) + ': ' + TG_esc_(x.r.error)); return; }
     var docs = x.r.docs;
@@ -255,6 +276,7 @@ function TGP_analizar_(ss, adjs, op) {
     if (!/^(❌|⚠️)/.test(est)) return;
     if (TGP_seg_() > 200) return;   // sin tiempo para la segunda lectura: queda la duda / «no está» (la persona decide)
     relecturas++;
+    TGP_av_('🔁 Volviendo a leer el N° de operación del voucher ' + (i + 1) + ' (no lo encontré a la primera)…');
     var re = TGP_releerOp_(c, v);
     if (!re) return;
     var dig = function (t) { return String(t || '').replace(/\D/g, '').replace(/^0+/, ''); };
@@ -946,11 +968,14 @@ function TGP_avisar_(job, html) {
 
 function TGP_iniciarTG_(ctx, adjs) {
   TG_accion_(ctx.chatId, 'typing');
-  TG_enviar_(ctx.chatId, '🧾 Leyendo ' + (adjs.length > 1 ? 'los ' + adjs.length + ' archivos' : 'el archivo') + ' página por página…', null, { silencioso: true });
+  var msgAv = TG_enviar_(ctx.chatId, '🧾 Leyendo ' + (adjs.length > 1 ? 'los ' + adjs.length + ' archivos' : 'el archivo') + ' página por página…', null, { silencioso: true });
+  if (msgAv) TGP_AV_ = { chat: ctx.chatId, msg: msgAv, t0: Date.now(), pasos: [], titulo: '🧾 <b>Revisando ' + (adjs.length > 1 ? adjs.length + ' archivos' : '«' + TG_esc_(adjs[0].nombre) + '»') + '</b>' };
+  TGP_av_('📖 Leyendo con IA' + (adjs.length > 1 ? ' (' + adjs.length + ' archivos a la vez)' : '') + '…');
   var r;
   TGP_PUEDE_SEGUIR_ = true;
-  try { r = TGP_analizar_(ctx.ss, adjs, { canal: 'tg', destino: ctx.chatId, clave: ctx.chatId }); }
+  try { r = TGP_analizar_(ctx.ss, adjs, { canal: 'tg', destino: ctx.chatId, clave: ctx.chatId }); TGP_av_(null, true); }
   catch (e) {
+    TGP_av_('⚠️ ' + TG_esc_(String(e.message).replace('TGP_SIGUE', 'sigue en segundo plano')), true);
     if (/TGP_SIGUE/.test(e.message)) {
       TGP_encolarAnalisis_(String(ctx.chatId), { canal: 'tg', chat: ctx.chatId, adjs: adjs });
       return TG_enviar_(ctx.chatId, '⏳ Son varios archivos: sigo leyéndolos en segundo plano y le mando el resumen aquí en unos minutos.');

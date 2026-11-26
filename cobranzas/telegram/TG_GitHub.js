@@ -200,8 +200,8 @@ function TG_reintentarRun_(ctx, datos) {
   var cfg = TG_cfg_(ctx.ss);
   try {
     TG_gh_(cfg, '/actions/runs/' + datos.id + '/rerun-failed-jobs', 'post');
-    TG_seguir_(ctx.chatId, null, datos.id, 'Reintento de ' + datos.nombre);
-    TG_enviar_(ctx.chatId, '🔁 Reintentando lo que falló de ' + TG_esc_(datos.nombre) + '. Le aviso cuando termine.');
+    var msgR = TG_enviar_(ctx.chatId, '🔁 Reintentando lo que falló de ' + TG_esc_(datos.nombre) + '. ⏳ Este mensaje muestra el avance.');
+    TG_seguir_(ctx.chatId, null, datos.id, 'Reintento de ' + datos.nombre, null, msgR);
   } catch (e) {
     TG_enviar_(ctx.chatId, '⚠️ ' + TG_esc_(e.message));
   }
@@ -296,19 +296,44 @@ function TG_confirmarDescarga_(ctx, acc, op) {
   } catch (e) {
     return TG_enviar_(ctx.chatId, '⚠️ No se pudo pedir la descarga: ' + TG_esc_(e.message));
   }
-  TG_seguir_(ctx.chatId, p.wf, null, TG_textoDescarga_(acc, cfg.cob), acc.proyecto === 'sire_rapido' ? { tipo: 'sire_rapido', titulo: TGS_titulo_(inputs) } : null);
-  TG_enviar_(ctx.chatId, '✅ <b>Descarga pedida</b>: ' + TG_esc_(TG_textoDescarga_(acc, cfg.cob)) + '\nLe aviso cuando termine. Mientras tanto puede seguir preguntándome.',
+  var msgD = TG_enviar_(ctx.chatId, '✅ <b>Descarga pedida</b>: ' + TG_esc_(TG_textoDescarga_(acc, cfg.cob)) + '\n⏳ Este mensaje muestra el avance (se actualiza cada minuto). Mientras tanto puede seguir preguntándome.',
     [[{ text: '⚙️ Ver estado', callback_data: 'c:estado' }]]);
+  TG_seguir_(ctx.chatId, p.wf, null, TG_textoDescarga_(acc, cfg.cob), acc.proyecto === 'sire_rapido' ? { tipo: 'sire_rapido', titulo: TGS_titulo_(inputs) } : null, msgD);
 }
 
 /* ============================================================ seguimiento (avisar al terminar) */
 
-function TG_seguir_(chatId, wf, runId, texto, extra) {
+function TG_seguir_(chatId, wf, runId, texto, extra, msg) {
   var props = PropertiesService.getScriptProperties();
   var lista = JSON.parse(props.getProperty('TG_SEGUIR') || '[]');
-  lista.push({ chat: chatId, wf: wf, run: runId, texto: texto, desde: Date.now(), extra: extra || null });
+  lista.push({ chat: chatId, wf: wf, run: runId, texto: texto, desde: Date.now(), extra: extra || null, msg: msg || 0 });
   props.setProperty('TG_SEGUIR', JSON.stringify(lista.slice(-20)));
-  TG_programarSeguimiento_(4);
+  TG_programarSeguimiento_(msg ? 1 : 4);   // ⏳ con mensaje de avance: se mira cada minuto
+}
+
+/**
+ * ⏳ Avance en vivo de una corrida de GitHub: edita el mensaje de Telegram con cada máquina (empresa) y el paso en que va.
+ * Con muchas máquinas, la cuenta (✅ 5 · ⏳ 2 · 🕐 3) y solo las que están trabajando.
+ */
+function TG_avanceRun_(cfg, s, r) {
+  if (!s.msg || String(s.chat).indexOf('wa') === 0) return;
+  var jobs = [];
+  try { jobs = TG_gh_(cfg, '/actions/runs/' + r.id + '/jobs?per_page=60').jobs || []; } catch (e) { return; }
+  var icono = function (j) { return j.status !== 'completed' ? (j.status === 'in_progress' ? '⏳' : '🕐') : ({ success: '✅', failure: '❌', cancelled: '⚪', skipped: '⚪' }[j.conclusion] || '⚠️'); };
+  var paso = function (j) { var st = (j.steps || []).filter(function (x) { return x.status === 'in_progress'; })[0]; return st ? ': ' + st.name : ''; };
+  var min = Math.max(0, Math.round((Date.now() - new Date(r.run_started_at || r.created_at).getTime()) / 60000));
+  var lineas;
+  if (jobs.length <= 8) lineas = jobs.map(function (j) { return icono(j) + ' ' + TG_esc_(j.name + (j.status === 'in_progress' ? paso(j) : '')); });
+  else {
+    var cuenta = {}; jobs.forEach(function (j) { var i = icono(j); cuenta[i] = (cuenta[i] || 0) + 1; });
+    lineas = [Object.keys(cuenta).map(function (i) { return i + ' ' + cuenta[i]; }).join(' · ')]
+      .concat(jobs.filter(function (j) { return j.status === 'in_progress'; }).slice(0, 6).map(function (j) { return '⏳ ' + TG_esc_(j.name + paso(j)); }));
+  }
+  var hechos = jobs.filter(function (j) { return j.status === 'completed'; }).length;
+  var pct = jobs.length ? Math.round(100 * hechos / jobs.length) : 0;
+  TG_editar_(s.chat, s.msg, (r.status === 'completed' ? TG_iconoRun_(r) + ' <b>Terminó</b>: ' : '⏳ <b>En curso</b> · ' + min + ' min: ') + TG_esc_(s.texto) + '\n' +
+    (jobs.length > 1 ? '▓'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10)) + ' ' + hechos + ' de ' + jobs.length + '\n' : '') + lineas.join('\n') +
+    '\n<a href="' + r.html_url + '">ver en GitHub</a>', [[{ text: '⚙️ Ver estado', callback_data: 'c:estado' }]]);
 }
 
 function TG_programarSeguimiento_(min) {
@@ -338,10 +363,12 @@ function TG_seguirDescargas__reg() {
       var edad = Date.now() - s.desde;
       if (!r) { if (edad < 30 * 60000) quedan.push(s); return; }
       if (r.status !== 'completed' || (s.run && r.run_attempt && r.updated_at && new Date(r.updated_at).getTime() < s.desde)) {
+        try { TG_avanceRun_(cfg, s, r); } catch (eA) { console.warn('Avance de la corrida: ' + eA.message); }   // ⏳
         if (edad < 4 * 3600000) quedan.push(s);
         else if (String(s.chat).indexOf('wa') !== 0) TG_enviar_(s.chat, '⏳ ' + TG_esc_(s.texto) + ' sigue corriendo después de 4 horas: <a href="' + r.html_url + '">ver en GitHub</a>');
         return;
       }
+      try { TG_avanceRun_(cfg, s, r); } catch (eA) {}   // ⏳ el mensaje de avance queda con el estado final
       if (s.extra && s.extra.tipo === 'cre') return TGR_avisarFin_(cfg, s, r);
       if (s.extra && s.extra.tipo === 'constancia') return TGR_constanciaFin_(cfg, s, r);   // 📄 constancia bajada de SUNAT (TG_Retener.js)   // 🧾 comprobante de retención (TG_Retener.js)
       if (s.extra && s.extra.tipo === 'sire_rapido') return TGS_avisarFin_(cfg, s, r);   // ⚡ SIRE solo reporte (TG_SireRapido.js)
@@ -357,7 +384,7 @@ function TG_seguirDescargas__reg() {
   });
   props.setProperty('TG_SEGUIR', JSON.stringify(quedan));
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'TG_seguirDescargas') ScriptApp.deleteTrigger(t); });
-  if (quedan.length) TG_programarSeguimiento_(5);
+  if (quedan.length) TG_programarSeguimiento_(quedan.some(function (x) { return x.msg; }) ? 1 : 5);   // ⏳ con avance en vivo: cada minuto
 }
 
 /**
