@@ -4,7 +4,7 @@
 // Todo vive en ESTA hoja (Sistema de Vouchers), sin depender de Cobranzas (pedido del usuario, 26/11/2026).
 //
 // Google Apps Script no puede abrir archivos de más de ~50 MB y esta hoja aparta los de más de CFG.MAX_MB_ARCHIVO.
-// Si está ENCENDIDO (🤖 Vouchers → 📦 Comprimir PDF pesados) y hay 🔑 Token de GitHub, al empezar cada procesamiento
+// Si está ENCENDIDO (✨ Vouchers → 📦 Comprimir PDF pesados) y hay 🔑 Token de GitHub, al empezar cada procesamiento
 // se miran las carpetas de Entrada: un PDF de más de CMPV_MB_ MB se marca «📦 comprimiendo» y se lanza
 // vouchers-comprimir.yml con un «lote» (el nombre y el ID del archivo NO van al registro público de GitHub).
 // El robot llama aquí (doGet ?canal=gh, solo una corrida de ese workflow que esté corriendo) y pide un permiso
@@ -31,7 +31,7 @@ function CMPV_repo_() {
 
 function CMPV_gh_(ruta, metodo, carga) {
   var token = PropertiesService.getScriptProperties().getProperty(CMPV_TOKEN_);
-  if (!token) throw new Error('falta el 🔑 Token de GitHub (🤖 Vouchers → 📦 Comprimir PDF pesados)');
+  if (!token) throw new Error('falta el 🔑 Token de GitHub (✨ Vouchers → 📦 Comprimir PDF pesados)');
   var op = { method: metodo || 'get', muteHttpExceptions: true,
     headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } };
   if (carga) { op.contentType = 'application/json'; op.payload = JSON.stringify(carga); }

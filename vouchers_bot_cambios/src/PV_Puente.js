@@ -48,7 +48,7 @@ function PVP_get_(p) {
       case 'releerAplicar': {
         const r2 = RP_visorAplicar(String(p.id || ''), parseInt(p.i, 10) || 0);
         r2.ok = !r2.error;
-        if (r2.mensaje) r2.mensaje = r2.mensaje.replace('menú 🤖 Vouchers → ↩️ Deshacer la última relectura', 'botón ↩️ Deshacer relectura');
+        if (r2.mensaje) r2.mensaje = r2.mensaje.replace('menú ✨ Vouchers → ↩️ Deshacer la última relectura', 'botón ↩️ Deshacer relectura');
         return r2;
       }
       case 'conexionIA': {   // 🧠 la conexión de esta hoja con Cobranzas (asistente_ia/AsistenteIA.js), para que el portal use el mismo asistente

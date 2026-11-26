@@ -1,5 +1,5 @@
 // ============================================================
-// 🗑 DESHACER UNA TANDA desde la hoja de Vouchers (menú 🤖 Vouchers) — pedido del usuario 26/11/2026
+// 🗑 DESHACER UNA TANDA desde la hoja de Vouchers (menú ✨ Vouchers) — pedido del usuario 26/11/2026
 // ------------------------------------------------------------
 // Una «tanda» = las filas SEGUIDAS de un mismo archivo (columna «Archivo») en Originales o Fotos. Al deshacer:
 //   · se borran esas filas (con su imagen);

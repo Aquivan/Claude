@@ -1,7 +1,7 @@
 // ============================================================
 // 🏢 COMPLETAR «EMPRESA» SOLO — acordado con el usuario el 26/11/2026
 // ------------------------------------------------------------
-// En cada vuelta del bot (si el interruptor está encendido: 🤖 Vouchers → 🏢 Completar Empresa sola), en Originales y
+// En cada vuelta del bot (si el interruptor está encendido: ✨ Vouchers → 🏢 Completar Empresa sola), en Originales y
 // Fotos, SOLO donde «Empresa» está vacía, se pone la empresa del grupo (de 🏢 Empresas) que pagó, y su «RUC empresa»:
 //   1. «Doc. depositante» = RUC de una empresa del grupo (exacto).
 //   2. «Doc. depositante» = DNI de una persona del grupo (su RUC 10 sin el 10 ni el dígito final) → se llena con nota
@@ -191,7 +191,7 @@ function AE_menuDeshacer() {
   if (ui.alert('↩️ Deshacer el último completado de Empresa', '¿Quito las empresas que el sistema puso solo en su último lote? (las que usted cambió después no se tocan). Si quiere deshacer uno anterior, repita.', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
   // que no vuelva a llenarlas en la próxima vuelta: se apaga el interruptor
   PropertiesService.getScriptProperties().setProperty('VCH_AUTO_EMPRESA', '0');
-  ui.alert('↩️ Deshacer', AE_deshacer_() + '\n\nEl completado automático quedó APAGADO (enciéndalo en 🤖 Vouchers → 🏢 Completar Empresa sola).', ui.ButtonSet.OK);
+  ui.alert('↩️ Deshacer', AE_deshacer_() + '\n\nEl completado automático quedó APAGADO (enciéndalo en ✨ Vouchers → 🏢 Completar Empresa sola).', ui.ButtonSet.OK);
 }
 
 function AE_menuInterruptor() {

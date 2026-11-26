@@ -245,7 +245,7 @@ function WA_menuRegistrar() {
 function WA_menuInstante() {
   var ui = SpreadsheetApp.getUi();
   var r = ui.prompt('⚡ Procesar al instante',
-    'En la hoja de Vouchers abra el menú 🤖 Vouchers → 🩺 Configurar diagnostico remoto,\n' +
+    'En la hoja de Vouchers abra el menú ✨ Vouchers → 🩺 Configurar diagnostico remoto,\n' +
     'copie la dirección que muestra y péguela aquí.\n' +
     'Así cada tanda de WhatsApp se procesa apenas llega, sin esperar los 10 minutos.\n' +
     (WA_prop_('WA_PROCESAR_URL') ? '(Ya hay una guardada; deje vacío para conservarla, o escriba BORRAR.)' : ''),
