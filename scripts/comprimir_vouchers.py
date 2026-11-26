@@ -103,18 +103,146 @@ def recortar_blanco(img):
     return img[y0:y1, x0:x1], True
 
 
-def a_jpg(img, cjpegli):
+def a_jpg(img, cjpegli, calidad=CALIDAD):
+    """JPG con Jpegli (o Pillow). img puede ser color (RGB) o gris (2D)."""
     pil = Image.fromarray(img)
     if cjpegli:
         with tempfile.TemporaryDirectory() as d:
             png, jpg = os.path.join(d, "p.png"), os.path.join(d, "p.jpg")
             pil.save(png)
-            r = subprocess.run([cjpegli, png, jpg, "-q", str(CALIDAD)], capture_output=True)
+            r = subprocess.run([cjpegli, png, jpg, "-q", str(calidad)], capture_output=True)
             if r.returncode == 0 and os.path.exists(jpg):
                 return open(jpg, "rb").read()
     out = io.BytesIO()
-    pil.save(out, "JPEG", quality=CALIDAD - 5, optimize=True, progressive=True)
+    pil.save(out, "JPEG", quality=calidad - 5, optimize=True, progressive=True)
     return out.getvalue()
+
+
+# ---------- 26/11/2026: grises con papel blanco, recorte por texto (RapidOCR) y copia buscable ----------
+# Prueba con 30 páginas reales: «grises + papel blanco puro, calidad 72» se lee igual que el color (N° op, monto y fecha)
+# y pesa ~45 % menos. Las páginas con COLOR (etiquetas, tinta azul) siguen en color.
+
+def ocr_motor():
+    """RapidOCR (mismos modelos PP-OCRv5 de PaddleOCR, más liviano). Si no está, None: se recorta como antes y sin copia buscable."""
+    try:
+        from rapidocr import RapidOCR
+        return RapidOCR()
+    except Exception as e:  # noqa: BLE001
+        print("::warning::Sin RapidOCR (" + str(e)[:100] + "): recorte clásico y sin copia buscable")
+        return None
+
+
+def ocr(motor, img):
+    """[(caja[4 puntos], texto)] de la página."""
+    if motor is None:
+        return []
+    try:
+        r = motor(img)
+        if r.boxes is None:
+            return []
+        return [([(float(x), float(y)) for x, y in b], str(t)) for b, t in zip(r.boxes, r.txts or [])]
+    except Exception as e:  # noqa: BLE001
+        print("  OCR falló en una página: " + str(e)[:80])
+        return []
+
+
+def tiene_color(img):
+    """¿La página tiene algo de color que valga la pena (etiqueta, tinta azul, sello)?"""
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+    return float(((hsv[:, :, 1] > 90) & (hsv[:, :, 2] > 60)).mean()) > 0.002
+
+
+def papel_blanco(img):
+    """Gris con el papel blanco puro: divide por el fondo (sombras, reverso transparentado) y lleva a blanco lo más claro."""
+    g = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    chico = cv2.resize(g, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
+    fondo = cv2.resize(cv2.medianBlur(cv2.dilate(chico, np.ones((7, 7), np.uint8)), 21), (g.shape[1], g.shape[0]), interpolation=cv2.INTER_LINEAR)
+    n = np.clip(g.astype(np.float32) / np.maximum(fondo, 1) * 255, 0, 255)
+    n = np.clip((n - 40) * 255 / (255 - 40), 0, 255)
+    return np.clip(n * 255 / 215, 0, 255).astype(np.uint8)
+
+
+def papel_blanco_color(img):
+    """Como papel_blanco pero en color: cada canal se divide por su fondo (el papel queda blanco, la etiqueta conserva su color)."""
+    out = np.empty_like(img)
+    for k in range(3):
+        g = img[:, :, k]
+        chico = cv2.resize(g, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
+        fondo = cv2.resize(cv2.medianBlur(cv2.dilate(chico, np.ones((7, 7), np.uint8)), 21), (g.shape[1], g.shape[0]), interpolation=cv2.INTER_LINEAR)
+        n = np.clip(g.astype(np.float32) / np.maximum(fondo, 1) * 255, 0, 255)
+        n = np.clip((n - 40) * 255 / (255 - 40), 0, 255)
+        out[:, :, k] = np.clip(n * 255 / 215, 0, 255).astype(np.uint8)
+    # las zonas de color (etiquetas, tinta azul, sellos) quedan tal cual
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+    col = cv2.dilate(((hsv[:, :, 1] > 90) & (hsv[:, :, 2] > 60)).astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+    out[col] = img[col]
+    return out
+
+
+def caja_contenido(img, lineas):
+    """Caja de todo el texto que encontró el OCR + lo de color (etiquetas), con margen. None si no hay texto."""
+    h, w = img.shape[:2]
+    xs, ys = [], []
+    for caja, _ in lineas:
+        xs += [p[0] for p in caja]; ys += [p[1] for p in caja]
+    if not xs:
+        return None
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+    col = ((hsv[:, :, 1] > 90) & (hsv[:, :, 2] > 60)).astype(np.uint8)
+    n, _, st, _ = cv2.connectedComponentsWithStats(cv2.dilate(col, np.ones((9, 9), np.uint8)))
+    for i in range(1, n):
+        if st[i][4] > 0.002 * h * w:
+            xs += [st[i][0], st[i][0] + st[i][2]]; ys += [st[i][1], st[i][1] + st[i][3]]
+    m = max(20, int(0.025 * max(h, w)))
+    x0, y0, x1, y1 = max(0, int(min(xs)) - m), max(0, int(min(ys)) - m), min(w, int(max(xs)) + m), min(h, int(max(ys)) + m)
+    if (x1 - x0) * (y1 - y0) > 0.95 * w * h:
+        return None
+    return x0, y0, x1, y1
+
+
+def preparar(img, cjpegli, motor, blanco):
+    """Una página/foto ya recortada al papel → (jpg, ancho, alto, líneas OCR en esa imagen, recortó blancos?)."""
+    h, w = img.shape[:2]
+    f = LADO / float(max(h, w))
+    if f < 1:
+        img = cv2.resize(img, (int(w * f), int(h * f)), interpolation=cv2.INTER_AREA)
+    lineas = ocr(motor, img)
+    rb = False
+    if blanco:
+        c = caja_contenido(img, lineas) if lineas else None
+        if c:
+            x0, y0, x1, y1 = c
+            img = img[y0:y1, x0:x1]
+            lineas = [([(x - x0, y - y0) for x, y in caja], t) for caja, t in lineas]
+            rb = True
+        else:
+            img, rb = recortar_blanco(img)   # sin texto detectado: el recorte de antes
+            if rb:
+                lineas = []   # las posiciones ya no calzan
+    if tiene_color(img):
+        jpg = a_jpg(papel_blanco_color(img), cjpegli, 75)   # etiquetas / tinta de color: en color, con el papel blanco
+    else:
+        jpg = a_jpg(papel_blanco(img), cjpegli, 72)      # el resto: gris con papel blanco
+    return jpg, img.shape[1], img.shape[0], lineas, rb
+
+
+def pdf_buscable(paginas):
+    """PDF con las MISMAS imágenes + el texto invisible del OCR (para buscar con Ctrl+F). No lo lee la IA."""
+    doc = fitz.open()
+    for jpg, w, h, lineas in paginas:
+        k = 72.0 / 150
+        pg = doc.new_page(width=w * k, height=h * k)
+        pg.insert_image(pg.rect, stream=jpg)
+        for caja, t in lineas:
+            if not t.strip():
+                continue
+            xs = [p[0] for p in caja]; ys = [p[1] for p in caja]
+            alto = max(4.0, (max(ys) - min(ys)) * k)
+            try:
+                pg.insert_text((min(xs) * k, max(ys) * k - alto * 0.2), t, fontsize=alto * 0.8, render_mode=3)
+            except Exception:  # noqa: BLE001
+                pass
+    return doc.tobytes(garbage=3, deflate=True)
 
 
 def main():
@@ -134,6 +262,8 @@ def main():
         es_foto = str(d.get("mime", "")).startswith("image/")
         recortadas, blancos, archivos = 0, 0, []
         blanco = bool(d.get("blanco"))   # ✂️ la persona pidió también recortar los blancos
+        motor_ocr = ocr_motor()
+        buscable = None
         if es_foto:   # 🗜 una foto: se recorta, se achica y queda como JPG
             img = cv2.imdecode(np.frombuffer(pdf, np.uint8), cv2.IMREAD_COLOR)
             if img is None:
@@ -141,18 +271,13 @@ def main():
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img, rec = recortar(img)
             recortadas += 1 if rec else 0
-            if blanco:
-                img, rb = recortar_blanco(img)
-                blancos += 1 if rb else 0
-            h, w = img.shape[:2]
-            f = LADO / float(max(h, w))
-            if f < 1:
-                img = cv2.resize(img, (int(w * f), int(h * f)), interpolation=cv2.INTER_AREA)
-            archivos.append((nombre if nombre.lower().endswith((".jpg", ".jpeg")) else base + ".jpg", a_jpg(img, cjpegli), "image/jpeg"))
+            jpg, _, _, _, rb = preparar(img, cjpegli, motor_ocr, blanco)
+            blancos += 1 if rb else 0
+            archivos.append((nombre if nombre.lower().endswith((".jpg", ".jpeg")) else base + ".jpg", jpg, "image/jpeg"))
             npag = 1
         else:
             doc = fitz.open(stream=pdf, filetype="pdf")
-            paginas, ultimo = [], time.time()
+            paginas, conocr, ultimo = [], [], time.time()
             for p in doc:
                 if time.time() - ultimo > 15:   # ⏳ avance en vivo (la hoja se lo pasa a Telegram / WhatsApp)
                     ultimo = time.time()
@@ -165,15 +290,17 @@ def main():
                 img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)[:, :, :3].copy()
                 img, rec = recortar(img)
                 recortadas += 1 if rec else 0
-                if blanco:
-                    img, rb = recortar_blanco(img)
-                    blancos += 1 if rb else 0
-                h, w = img.shape[:2]
-                f = LADO / float(max(h, w))
-                if f < 1:
-                    img = cv2.resize(img, (int(w * f), int(h * f)), interpolation=cv2.INTER_AREA)
-                paginas.append(a_jpg(img, cjpegli))
+                jpg, w, h, lineas, rb = preparar(img, cjpegli, motor_ocr, blanco)
+                blancos += 1 if rb else 0
+                paginas.append(jpg)
+                conocr.append((jpg, w, h, lineas))
             npag = len(paginas)
+            # 🔎 copia buscable (aparte: la que lee la IA va solo con imágenes)
+            if motor_ocr is not None and d.get("buscables"):
+                try:
+                    buscable = pdf_buscable(conocr)
+                except Exception as eb:  # noqa: BLE001
+                    print("::warning::No se pudo armar la copia buscable: " + str(eb)[:120])
             # partes de hasta ~38 MB
             partes, act, peso = [], [], 0
             for j in paginas:
@@ -187,7 +314,7 @@ def main():
                 archivos.append((nom, img2pdf.convert(imgs, layout_fun=img2pdf.get_fixed_dpi_layout_fun((150, 150))), "application/pdf"))
         total = sum(len(b) for _, b, _ in archivos)
         print("Comprimido: %.1f MB → %.1f MB · %d pág · %d recortadas · %d sin blancos · %d parte(s) · %s" % (len(pdf) / 1048576, total / 1048576, npag, recortadas, blancos, len(archivos), motor))
-        if len(archivos) == 1 and total >= len(pdf) * 0.9 and not blancos:   # casi no baja (ya estaba liviano): queda el original
+        if len(archivos) == 1 and total >= len(pdf) * 0.9 and not blancos and not buscable:   # casi no baja (ya estaba liviano): queda el original
             print("No hacía falta: el original ya pesaba poco.")
             bot({"accion": "cmp_fin", "ok": True, "sinCambio": True})
             return 0
@@ -200,7 +327,18 @@ def main():
             _, cab = drive(token, "POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true", meta,
                            {"Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Type": tipo, "X-Upload-Content-Length": str(len(b))})
             drive(token, "PUT", cab["Location"], b, {"Content-Type": tipo})
-        bot({"accion": "cmp_fin", "ok": True, "mb": round(total / 1048576, 1), "partes": len(archivos), "paginas": npag, "recortadas": recortadas, "blancos": blancos, "motor": motor})
+        if buscable:   # 🔎 copia buscable en «Procesados/🔎 Buscables» (no entra a la cola de lectura)
+            try:
+                meta = json.dumps({"name": base + " (buscable).pdf", "parents": [d["buscables"]], "mimeType": "application/pdf"}).encode()
+                _, cab = drive(token, "POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true", meta,
+                               {"Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Type": "application/pdf", "X-Upload-Content-Length": str(len(buscable))})
+                drive(token, "PUT", cab["Location"], buscable, {"Content-Type": "application/pdf"})
+                print("Copia buscable: %.1f MB" % (len(buscable) / 1048576))
+            except Exception as eb:  # noqa: BLE001
+                print("::warning::No se pudo subir la copia buscable: " + str(eb)[:120])
+                buscable = None
+        bot({"accion": "cmp_fin", "ok": True, "mb": round(total / 1048576, 1), "partes": len(archivos), "paginas": npag, "recortadas": recortadas, "blancos": blancos,
+             "motor": motor + (" + RapidOCR" if motor_ocr is not None else ""), "buscable": bool(buscable)})
         return 0
     except Exception as e:  # noqa: BLE001
         msg = str(e)[:300]
