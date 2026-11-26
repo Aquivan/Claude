@@ -226,19 +226,6 @@ function crearContexto(hoja) {
     }
   }
 
-  // 🔁 La OTRA pestaña (Originales ↔ Fotos) también cuenta para los repetidos (26/11/2026): el mismo escaneo mandado
-  // «como foto» entraba entero de nuevo porque solo se miraba la pestaña donde se escribe.
-  try {
-    const otra = obtenerHoja(hoja.getName() === CFG.SHEET_FOTOS ? CFG.SHEET_ORIGINALES : CFG.SHEET_FOTOS);
-    if (otra && otra.getSheetId() !== hoja.getSheetId() && otra.getLastRow() >= 2) {
-      ctx.otraHoja = otra; ctx.otroDup = {};
-      otra.getRange(2, 2, otra.getLastRow() - 1, 4).getValues().forEach(function (r, i) {
-        const op = String(r[0] || '').trim();
-        if (op && op.charAt(0) !== '[') ctx.otroDup[claveDuplicado(op, r[1], r[3])] = i + 2;
-      });
-    }
-  } catch (eO) { Logger.log('Repetidos en la otra pestaña: ' + eO.message); }
-
   return ctx;
 }
 
@@ -253,8 +240,7 @@ function claveDuplicado(op, banco, monto) {
 // O(1) en memoria, no vuelve a leer toda la hoja.
 function esDuplicadoCtx(ctx, nOperacion, banco, monto) {
   if (!nOperacion || nOperacion.toString().trim() === '') return false;
-  const k = claveDuplicado(nOperacion, banco, monto);
-  return ctx.indiceDup.has(k) || !!(ctx.otroDup && ctx.otroDup[k]);
+  return ctx.indiceDup.has(claveDuplicado(nOperacion, banco, monto));   // solo la MISMA pestaña (decisión del usuario, 26/11/2026)
 }
 
 function obtenerUltimaPaginaProcesadaCtx(ctx, nombreArchivo) {

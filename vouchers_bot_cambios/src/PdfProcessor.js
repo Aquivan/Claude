@@ -247,7 +247,7 @@ async function procesarArchivoPDF(archivo, ctx, inicioEjecucion, LIMITE, remiten
               const fOrig = REP_original_(ctx, v, montoV);
               Logger.log('  Pag.' + numeroPaginaReal + ' repetido de la fila ' + fOrig + ': ' + v.nOperacion + ' / ' + v.banco + ' / ' + montoV);
               REP_anotar_(ctx, fOrig, nombre, numeroPaginaReal, remitente);
-              resumenes.push({ banco: v.banco, moneda: v.moneda, monto: montoV, nOperacion: v.nOperacion, duplicado: true, filaOriginal: typeof fOrig === 'object' ? fOrig.hoja.getName() + '!' + fOrig.fila : fOrig });
+              resumenes.push({ banco: v.banco, moneda: v.moneda, monto: montoV, nOperacion: v.nOperacion, duplicado: true, filaOriginal: fOrig });
               repetidosArchivo++;
               filasInsertadas++;
               continue;
