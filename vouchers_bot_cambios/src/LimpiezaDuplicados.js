@@ -120,11 +120,15 @@ async function LIMP_grupos_(t, h, plan) {
     for (let a = 0; a < idx.length; a++) for (let b = a + 1; b < idx.length; b++) {
       const i = idx[a], j = idx[b], oi = REP_normOp_(v[i][1]), oj = REP_normOp_(v[j][1]);
       if (!(oi === oj || REP_unoDistinto_(oi, oj))) { distintos++; continue; }
-      const ri = await releer(i), rj = await releer(j);
+      // Mismo archivo y operación con 1 dígito distinto = vouchers SEGUIDOS de un mismo escaneo (operaciones correlativas
+      // como 9553 / 9554): son distintos. Así salió al releer los primeros casos (26/11). No se relee.
+      if (oi !== oj && String(v[i][10]).trim() === String(v[j][10]).trim()) { distintos++; continue; }
+      // Misma operación (salvo ceros / guiones), mismo banco, monto y fecha: es el MISMO voucher (no hace falta la IA).
+      const ri = oi === oj ? oi : await releer(i), rj = oi === oj ? oj : await releer(j);
       const base = { fecha: LIMP_dia_(v[j][0]), banco: v[j][2], moneda: v[j][3], monto: v[j][4], benef: v[j][5], archivo: String(v[j][10] || '').trim(),
         procesado: v[j][11] instanceof Date ? Utilities.formatDate(v[j][11], 'America/Lima', 'dd/MM/yyyy HH:mm') : String(v[j][11] || ''), pag: v[j][12], canal: String(v[j][13] || ''),
         candidatos: [i + 2], fila: j + 2, verde: true };
-      if (ri && rj && ri === rj) plan.push(Object.assign(base, { orig: i + 2, motivo: 'repetido confirmado (releído: op ' + ri + ' en ' + (i + 2) + ' y ' + (j + 2) + ')' }));
+      if (ri && rj && ri === rj) plan.push(Object.assign(base, { orig: i + 2, motivo: (oi === oj ? 'repetido: misma operación ' + ri : 'repetido confirmado (releído: op ' + ri + ')') + ' en ' + (i + 2) + ' y ' + (j + 2) + (String(v[i][10]).trim() === String(v[j][10]).trim() ? ' (mismo archivo)' : ' (archivos distintos)') }));
       else plan.push(Object.assign(base, { orig: 0, motivo: ri && rj ? 'distintos al releer (op ' + ri + ' / ' + rj + '): no se toca' : 'casi igual, no se pudo releer: revisar a mano' }));
     }
   }
@@ -132,13 +136,16 @@ async function LIMP_grupos_(t, h, plan) {
 }
 
 async function VCH_limpiezaDuplicados_() {
-  const props = PropertiesService.getScriptProperties(), estado = props.getProperty('VCH_LIMP_DUP3') || '';
+  const props = PropertiesService.getScriptProperties(), estado = props.getProperty('VCH_LIMP_DUP4') || '';
   if (estado === 'hecho' || (estado === 'vista' && !LIMP_APLICAR_)) return;
   const tabs = [CFG.SHEET_ORIGINALES, CFG.SHEET_FOTOS], planes = {}, infoG = {};
-  for (let q = 0; q < tabs.length; q++) {
+  for (let q = 0; q < tabs.length; q++) {   // primero las [DUPLICADO] (pocas, releer seguro) de las dos pestañas…
     const t = tabs[q], h = obtenerHoja(t);
     planes[t] = h ? LIMP_plan_(h) : [];
     if (h && planes[t].length) { try { await LIMP_releer_(t, h, planes[t]); } catch (e) { Logger.log('🧹 Releer: ' + e.message); } }
+  }
+  for (let q = 0; q < tabs.length; q++) {   // …después los repetidos no marcados
+    const t = tabs[q], h = obtenerHoja(t);
     if (h) { try { infoG[t] = await LIMP_grupos_(t, h, planes[t]); } catch (e) { Logger.log('🧹 Grupos: ' + e.message); } }
   }
 
@@ -162,7 +169,7 @@ async function VCH_limpiezaDuplicados_() {
     carp.createFile(nom, LIMP_csv_(filas), MimeType.CSV);
   } catch (e) { Logger.log('🧹 CSV: ' + e.message); }
   if (!LIMP_APLICAR_) {
-    props.setProperty('VCH_LIMP_DUP3', 'vista');
+    props.setProperty('VCH_LIMP_DUP4', 'vista');
     if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · vista previa', '', resumen);
     return;
   }
@@ -220,6 +227,6 @@ async function VCH_limpiezaDuplicados_() {
     });
     hechos.push(t + ': ' + borrar.length + ' fila(s) borradas, ' + movidos + ' archivo(s) a 🔁 Repetidos');
   });
-  props.setProperty('VCH_LIMP_DUP3', 'hecho');
+  props.setProperty('VCH_LIMP_DUP4', 'hecho');
   if (typeof REG_anotar_ === 'function') REG_anotar_('Vouchers', 'limpieza duplicados · aplicada', '', hechos.join(' | ') + ' · ' + resumen);
 }
