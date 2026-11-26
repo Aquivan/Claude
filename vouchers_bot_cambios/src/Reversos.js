@@ -46,7 +46,7 @@ function REV_empresas_() {
 
 function REV_prompt_(n, empresas) {
   return 'El PDF adjunto tiene ' + n + ' paginas escaneadas de vouchers bancarios de Peru (BCP, BBVA, Interbank, BanBif, Scotiabank, etc.). ' +
-    'Para CADA pagina responde un objeto JSON con: "pagina" (1 a ' + n + '), "tipo" y "manuscrito", "dudoso".\n' +
+    'Para CADA pagina responde un objeto JSON con: "pagina" (1 a ' + n + '), "tipo", "manuscrito", "etiqueta", "dudoso".\n' +
     '"tipo":\n' +
     ' - "frente": la cara del voucher/constancia con datos de la operacion (monto, numero de operacion, fecha, cuenta).\n' +
     ' - "reverso": la parte de ATRAS de un voucher: NO tiene datos propios de una operacion; suele tener solo texto fijo impreso del banco ' +
@@ -58,6 +58,9 @@ function REV_prompt_(n, empresas) {
     'Si una parte no se entiende, pon "?" en esa parte; no inventes.\n' +
     (empresas.length ? 'Si lo escrito a mano es claramente el nombre de una de estas empresas, escribelo EXACTAMENTE asi: ' + empresas.join(', ') + '. Si es otra cosa, copialo tal cual.\n' : '') +
     '"banco" y "monto": SOLO para paginas "frente", el banco y el importe del voucher tal como se ve (ej. "BBVA", "S/ 25,701.12"); en las demas "".\n' +
+    '"etiqueta": texto AGREGADO DIGITALMENTE sobre la foto o el escaneo (no es del banco ni escrito a mano): etiquetas o stickers ' +
+    'de color con una palabra (p. ej. un recuadro verde que dice "libre"), cuadros de texto, flechas con texto, marcas hechas con el editor ' +
+    'del celular. Copia solo ese texto; si no hay: "". No confundir con logos o recuadros impresos del banco.\n' +
     '"dudoso": true si no estas seguro del tipo de pagina o de lo escrito a mano; si no, false.\n' +
     'Responde SOLO el arreglo JSON, un objeto por pagina, por ejemplo: [{"pagina":1,"tipo":"frente","manuscrito":"","dudoso":false},{"pagina":2,"tipo":"reverso","manuscrito":"GRANIX","dudoso":false}]';
 }
@@ -139,13 +142,13 @@ async function REV_separar_(archivo, pdfDoc, nombre, carpetas) {
     const arr = REV_clasificar_(b64, idx.length, empresas);
     arr.forEach(function (o) {
       const p = parseInt(o && o.pagina, 10);
-      if (p >= 1 && p <= idx.length) info[ini + p - 1] = { tipo: String(o.tipo || '').toLowerCase(), m: String(o.manuscrito || '').trim(), dud: o.dudoso === true,
+      if (p >= 1 && p <= idx.length) info[ini + p - 1] = { tipo: String(o.tipo || '').toLowerCase(), m: String(o.manuscrito || '').trim(), et: String(o.etiqueta || '').trim(), dud: o.dudoso === true,
         banco: String(o.banco || '').trim(), monto: String(o.monto || '').trim() };
     });
   }
   for (let i = 0; i < total; i++) if (!info[i]) info[i] = { tipo: 'frente', m: '', dud: false };   // sin dato: como siempre
   const hayRev = info.some(function (x) { return x.tipo === 'reverso'; });
-  const hayMano = info.some(function (x) { return x.m; });
+  const hayMano = info.some(function (x) { return x.m || x.et; });
   const nRev = info.filter(function (x) { return x.tipo === 'reverso'; }).length;
   if (!hayRev && !hayMano) { REV_anotGuardar_(nombre, {}); return null; }
 
@@ -153,7 +156,13 @@ async function REV_separar_(archivo, pdfDoc, nombre, carpetas) {
   //    («<archivo> · reversos.pdf»), cada página con una etiqueta arriba: de qué voucher es (pág. del PDF en Procesados).
   const limpias = [], anot = {}, base = nombre.replace(/\.pdf$/i, '');
   const sinFrente = [], revs = [];   // revs: {i, etiqueta, k}
-  const fmt = function (o, lado) { return o.m ? lado + ': ' + o.m + (o.dud ? ' (revisar)' : '') : ''; };
+  // lo escrito a mano («Frente: …» / «Reverso: …») y las etiquetas digitales («Etiqueta: libre»)
+  const fmt = function (o, lado) {
+    const p = [];
+    if (o.m) p.push(lado + ': ' + o.m + (o.dud ? ' (revisar)' : ''));
+    if (o.et) p.push('Etiqueta: ' + o.et);
+    return p.join(' · ');
+  };
   for (let i = 0; i < total; i++) {
     const o = info[i];
     if (o.tipo === 'reverso') {
